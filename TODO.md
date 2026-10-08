@@ -43,3 +43,9 @@ The owner decides about each item.
   until the AC is not planned.
 - The circuits of a subpanel by name, in place of the items that a
   station runs.
+- The check of phase 4 with a real person with no background in plans:
+  the person compares 2 plans with the worksheet.
+- The EFL forms that the reader does not know yet: numbers in columns
+  under their names, and charges in a table.
+- The delivery charges of the other utilities (CenterPoint, AEP Texas,
+  TNMP) in the table of `DIY.Plan.tdu/1`.
