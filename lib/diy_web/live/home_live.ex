@@ -16,8 +16,8 @@ defmodule DIYWeb.HomeLive do
   """
   use DIYWeb, :live_view
 
-  alias DIY.{Build, Catalog, Estimate, House, Market, Prices, Weather}
-  alias DIYWeb.Device
+  alias DIY.{Build, Catalog, Estimate, House, Market, Prices, Usage, Weather}
+  alias DIYWeb.{Device, Format}
 
   @impl true
   def mount(_params, _session, socket) do
@@ -130,6 +130,32 @@ defmodule DIYWeb.HomeLive do
       {:error, {:param, key}} -> {:noreply, assign(socket, :item_error, key)}
       {:error, _reason} -> {:noreply, socket}
     end
+  end
+
+  # The sums of a meter file, from the hook UsageFile: the file stays on
+  # the device.
+  def handle_event("usage", params, socket) do
+    case Usage.read(params) do
+      {:ok, usage} ->
+        {:noreply,
+         socket
+         |> put(Build.set_usage(socket.assigns.build, usage))
+         |> put_flash(
+           :info,
+           "The page has #{Format.count(length(usage.months), "month")} of your usage. The file stayed on this device."
+         )}
+
+      :error ->
+        {:noreply, put_flash(socket, :error, "The app cannot read the usage of this file.")}
+    end
+  end
+
+  def handle_event("usage_error", %{"error" => error}, socket) when is_binary(error) do
+    {:noreply, put_flash(socket, :error, String.slice(error, 0, 200))}
+  end
+
+  def handle_event("clear_usage", _params, socket) do
+    {:noreply, put(socket, Build.set_usage(socket.assigns.build, nil))}
   end
 
   def handle_event("check_item", %{"id" => id}, socket) do

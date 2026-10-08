@@ -78,7 +78,7 @@ defmodule DIY.CatalogTest do
   end
 
   property "params gives a valid map, or the error of one parameter, for any values" do
-    kinds = Catalog.kinds()
+    kinds = Enum.filter(Catalog.kinds(), &(&1.params != []))
 
     check all(
             kind <- member_of(kinds),

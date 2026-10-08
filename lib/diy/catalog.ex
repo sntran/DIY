@@ -187,6 +187,14 @@ defmodule DIY.Catalog do
       ]
     },
     %{
+      type: "smart_meter",
+      name: "Smart meter",
+      emoji: "📟",
+      places: [:outdoor, :indoor],
+      features: [:usage],
+      params: []
+    },
+    %{
       type: "water_heater",
       name: "Water heater",
       emoji: "🚿",
