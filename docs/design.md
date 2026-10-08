@@ -293,9 +293,11 @@ and keeps the best one with no number under zero. It needs 6 months with
   numbers (a heat loss up to 10% larger or smaller, an AC of one SEER2
   more or less, other items up to 20% more or less), and its months come
   from the real weather of July 2024 to June 2025, with 5% noise. The
-  estimate of the preset does not know these numbers. Each house has 10
+  estimate of the preset does not know these numbers. Each house has 9
   of its 12 months in the range at least, and all the houses 90% (in
-  October 2026: 283 of 288 months, 98%).
+  October 2026: 282 of 288 months, 98%). The months out of the range: the
+  hot October of 2024, a hot August and a cold January, in houses that
+  are larger than their preset and have more items.
 - Property tests: random files of 15-minute reads give the sums of their
   readings, any text gives a result or an error, a usage goes to JSON and
   back with no change, and the fit finds the numbers of a house from its

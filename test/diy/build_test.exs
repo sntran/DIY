@@ -329,8 +329,23 @@ defmodule DIY.BuildTest do
           "date" => "2026-10-08",
           "source" => "ptc"
         },
-        "price" => 12.5
+        "price" => 12.5,
+        "usage" => %{
+          "source" => "smt",
+          "months" => [
+            %{"month" => "2025-07", "kwh" => 1500, "export" => 0, "days" => 31, "hours" => nil},
+            %{
+              "month" => "2025-08",
+              "kwh" => 1600.5,
+              "export" => 2.5,
+              "days" => 20,
+              "hours" => List.duplicate(2.5, 24)
+            }
+          ]
+        }
     }
+
+    assert {:ok, %{usage: %{months: [_, _]}}} = map |> Jason.encode!() |> Build.from_json()
 
     for path <- paths(map, []), value <- @bad do
       text = map |> put_at(path, value) |> Jason.encode!()
