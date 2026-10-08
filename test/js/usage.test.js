@@ -2,26 +2,80 @@
 import {test} from "node:test"
 import assert from "node:assert/strict"
 import fc from "fast-check"
-import {
-  UsageError, MONTHS, fields, parseDate, parseHour, readUsage, localTime, usageHook,
-} from "../../assets/js/usage.js"
+import {UsageError, MONTHS, fields, parseDate, readUsage, localTime, usageHook} from "../../assets/js/usage.js"
+
+const UNREADABLE = "The app cannot read this file. Use the 15-minute CSV of Smart Meter Texas, or a Green Button file (XML or CSV)."
+const EMPTY = /no electric usage/
 
 const pad = (n) => String(n).padStart(2, "0")
+const rows = (usage) => usage.months.map((m) => [m.month, m.kwh, m.export, m.days])
 
 // A CSV of Smart Meter Texas: one row for each interval of 15 minutes.
-function smt(rows) {
+function smt(lines) {
   const head = "ESIID,USAGE_DATE,REVISION_DATE,USAGE_START_TIME,USAGE_END_TIME,USAGE_KWH,ESTIMATED_ACTUAL,CONSUMPTION_SURPLUSGENERATION"
-  return [head, ...rows.map(({date, hour, minute = 0, kwh, kind = "Consumption"}) =>
+  return [head, ...lines.map(({date, hour = 0, minute = 0, kwh, kind = "Consumption"}) =>
     `"1044372000000000",${date},10/01/2025 06:32:13,${pad(hour)}:${pad(minute)},${pad(hour)}:${pad(minute + 15)},${kwh},A,${kind}`)].join("\r\n")
 }
 
-// A Green Button XML (ESPI) with readings of one hour.
-function espi(readings, {power = 0, uom = 72, direction = 1, tz = -21600, dst = 3600} = {}) {
-  const items = readings.map(({start, value, duration = 3600}) =>
-    `<espi:IntervalReading><espi:timePeriod><espi:duration>${duration}</espi:duration><espi:start>${start}</espi:start></espi:timePeriod><espi:value>${value}</espi:value></espi:IntervalReading>`)
-  return `<?xml version="1.0"?><feed><entry><content><espi:LocalTimeParameters><espi:dstOffset>${dst}</espi:dstOffset><espi:tzOffset>${tz}</espi:tzOffset></espi:LocalTimeParameters></content></entry>
-<entry><content><espi:ReadingType><espi:flowDirection>${direction}</espi:flowDirection><espi:powerOfTenMultiplier>${power}</espi:powerOfTenMultiplier><espi:uom>${uom}</espi:uom></espi:ReadingType></content></entry>
-<entry><content><espi:IntervalBlock>${items.join("")}</espi:IntervalBlock></content></entry></feed>`
+// The tags of a ReadingType (ESPI). A tag with null is not in the file.
+function typeTags({uom = 72, power = 0, direction = 1, commodity = 1, kind = 12, length = 3600} = {}) {
+  const tags = {commodity, flowDirection: direction, intervalLength: length, kind, powerOfTenMultiplier: power, uom}
+  return Object.entries(tags)
+    .filter(([, value]) => value !== null)
+    .map(([name, value]) => `<espi:${name}>${value}</espi:${name}>`)
+    .join("")
+}
+
+// One IntervalReading. A duration with null, or a value with undefined, is
+// not in the file.
+const interval = ({start, value, duration = 3600}) =>
+  "<espi:IntervalReading><espi:timePeriod>" +
+  (duration === null ? "" : `<espi:duration>${duration}</espi:duration>`) +
+  `<espi:start>${start}</espi:start></espi:timePeriod>` +
+  (value === undefined ? "" : `<espi:value>${value}</espi:value>`) +
+  "</espi:IntervalReading>"
+
+// A Green Button XML (ESPI) as the utilities give it: an Atom feed with the
+// LocalTimeParameters, and for each MeterReading an entry with a link to its
+// ReadingType, an entry of the ReadingType, and the entries of its
+// IntervalBlocks (each with a link up to the MeterReading).
+//
+// A meter is {type, blocks, related, up}: related false gives no link to the
+// ReadingType, up "none" or "empty" gives a block with no up link, or with no
+// href in it.
+function feed(meters, {tz = -21600, dst = 3600} = {}) {
+  const site = "https://utility.example/DataCustodian/espi/1_1/resource"
+  const point = `${site}/Subscription/5/UsagePoint/1`
+  const entries = [
+    `<entry><content><espi:LocalTimeParameters><espi:dstOffset>${dst}</espi:dstOffset><espi:tzOffset>${tz}</espi:tzOffset></espi:LocalTimeParameters></content></entry>`,
+  ]
+  meters.forEach(({type = {}, blocks = [], related = true, up}, i) => {
+    const reading = `${point}/MeterReading/0${i + 1}`
+    const readingType = `${site}/ReadingType/0${i + 1}`
+    entries.push(
+      `<entry><link rel="self" href="${reading}"/><link rel="up" href="${point}/MeterReading"/>` +
+      `<link rel="related" href="${reading}/IntervalBlock"/>` +
+      (related ? `<link rel="related" href="${readingType}"/>` : "") +
+      "<content><espi:MeterReading/></content></entry>",
+    )
+    entries.push(
+      `<entry><link rel="self" href="${readingType}"/><link rel="up" href="${site}/ReadingType"/>` +
+      `<content><espi:ReadingType>${typeTags(type)}</espi:ReadingType></content></entry>`,
+    )
+    blocks.forEach((block, j) => {
+      const link = up === "none" ? "" : up === "empty" ? '<link rel="up"/>' : `<link rel="up" href="${reading}/IntervalBlock"/>`
+      entries.push(
+        `<entry><link href="${site}"/><link rel="self" href="${reading}/IntervalBlock/${j + 1}"/>${link}` +
+        `<content><espi:IntervalBlock xmlns:espi="http://naesb.org/espi">${block.map(interval).join("")}</espi:IntervalBlock></content></entry>`,
+      )
+    })
+  })
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<feed xmlns="http://www.w3.org/2005/Atom" xmlns:espi="http://naesb.org/espi">\n${entries.join("\n")}\n</feed>`
+}
+
+// The readings of one day, from 00:00 in Texas in summer.
+function day(value, hours = 24, start = Date.UTC(2025, 6, 1, 5) / 1000) {
+  return Array.from({length: hours}, (_, h) => ({start: start + h * 3600, value}))
 }
 
 test("fields reads quotes, quotes in quotes, and spaces", () => {
@@ -29,137 +83,206 @@ test("fields reads quotes, quotes in quotes, and spaces", () => {
   assert.deepEqual(fields(""), [""])
 })
 
-test("dates and hours", () => {
+test("only real dates", () => {
   assert.deepEqual(parseDate("07/04/2025"), [2025, 7, 4])
+  assert.deepEqual(parseDate("7/4/2025"), [2025, 7, 4])
   assert.deepEqual(parseDate("2025-07-04"), [2025, 7, 4])
   assert.deepEqual(parseDate("2025-07-04 00:00"), [2025, 7, 4])
-  assert.equal(parseDate("13/04/2025"), null)
-  assert.equal(parseDate("07/32/2025"), null)
-  assert.equal(parseDate("July 4"), null)
-  assert.equal(parseDate(undefined), null)
-  assert.equal(parseHour("00:00"), 0)
-  assert.equal(parseHour("23:45"), 23)
-  assert.equal(parseHour("1:15 PM"), 13)
-  assert.equal(parseHour("12:00 AM"), 0)
-  assert.equal(parseHour("12:00 pm"), 12)
-  assert.equal(parseHour("07:30:00"), 7)
-  assert.equal(parseHour(""), 0)
-  assert.equal(parseHour("25:00"), null)
-  assert.equal(parseHour("noon"), null)
+  assert.deepEqual(parseDate("02/29/2024"), [2024, 2, 29])
+  for (const text of ["13/04/2025", "07/32/2025", "02/30/2025", "02/29/2025", "00/10/2025", "2025-13-01", "2025-04-31", "2025-04-00", "July 4", "", undefined]) {
+    assert.equal(parseDate(text), null, String(text))
+  }
 })
 
-test("a CSV of Smart Meter Texas gives the months, the days and the hours", () => {
+test("a CSV of Smart Meter Texas gives the months, with the surplus generation", () => {
   const text = smt([
-    {date: "07/01/2025", hour: 0, kwh: 0.25},
-    {date: "07/01/2025", hour: 0, minute: 15, kwh: 0.25},
+    {date: "08/01/2025", hour: 9, kwh: 1},
+    {date: "07/01/2025", kwh: 0.25},
+    {date: "07/01/2025", minute: 15, kwh: 0.25},
     {date: "07/01/2025", hour: 15, kwh: 1.5},
     {date: "07/02/2025", hour: 15, kwh: 0.5},
     {date: "07/02/2025", hour: 13, kwh: 2, kind: "Surplus Generation"},
-    {date: "08/01/2025", hour: 9, kwh: 1},
-  ])
+    {date: "06/30/2025", hour: 13, kwh: 1},
+    // Not a real date: the app does not count it.
+    {date: "02/30/2025", kwh: 9},
+  ]) + "\r\n\r\n\"1044372000000000\",07/03/2025\r\n"
+  // The byte order mark of the file.
   const usage = readUsage("﻿" + text)
   assert.equal(usage.source, "smt")
-  assert.equal(usage.months.length, 2)
-  const july = usage.months[0]
-  assert.deepEqual({month: july.month, kwh: july.kwh, export: july.export, days: july.days},
-    {month: "2025-07", kwh: 2.5, export: 2, days: 2})
-  assert.equal(july.hours[0], 0.25)
-  assert.equal(july.hours[15], 1)
-  assert.equal(july.hours.length, 24)
-  assert.equal(usage.months[1].month, "2025-08")
+  assert.deepEqual(rows(usage), [["2025-06", 1, 0, 1], ["2025-07", 2.5, 2, 2], ["2025-08", 1, 0, 1]])
 })
 
-test("a CSV of daily reads gives no hours", () => {
+test("a CSV of the daily readings of Smart Meter Texas", () => {
   const text = "ESIID,USAGE_DATE,REVISION_DATE,START_READING,END_READING,USAGE_KWH\n" +
     "1,09/01/2025,x,100,130,30\n1,09/02/2025,x,130,155,25\n"
-  const usage = readUsage(text)
-  assert.deepEqual(usage.months, [{month: "2025-09", kwh: 55, export: 0, days: 2, hours: null}])
+  assert.deepEqual(readUsage(text), {source: "smt", months: [{month: "2025-09", kwh: 55, export: 0, days: 2}]})
 })
 
-test("a CSV of Green Button, with lines before the header, units and AM/PM", () => {
+test("a CSV of Green Button, with lines before the header, Wh, gas and short rows", () => {
   const text = [
     "Name,JANE DOE", "Address,1 MAIN ST", "",
     "TYPE,DATE,START TIME,END TIME,USAGE,UNITS,COST,NOTES",
     "Electric usage,2025-01-05,1:00 PM,1:59 PM,1500,Wh,$0.20,",
     "Electric usage,2025-01-05,12:00 AM,12:59 AM,0.5,kWh,$0.07,",
-    "Electric usage,2025-01-06,bad,1:59 PM,1,kWh,,",
+    "Natural gas usage,2025-01-05,,,3,therms,$4.00,",
+    "Natural gas usage,2025-01-05,,,3,kWh,$4.00,",
+    "Electric usage,2025-01-06,1:00 PM,1:59 PM,4,kW,,",
+    "Electric usage,2025-01-07",
     "Electric usage,someday,1:00 PM,1:59 PM,1,kWh,,",
-    "Electric usage,2025-01-06,2:00 PM,2:59 PM,-1,kWh,,",
-    "Electric usage,2025-01-06,2:00 PM,2:59 PM,,kWh,,",
+    "Electric usage,2025-01-08,2:00 PM,2:59 PM,-1,kWh,,",
+    "Electric usage,2025-01-09,2:00 PM,2:59 PM,,kWh,,",
   ].join("\n")
   const usage = readUsage(text)
   assert.equal(usage.source, "green_button")
-  assert.deepEqual(usage.months.map((m) => [m.month, m.kwh, m.days]), [["2025-01", 2, 1]])
-  assert.equal(usage.months[0].hours[13], 1.5)
-  assert.equal(usage.months[0].hours[0], 0.5)
+  assert.deepEqual(rows(usage), [["2025-01", 2, 1, 2]])
 })
 
-test("a CSV with no time column gives no hours, and the numbers can have commas", () => {
-  const usage = readUsage('Date,Usage (kWh)\n2025-03-01,"1,200.5"\n')
-  assert.deepEqual(usage.months, [{month: "2025-03", kwh: 1200.5, export: 0, days: 1, hours: null}])
+test("a CSV of Green Button of gas only has no electric usage", () => {
+  const text = "TYPE,DATE,START TIME,END TIME,USAGE,UNITS,COST\nNatural gas usage,2025-01-05,,,3,therms,$4.00\n"
+  assert.throws(() => readUsage(text), EMPTY)
+})
+
+test("a CSV with the kWh from the grid and to the grid", () => {
+  const usage = readUsage("Date,Import (kWh),Export (kWh)\n2025-04-01,10,3\n2025-04-02,5,\n2025-05-01,1,0.5\n")
+  assert.equal(usage.source, "csv")
+  assert.deepEqual(rows(usage), [["2025-04", 15, 3, 2], ["2025-05", 1, 0.5, 1]])
+
+  const delivered = readUsage("Date,Delivered,Received\n2025-04-01,10,3\n")
+  assert.deepEqual(rows(delivered), [["2025-04", 10, 3, 1]])
+})
+
+test("a CSV of the net kWh: a number under zero is power to the grid", () => {
+  const usage = readUsage("Date,Net kWh\n2025-04-01,6\n2025-04-02,-4\n")
+  assert.deepEqual(rows(usage), [["2025-04", 6, 4, 2]])
+})
+
+test("a CSV with a direction for each row", () => {
+  const usage = readUsage("Date,Value,Direction\n2025-03-01,2,Delivered\n2025-03-01,0.5,Received\n")
+  assert.equal(usage.source, "csv")
+  assert.deepEqual(rows(usage), [["2025-03", 2, 0.5, 1]])
+})
+
+test("a CSV with a column Value, units and type, short rows, and numbers with commas", () => {
+  const usage = readUsage("Date,Value,Units,Type\n2025-03-01,2,kWh,Delivered\n2025-03-02\n2025-03-03,1,kWh\n")
+  assert.equal(usage.source, "green_button")
+  assert.deepEqual(rows(usage), [["2025-03", 3, 0, 2]])
+
+  assert.deepEqual(rows(readUsage('Date,Usage (kWh)\n2025-03-01,"1,200.5"\n')), [["2025-03", 1200.5, 0, 1]])
+  assert.deepEqual(rows(readUsage("Date/Time,kWh\n2025-03-01 00:15,0.5\n2025-03-01 00:30,0.25\n")), [["2025-03", 0.75, 0, 1]])
+})
+
+test("the CSV files that the app cannot read", () => {
+  for (const text of [null, 7, "hello", "a,b\n1,2", "USAGE,X\n1,2", "END DATE,KWH\n2025-03-01,2", "DATE,EXPORT_KWH\n2025-03-01,2"]) {
+    assert.throws(() => readUsage(text), (error) => error instanceof UsageError && error.message === UNREADABLE, String(text))
+  }
+  for (const text of ["Date,Value\n", "DATE,USAGE\nx,y", "DATE,USAGE\n2025-03-01,"]) {
+    assert.throws(() => readUsage(text), EMPTY, text)
+  }
 })
 
 test("a Green Button XML in Wh, with the time of the place and daylight time", () => {
-  // 2025-07-01 05:00 UTC is 00:00 in Texas (UTC-6 + 1 hour of daylight time).
+  // 2025-07-01 05:00 UTC is 00:00 in Texas (UTC-6, and 1 hour of daylight
+  // time). With no daylight time, it is 23:00 on June 30.
   const july = Date.UTC(2025, 6, 1, 5) / 1000
-  // 2025-01-15 06:00 UTC is 00:00 in Texas (no daylight time).
+  // 2025-01-15 06:00 UTC is 00:00 in Texas (no daylight time in January).
   const january = Date.UTC(2025, 0, 15, 6) / 1000
-  const text = espi([
-    {start: july, value: 1500},
-    {start: july + 3600, value: 500},
-    {start: january, value: 2000},
-    {start: january, value: 100, duration: 86400},
-  ])
-  const usage = readUsage(text)
+  const blocks = [[{start: july, value: 1500}, {start: july + 3600, value: 500}], [{start: january - 3600, value: 1000}, {start: january, value: 2000}]]
+  const usage = readUsage(feed([{blocks}]))
   assert.equal(usage.source, "green_button")
-  const [jan, jul] = usage.months
-  assert.equal(jul.month, "2025-07")
-  assert.equal(jul.kwh, 2)
-  assert.equal(jul.hours[0], 1.5)
-  assert.equal(jul.hours[1], 0.5)
-  assert.equal(jan.kwh, 2.1)
-  // A daily reading gives no hours for its month.
-  assert.equal(jan.hours, null)
+  assert.deepEqual(rows(usage), [["2025-01", 3, 0, 2], ["2025-07", 2, 0, 1]])
+  assert.deepEqual(rows(readUsage(feed([{blocks}], {dst: 0}))), [["2025-01", 3, 0, 2], ["2025-06", 1.5, 0, 1], ["2025-07", 0.5, 0, 1]])
 })
 
-test("a Green Button XML in kWh, with a multiplier, or to the grid", () => {
+test("a Green Button XML of solar: a MeterReading from the grid, and one to the grid", () => {
+  const usage = readUsage(feed([
+    {type: {direction: 1}, blocks: [day(1500)]},
+    // In tenths of a Wh: the multiplier is 10^-1.
+    {type: {direction: 19, power: -1}, blocks: [day(5000, 8)]},
+  ]))
+  assert.deepEqual(rows(usage), [["2025-07", 36, 4, 1]])
+})
+
+test("a Green Button XML with hourly, daily and summary readings counts the days once", () => {
+  const usage = readUsage(feed([
+    {type: {length: 3600}, blocks: [day(500)]},
+    {type: {length: 86400}, blocks: [[{start: Date.UTC(2025, 6, 1, 5) / 1000, value: 12000, duration: 86400}]]},
+    // The demand, in W.
+    {type: {uom: 38, kind: 8}, blocks: [day(9000)]},
+    // No length in the ReadingType: the length of the readings.
+    {type: {length: null}, blocks: [[{start: Date.UTC(2025, 6, 1, 5) / 1000, value: 12000, duration: 86400}]]},
+  ]))
+  assert.deepEqual(rows(usage), [["2025-07", 12, 0, 1]])
+
+  // No length in the ReadingType, and none in the readings.
+  const unknown = readUsage(feed([{type: {length: null}, blocks: [[{start: Date.UTC(2025, 6, 1, 5) / 1000, value: 2000, duration: null}]]}]))
+  assert.deepEqual(rows(unknown), [["2025-07", 2, 0, 1]])
+})
+
+test("a Green Button XML of net readings, and a reading with no value", () => {
   const start = Date.UTC(2025, 4, 10, 12) / 1000
-  assert.equal(readUsage(espi([{start, value: 25}], {power: -1, uom: 169})).months[0].kwh, 2.5)
-  const out = readUsage(espi([{start, value: 25}], {direction: 19}).replace("</feed>",
-    `<espi:IntervalReading><espi:timePeriod><espi:duration>3600</espi:duration><espi:start>${start}</espi:start></espi:timePeriod><espi:value>1000</espi:value></espi:IntervalReading></feed>`))
-  assert.deepEqual([out.months[0].kwh, out.months[0].export], [0, 1.025])
+  const usage = readUsage(feed([{
+    type: {direction: 4, commodity: null, kind: null},
+    blocks: [[{start, value: 1000}, {start: start + 3600, value: -3000}, {start: start + 7200}], []],
+  }]))
+  assert.deepEqual(rows(usage), [["2025-05", 1, 3, 1]])
 })
 
-test("a Green Button XML with the defaults, and a reading with no value", () => {
+test("a ReadingType with no multiplier and no flow: Wh from the grid", () => {
   const start = Date.UTC(2025, 4, 10, 12) / 1000
-  const text = `<feed><IntervalReading><timePeriod><duration>900</duration><start>${start}</start></timePeriod><value>2000</value></IntervalReading>
-<IntervalReading><timePeriod><start>${start}</start></timePeriod></IntervalReading></feed>`
-  const usage = readUsage(text)
-  assert.equal(usage.months[0].kwh, 2)
-  assert.equal(usage.months[0].hours[12], 2)
+  const usage = readUsage(feed([{type: {power: null, direction: null}, blocks: [[{start, value: 1000}]]}]))
+  assert.deepEqual(rows(usage), [["2025-05", 1, 0, 1]])
 })
 
-test("a CSV with a column Value, short rows, and a header with no date column", () => {
-  const usage = readUsage("Date,Value,Units,Type\n2025-03-01,2,kWh,Delivered\n2025-03-02\n2025-03-03,1\n")
-  assert.deepEqual(usage.months.map((m) => [m.month, m.kwh, m.days]), [["2025-03", 3, 2]])
-  assert.throws(() => readUsage("END DATE,KWH\n2025-03-01,2"), /cannot read/)
-  assert.throws(() => readUsage("<feed><IntervalReading>"), /no usage/)
+test("a Green Button XML of gas or of the demand has no electric usage", () => {
+  const start = Date.UTC(2025, 4, 10, 12) / 1000
+  // Natural gas (commodity 7), in therms (uom 169).
+  assert.throws(() => readUsage(feed([{type: {commodity: 7, uom: 169}, blocks: [[{start, value: 3}]]}])), EMPTY)
+  // Gas in Wh is still gas.
+  assert.throws(() => readUsage(feed([{type: {commodity: 7}, blocks: [[{start, value: 3}]]}])), EMPTY)
+  // The demand in W, and the energy of a different kind.
+  assert.throws(() => readUsage(feed([{type: {uom: 38, kind: 8}, blocks: [[{start, value: 3}]]}])), EMPTY)
+  assert.throws(() => readUsage(feed([{type: {kind: 3}, blocks: [[{start, value: 3}]]}])), EMPTY)
+  // A flow that the app does not know.
+  assert.throws(() => readUsage(feed([{type: {direction: 2}, blocks: [[{start, value: 3}]]}])), EMPTY)
 })
 
-test("the files that the app cannot read", () => {
-  for (const text of [null, "hello", "a,b\n1,2", "<html></html>", "DATE,USAGE\nx,y", "<feed><IntervalReading></IntervalReading></feed>"]) {
-    assert.throws(() => readUsage(text), UsageError)
-  }
-  assert.throws(() => readUsage("Date,Value\n"), /no usage/)
-  assert.throws(() => readUsage("USAGE,X\n1,2"), /cannot read/)
+test("the links of a feed: a block with no up link, and a MeterReading with no ReadingType", () => {
+  const start = Date.UTC(2025, 4, 10, 12) / 1000
+  // The link of the block itself gives its MeterReading.
+  assert.deepEqual(rows(readUsage(feed([{blocks: [[{start, value: 1000}]], up: "none"}]))), [["2025-05", 1, 0, 1]])
+  assert.deepEqual(rows(readUsage(feed([{blocks: [[{start, value: 1000}]], up: "empty"}]))), [["2025-05", 1, 0, 1]])
+  // One ReadingType in the file: it is the type of all the blocks.
+  assert.deepEqual(rows(readUsage(feed([{blocks: [[{start, value: 1000}]], related: false}]))), [["2025-05", 1, 0, 1]])
+  // Two ReadingTypes: a block with no ReadingType does not count.
+  const two = readUsage(feed([
+    {blocks: [[{start, value: 1000}]], related: false},
+    {type: {direction: 19}, blocks: [[{start, value: 500}]]},
+  ]))
+  assert.deepEqual(rows(two), [["2025-05", 0, 0.5, 1]])
+})
+
+test("a Green Button XML with no feed", () => {
+  const start = Date.UTC(2025, 4, 10, 12) / 1000
+  const block = `<IntervalBlock>${interval({start, value: 2000})}</IntervalBlock>`
+  const type = (tags) => `<ReadingType>${typeTags(tags).replace(/espi:/g, "")}</ReadingType>`
+  assert.deepEqual(rows(readUsage(`<UsagePoint>${type({})}${block}</UsagePoint>`)), [["2025-05", 2, 0, 1]])
+  // No ReadingType, or two: the app does not know the units.
+  assert.throws(() => readUsage(`<UsagePoint>${block}</UsagePoint>`), EMPTY)
+  assert.throws(() => readUsage(`<UsagePoint>${type({})}${type({uom: 38})}${block}</UsagePoint>`), EMPTY)
+})
+
+test("the XML files that the app cannot read", () => {
+  assert.throws(() => readUsage("<html></html>"), (error) => error.message === UNREADABLE)
+  assert.throws(() => readUsage("<feed><IntervalReading></IntervalReading></feed>"), EMPTY)
+  assert.throws(() => readUsage("<feed><entry><content><IntervalBlock><IntervalReading></IntervalReading></IntervalBlock></content></entry></feed>"), EMPTY)
 })
 
 test("the result keeps the last months", () => {
-  const rows = []
+  const lines = []
   for (let year = 2022; year <= 2025; year++) {
-    for (let month = 1; month <= 12; month++) rows.push({date: `${pad(month)}/01/${year}`, hour: 1, kwh: 1})
+    for (let month = 1; month <= 12; month++) lines.push({date: `${pad(month)}/01/${year}`, kwh: 1})
   }
-  const usage = readUsage(smt(rows))
+  const usage = readUsage(smt(lines.reverse()))
   assert.equal(usage.months.length, MONTHS)
   assert.equal(usage.months.at(-1).month, "2025-12")
   assert.equal(usage.months[0].month, "2024-01")
@@ -176,8 +299,8 @@ test("the daylight time of the US", () => {
   assert.equal(localTime(Date.UTC(2025, 6, 1, 6) / 1000, -21600, 0).getUTCHours(), 0)
 })
 
-// Random readings of 15 minutes: the months of the result have the sums of
-// the readings, and the hours of a month add up to its kWh.
+// Random readings of 15 minutes, from the grid and to the grid: the months of
+// the result have the sums of the readings, and the days with data.
 test("the months have the sums of the readings", () => {
   const reading = fc.record({
     month: fc.integer({min: 1, max: 12}),
@@ -185,27 +308,61 @@ test("the months have the sums of the readings", () => {
     hour: fc.integer({min: 0, max: 23}),
     quarter: fc.constantFrom(0, 15, 30, 45),
     kwh: fc.integer({min: 0, max: 5000}).map((n) => n / 1000),
+    surplus: fc.boolean(),
   })
   fc.assert(fc.property(fc.array(reading, {minLength: 1, maxLength: 60}), (readings) => {
-    const rows = readings.map((r) => ({date: `${pad(r.month)}/${pad(r.day)}/2025`, hour: r.hour, minute: r.quarter, kwh: r.kwh}))
-    const usage = readUsage(smt(rows))
+    const lines = readings.map((r) => ({
+      date: `${pad(r.month)}/${pad(r.day)}/2025`, hour: r.hour, minute: r.quarter, kwh: r.kwh,
+      kind: r.surplus ? "Surplus Generation" : "Consumption",
+    }))
+    const usage = readUsage(smt(lines))
     for (const m of usage.months) {
       const mine = readings.filter((r) => `2025-${pad(r.month)}` === m.month)
-      const total = mine.reduce((sum, r) => sum + r.kwh, 0)
-      assert.ok(Math.abs(m.kwh - total) < 0.01)
+      const sum = (list) => list.reduce((total, r) => total + r.kwh, 0)
+      assert.ok(Math.abs(m.kwh - sum(mine.filter((r) => !r.surplus))) < 0.01)
+      assert.ok(Math.abs(m.export - sum(mine.filter((r) => r.surplus))) < 0.01)
       assert.equal(m.days, new Set(mine.map((r) => r.day)).size)
-      const hours = m.hours.reduce((sum, h) => sum + h, 0) * m.days
-      assert.ok(Math.abs(hours - total) < 0.05)
     }
-    assert.equal(usage.months.length, new Set(readings.map((r) => r.month)).size)
+    assert.deepEqual(usage.months.map((m) => m.month), [...new Set(readings.map((r) => `2025-${pad(r.month)}`))].sort())
+  }))
+})
+
+// A result has months in order, each once, with no number under zero and the
+// days of one month.
+function check(usage) {
+  assert.ok(usage.months.length > 0 && usage.months.length <= MONTHS)
+  const names = usage.months.map((m) => m.month)
+  assert.deepEqual(names, [...new Set(names)].sort())
+  for (const m of usage.months) {
+    assert.match(m.month, /^\d{4}-(0[1-9]|1[0-2])$/)
+    assert.ok(m.kwh >= 0 && m.export >= 0)
+    assert.ok(m.days >= 1 && m.days <= 31)
+  }
+}
+
+// A CSV with a header that the app knows, and random cells.
+test("a CSV with random cells gives a good result or a UsageError", () => {
+  const cell = fc.oneof(
+    fc.string({maxLength: 12}),
+    fc.constantFrom("2025-02-29", "2024-02-29", "13/01/2025", "01/31/2025", "kWh", "Wh", "therms", "Surplus", "Gas", "-1", "1e400", '"1,5"'),
+    fc.double({noNaN: true}).map(String),
+    fc.integer({min: 1, max: 12}).chain((month) => fc.integer({min: 1, max: 31}).map((d) => `${pad(month)}/${pad(d)}/2025`)),
+  )
+  const line = fc.array(cell, {maxLength: 6}).map((cells) => cells.join(","))
+  fc.assert(fc.property(fc.array(line, {maxLength: 20}), (lines) => {
+    const text = ["DATE,USAGE,UNITS,TYPE,EXPORT KWH", ...lines].join("\n")
+    try {
+      check(readUsage(text))
+    } catch (error) {
+      if (!(error instanceof UsageError)) throw error
+    }
   }))
 })
 
 test("readUsage gives a result or a UsageError for any text", () => {
   fc.assert(fc.property(fc.string({maxLength: 300}), (text) => {
     try {
-      const usage = readUsage(text)
-      assert.ok(usage.months.length > 0)
+      check(readUsage(text))
     } catch (error) {
       assert.ok(error instanceof UsageError)
     }
@@ -234,19 +391,20 @@ test("the hook reads the file in the browser, and sends the months", async () =>
   h.mounted()
   await h.el.listeners.change()
   await h.read()
-  assert.equal(h.pushed[0][0], "usage")
-  assert.equal(h.pushed[0][1].months[0].kwh, 1)
+  assert.deepEqual(h.pushed[0], ["usage", {source: "smt", months: [{month: "2025-07", kwh: 1, export: 0, days: 1}]}])
   assert.equal(h.el.value, "")
 })
 
-test("the hook sends the error of a file", async () => {
+test("the hook sends the error of a file, and clears the input", async () => {
   const bad = hook(input({text: () => Promise.resolve("hello")}))
   await bad.read()
-  assert.deepEqual(bad.pushed, [["usage_error", {error: "The app cannot read this file. Use the 15-minute CSV of Smart Meter Texas, or a Green Button file."}]])
+  assert.deepEqual(bad.pushed, [["usage_error", {error: UNREADABLE}]])
+  assert.equal(bad.el.value, "")
 
   const broken = hook(input({text: () => Promise.reject(new Error("no"))}))
   await broken.read()
-  assert.equal(broken.pushed[0][0], "usage_error")
+  assert.deepEqual(broken.pushed, [["usage_error", {error: UNREADABLE}]])
+  assert.equal(broken.el.value, "")
 
   const none = hook(input(null))
   await none.read()
