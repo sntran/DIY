@@ -69,14 +69,17 @@ cleared store.
    save.
 3. The hook takes the saves in order. For each one, it reads and writes
    in one transaction: it writes only if the stored stamp is the base.
-   Then it sends `device:saved`, and tells the other tabs with a
-   BroadcastChannel. Else a different tab wrote first: the hook sends
-   `device:conflict` at once, in the transaction, with the stored text,
-   its stamp and the epoch of the save.
-4. A different tab sends `device:changed`. The LiveView shows that build
-   if its revision is larger.
-5. When a write fails (for example, the device has no space), the hook
-   sends `device:error` with the stored stamp.
+   Then it sends `device:saved`. Else a different tab wrote first: the
+   hook sends `device:conflict` at once, in the transaction, with the
+   stored text, its stamp and the epoch of the save.
+4. In the transaction of a write, the hook tells the other tabs with a
+   BroadcastChannel. The hook of each other tab reads the store in its
+   queue, and sends `device:changed`. IndexedDB runs that read after the
+   write, so the news comes also when the tab of the write closes before
+   the end of its transaction. The LiveView shows that build if its
+   revision is larger.
+5. When a save fails (for example, the device has no space), the hook
+   sends `device:error` with the stored stamp that it saw.
 
 The hook sends what it sees of the store on one channel, in the order
 that it sees it. A conflict goes in the transaction, so it comes before
@@ -98,16 +101,25 @@ configuration of the model with the fault, and TLC finds the fault:
   reconnects, an old read can come before a save of the queue, and its
   build is old. The property test with real LiveViews found this fault:
   TLC needs two restarts to show it.
+- **The news of a write goes in its transaction** (`Device.news.cfg`).
+  With the news after the transaction, a tab that writes and then closes
+  can leave the other tabs with an old build.
 
 Other cases:
 
 - A failed write keeps the build of the page. The next save comes from
   the stored build, and has all the build.
-- When the user removes the data of the site, a save gets a conflict with
-  no stored text. The LiveView saves its build again on the empty store.
-- A text that the page cannot read gives a new build. The next save keeps
-  a copy of the old text under the key `backup`, and the page tells the
-  user.
+- When the user removes the data of the site, the browser closes the
+  database. The hook opens it again, and the save gets a conflict with no
+  stored text. The LiveView saves its build again on the empty store.
+- A newer version of the app can open the database with a new version:
+  this tab then closes its connection, so that the new version does not
+  wait.
+- A text that the page cannot read (also a value that is not a text, or a
+  text of more than 512 KiB) gives a new build. The next save keeps a copy
+  of the old text under the key `backup`, and the page tells the user. If
+  that save fails, the save after it keeps the copy.
+- The page does not save a build of more than 512 KiB.
 - A build of a newer version of the app stops the saves, and the page
   asks the user to load the page again.
 - A push of the hook while the socket is down goes nowhere. The restore

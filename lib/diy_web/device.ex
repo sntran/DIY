@@ -18,6 +18,8 @@ defmodule DIYWeb.Device do
     - `saved`: the stamp of the last build that the device saved.
     - `backup`: the next save keeps a copy of the stored text, because the
       page cannot read it.
+    - `unreadable`: the stamp of that text. A failed save on it asks for the
+      copy again.
     - `newer`: the stored build comes from a newer version of the app. The
       page does not write over it.
 
@@ -39,6 +41,7 @@ defmodule DIYWeb.Device do
       epoch: new_epoch(),
       saved: nil,
       backup: false,
+      unreadable: nil,
       newer: false
     }
 
@@ -58,12 +61,25 @@ defmodule DIYWeb.Device do
 
   def put_build(socket, %Build{} = build) do
     device = socket.assigns.device
+    text = Build.to_json(build)
 
+    if byte_size(text) > @max_text do
+      LiveView.put_flash(
+        socket,
+        :error,
+        "The build is too large for this device. Remove some items."
+      )
+    else
+      save(socket, build, text, device)
+    end
+  end
+
+  defp save(socket, build, text, device) do
     socket
     |> assign(:build, build)
     |> assign(:device, %{device | base: build.stamp, backup: false})
     |> LiveView.push_event("device:save", %{
-      text: Build.to_json(build),
+      text: text,
       base: device.base,
       epoch: device.epoch,
       backup: device.backup
@@ -86,6 +102,17 @@ defmodule DIYWeb.Device do
     if socket.assigns.device.restoring do
       device = %{socket.assigns.device | restoring: false, saved: stamp}
       {:halt, socket |> assign(:device, device) |> take(text, stamp, false)}
+    else
+      {:halt, socket}
+    end
+  end
+
+  # A restore that the page cannot read (for example a text that is not a
+  # string, or a large text): a new build, as for an unreadable text.
+  def handle_event("device:restore", %{"stamp" => stamp}, socket) when is_binary(stamp) do
+    if socket.assigns.device.restoring do
+      device = %{socket.assigns.device | restoring: false, saved: stamp}
+      {:halt, socket |> assign(:device, device) |> take(:unreadable, stamp, false)}
     else
       {:halt, socket}
     end
@@ -136,8 +163,9 @@ defmodule DIYWeb.Device do
     end
   end
 
-  # A failed write: keep the build. The next save comes from the stored
-  # build, and has all the build.
+  # A failed save: keep the build. The next save comes from the stored
+  # build, and has all the build. If the store still has a text that the
+  # page cannot read, the next save keeps a copy of it.
   def handle_event(
         "device:error",
         %{"error" => error, "stamp" => stamp, "epoch" => epoch},
@@ -147,9 +175,12 @@ defmodule DIYWeb.Device do
     device = socket.assigns.device
 
     socket =
-      if epoch == device.epoch and not device.restoring,
-        do: assign(socket, :device, %{device | base: stamp, epoch: new_epoch()}),
-        else: socket
+      if epoch == device.epoch and not device.restoring do
+        backup = device.backup or stamp == device.unreadable
+        assign(socket, :device, %{device | base: stamp, epoch: new_epoch(), backup: backup})
+      else
+        socket
+      end
 
     {:halt, LiveView.put_flash(socket, :error, "This device did not save the build: #{error}")}
   end
@@ -162,17 +193,19 @@ defmodule DIYWeb.Device do
   # a copy of the text, and writes over it. A build of a newer version
   # stops the saves.
   defp take(socket, text, stamp, outside) do
+    send(self(), {__MODULE__, :build})
     device = %{socket.assigns.device | base: stamp}
     device = if outside, do: %{device | epoch: new_epoch()}, else: device
+    current = Build.version()
 
     case {text, Build.from_json(text)} do
       {_text, {:ok, build}} ->
-        socket |> assign(:device, device) |> assign(:build, build)
+        socket |> assign(:device, %{device | newer: false}) |> assign(:build, build)
 
       {nil, _error} ->
         socket |> assign(:device, device) |> assign(:build, Build.new())
 
-      {_text, {:error, {:version, version}}} when version > 1 ->
+      {_text, {:error, {:version, version}}} when version > current ->
         socket
         |> assign(:device, %{device | newer: true})
         |> assign(:build, Build.new())
@@ -180,7 +213,7 @@ defmodule DIYWeb.Device do
 
       {_text, {:error, _reason}} ->
         socket
-        |> assign(:device, %{device | backup: true})
+        |> assign(:device, %{device | backup: true, unreadable: stamp})
         |> assign(:build, Build.new())
         |> LiveView.put_flash(
           :info,

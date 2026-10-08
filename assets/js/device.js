@@ -14,9 +14,13 @@
 //   writes in one transaction (compare and set): it writes only if the
 //   stored stamp is the base. Else it sends "device:conflict" with the
 //   stored text, its stamp and the epoch of the save.
-// - After a write, the hook sends "device:saved", and tells the other tabs
-//   with a BroadcastChannel. A different tab sends "device:changed".
-// - When a write fails, the hook sends "device:error" with the stored stamp.
+// - In the transaction of a write, the hook tells the other tabs with a
+//   BroadcastChannel. The hook of each other tab then reads the store in
+//   its queue, and sends "device:changed" with that build. IndexedDB runs
+//   that read after the write. After the write, the hook sends
+//   "device:saved".
+// - When a save fails, the hook sends "device:error" with the stored stamp
+//   that it saw.
 //
 // The hook sends what it sees of the store in the order that it sees it: a
 // conflict goes at once, in the transaction, before a different tab can
@@ -44,63 +48,106 @@ export function stampOf(text) {
 
 const message = (error) => String(error && error.message || error)
 
-// Opens the database of the build.
+// Opens the database of the build. The connection closes when a newer
+// version of the app opens the database with a new version, so that the
+// new version does not wait for this tab.
 export function open(factory) {
   return new Promise((resolve, reject) => {
     const request = factory.open(DB, 1)
     request.onupgradeneeded = () => request.result.createObjectStore(STORE)
-    request.onsuccess = () => resolve(request.result)
+    request.onsuccess = () => {
+      const db = request.result
+      db.onversionchange = () => db.close()
+      resolve(db)
+    }
     request.onerror = () => reject(request.error)
   })
 }
 
-// The store of the build in a database: read() gives the stored text, and
-// save(message, report) does the compare and set. report gets the result
-// at the time of the observation: {conflict, stamp} in the transaction,
-// {saved} or {error, stamp} at its end.
-export function indexedStore(db) {
+// The store of the build in IndexedDB: read() gives the stored text, and
+// save(message, report, notify) does the compare and set. report gets the
+// result at the time of the observation: {conflict, stamp} in the
+// transaction, {saved} or {error, stamp} at its end. notify runs in the
+// transaction of a write.
+//
+// The store opens the database at the first use. The browser closes it
+// when the user removes the data of the site: then the store opens it
+// again, one time for each operation.
+export function indexedStore(factory) {
+  let connection = null
+
+  const connect = () => {
+    if (!connection) {
+      connection = open(factory).then((db) => {
+        db.onclose = () => { connection = null }
+        return db
+      })
+      connection.catch(() => { connection = null })
+    }
+    return connection
+  }
+
+  // Runs task(db). A closed database gives InvalidStateError: then open it
+  // again, and run the task one more time.
+  const run = (task) => connect().then((db) => {
+    try {
+      return task(db)
+    } catch (error) {
+      if (error && error.name === "InvalidStateError") {
+        connection = null
+        return connect().then(task)
+      }
+      throw error
+    }
+  })
+
   return {
+    connection: connect,
+
     read() {
-      return new Promise((resolve, reject) => {
+      return run((db) => new Promise((resolve, reject) => {
         const request = db.transaction(STORE, "readonly").objectStore(STORE).get(KEY)
         request.onsuccess = () => resolve(request.result === undefined ? null : request.result)
         request.onerror = () => reject(request.error)
-      })
+      }))
     },
 
-    save({text, base, backup}, report) {
-      return new Promise((resolve) => {
-        let stamp = ""
-        let done = false
-        const end = (result) => {
-          if (!done) {
-            done = true
-            report(result)
+    save({text, base, backup}, report, notify = () => {}) {
+      let stamp = ""
+      let done = false
+      const end = (result) => {
+        if (!done) {
+          done = true
+          report(result)
+        }
+      }
+      return run((db) => {
+        const tx = db.transaction(STORE, "readwrite")
+        return new Promise((resolve) => {
+          const store = tx.objectStore(STORE)
+          const get = store.get(KEY)
+          get.onsuccess = () => {
+            const stored = get.result === undefined ? null : get.result
+            stamp = stampOf(stored)
+            if (stamp !== base) {
+              end({conflict: stored, stamp})
+              return
+            }
+            if (backup && stored !== null) store.put(stored, BACKUP)
+            store.put(text, KEY)
+            notify()
           }
-          resolve()
-        }
-        let tx
-        try {
-          tx = db.transaction(STORE, "readwrite")
-        } catch (error) {
-          end({error: message(error), stamp})
-          return
-        }
-        const store = tx.objectStore(STORE)
-        const get = store.get(KEY)
-        get.onsuccess = () => {
-          const stored = get.result === undefined ? null : get.result
-          stamp = stampOf(stored)
-          if (stamp !== base) {
-            end({conflict: stored, stamp})
-            return
+          // After a conflict, end() has its result already.
+          tx.oncomplete = () => {
+            end({saved: stampOf(text)})
+            resolve()
           }
-          if (backup && stored !== null) store.put(stored, BACKUP)
-          store.put(text, KEY)
-          tx.oncomplete = () => end({saved: stampOf(text)})
-        }
-        tx.onabort = () => end({error: message(tx.error || "The browser stopped the save."), stamp})
-      })
+          tx.onabort = () => {
+            end({error: message(tx.error || "The browser stopped the save."), stamp})
+            resolve()
+          }
+        })
+      }).catch((error) => end({error: message(error), stamp}))
     },
   }
 }
@@ -125,12 +172,13 @@ export function storeOf(win) {
   } catch {
     factory = null
   }
-  if (!factory) return Promise.resolve(refusedStore("The browser does not let this page keep data."))
-  return open(factory).then(indexedStore, (error) => refusedStore(message(error)))
+  return factory
+    ? indexedStore(factory)
+    : refusedStore("The browser does not let this page keep data.")
 }
 
-// The LiveView hook. store() gives a promise of the store, and channel()
-// gives a BroadcastChannel (or null), so that the tests can give fakes.
+// The LiveView hook. store() gives the store, and channel() gives a
+// BroadcastChannel (or null), so that the tests can give fakes.
 export function deviceHook({store, channel}) {
   return {
     mounted() {
@@ -138,13 +186,15 @@ export function deviceHook({store, channel}) {
       this.queue = Promise.resolve()
       this.restore()
 
-      this.handleEvent("device:save", (save) =>
-        this.enqueue((s) => s.save(save, (result) => this.report(result, save))))
-
       this.channel = channel()
+      this.handleEvent("device:save", (save) =>
+        this.enqueue((s) => s.save(save, (result) => this.report(result, save), () => this.tell())))
+
+      // A write of a different tab: read the store, in the queue.
       if (this.channel) {
-        this.channel.onmessage = (event) =>
-          this.push("device:changed", {text: event.data, stamp: stampOf(event.data)})
+        this.channel.onmessage = () => this.enqueue((s) => s.read().then(
+          (text) => this.push("device:changed", {text, stamp: stampOf(text)}),
+          () => undefined))
       }
     },
 
@@ -172,13 +222,17 @@ export function deviceHook({store, channel}) {
 
     // Runs the tasks of the store one at a time, in order.
     enqueue(task) {
-      this.queue = this.queue.then(() => this.store).then(task)
+      this.queue = this.queue.then(() => task(this.store))
       return this.queue
     },
 
-    report(result, {text, epoch}) {
+    // Tells the other tabs about a write, in its transaction.
+    tell() {
+      if (this.channel) this.channel.postMessage("write")
+    },
+
+    report(result, {epoch}) {
       if ("saved" in result) {
-        if (this.channel) this.channel.postMessage(text)
         this.push("device:saved", {stamp: result.saved})
       } else if ("conflict" in result) {
         this.push("device:conflict", {text: result.conflict, stamp: result.stamp, epoch})

@@ -10,7 +10,11 @@
 (* each one, it reads and writes in one transaction of the store (compare  *)
 (* and set): it writes only if the stored key is the base. Else it sends   *)
 (* the stored build back (a conflict), and the LiveView shows that build.  *)
-(* After a write, the hook tells the other tabs (a BroadcastChannel).      *)
+(* In the transaction of a write, the hook tells the other tabs (a         *)
+(* BroadcastChannel). The hook of each other tab then reads the store in   *)
+(* its queue, and sends that build ("changed"). IndexedDB runs that read   *)
+(* after the write: so the news comes also when the tab of the write       *)
+(* closes before the end of its transaction.                               *)
 (*                                                                         *)
 (* The hook sends all that it sees of the store on one channel, in the     *)
 (* order that it sees it: a conflict, a write of a different tab, the      *)
@@ -35,12 +39,14 @@
 (*   of the queue, and then its restore is old. A LiveView takes only the  *)
 (*   first restore.                                                        *)
 (* - Reload: the page loads again. The hook and its queue go away.         *)
-(* - Fail: a write fails (the device has no space). The LiveView keeps its *)
-(*   build, and takes the stored key as the base: the next edit saves all  *)
-(*   the build again.                                                      *)
-(* - Clear: the user removes the data of the site. A conflict with an      *)
-(*   empty store does not empty the build: the LiveView saves its build    *)
-(*   again on the empty store.                                             *)
+(* - Fail: a save fails (the device has no space, or the browser refuses  *)
+(*   the database). The LiveView keeps its build, and takes the stored key *)
+(*   that the hook saw as the base: the next edit saves all the build      *)
+(*   again.                                                                *)
+(* - Clear: the user removes the data of the site. The browser closes the  *)
+(*   database, and the hook opens it again. A conflict with an empty store *)
+(*   does not empty the build: the LiveView saves its build again on the   *)
+(*   empty store.                                                          *)
 (*                                                                         *)
 (* An edit here is a number. A build is the set of its edits, with a       *)
 (* revision and a stamp. The stamp of a build is the number of the edit    *)
@@ -56,7 +62,8 @@ CONSTANTS
   MaxClears,    \* the number of clears of the store in a behavior
   ByStamp,      \* TRUE: the key of a build is its stamp. FALSE: its revision.
   ByEpoch,      \* TRUE: an answer of an old epoch changes nothing.
-  ByReads       \* TRUE: a new read removes the old reads of the queue.
+  ByReads,      \* TRUE: a new read removes the old reads of the queue.
+  ByCheck       \* TRUE: the news of a write goes in its transaction. FALSE: after it.
 
 VARIABLES
   store,      \* the stored build
@@ -76,6 +83,7 @@ vars == <<store, view, base, epoch, restoring, toHook, toView, next, fresh, coun
 Empty == [rev |-> 0, stamp |-> 0, edits |-> {}]
 Key(b) == IF ByStamp THEN b.stamp ELSE b.rev
 Read == [kind |-> "read"]
+Check == [kind |-> "check"]
 
 Init ==
   /\ store = Empty
@@ -112,28 +120,47 @@ Hook(t) ==
   /\ LET m == Head(toHook[t]) IN
        CASE m.kind = "read" ->
               /\ toView' = [toView EXCEPT ![t] = Tell(t, [kind |-> "restore", build |-> store])]
+              /\ toHook' = [toHook EXCEPT ![t] = Tail(@)]
+              /\ UNCHANGED <<store, stored>>
+         [] m.kind = "check" ->
+              /\ toView' = [toView EXCEPT ![t] = Tell(t, [kind |-> "changed", build |-> store])]
+              /\ toHook' = [toHook EXCEPT ![t] = Tail(@)]
+              /\ UNCHANGED <<store, stored>>
+         [] m.kind = "news" ->
+              \* The fault: the news after the transaction. A reload of the
+              \* tab before this step loses it.
+              /\ toView' = [u \in Tabs |->
+                   IF u = t THEN toView[u]
+                   ELSE Append(toView[u], [kind |-> "changed", build |-> m.build])]
+              /\ toHook' = [toHook EXCEPT ![t] = Tail(@)]
               /\ UNCHANGED <<store, stored>>
          [] Key(store) = m.base ->
               /\ store' = m.build
               /\ stored' = stored \cup m.build.edits
-              /\ toView' = [u \in Tabs |->
-                   IF u = t THEN toView[u]
-                   ELSE Append(toView[u], [kind |-> "changed", build |-> m.build])]
+              /\ toHook' = [u \in Tabs |->
+                   IF u = t
+                   THEN IF ByCheck THEN Tail(toHook[u])
+                        ELSE <<[kind |-> "news", build |-> m.build]>> \o Tail(toHook[u])
+                   ELSE IF ByCheck THEN Append(toHook[u], Check) ELSE toHook[u]]
+              /\ UNCHANGED toView
          [] OTHER ->
               /\ toView' = [toView EXCEPT ![t] =
                    Tell(t, [kind |-> "conflict", build |-> store, epoch |-> m.epoch])]
+              /\ toHook' = [toHook EXCEPT ![t] = Tail(@)]
               /\ UNCHANGED <<store, stored>>
-  /\ toHook' = [toHook EXCEPT ![t] = Tail(@)]
   /\ UNCHANGED <<view, base, epoch, restoring, next, fresh, counts>>
 
-\* A write of the hook of t fails: the store does not change.
+\* A save of the hook of t fails, and the store does not change: after the
+\* read (the device has no space), or before it (the browser refuses the
+\* database), with no stored key.
 Fail(t) ==
   /\ counts.fails < MaxFails
   /\ toHook[t] /= <<>>
   /\ Head(toHook[t]).kind = "save"
-  /\ Key(store) = Head(toHook[t]).base
-  /\ toView' = [toView EXCEPT ![t] =
-       Tell(t, [kind |-> "error", build |-> store, epoch |-> Head(toHook[t]).epoch])]
+  /\ \E seen \in {store, Empty} :
+       /\ seen = Empty \/ Key(store) = Head(toHook[t]).base
+       /\ toView' = [toView EXCEPT ![t] =
+            Tell(t, [kind |-> "error", build |-> seen, epoch |-> Head(toHook[t]).epoch])]
   /\ toHook' = [toHook EXCEPT ![t] = Tail(@)]
   /\ counts' = [counts EXCEPT !.fails = @ + 1]
   /\ UNCHANGED <<store, view, base, epoch, restoring, next, fresh, stored>>

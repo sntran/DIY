@@ -41,12 +41,69 @@ defmodule DIYWeb.DeviceTest do
     assert %{backup: false} = save(view)
   end
 
-  test "a build of a newer version stops the saves", %{conn: conn} do
+  test "a failed save on an unreadable text asks for the copy again", %{conn: conn} do
+    view = open(conn, %{"text" => "not a build", "stamp" => "x"})
+    view |> element("#door-my-house") |> render_click()
+    assert %{backup: true, epoch: epoch} = save(view)
+
+    render_hook(view, "device:error", %{"error" => "full", "stamp" => "x", "epoch" => epoch})
+    view |> element("#restart") |> render_click()
+    assert %{backup: true, base: "x", epoch: epoch} = save(view)
+
+    # A failed save on a different stored build does not ask for a copy.
+    render_hook(view, "device:error", %{"error" => "full", "stamp" => "y", "epoch" => epoch})
+    view |> element("#door-planning") |> render_click()
+    assert %{backup: false, base: "y"} = save(view)
+  end
+
+  test "a restore that is not a text, or is too large, gives a new build with a copy", %{
+    conn: conn
+  } do
+    for text <- [%{"version" => 1}, String.duplicate("x", 512 * 1024 + 1)] do
+      view = open(conn, %{"text" => text, "stamp" => "x"})
+      assert render(view) =~ "keeps a copy of the old one"
+      view |> element("#door-my-house") |> render_click()
+      assert %{base: "x", backup: true} = save(view)
+
+      # A second one changes nothing.
+      refute render_hook(view, "device:restore", %{"text" => 5, "stamp" => "y"}) =~
+               "door-my-house"
+    end
+  end
+
+  test "a build of an old version is a text that the page cannot read", %{conn: conn} do
+    view = open(conn, %{"text" => ~s({"version": 0}), "stamp" => "x"})
+    assert render(view) =~ "keeps a copy of the old one"
+  end
+
+  test "a build of a newer version stops the saves, until a build of this version", %{
+    conn: conn
+  } do
     view = open(conn, %{"text" => ~s({"version": 2}), "stamp" => "x"})
     assert render(view) =~ "comes from a newer version"
 
     view |> element("#door-my-house") |> render_click()
     refute_push_event view, "device:save", _save
+
+    render_hook(view, "device:changed", stored(door("planning")))
+    view |> element("#restart") |> render_click()
+    assert %{text: _} = save(view)
+  end
+
+  test "a build that is too large for the device does not go to it" do
+    socket = %Phoenix.LiveView.Socket{
+      assigns: %{
+        __changed__: %{},
+        flash: %{},
+        build: Build.new(),
+        device: %{base: "", epoch: 1, backup: false, newer: false}
+      }
+    }
+
+    large = %Build{revision: 1, stamp: String.duplicate("x", 512 * 1024)}
+    socket = DIYWeb.Device.put_build(socket, large)
+    assert socket.assigns.build == Build.new()
+    assert socket.assigns.flash["error"] =~ "too large"
   end
 
   test "a second restore changes nothing", %{conn: conn} do
@@ -186,7 +243,8 @@ defmodule DIYWeb.DeviceTest do
   # Two tabs, as in specs/Device.tla: real LiveViews, and a fake device with
   # the compare and set of assets/js/device.js. The test is the hook of each
   # tab: it takes the saves in order, keeps its queue on a conflict, and
-  # sends what it sees of the store on one channel, in order. A restart of a
+  # sends what it sees of the store on one channel, in order. A write puts a
+  # read of the store in the queue of the other tab. A restart of a
   # tab is a reconnect (a new LiveView, the same hook and queue). After
   # random steps, the test gives all the messages: then each tab shows the
   # stored build (the same stamp), and its next save comes from it.
@@ -242,6 +300,12 @@ defmodule DIYWeb.DeviceTest do
         |> put_in([:tabs, t, :queue], rest)
         |> tell(t, {"device:restore", stored_text(state)})
 
+      # The news of a write of the other tab: read the store.
+      [:check | rest] ->
+        state
+        |> put_in([:tabs, t, :queue], rest)
+        |> tell(t, {"device:changed", stored_text(state)})
+
       [save | rest] ->
         state = put_in(state, [:tabs, t, :queue], rest)
 
@@ -251,7 +315,7 @@ defmodule DIYWeb.DeviceTest do
 
           %{state | store: text}
           |> tell(t, {"device:saved", %{"stamp" => build.stamp}})
-          |> tell(1 - t, {"device:changed", text})
+          |> update_in([:tabs, 1 - t, :queue], &(&1 ++ [:check]))
         else
           tell(state, t, {"device:conflict", Map.put(stored_text(state), "epoch", save.epoch)})
         end

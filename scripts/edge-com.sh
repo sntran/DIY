@@ -6,7 +6,7 @@
 # worker.js serves edge.com with the runtime of the npm package beam.com
 # (see wrangler.jsonc).
 #
-#   npm install && npm run build      (or: sh scripts/edge-com.sh)
+#   npm ci && npm run build      (or: sh scripts/edge-com.sh)
 #
 # Variables:
 # - BEAM_COM: the path of a beam.com, in place of the file of the npm
