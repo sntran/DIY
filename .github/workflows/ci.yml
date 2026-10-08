@@ -3,6 +3,8 @@
 # - mix precommit: the format, the tests of the VM with 100% coverage, and
 #   the tests of the JavaScript of the page (npm test), with 100% coverage.
 # - scripts/tlc.sh: the TLA+ models of specs/, with TLC.
+# - The browser test: a person builds a house in Chrome, with axe-core on
+#   each screen (mix test --only browser).
 # - The build for Cloudflare Workers (npm run build), its size (wrangler
 #   deploy --dry-run), and a request to it in workerd (wrangler dev).
 #
@@ -101,6 +103,13 @@ jobs:
 
       - name: The TLA+ models
         run: scripts/tlc.sh
+
+      # The Chrome of the runner, with the server of the tests.
+      - name: The browser test
+        run: |
+          MIX_ENV=test mix.com assets.setup
+          MIX_ENV=test mix.com assets.build
+          CHROMIUM=$(command -v google-chrome) DIY_BROWSER=1 mix.com test --only browser
 
   build:
     runs-on: ubuntu-24.04

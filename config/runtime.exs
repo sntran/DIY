@@ -20,7 +20,10 @@ if System.get_env("PHX_SERVER") do
   config :diy, DIYWeb.Endpoint, server: true
 end
 
-config :diy, DIYWeb.Endpoint, http: [port: String.to_integer(System.get_env("PORT", "4000"))]
+# The tests use the port of config/test.exs (4002).
+if config_env() != :test do
+  config :diy, DIYWeb.Endpoint, http: [port: String.to_integer(System.get_env("PORT", "4000"))]
+end
 
 if config_env() == :dev do
   # Reload browser tabs when matching files change.

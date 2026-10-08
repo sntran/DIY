@@ -10,9 +10,11 @@
     "test": "node --test --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-test-coverage --test-coverage-include='assets/js/**/*.js' --test-coverage-include='*.js' --test-coverage-exclude='assets/vendor/**' --test-coverage-exclude='test/**' --test-coverage-lines=100 --test-coverage-branches=100 --test-coverage-functions=100 'test/js/**/*.test.js'"
   },
   "devDependencies": {
+    "axe-core": "4.11.0",
     "beam.com": "0.1.0-rc.5",
     "fake-indexeddb": "6.2.5",
     "fast-check": "4.10.2",
+    "playwright-core": "1.56.1",
     "wrangler": "4.142.0"
   }
 }
