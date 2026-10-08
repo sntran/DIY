@@ -93,6 +93,81 @@ function meterFile() {
   return Buffer.from(lines.join("\r\n"))
 }
 
+// The math of a hint of the lesson, as a person does it: "1,586 kWh ×
+// 13.7¢ ÷ 100", or "$4.06 + 1,586 kWh × 6.8673¢ ÷ 100".
+function calc(text) {
+  const expression = text
+    .replace(/,/g, "")
+    .replace(/×/g, "*")
+    .replace(/÷/g, "/")
+    .replace(/\.(?!\d)/g, "")
+    .replace(/[^0-9.+*/ ]/g, "")
+  return Function(`return (${expression})`)()
+}
+
+const money = (number) => number.toFixed(2)
+
+// A test user with no background does the plan lesson: the worked example,
+// an EFL with the help of the hints, a second plan with fewer hints, and the
+// worksheet with the two plans.
+async function lesson(page, name) {
+  await page.click("nav >> text=Plans")
+  await page.waitForSelector("#example")
+  await check(page, `${name} lesson example`)
+  await page.click("#example >> text=Next: your data")
+  await page.waitForSelector("#with-help")
+
+  // The EFL of a plan, read in the browser.
+  await page.setInputFiles("#efl-file", "test/fixtures/efl/txu-smart-1000-select-12.pdf")
+  await page.waitForSelector("#efl-check")
+  assert.equal(await page.locator("#efl-check td:has-text('✓')").count(), 3)
+  await check(page, `${name} EFL`)
+  await page.fill("#efl-add input[name=name]", "Plan with a credit")
+  await page.click("#efl-add button")
+  await page.waitForSelector("#lesson-plan")
+
+  // Each part of the bill of the month with the most use, with the hints.
+  const kwh = await page.$eval("#exercise p.font-semibold", (el) => +el.textContent.match(/([\d,]+) kWh/)[1].replace(/,/g, ""))
+  const month = await page.$eval("#exercise p.font-semibold", (el) => el.textContent.match(/bill of (\w+)/)[1])
+  const hint = (part) => page.$eval(`label:has(#answer-${part}) span.text-xs`, (el) => el.textContent)
+  const energy = calc(await hint("energy"))
+  const base = calc(await hint("base"))
+  const tdu = calc(await hint("tdu"))
+  let credits = 0
+  for (const line of await page.$$eval("#plan-numbers li", (els) => els.map((el) => el.textContent))) {
+    const credit = line.match(/Credit: \$([\d.]+) for ([\d,]+) kWh or more( in (.*))?\./)
+    if (credit && kwh >= +credit[2].replace(/,/g, "") && (!credit[4] || credit[4].includes(month))) credits += +credit[1]
+  }
+  await page.fill("#answer-energy", money(energy))
+  await page.fill("#answer-base", money(base))
+  await page.fill("#answer-tdu", money(tdu))
+  await page.fill("#answer-credits", money(credits))
+  await page.fill("#answer-total", money(energy + base + tdu - credits))
+  await page.click("#exercise button")
+  await page.waitForSelector("#exercise-done")
+  await check(page, `${name} exercise`)
+  await page.click("#exercise-done >> text=Next: fewer hints")
+
+  // A second plan from its numbers (a plan from a broker), and its bill.
+  await page.waitForSelector("#plan-form")
+  await page.fill("#plan-form input[name='plan[name]']", "Broker plan")
+  await page.fill("#plan-form input[name='plan[base]']", "4.95")
+  await page.fill("#plan-form input[name='plan[energy]']", "9.5")
+  await page.click("#plan-form button")
+  await page.waitForSelector("#fewer-hints #exercise")
+  const second = await page.$eval("#exercise p.font-semibold", (el) => +el.textContent.match(/([\d,]+) kWh/)[1].replace(/,/g, ""))
+  await page.fill("#answer-total", money(4.95 + second * 9.5 / 100 + 4.06 + second * 6.8673 / 100))
+  await page.click("#exercise button[type=submit], #exercise button:not([type])")
+  await page.waitForSelector("#exercise-done")
+  await page.click("#exercise-done >> text=Next: on your own")
+
+  // The worksheet: the two plans, in the order of the user.
+  await page.waitForSelector("#worksheet-table")
+  const heads = await page.$$eval("#worksheet-table thead th", (els) => els.map((el) => el.textContent.trim()))
+  assert.deepEqual(heads, ["Month", "kWh", "Plan with a credit", "Broker plan"])
+  await check(page, `${name} worksheet`)
+}
+
 async function connected(page) {
   await page.waitForSelector(".phx-connected")
 }
@@ -322,6 +397,8 @@ for (const colorScheme of ["light", "dark"]) {
     await page.click("nav >> text=Power")
     await page.waitForSelector("#today-overload")
     await check(page, `${name} power with an overload`)
+
+    await lesson(page, name)
 
     await context.close()
   }
