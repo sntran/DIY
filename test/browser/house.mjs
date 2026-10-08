@@ -175,6 +175,43 @@ async function lesson(page, name) {
   await check(page, `${name} worksheet`)
 }
 
+// The van: the person adds a camper van in the driveway, fills its zones,
+// and takes the power station of the house in it.
+async function van(page, name) {
+  await page.click("nav >> text=Rooms")
+  await page.waitForSelector("#inside")
+  await page.click('a[aria-label="Add an item to Driveway"]')
+  await page.click("#add-camper_van")
+  await page.waitForSelector("#item-sheet:has-text('Camper van')")
+  await page.click("#open-van")
+  await page.waitForSelector("#van-weight")
+  assert.match(await page.textContent("#weight-total"), /of 8,900 lb/)
+  await check(page, `${name} van`)
+
+  await page.click('a[aria-label="Add an item to Galley"]')
+  await page.waitForSelector("#add-sheet")
+  await check(page, `${name} van add`)
+  await page.click("#add-van_fridge")
+  await page.waitForSelector("#item-sheet:has-text('12 V fridge')")
+  await check(page, `${name} van item`)
+  await page.click("#item-sheet .btn-ghost[aria-label=Close]")
+  await page.waitForSelector("#item-sheet", { state: "detached" })
+  await page.waitForSelector("#van-notes:has-text('no power station')")
+
+  await page.click('#van-stations button:has-text("Take it in this van")')
+  await page.waitForSelector("#van-stations:has-text('in this van')")
+  await page.waitForSelector("#van-months")
+  await page.waitForSelector("#van-power:has-text('Off the grid')")
+  await check(page, `${name} van with the station`)
+
+  // The house shows the station as away, and the bill of the house stays.
+  await page.click("nav >> text=Rooms")
+  await page.waitForSelector('[id^="away-"]:has-text("In the van now")')
+  await page.click("nav >> text=Van")
+  await page.click('#van-stations button:has-text("Bring it home")')
+  await page.waitForSelector("#van-stations:has-text('at home')")
+}
+
 async function connected(page) {
   await page.waitForSelector(".phx-connected")
 }
@@ -406,6 +443,7 @@ for (const colorScheme of ["light", "dark"]) {
     await check(page, `${name} power with an overload`)
 
     await lesson(page, name)
+    await van(page, name)
 
     await context.close()
   }

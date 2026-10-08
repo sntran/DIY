@@ -53,3 +53,10 @@ The owner decides about each item.
   under their names, and charges in a table.
 - The delivery charges of the other utilities (AEP Texas, TNMP) in the
   table of `DIY.Plan.tdu/1`.
+- The check of phase 5 with the van of the owner: the label in the door
+  frame, the weight of each axle on a truck scale, and the Wh of a day
+  from the app of the battery.
+- The place of each zone of a van, from the user (today a typical
+  layout).
+- The sun of the place of a trip, in place of the sun at the house.
+- The axles of the Transit and of the Sprinter in the models of vans.

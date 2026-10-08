@@ -17,6 +17,9 @@ defmodule DIYWeb.Inside do
 
   @place_names %{indoor: "Inside", outdoor: "Outside", roof: "On the roof"}
 
+  # The features of a van: a house with no van does not show them.
+  @van_features [:weight, :van_power, :safety]
+
   attr :build, :map, required: true
   attr :estimate, :map, required: true, doc: "the estimate with the planned items"
   attr :bill, :map, default: nil, doc: "the bill of today (DIY.Bill)"
@@ -24,6 +27,7 @@ defmodule DIYWeb.Inside do
   attr :item, :string, default: nil
   attr :add, :string, default: nil
   attr :item_error, :string, default: nil
+  attr :away, :list, default: [], doc: "the stations of the house in a van: {item, van}"
 
   def inside(assigns) do
     assigns = assign(assigns, :levels, Build.levels(assigns.build.house.floors))
@@ -80,7 +84,7 @@ defmodule DIYWeb.Inside do
               >▼</a>
             </span>
           </div>
-          <.row build={@build} level={level} estimate={@estimate} price={@price} />
+          <.row build={@build} level={level} estimate={@estimate} price={@price} away={@away} />
         </section>
       </div>
 
@@ -104,8 +108,10 @@ defmodule DIYWeb.Inside do
   attr :level, :string, required: true
   attr :estimate, :map, required: true
   attr :price, :map, required: true
+  attr :away, :list, default: []
 
-  # The rooms of a level, in a row, and a card to add a room.
+  # The rooms of a level, in a row, and a card to add a room. A station of
+  # the house in a van shows in its room, as away.
   defp row(assigns) do
     rooms = Build.rooms_on(assigns.build, assigns.level)
     assigns = assign(assigns, rooms: rooms, place_names: @place_names)
@@ -161,6 +167,17 @@ defmodule DIYWeb.Inside do
               <span :if={item.backup and station?(@build)} class="text-xs">
                 <span aria-hidden="true">🔋</span> On the station
               </span>
+            </.link>
+          </li>
+          <li :for={{item, van} <- @away} :if={item.home == room.id}>
+            <.link
+              patch={~p"/van?#{[id: van.id]}"}
+              id={"away-#{item.id}"}
+              class="card border border-dashed border-base-300 p-2 h-full hover:bg-base-200"
+            >
+              <span class="text-2xl" aria-hidden="true">{Catalog.kind(item.type).emoji}</span>
+              <span class="text-sm font-semibold leading-tight">{Catalog.name(item)}</span>
+              <span class="text-xs">In the van now</span>
             </.link>
           </li>
           <li>
@@ -270,14 +287,21 @@ defmodule DIYWeb.Inside do
     kind = Catalog.kind(assigns.item.type)
     {:ok, room} = Build.room(assigns.build, assigns.item.room)
     rooms = Enum.filter(assigns.build.rooms, &(&1.place in kind.places))
-    assigns = assign(assigns, kind: kind, room: room, rooms: rooms)
+    van = Enum.any?(assigns.build.items, &(&1.type == "camper_van"))
+    features = if van, do: kind.features, else: kind.features -- @van_features
+    assigns = assign(assigns, kind: kind, room: room, rooms: rooms, van: van, features: features)
 
     ~H"""
     <.sheet id="item-sheet" title={"#{@kind.emoji} #{Catalog.name(@item)}"}>
       <p class="text-sm opacity-80">In {@room.name} ({Build.level_name(@room.level)})</p>
 
       <div :if={@item.typical} class="alert alert-warning text-sm">
-        <span>These numbers are a guess for a house like yours. Check them on the label of the item.</span>
+        <span>
+          {if @item.type == "camper_van",
+            do: "These numbers are typical of the model. Check them on the label in the door frame.",
+            else:
+              "These numbers are a guess for a house like yours. Check them on the label of the item."}
+        </span>
         <button type="button" phx-click="check_item" phx-value-id={@item.id} class="btn btn-xs">Correct</button>
       </div>
 
@@ -309,6 +333,7 @@ defmodule DIYWeb.Inside do
         <input type="hidden" name="item_id" value={@item.id} />
         <.param
           :for={param <- @kind.params}
+          :if={param.key != "weight" or @van}
           param={param}
           value={@item.params[param.key]}
           error={@error == param.key}
@@ -328,10 +353,19 @@ defmodule DIYWeb.Inside do
       </div>
 
       <p class="text-sm">
-        <span class="font-semibold">It turns on:</span> {features(@kind)}.
+        <span class="font-semibold">It turns on:</span> {features(@features)}.
       </p>
 
       <.usage :if={:usage in @kind.features} usage={@build.usage} />
+
+      <.link
+        :if={:van in @kind.features}
+        patch={~p"/van?#{[id: @item.id]}"}
+        id="open-van"
+        class="btn btn-sm btn-primary"
+      >
+        Open the build of the van
+      </.link>
 
       <form :if={length(@rooms) > 1} id="move-form" phx-change="move_item">
         <input type="hidden" name="item_id" value={@item.id} />
@@ -368,7 +402,7 @@ defmodule DIYWeb.Inside do
 
   # The items that a station can run: the items that use power.
   defp loads_power?(%{type: type}),
-    do: type not in ~w(power_station solar_panels transfer_switch smart_meter)
+    do: type not in ~w(power_station solar_panels transfer_switch smart_meter camper_van)
 
   # A month that shows the work of an item: January for heat, July else.
   defp math_month(%{type: type}) when type in ["furnace", "heat_strips", "space_heater"], do: 1
@@ -376,7 +410,8 @@ defmodule DIYWeb.Inside do
 
   defp month_name(month), do: Enum.at(Estimate.month_names(), month - 1)
 
-  defp features(kind), do: Enum.map_join(kind.features, ", ", &feature/1)
+  @doc "Features of a kind of item, in words."
+  def features(features), do: Enum.map_join(features, ", ", &feature/1)
 
   defp feature(:estimate), do: "the usage estimate"
   defp feature(:backup), do: "the hours of backup in an outage"
@@ -385,6 +420,10 @@ defmodule DIYWeb.Inside do
   defp feature(:solar), do: "the power of the sun"
   defp feature(:ev), do: "the cost of the home charge next to gas"
   defp feature(:usage), do: "your real usage, from the file of the meter"
+  defp feature(:van), do: "the build of the van: its zones, its weight and its power"
+  defp feature(:weight), do: "the weight budget of the van"
+  defp feature(:van_power), do: "the power budget of the van"
+  defp feature(:safety), do: "the safety notes of the van"
 
   attr :usage, :map, default: nil
 
@@ -432,7 +471,8 @@ defmodule DIYWeb.Inside do
   attr :value, :any, required: true
   attr :error, :boolean, default: false
 
-  defp param(%{param: %{type: :bool}} = assigns) do
+  @doc "The input of a parameter of an item (`DIY.Catalog`)."
+  def param(%{param: %{type: :bool}} = assigns) do
     ~H"""
     <label class="flex items-center gap-2">
       <input type="hidden" name={"item[#{@param.key}]"} value="false" />
@@ -448,7 +488,7 @@ defmodule DIYWeb.Inside do
     """
   end
 
-  defp param(%{param: %{type: {:choice, values}}} = assigns) do
+  def param(%{param: %{type: {:choice, values}}} = assigns) do
     assigns = assign(assigns, :values, values)
 
     ~H"""
@@ -461,7 +501,7 @@ defmodule DIYWeb.Inside do
     """
   end
 
-  defp param(assigns) do
+  def param(assigns) do
     ~H"""
     <label class="block">
       <span class="text-sm font-semibold">{@param.label}{if @param.unit, do: " (#{@param.unit})"}</span>
@@ -514,18 +554,21 @@ defmodule DIYWeb.Inside do
 
   attr :id, :string, required: true
   attr :title, :string, required: true
+  attr :close, :string, default: "/inside", doc: "the page of the close link"
   slot :inner_block, required: true
 
-  # A sheet over the page. The close link goes back to the rooms. The hook
-  # Sheet closes it with the Escape key, and keeps the focus in it.
-  defp sheet(assigns) do
+  @doc """
+  A sheet over the page. The close link goes back to the page under it.
+  The hook Sheet closes it with the Escape key, and keeps the focus in it.
+  """
+  def sheet(assigns) do
     ~H"""
     <div
       id={@id}
       phx-hook="Sheet"
       class="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40"
     >
-      <.link patch={~p"/inside"} class="absolute inset-0" aria-label="Close" tabindex="-1"></.link>
+      <.link patch={@close} class="absolute inset-0" aria-label="Close" tabindex="-1"></.link>
       <div
         role="dialog"
         aria-modal="true"
@@ -535,7 +578,7 @@ defmodule DIYWeb.Inside do
       >
         <div class="flex items-center justify-between">
           <h2 id={"#{@id}-title"} class="text-lg font-bold">{@title}</h2>
-          <.link patch={~p"/inside"} class="btn btn-sm btn-ghost" aria-label="Close" data-close>
+          <.link patch={@close} class="btn btn-sm btn-ghost" aria-label="Close" data-close>
             ✕
           </.link>
         </div>

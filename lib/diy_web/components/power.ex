@@ -6,7 +6,9 @@ defmodule DIYWeb.PowerPage do
   stations use their batteries, and the math of these numbers.
 
   The page shows only the parts that apply to the house: a house with no
-  station has no hours of backup, and a house with no car has no cars.
+  station has no hours of backup, and a house with no car has no cars. A
+  station of the house that is in a van now (`DIY.Van.stations/1`) is not
+  in the numbers of the house: the page tells it.
   """
   use DIYWeb, :html
 
@@ -17,11 +19,23 @@ defmodule DIYWeb.PowerPage do
   attr :power, :map, default: nil
   attr :whatif, :map, default: nil
   attr :price, :map, default: nil
+  attr :away, :list, default: [], doc: "the stations of the house in a van: {item, van}"
 
   def page(assigns) do
     ~H"""
     <section id="power" class="space-y-6">
       <h1 class="text-xl font-bold">Power</h1>
+
+      <ul :if={@away != []} id="power-away" class="space-y-2">
+        <li :for={{item, van} <- @away} class="alert alert-info text-sm">
+          <span>
+            {Catalog.name(item)} ({Format.value(
+              Float.round((item.params["kwh"] + item.params["extra_kwh"]) / 1, 3)
+            )} kWh) is in the van now. The numbers of the house do not count it until it comes home.
+            <.link patch={~p"/van?#{[id: van.id]}"} class="link">Open the van</.link>
+          </span>
+        </li>
+      </ul>
 
       <p :if={is_nil(@power)} class="opacity-70">
         The page shows the power when the house has its estimate.
@@ -29,6 +43,7 @@ defmodule DIYWeb.PowerPage do
 
       <%= cond do %>
         <% is_nil(@power) -> %>
+        <% not equipment?(@build) and @away != [] -> %>
         <% not equipment?(@build) -> %>
           <p id="no-equipment" class="text-sm">
             The house has no power equipment yet. Add a power station, solar panels, an interlock or an electric car in a room.
@@ -215,7 +230,7 @@ defmodule DIYWeb.PowerPage do
     others =
       Enum.count(
         assigns.build.items,
-        &(&1.type not in ~w(power_station solar_panels transfer_switch smart_meter) and
+        &(&1.type not in ~w(power_station solar_panels transfer_switch smart_meter camper_van) and
             &1 not in sys.backup)
       )
 
