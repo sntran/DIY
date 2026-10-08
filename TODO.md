@@ -51,5 +51,5 @@ The owner decides about each item.
   the person compares 2 plans with the worksheet.
 - The EFL forms that the reader does not know yet: numbers in columns
   under their names, and charges in a table.
-- The delivery charges of the other utilities (CenterPoint, AEP Texas,
-  TNMP) in the table of `DIY.Plan.tdu/1`.
+- The delivery charges of the other utilities (AEP Texas, TNMP) in the
+  table of `DIY.Plan.tdu/1`.
