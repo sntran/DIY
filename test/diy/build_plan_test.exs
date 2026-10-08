@@ -309,4 +309,34 @@ defmodule DIY.BuildPlanTest do
       assert read.items == build.items
     end
   end
+
+  property "a stored build with any plans and places loads with the rules of the plan" do
+    check all(
+            floors <- integer(1..3),
+            plans <- list_of(one_of([constant(nil), plan()]), length: 20),
+            places <- list_of({integer(-900..900), integer(-900..900)}, length: 40),
+            max_runs: 60
+          ) do
+      map = Jason.decode!(Build.to_json(house(floors)))
+
+      stored =
+        map
+        |> Map.update!("rooms", fn rooms ->
+          rooms
+          |> Enum.zip(Stream.cycle(plans))
+          |> Enum.map(fn
+            {room, nil} -> Map.delete(room, "plan")
+            {room, plan} -> Map.put(room, "plan", Map.new(plan, fn {k, v} -> {"#{k}", v} end))
+          end)
+        end)
+        |> Map.update!("items", fn items ->
+          items
+          |> Enum.zip(Stream.cycle(places))
+          |> Enum.map(fn {item, {x, y}} -> Map.put(item, "at", %{"x" => x, "y" => y}) end)
+        end)
+
+      {:ok, read} = Build.from_json(Jason.encode!(stored))
+      assert_rules(read)
+    end
+  end
 end
