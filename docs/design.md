@@ -258,16 +258,26 @@ and the build stays on the device (see above).
 The app reads these files:
 
 - Smart Meter Texas: the CSV of "Energy Data 15 Min Interval", or of the
-  daily reads. The columns: `USAGE_DATE`, `USAGE_START_TIME`, `USAGE_KWH`
-  and `CONSUMPTION_SURPLUSGENERATION`.
-- Green Button: the XML (ESPI) of "Download My Data", with its units, its
-  power of ten, its time zone and its daylight time, or a CSV with a
-  date, a start time and the usage.
+  daily reads. The columns: `USAGE_DATE`, `USAGE_KWH` and
+  `CONSUMPTION_SURPLUSGENERATION`.
+- Green Button: the XML (ESPI) of "Download My Data". Each IntervalBlock
+  gets the ReadingType of its own MeterReading (the links of the feed).
+  The app reads only electric energy in Wh (uom 72, with its power of
+  ten): from the grid, to the grid, or net. It refuses a file of gas or
+  of the demand (kW), and it skips the summaries. With hourly and daily
+  readings of the same days, it takes the finest ones. It uses the time
+  zone and the daylight time of the file.
+- Green Button CSV, or a CSV with a date and the kWh: a column of the
+  kWh to the grid (export) goes to the grid, a net value under zero too,
+  and a row of gas or with units that are not kWh or Wh does not count.
 
 For each month (the last 24 months at most), the build keeps the kWh from
-the grid, the kWh to the grid, the days with data, and the mean kWh of
-each hour of the day (or no hours for daily data). Phase 3 uses the hours.
-`DIY.Usage.read/1` accepts only a usage that it can read in full.
+the grid, the kWh to the grid, and the days with data. The page says so.
+`DIY.Usage.read/1` accepts only a usage that it can read in full: a month
+"YYYY-MM" of 2000 to 2099, with at most the days of that month. When a
+file has a month of the year two times (a file of 12 months from the 8th
+of a month), the app takes the one with the most days. With no smart
+meter, the build keeps no real usage.
 
 ### The real months and the estimate
 
@@ -289,15 +299,21 @@ and keeps the best one with no number under zero. It needs 6 months with
 
 - The check of the plan: "the estimate falls inside its own range for
   test houses with meter data". The test makes 24 houses: 4 sizes, 3
-  kinds of heat, 2 of each. Each real house is a preset with other
-  numbers (a heat loss up to 10% larger or smaller, an AC of one SEER2
-  more or less, other items up to 20% more or less), and its months come
-  from the real weather of July 2024 to June 2025, with 5% noise. The
-  estimate of the preset does not know these numbers. Each house has 9
-  of its 12 months in the range at least, and all the houses 90% (in
-  October 2026: 282 of 288 months, 98%). The months out of the range: the
-  hot October of 2024, a hot August and a cold January, in houses that
-  are larger than their preset and have more items.
+  kinds of heat, 2 of each. Each test house is a preset with other numbers
+  (a heat loss up to 10% larger or smaller, an AC of one SEER2 more or
+  less, a furnace blower and other items up to 20% more or less, one
+  person more or less at the water heater). Its months come from the
+  weather of July 2024 to June 2025, with 5% noise. The estimate of the
+  preset does not know these numbers, and it uses the weather of 2016 to
+  2023 only. Each house has 10 of its 12 months in the range at least, and
+  all the houses 90% (in October 2026: 269 of 288 months, 93%).
+
+  This is a check of the app with itself, on synthetic meter data: the
+  test houses come from the same model as the estimate. It shows that the
+  range covers the numbers that the model does not know. It cannot find a
+  fault of the model itself: a house with 25% more heat loss than its
+  preset has fewer months in the range. A check with real files of meters
+  is open (TODO.md).
 - Property tests: random files of 15-minute reads give the sums of their
   readings, any text gives a result or an error, a usage goes to JSON and
   back with no change, and the fit finds the numbers of a house from its

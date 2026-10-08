@@ -24,3 +24,8 @@ The owner decides about each item.
   plan).
 - A lot from a subdivision plan, for "a house I'm planning". Today the
   user gives the size of the lot.
+- The check of phase 2 with real files of meters (anonymized), in place of
+  synthetic meter data from the model of the estimate.
+- The weather of the months of this year (NASA POWER has the months of
+  last year and before): a file of the last 12 months then gets its fit.
+
