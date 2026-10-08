@@ -14,6 +14,7 @@ defmodule DIYWeb.Layouts do
   attr :flash, :map, required: true, doc: "the flash notices"
   attr :nav, :boolean, default: false, doc: "show the bar of the parts of a build"
   attr :action, :atom, default: nil, doc: "the part that shows"
+  attr :power, :boolean, default: false, doc: "show the part Power (DIYWeb.PowerPage)"
   attr :saved, :boolean, default: true, doc: "the device has the last change"
   slot :inner_block, required: true
 
@@ -57,6 +58,14 @@ defmodule DIYWeb.Layouts do
         aria-current={@action == :estimate && "page"}
       >
         <span aria-hidden="true">📊</span><span class="dock-label">Bill</span>
+      </.link>
+      <.link
+        :if={@power}
+        patch={~p"/power"}
+        class={[@action == :power && "dock-active"]}
+        aria-current={@action == :power && "page"}
+      >
+        <span aria-hidden="true">🔋</span><span class="dock-label">Power</span>
       </.link>
       <.link
         patch={~p"/settings"}

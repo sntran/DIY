@@ -271,6 +271,58 @@ for (const colorScheme of ["light", "dark"]) {
     await page.click("nav >> text=House")
     assert.match(await page.textContent("#real-average"), /\$\d+/)
 
+    // The power: a station in the laundry runs the fridge, and the person
+    // plans panels on the roof.
+    await page.click("nav >> text=Rooms")
+    await page.waitForSelector("#inside")
+    await page.click('a[aria-label="Add an item to Laundry"]')
+    await page.click("#add-power_station")
+    await page.waitForSelector("#item-sheet:has-text('Power station')")
+    await page.click("#item-sheet .btn-ghost[aria-label=Close]")
+    await page.waitForSelector("#item-sheet", { state: "detached" })
+    await page.click('a[id^="item-"]:has-text("Fridge")')
+    await page.check("#flags-form input[name=backup][type=checkbox]")
+    await page.waitForSelector("#flags-form input[name=backup]:checked")
+    await page.click("#item-sheet .btn-ghost[aria-label=Close]")
+    await page.waitForSelector('a[id^="item-"]:has-text("On the station")')
+    await page.click('a[aria-label="Add an item to Roof"]')
+    await page.click("#add-solar_panels")
+    await page.waitForSelector("#item-sheet:has-text('Solar panels')")
+    await page.check("#flags-form input[name=planned][type=checkbox]")
+    await page.waitForSelector('#item-sheet:has-text("Solar panels")')
+    await page.waitForSelector("#flags-form input[name=planned]:checked")
+    await check(page, `${name} planned item`)
+    await page.click("#item-sheet .btn-ghost[aria-label=Close]")
+    await page.waitForSelector('a[id^="item-"]:has-text("Plan")')
+
+    // The page Bill with a planned item: the house of today, and a note.
+    await page.click("nav >> text=Bill")
+    await page.waitForSelector("#planned-note")
+    await page.waitForSelector("#items")
+
+    await page.click("nav >> text=Power")
+    await page.waitForSelector("#plan")
+    await page.waitForSelector("#outage")
+    assert.match(
+      await page.textContent("#payback"),
+      /The planned equipment (saves \$[\d,]+ in one year[:.] [Ii]t pays back in|saves no money|does not pay back: it costs)/,
+    )
+    await check(page, `${name} power`)
+    await page.click("nav >> text=House")
+    await page.waitForSelector("#whatif-card")
+    await check(page, `${name} front with a plan`)
+
+    // A station that is too small for its items: the warning.
+    await page.click("nav >> text=Rooms")
+    await page.click('a[id^="item-"]:has-text("Power station")')
+    await page.fill("#item-form input[name='item[output_w]']", "100")
+    await page.press("#item-form input[name='item[output_w]']", "Tab")
+    await page.waitForFunction(() => document.querySelector("#item-form input[name='item[output_w]']").value === "100")
+    await page.click("#item-sheet .btn-ghost[aria-label=Close]")
+    await page.click("nav >> text=Power")
+    await page.waitForSelector("#today-overload")
+    await check(page, `${name} power with an overload`)
+
     await context.close()
   }
 }

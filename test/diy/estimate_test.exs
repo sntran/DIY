@@ -308,6 +308,7 @@ defmodule DIY.EstimateTest do
     {build, _id} = add(build, "Backyard", "pool_pump", %{"season" => "summer"})
     {build, _id} = add(build, "Living room", "ceiling_fan", %{"season" => "summer"})
     {build, _id} = add(build, "Living room", "ceiling_fan", %{"season" => "all"})
+    {build, _id} = add(build, "Driveway", "ev", %{"charger" => "l1", "miles" => "45"})
     estimate = Estimate.run(build, climate())
 
     for item <- build.items, month <- 1..12 do

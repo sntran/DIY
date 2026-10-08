@@ -18,7 +18,8 @@ defmodule DIYWeb.Inside do
   @place_names %{indoor: "Inside", outdoor: "Outside", roof: "On the roof"}
 
   attr :build, :map, required: true
-  attr :estimate, :map, required: true
+  attr :estimate, :map, required: true, doc: "the estimate with the planned items"
+  attr :bill, :map, default: nil, doc: "the bill of today (DIY.Bill)"
   attr :price, :map, required: true
   attr :item, :string, default: nil
   attr :add, :string, default: nil
@@ -32,12 +33,12 @@ defmodule DIYWeb.Inside do
       <div class="flex items-center justify-between">
         <h1 class="text-xl font-bold">Rooms</h1>
         <.link
-          :if={@estimate.ready}
+          :if={@bill}
           patch={~p"/estimate"}
           id="pill"
           class="badge badge-lg badge-primary"
         >
-          {Format.money(Format.cost(@estimate.kwh / 12, @price.cents))} a month
+          {Format.money(@bill.cost / 12)} a month
         </.link>
       </div>
 
@@ -141,7 +142,11 @@ defmodule DIYWeb.Inside do
               id={"item-#{item.id}"}
               class={[
                 "card p-2 h-full hover:bg-base-200",
-                if(item.typical, do: "border border-dashed border-base-300", else: "card-border")
+                cond do
+                  item.planned -> "border-2 border-dashed border-primary"
+                  item.typical -> "border border-dashed border-base-300"
+                  true -> "card-border"
+                end
               ]}
             >
               <span class="text-2xl" aria-hidden="true">{Catalog.kind(item.type).emoji}</span>
@@ -152,6 +157,10 @@ defmodule DIYWeb.Inside do
                 )} a month
               </span>
               <span :if={item.typical} class="text-xs opacity-60">Typical</span>
+              <span :if={item.planned} class="text-xs font-semibold">Plan</span>
+              <span :if={item.backup and station?(@build)} class="text-xs">
+                <span aria-hidden="true">🔋</span> On the station
+              </span>
             </.link>
           </li>
           <li>
@@ -272,6 +281,30 @@ defmodule DIYWeb.Inside do
         <button type="button" phx-click="check_item" phx-value-id={@item.id} class="btn btn-xs">Correct</button>
       </div>
 
+      <form id="flags-form" phx-change="flag" class="space-y-1">
+        <input type="hidden" name="item_id" value={@item.id} />
+        <label class="flex items-center gap-2 text-sm">
+          <input type="hidden" name="planned" value="false" />
+          <input
+            type="checkbox"
+            name="planned"
+            value="true"
+            checked={@item.planned}
+            class="checkbox checkbox-sm"
+          /> I do not have it yet: it is a plan
+        </label>
+        <label :if={station?(@build) and loads_power?(@item)} class="flex items-center gap-2 text-sm">
+          <input type="hidden" name="backup" value="false" />
+          <input
+            type="checkbox"
+            name="backup"
+            value="true"
+            checked={@item.backup}
+            class="checkbox checkbox-sm"
+          /> A power station runs it (in an outage too)
+        </label>
+      </form>
+
       <form id="item-form" phx-change="item" phx-submit="item" class="space-y-3">
         <input type="hidden" name="item_id" value={@item.id} />
         <.param
@@ -330,6 +363,13 @@ defmodule DIYWeb.Inside do
     """
   end
 
+  # True when the house has a power station (a planned one too).
+  defp station?(build), do: Enum.any?(build.items, &(&1.type == "power_station"))
+
+  # The items that a station can run: the items that use power.
+  defp loads_power?(%{type: type}),
+    do: type not in ~w(power_station solar_panels transfer_switch smart_meter)
+
   # A month that shows the work of an item: January for heat, July else.
   defp math_month(%{type: type}) when type in ["furnace", "heat_strips", "space_heater"], do: 1
   defp math_month(_item), do: 7
@@ -339,6 +379,11 @@ defmodule DIYWeb.Inside do
   defp features(kind), do: Enum.map_join(kind.features, ", ", &feature/1)
 
   defp feature(:estimate), do: "the usage estimate"
+  defp feature(:backup), do: "the hours of backup in an outage"
+  defp feature(:shift), do: "the charge at night"
+  defp feature(:power_view), do: "the view of what feeds what, and the permit notes"
+  defp feature(:solar), do: "the power of the sun"
+  defp feature(:ev), do: "the cost of the home charge next to gas"
   defp feature(:usage), do: "your real usage, from the file of the meter"
 
   attr :usage, :map, default: nil

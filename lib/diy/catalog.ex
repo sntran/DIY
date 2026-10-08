@@ -390,6 +390,178 @@ defmodule DIY.Catalog do
       ]
     },
     %{
+      type: "power_station",
+      name: "Power station",
+      emoji: "🔋",
+      places: [:indoor, :outdoor],
+      features: [:backup, :shift, :power_view],
+      params: [
+        float(
+          "kwh",
+          "Battery",
+          "kWh",
+          2.0,
+          0.1,
+          100.0,
+          "The label or the app of the station gives it in Wh: 2,048 Wh is 2.048 kWh."
+        ),
+        float(
+          "extra_kwh",
+          "Extra batteries",
+          "kWh",
+          0.0,
+          0.0,
+          200.0,
+          "The sum of the expansion batteries that connect to the station."
+        ),
+        int(
+          "output_w",
+          "Output",
+          "W",
+          2400,
+          100,
+          30000,
+          "The most power of its outlets, all the time (not the surge)."
+        ),
+        int(
+          "charge_w",
+          "Charge from the wall",
+          "W",
+          1800,
+          50,
+          20000,
+          "The most power of its AC charge."
+        ),
+        int("solar_w", "Solar input", "W", 1000, 0, 20000, "The most solar power that it takes."),
+        choice(
+          "feeds",
+          "It powers",
+          [
+            {"plug", "Items that plug into it"},
+            {"panel", "Circuits of the house, through an inlet"}
+          ],
+          "plug"
+        ),
+        int(
+          "cost",
+          "Price",
+          "$",
+          1500,
+          0,
+          200_000,
+          "What you paid, or what it costs: for the payback."
+        )
+      ]
+    },
+    %{
+      type: "solar_panels",
+      name: "Solar panels",
+      emoji: "☀️",
+      places: [:roof, :outdoor],
+      features: [:solar],
+      params: [
+        int(
+          "watts",
+          "Size",
+          "W",
+          800,
+          50,
+          50000,
+          "The sum of the watts on the labels of the panels."
+        ),
+        choice(
+          "facing",
+          "They face",
+          [
+            {"south", "South"},
+            {"southeast", "South-east or south-west"},
+            {"east", "East or west"},
+            {"flat", "Up (flat)"}
+          ],
+          "south"
+        ),
+        choice(
+          "to",
+          "They connect to",
+          [
+            {"station", "A power station"},
+            {"grid", "The house and the grid (a grid-tie inverter)"}
+          ],
+          "station"
+        ),
+        int(
+          "cost",
+          "Price",
+          "$",
+          800,
+          0,
+          200_000,
+          "What you paid, or what they cost: for the payback."
+        )
+      ]
+    },
+    %{
+      type: "transfer_switch",
+      name: "Interlock, transfer switch or subpanel",
+      emoji: "🔀",
+      places: [:indoor, :outdoor],
+      features: [:power_view],
+      params: [
+        choice(
+          "device",
+          "Device",
+          [
+            {"interlock", "Interlock kit on the main panel"},
+            {"transfer", "Transfer switch"},
+            {"subpanel", "Subpanel for the backup circuits, with a transfer switch"}
+          ],
+          "interlock"
+        ),
+        int(
+          "cost",
+          "Price",
+          "$",
+          300,
+          0,
+          50_000,
+          "The device, the inlet and the work: for the payback."
+        )
+      ]
+    },
+    %{
+      type: "ev",
+      name: "Electric car",
+      emoji: "🚗",
+      places: [:outdoor, :indoor],
+      features: [:ev],
+      params: [
+        int("miles", "Miles in one day", "mi", 30, 0, 500),
+        float(
+          "mi_kwh",
+          "Efficiency",
+          "mi/kWh",
+          3.5,
+          1.0,
+          6.0,
+          "The app of the car, or 100 ÷ the kWh/100 mi of the EPA label."
+        ),
+        choice(
+          "charger",
+          "Charger",
+          [{"l1", "Level 1: a wall outlet (1.4 kW)"}, {"l2", "Level 2: 240 V (7.2 kW)"}],
+          "l2"
+        ),
+        choice(
+          "when",
+          "It charges",
+          [{"night", "At night"}, {"evening", "When I come home"}],
+          "night"
+        ),
+        float("mpg", "The gas car that it replaces", "mpg", 25.0, 5.0, 80.0, nil),
+        float("gas", "Price of gas", "$/gal", 2.7, 0.5, 10.0, "The price at your gas station.")
+      ]
+    },
+    %{
       type: "other",
       name: "Other",
       emoji: "⚙️",

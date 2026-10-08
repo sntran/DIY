@@ -16,7 +16,9 @@ defmodule DIYWeb.HomeLive do
   """
   use DIYWeb, :live_view
 
-  alias DIY.{Build, Catalog, Estimate, House, Market, Prices, Usage, Weather}
+  @power_types ~w(power_station solar_panels transfer_switch ev)
+
+  alias DIY.{Bill, Build, Catalog, Estimate, House, Market, Power, Prices, Usage, Weather}
   alias DIYWeb.{Device, Format}
 
   @impl true
@@ -27,6 +29,10 @@ defmodule DIYWeb.HomeLive do
      |> assign(:weather, %{zip: nil, status: :none, climate: nil})
      |> assign(:market, %{zip: nil, status: :none})
      |> assign(:estimate, %{ready: false, missing: []})
+     |> assign(:full, %{ready: false, missing: []})
+     |> assign(:power, nil)
+     |> assign(:bill, nil)
+     |> assign(:whatif, nil)
      |> assign(:price, nil)
      |> assign(:item, nil)
      |> assign(:add, nil)
@@ -232,6 +238,38 @@ defmodule DIYWeb.HomeLive do
     end
   end
 
+  # The flags of an item: "planned" and "backup", "true" or "false".
+  def handle_event("flag", %{"item_id" => id} = params, socket) do
+    with_build(
+      socket,
+      with {:ok, build} <- flag(socket.assigns.build, id, :planned, params["planned"]) do
+        flag(build, id, :backup, params["backup"])
+      end
+    )
+  end
+
+  def handle_event("plan_done", _params, socket) do
+    build =
+      Enum.reduce(socket.assigns.build.items, socket.assigns.build, fn item, build ->
+        if item.planned,
+          do: elem(Build.flag_item(build, item.id, :planned, false), 1),
+          else: build
+      end)
+
+    {:noreply,
+     socket |> put(build) |> put_flash(:info, "The planned items are part of your house now.")}
+  end
+
+  def handle_event("power", params, socket) do
+    case Power.update(socket.assigns.build.power, params) do
+      {:ok, power} ->
+        {:noreply, put(socket, Build.set_power(socket.assigns.build, power))}
+
+      {:error, field} ->
+        {:noreply, put_flash(socket, :error, power_error(field))}
+    end
+  end
+
   def handle_event("utility", %{"choice" => choice}, socket) do
     market = Market.by_user(socket.assigns.build.market, choice == "true")
     {:noreply, put(socket, Build.set_market(socket.assigns.build, market))}
@@ -252,6 +290,11 @@ defmodule DIYWeb.HomeLive do
   def handle_event("upload", _params, socket), do: {:noreply, socket}
 
   def handle_event(_event, _params, socket), do: {:noreply, socket}
+
+  defp flag(build, id, flag, value) when value in ["true", "false"],
+    do: Build.flag_item(build, id, flag, value == "true")
+
+  defp flag(build, _id, _flag, _value), do: {:ok, build}
 
   defp with_build(socket, {:ok, build}), do: {:noreply, put(socket, build)}
   defp with_build(socket, {:error, _reason}), do: {:noreply, socket}
@@ -317,6 +360,15 @@ defmodule DIYWeb.HomeLive do
     end
   end
 
+  defp power_error(:night_cents),
+    do: "Give the price at night in cents, from 0 to 200, or leave it empty."
+
+  defp power_error(field) when field in [:night_from, :night_to], do: "Give an hour from 0 to 23."
+  defp power_error(:night), do: "The night must start and end at different hours."
+  defp power_error(:buyback_cents), do: "Give the price in cents, from 0 to 200."
+  defp power_error(:reserve), do: "Give a part from 0 to 100%."
+  defp power_error(:mode), do: "Choose how you use the batteries."
+
   defp room_error(:name), do: "Give the room a name."
   defp room_error(:level), do: "Choose a floor of the house."
   defp room_error(:place), do: "Choose a place: inside, outside or the roof."
@@ -369,13 +421,34 @@ defmodule DIYWeb.HomeLive do
 
   defp load_market(socket), do: socket
 
+  # The estimate of the house of today (with no planned item), its power
+  # and its bill, the estimate with the planned items (for the math of an
+  # item), and the what-if (DIY.Power).
   defp estimate(socket) do
     build = socket.assigns.build
     climate = socket.assigns.weather.climate
+    today = Build.today(build)
+    estimate = Estimate.run(today, climate)
+    full = if today == build, do: estimate, else: Estimate.run(build, climate)
+    price = if build.zip, do: Prices.price(build)
+
+    {power, bill, whatif} =
+      if estimate.ready do
+        power = Power.run(today, estimate, climate, price.cents)
+
+        {power, Bill.run(estimate, power),
+         Power.whatif(build, power, estimate, full, climate, price.cents)}
+      else
+        {nil, nil, nil}
+      end
 
     socket
-    |> assign(:estimate, Estimate.run(build, climate))
-    |> assign(:price, if(build.zip, do: Prices.price(build)))
+    |> assign(:estimate, estimate)
+    |> assign(:full, full)
+    |> assign(:price, price)
+    |> assign(:power, power)
+    |> assign(:bill, bill)
+    |> assign(:whatif, whatif)
   end
 
   @impl true
@@ -434,6 +507,7 @@ defmodule DIYWeb.HomeLive do
     <Layouts.app
       flash={@flash}
       nav={nav?(@build)}
+      power={power?(@build)}
       action={@live_action}
       saved={Device.saved?(assigns)}
     >
@@ -459,7 +533,8 @@ defmodule DIYWeb.HomeLive do
           <% @live_action == :inside -> %>
             <DIYWeb.Inside.inside
               build={@build}
-              estimate={@estimate}
+              estimate={@full}
+              bill={@bill}
               price={@price}
               item={@item}
               add={@add}
@@ -467,10 +542,20 @@ defmodule DIYWeb.HomeLive do
             />
           <% @live_action == :estimate -> %>
             <DIYWeb.Math.estimate
-              build={@build}
+              build={Build.today(@build)}
+              planned={Enum.count(@build.items, & &1.planned)}
               estimate={@estimate}
+              power={@power}
+              bill={@bill}
               price={@price}
               weather={@weather}
+            />
+          <% @live_action == :power -> %>
+            <DIYWeb.PowerPage.page
+              build={@build}
+              power={@power}
+              whatif={@whatif}
+              price={@price}
             />
           <% @live_action == :settings -> %>
             <DIYWeb.Settings.settings
@@ -483,6 +568,8 @@ defmodule DIYWeb.HomeLive do
             <DIYWeb.Front.front
               build={@build}
               estimate={@estimate}
+              bill={@bill}
+              whatif={@whatif}
               price={@price}
               weather={@weather}
               market={@market}
@@ -495,4 +582,10 @@ defmodule DIYWeb.HomeLive do
 
   defp nav?(%Build{house: house}) when is_map(house), do: true
   defp nav?(_build), do: false
+
+  # The page Power is for a house with power equipment, a car, or a plan.
+  defp power?(%Build{items: items}),
+    do: Enum.any?(items, &(&1.planned or &1.type in @power_types))
+
+  defp power?(_build), do: false
 end

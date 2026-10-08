@@ -401,10 +401,22 @@ defmodule DIY.Estimate do
   # show.
   def kwh(%{type: "smart_meter"}, _ctx), do: other(0)
 
+  # The power equipment changes the power from the grid, not the use of
+  # the house: see DIY.Power.
+  def kwh(%{type: type}, _ctx) when type in ["power_station", "solar_panels", "transfer_switch"],
+    do: other(0)
+
+  def kwh(%{type: "ev", params: p}, ctx),
+    do: other(p["miles"] * ctx.days / p["mi_kwh"] / charge_efficiency(p["charger"]))
+
   def kwh(%{params: p} = item, ctx),
     do: other(in_season(item, ctx) * p["watts"] * p["hours"] * ctx.days / 1_000)
 
   defp other(kwh), do: %{kwh: kwh / 1, part: :other, full: false}
+
+  @doc "The part of the power that goes into the battery of a car: a charge loses some."
+  def charge_efficiency("l1"), do: 0.85
+  def charge_efficiency("l2"), do: 0.9
 
   defp hvac_part(%{cool_btu: cool, heat_btu: heat}) when cool >= heat, do: :cooling
   defp hvac_part(_ctx), do: :heating
@@ -600,6 +612,24 @@ defmodule DIY.Estimate do
 
   defp steps(%{type: "smart_meter"}, _m, _data, _estimate),
     do: ["The meter measures the power of the house. Its own power is too small to show."]
+
+  defp steps(%{type: "power_station"}, _m, _data, _estimate),
+    do: [
+      "A power station keeps power for later. It changes the power from the grid, not the use of the house: see the page Power."
+    ]
+
+  defp steps(%{type: "solar_panels"}, _m, _data, _estimate),
+    do: [
+      "The panels make power. They change the power from the grid, not the use of the house: see the page Power."
+    ]
+
+  defp steps(%{type: "transfer_switch"}, _m, _data, _estimate),
+    do: ["The device connects the circuits to the grid or to a power station. It uses no power."]
+
+  defp steps(%{type: "ev", params: p}, m, _data, _estimate),
+    do: [
+      "#{fmt(p["miles"])} miles in one day × #{m.days} days ÷ #{num(p["mi_kwh"])} miles for each kWh ÷ #{num(charge_efficiency(p["charger"]))} (the charge loses some power)."
+    ]
 
   defp steps(%{type: "always_on", params: p}, m, _data, _estimate),
     do: ["#{num(p["watts"])} W × 24 hours × #{m.days} days ÷ 1,000."]
