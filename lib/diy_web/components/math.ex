@@ -9,12 +9,17 @@ defmodule DIYWeb.Math do
   alias DIY.{Catalog, Usage}
   alias DIYWeb.Format
 
-  attr :build, :map, required: true
+  attr :build, :map, required: true, doc: "the house of today (no planned item)"
+  attr :planned, :integer, default: 0, doc: "the number of planned items"
   attr :estimate, :map, required: true
+  attr :power, :map, default: nil, doc: "the power of the house of today (DIY.Power)"
+  attr :bill, :map, default: nil, doc: "the bill of the house of today (DIY.Bill)"
   attr :price, :map, required: true
   attr :weather, :map, required: true
 
   def estimate(assigns) do
+    assigns = assign(assigns, :changed, assigns.power != nil and changed?(assigns.power))
+
     ~H"""
     <section id="math" class="space-y-4">
       <h1 class="text-2xl font-bold">How the app gets your bill</h1>
@@ -30,6 +35,10 @@ defmodule DIYWeb.Math do
           the weather changes from year to year, and the numbers of the items are not exact.
           A file of your smart meter gives your real usage.
         </p>
+        <p :if={@planned > 0} id="planned-note" class="text-sm">
+          The {Format.count(@planned, "planned item")} are not in this bill.
+          <.link patch={~p"/power"} class="link">The page Power shows the plan.</.link>
+        </p>
 
         <div class="overflow-x-auto">
           <table class="table table-xs sm:table-sm" id="months">
@@ -39,7 +48,7 @@ defmodule DIYWeb.Math do
                 <th class="text-right hidden sm:table-cell">°F-days cool / heat</th>
                 <th class="text-right">kWh</th>
                 <th class="text-right">Range</th>
-                <th class="text-right">Bill</th>
+                <th class="text-right">{if @changed, do: "kWh × price", else: "Bill"}</th>
               </tr>
             </thead>
             <tbody>
@@ -66,6 +75,8 @@ defmodule DIYWeb.Math do
             </tfoot>
           </table>
         </div>
+
+        <.with_power :if={@changed} power={@power} bill={@bill} price={@price} />
 
         <.real :if={@build.usage} build={@build} estimate={@estimate} weather={@weather} />
 
@@ -110,6 +121,79 @@ defmodule DIYWeb.Math do
         </ul>
       <% end %>
     </section>
+    """
+  end
+
+  # True when the equipment or the prices make the bill different from the
+  # use times the price.
+  defp changed?(%{system: sys, settings: settings}) do
+    sys.stations != [] or sys.grid_panels_w > 0 or settings.night_cents != nil
+  end
+
+  attr :power, :map, required: true
+  attr :bill, :map, required: true
+  attr :price, :map, required: true
+
+  # The bill with the equipment and the prices of the house (DIY.Bill).
+  defp with_power(assigns) do
+    assigns = assign(assigns, :settings, assigns.power.settings)
+
+    ~H"""
+    <div id="bill-math" class="space-y-1">
+      <h2 class="text-lg font-bold">Your bill with your equipment and prices</h2>
+      <p class="text-sm">
+        The equipment and the prices change the bill, not the use. For each month, the bill is the kWh from the grid in the day × {Format.cents(
+          @price.cents
+        )}{if @settings.night_cents,
+          do:
+            ", plus the kWh from the grid at night (#{@settings.night_from}:00 to #{@settings.night_to}:00) × #{Format.cents(@settings.night_cents)}"}{if @power.year.export >
+                                                                                                                                                            0,
+                                                                                                                                                          do:
+                                                                                                                                                            ", less the kWh to the grid × #{Format.cents(@settings.buyback_cents)}"}.
+        <.link patch={~p"/power"} class="link">The page Power shows how the app gets the kWh from the grid.</.link>
+      </p>
+      <div class="overflow-x-auto">
+        <table class="table table-xs sm:table-sm" id="bill-months">
+          <thead>
+            <tr>
+              <th>Month</th>
+              <th class="text-right">From the grid</th>
+              <th :if={@settings.night_cents} class="text-right">At night</th>
+              <th :if={@power.year.export > 0} class="text-right">To the grid</th>
+              <th class="text-right">Bill</th>
+              <th class="text-right">Range</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr :for={{p, b} <- Enum.zip(@power.months, @bill.months)}>
+              <td>{p.name}</td>
+              <td class="text-right">{Format.int(p.grid)}</td>
+              <td :if={@settings.night_cents} class="text-right">{Format.int(p.night)}</td>
+              <td :if={@power.year.export > 0} class="text-right">{Format.int(p.export)}</td>
+              <td class="text-right">{Format.money(b.cost)}</td>
+              <td class="text-right">{Format.money(b.cost_low)} to {Format.money(b.cost_high)}</td>
+            </tr>
+          </tbody>
+          <tfoot>
+            <tr>
+              <th>Year</th>
+              <th class="text-right">{Format.int(@power.year.grid)}</th>
+              <th :if={@settings.night_cents} class="text-right">{Format.int(@power.year.night)}</th>
+              <th :if={@power.year.export > 0} class="text-right">
+                {Format.int(@power.year.export)}
+              </th>
+              <th class="text-right">{Format.money(@bill.cost)}</th>
+              <th class="text-right">
+                {Format.money(@bill.cost_low)} to {Format.money(@bill.cost_high)}
+              </th>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <p class="text-xs opacity-80">
+        The range: the kWh from the grid, less or more the distance from the use to the ends of its range, at the mean price of the power from the grid.
+      </p>
+    </div>
     """
   end
 

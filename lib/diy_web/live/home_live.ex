@@ -364,6 +364,7 @@ defmodule DIYWeb.HomeLive do
     do: "Give the price at night in cents, from 0 to 200, or leave it empty."
 
   defp power_error(field) when field in [:night_from, :night_to], do: "Give an hour from 0 to 23."
+  defp power_error(:night), do: "The night must start and end at different hours."
   defp power_error(:buyback_cents), do: "Give the price in cents, from 0 to 200."
   defp power_error(:reserve), do: "Give a part from 0 to 100%."
   defp power_error(:mode), do: "Choose how you use the batteries."
@@ -428,19 +429,22 @@ defmodule DIYWeb.HomeLive do
     climate = socket.assigns.weather.climate
     today = Build.today(build)
     estimate = Estimate.run(today, climate)
+    full = if today == build, do: estimate, else: Estimate.run(build, climate)
     price = if build.zip, do: Prices.price(build)
 
     {power, bill, whatif} =
       if estimate.ready do
         power = Power.run(today, estimate, climate, price.cents)
-        {power, Bill.run(estimate, power), Power.whatif(build, climate, price.cents)}
+
+        {power, Bill.run(estimate, power),
+         Power.whatif(build, estimate, full, climate, price.cents)}
       else
         {nil, nil, nil}
       end
 
     socket
     |> assign(:estimate, estimate)
-    |> assign(:full, if(today == build, do: estimate, else: Estimate.run(build, climate)))
+    |> assign(:full, full)
     |> assign(:price, price)
     |> assign(:power, power)
     |> assign(:bill, bill)
@@ -538,15 +542,17 @@ defmodule DIYWeb.HomeLive do
             />
           <% @live_action == :estimate -> %>
             <DIYWeb.Math.estimate
-              build={@build}
+              build={Build.today(@build)}
+              planned={Enum.count(@build.items, & &1.planned)}
               estimate={@estimate}
+              power={@power}
+              bill={@bill}
               price={@price}
               weather={@weather}
             />
           <% @live_action == :power -> %>
             <DIYWeb.PowerPage.page
               build={@build}
-              estimate={@estimate}
               power={@power}
               whatif={@whatif}
               price={@price}

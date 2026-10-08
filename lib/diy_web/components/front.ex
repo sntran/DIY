@@ -131,7 +131,7 @@ defmodule DIYWeb.Front do
         <% not @estimate.ready -> %>
           <p class="opacity-70">The page gets the weather history of your ZIP code from NASA.</p>
         <% true -> %>
-          <.numbers estimate={@estimate} bill={@bill} price={@price} />
+          <.numbers estimate={@estimate} bill={@bill} price={@price} build={@build} />
       <% end %>
     </div>
     """
@@ -140,6 +140,7 @@ defmodule DIYWeb.Front do
   attr :estimate, :map, required: true
   attr :bill, :map, required: true
   attr :price, :map, required: true
+  attr :build, :map, required: true
 
   # The money comes from the bill: the power from the grid, at the prices
   # of the house (DIY.Bill).
@@ -147,6 +148,7 @@ defmodule DIYWeb.Front do
     assigns =
       assigns
       |> assign(:cents, assigns.price.cents)
+      |> assign(:power, assigns.build.power)
       |> assign(:month, Enum.at(assigns.bill.months, Date.utc_today().month - 1))
 
     ~H"""
@@ -168,7 +170,12 @@ defmodule DIYWeb.Front do
     </p>
     <DIYWeb.Front.chart bill={@bill} />
     <p class="text-xs opacity-80">
-      At {Format.cents(@cents)} for each kWh: {@price.source}.
+      At {Format.cents(@cents)} for each kWh: {@price.source}.{if @power.night_cents,
+        do:
+          " At night (#{@power.night_from}:00 to #{@power.night_to}:00): #{Format.cents(@power.night_cents)}."}{if @bill.export >
+                                                                                                                     0,
+                                                                                                                   do:
+                                                                                                                     " For each kWh to the grid, the plan pays #{Format.cents(@power.buyback_cents)}."}
       <.link patch={~p"/settings"} class="link">Change the price</.link>
     </p>
     <ul :if={@estimate.notes != []} class="text-sm text-warning">
@@ -188,6 +195,11 @@ defmodule DIYWeb.Front do
       <p class="text-2xl font-bold">
         {Format.money(@whatif.plan.year.cost / 12)}
         <span class="text-base font-normal">· today {Format.money(@whatif.today.year.cost / 12)}</span>
+      </p>
+      <p class="text-sm">
+        The range with the plan: {Format.money(@whatif.plan_bill.cost_low / 12)} to {Format.money(
+          @whatif.plan_bill.cost_high / 12
+        )}.
       </p>
       <p class="text-sm">
         {Format.count(length(@whatif.planned), "planned item")}.

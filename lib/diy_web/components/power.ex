@@ -2,19 +2,18 @@ defmodule DIYWeb.PowerPage do
   @moduledoc """
   The page of the power of a house (`DIY.Power`): the what-if (the house
   of today next to the house with the planned items), the power view (what
-  feeds what), the hours of backup in an outage, the cars, and how the
-  stations use their batteries.
+  feeds what), the hours of backup in an outage, the cars, how the
+  stations use their batteries, and the math of these numbers.
 
   The page shows only the parts that apply to the house: a house with no
   station has no hours of backup, and a house with no car has no cars.
   """
   use DIYWeb, :html
 
-  alias DIY.{Catalog, Power}
+  alias DIY.{Build, Catalog, Power}
   alias DIYWeb.Format
 
   attr :build, :map, required: true
-  attr :estimate, :map, required: true
   attr :power, :map, default: nil
   attr :whatif, :map, default: nil
   attr :price, :map, default: nil
@@ -28,31 +27,54 @@ defmodule DIYWeb.PowerPage do
         The page shows the power when the house has its estimate.
       </p>
 
-      <%= if @power do %>
-        <.whatif :if={@whatif} whatif={@whatif} />
-        <.view build={@build} power={@power} />
-        <.outage :if={@power.system.stations != []} power={@power} />
-        <.months power={@power} />
-        <.cars build={@build} price={@price} />
-        <.settings build={@build} power={@power} />
+      <%= cond do %>
+        <% is_nil(@power) -> %>
+        <% not equipment?(@build) -> %>
+          <p id="no-equipment" class="text-sm">
+            The house has no power equipment yet. Add a power station, solar panels, an interlock or an electric car in a room.
+            <.link patch={~p"/inside"} class="link">Go to the rooms</.link>
+          </p>
+        <% true -> %>
+          <.whatif :if={@whatif} whatif={@whatif} build={@build} />
+          <.view build={Build.today(@build)} power={@power} />
+          <.outage :if={@power.system.stations != []} power={@power} />
+          <.months power={@power} />
+          <.cars build={@build} price={@price} />
+          <.settings build={@build} power={@power} />
+          <.math />
       <% end %>
     </section>
     """
   end
 
+  @power_types ~w(power_station solar_panels transfer_switch ev)
+
+  defp equipment?(build), do: Enum.any?(build.items, &(&1.planned or &1.type in @power_types))
+
   attr :whatif, :map, required: true
+  attr :build, :map, required: true
 
   # The house of today next to the house with the planned items (honesty
   # rule 2: say when a step does not pay back on savings alone, and show
-  # the backup as a different reason).
+  # the backup as a different reason; rule 3: a range).
   defp whatif(assigns) do
+    types = Enum.map(assigns.whatif.equipment, & &1.type)
+
+    assigns =
+      assign(assigns,
+        station: "power_station" in types,
+        panels: "solar_panels" in types,
+        warnings: assigns.whatif.warnings
+      )
+
     ~H"""
     <div id="plan" class="space-y-2">
       <h2 class="text-lg font-bold">Your plan</h2>
       <p class="text-sm">
-        The planned items: {Enum.map_join(@whatif.planned, ", ", &Catalog.name/1)}. They cost {Format.money(
-          @whatif.price
-        )}.
+        The planned items: {Enum.map_join(@whatif.planned, ", ", &Catalog.name/1)}.
+        <span :if={@whatif.equipment != []}>
+          The planned equipment costs {Format.money(@whatif.price)}.
+        </span>
       </p>
       <div class="overflow-x-auto">
         <table class="table table-xs sm:table-sm" id="plan-months">
@@ -84,44 +106,90 @@ defmodule DIYWeb.PowerPage do
           </tfoot>
         </table>
       </div>
+      <p id="plan-range" class="text-sm">
+        With the weather of 10 years and the limits of the model, the bill of one year is {Format.money(
+          @whatif.today_bill.cost_low
+        )} to {Format.money(@whatif.today_bill.cost_high)} today, and {Format.money(
+          @whatif.plan_bill.cost_low
+        )} to {Format.money(@whatif.plan_bill.cost_high)} with the plan.
+      </p>
       <p :if={@whatif.plan.year.lost > 1} class="text-sm">
         With the plan, {Format.kwh(@whatif.plan.year.lost)} of sun is lost in one year: the battery is full, or the station takes less solar power than the panels give.
       </p>
-      <p :if={@whatif.gas > 0} class="text-sm">
-        The planned car saves {Format.money(@whatif.gas)} of gas in one year.
+
+      <p :if={@whatif.car} id="plan-car" class="text-sm">
+        The planned car: its home charge adds {Format.money(@whatif.car.charge)} to the bill of one year, and it saves {Format.money(
+          @whatif.car.gas
+        )} of gas. {car_result(@whatif.car.savings)}
       </p>
-      <p id="payback" class="font-semibold">
-        <%= if @whatif.payback do %>
-          The plan saves {Format.money(@whatif.savings)} in one year: it pays back in {payback(
-            @whatif.payback
-          )}.
-        <% else %>
-          On savings alone, the plan does not pay back: it costs {Format.money(-@whatif.savings)} more in one year.
-        <% end %>
-      </p>
-      <p class="text-xs opacity-80">
-        A battery lasts near 10 years, and a panel near 25 years. A payback after that time is not a payback.
-      </p>
-      <p :if={backup_hours(@whatif.plan)} class="text-sm">
-        A different reason: in an outage, the stations of the plan run their items for {backup_hours(
-          @whatif.plan
-        )} in July.
-      </p>
+
+      <div :if={@whatif.equipment != []} id="payback" class="space-y-1">
+        <p class="font-semibold">{payback_text(@whatif)}</p>
+        <p :if={@whatif.payback} class="text-sm">
+          With the range of the bill, the equipment saves {Format.money(@whatif.savings_low)} to {Format.money(
+            @whatif.savings_high
+          )} in one year.
+        </p>
+        <p :if={@station} class="text-xs opacity-80">
+          A battery of 3,000 cycles (a common label of the stations) lasts near 8 years with one cycle each day.
+        </p>
+        <p :if={@panels} class="text-xs opacity-80">A panel lasts 25 to 35 years.</p>
+      </div>
+
+      <%= cond do %>
+        <% :overload in @warnings -> %>
+          <p class="text-sm">
+            In an outage, the stations of the plan cannot run all their items at the same time: see the warning below.
+          </p>
+        <% backup_hours(@whatif.plan) -> %>
+          <p class="text-sm">
+            A different reason: in an outage, the stations of the plan run their items for {backup_hours(
+              @whatif.plan
+            )}.
+          </p>
+        <% true -> %>
+      <% end %>
+      <.warnings id="plan" power={@whatif.plan} build={@build} />
       <button type="button" phx-click="plan_done" class="btn btn-sm">I have the planned items now</button>
     </div>
     """
   end
 
-  defp payback(years) when years < 1, do: "less than one year"
-  defp payback(years), do: "#{:erlang.float_to_binary(years / 1, decimals: 1)} years"
+  defp car_result(savings) when savings >= 0,
+    do: "The car saves #{Format.money(savings)} in one year."
 
+  defp car_result(savings), do: "The car costs #{Format.money(-savings)} more in one year."
+
+  defp payback_text(%{payback: nil, savings: savings}) when abs(savings) < 0.5,
+    do: "On savings alone, the planned equipment saves no money."
+
+  defp payback_text(%{payback: nil, savings: savings}),
+    do:
+      "On savings alone, the planned equipment does not pay back: it costs #{Format.money(-savings)} more in one year."
+
+  defp payback_text(%{payback: years, savings: savings, life: life})
+       when life != nil and years > life,
+       do:
+         "The planned equipment saves #{Format.money(savings)} in one year. It pays back in #{years(years)}: after its life of near #{life} years, so on savings alone it does not pay back."
+
+  defp payback_text(%{payback: years, savings: savings}),
+    do:
+      "The planned equipment saves #{Format.money(savings)} in one year: it pays back in #{years(years)}."
+
+  defp years(years) when years < 1, do: "less than one year"
+  defp years(years), do: "#{:erlang.float_to_binary(years / 1, decimals: 1)} years"
+
+  # The hours of backup of the month with the fewest hours.
   defp backup_hours(power) do
-    case Enum.at(power.months, 6).outage do
-      nil -> nil
-      hours -> hours_text(hours)
+    months = Enum.filter(power.months, & &1.outage)
+
+    if months != [] do
+      m = Enum.min_by(months, &if(&1.outage == :days, do: :infinity, else: &1.outage))
+      "#{hours_text(m.outage)} in #{m.name} (the month with the fewest hours)"
     end
   end
 
+  defp hours_text(nil), do: "no use"
   defp hours_text(:days), do: "more than 7 days"
   defp hours_text(hours), do: "#{:erlang.float_to_binary(hours / 1, decimals: 1)} hours"
 
@@ -132,17 +200,20 @@ defmodule DIYWeb.PowerPage do
   # it in order.
   defp view(assigns) do
     sys = assigns.power.system
-    items = Enum.reject(assigns.build.items, & &1.planned)
-    panels = Enum.filter(items, &(&1.type == "solar_panels"))
-    panel = Enum.any?(sys.stations, &(&1.params["feeds"] == "panel"))
+
+    others =
+      Enum.count(
+        assigns.build.items,
+        &(&1.type not in ~w(power_station solar_panels transfer_switch smart_meter) and
+            &1 not in sys.backup)
+      )
 
     assigns =
       assign(assigns,
         sys: sys,
-        others: length(items) - length(sys.backup),
-        panels: panels,
-        panel: panel,
-        warnings: Power.warnings(assigns.power)
+        others: others,
+        panels: Enum.filter(assigns.build.items, &(&1.type == "solar_panels")),
+        panel: Power.panel?(sys)
       )
 
     ~H"""
@@ -150,9 +221,9 @@ defmodule DIYWeb.PowerPage do
       <h2 class="text-lg font-bold">What feeds what</h2>
       <ul class="space-y-2 text-sm">
         <li class="card card-border p-3">
-          <span class="font-semibold">⚡ The grid</span>
-          → the main panel{if @sys.switch,
-            do: ", with the #{String.downcase(Catalog.name(@sys.switch))} (#{device(@sys.switch)})"} → {Format.count(
+          <span class="font-semibold"><span aria-hidden="true">⚡</span> The grid</span>
+          feeds the main panel{if @sys.switch,
+            do: ", with the #{String.downcase(Catalog.name(@sys.switch))} (#{device(@sys.switch)})"}. The main panel feeds {Format.count(
             @others,
             "item"
           )} of the house.
@@ -161,38 +232,129 @@ defmodule DIYWeb.PowerPage do
           :for={p <- Enum.filter(@panels, &(&1.params["to"] == "grid"))}
           class="card card-border p-3"
         >
-          <span class="font-semibold">☀️ {Format.int(p.params["watts"])} W of panels</span>
-          → the house first, and the rest to the grid.
+          <span class="font-semibold">
+            <span aria-hidden="true">☀️</span> {Format.int(p.params["watts"])} W of panels
+          </span>
+          feed the house first, and the rest goes to the grid.
         </li>
         <li :if={@sys.stations != []} class="card card-border p-3">
           <span class="font-semibold">
-            🔋 {Format.count(length(@sys.stations), "power station")}: {:erlang.float_to_binary(
+            <span aria-hidden="true">🔋</span>
+            {Format.count(length(@sys.stations), "power station")}: {:erlang.float_to_binary(
               @sys.kwh,
               decimals: 1
             )} kWh, {Format.int(@sys.output_w)} W
           </span>
           <span :if={@sys.station_panels_w > 0}>
-            ← {Format.int(
+            (with {Format.int(
               Enum.sum(for p <- @panels, p.params["to"] == "station", do: p.params["watts"])
-            )} W of panels
+            )} W of panels)
           </span>
-          → {if @panel, do: "an inlet → the backup circuits:", else: "by plug:"}
+          {if @panel,
+            do: "feed the backup circuits through an inlet:",
+            else: "feed the items that plug into them:"}
           {if @sys.backup == [],
             do: "no item yet (open an item, and choose \"A power station runs it\")",
             else: Enum.map_join(@sys.backup, ", ", &Catalog.name/1)}.
         </li>
       </ul>
 
-      <div :if={:backfeed in @warnings} id="backfeed" role="alert" class="alert alert-error text-sm">
+      <.warnings id="today" power={@power} build={@build} />
+
+      <div :if={@panel and @sys.switch} id="outage-steps" class="text-sm">
+        <%= if @sys.switch.params["device"] == "interlock" do %>
+          <p class="font-semibold">The steps in an outage</p>
+          <ol class="list-decimal pl-5">
+            <li :if={@sys.grid_panels_w > 0}>Turn off the breaker of the grid-tie inverter.</li>
+            <li>Turn off the main breaker.</li>
+            <li>Turn on the breaker of the inlet (the interlock lets it on now).</li>
+            <li>Turn on the station.</li>
+          </ol>
+          <p class="font-semibold mt-1">When the grid comes back</p>
+          <ol class="list-decimal pl-5">
+            <li>Turn off the station.</li>
+            <li>Turn off the breaker of the inlet.</li>
+            <li>Turn on the main breaker.</li>
+            <li :if={@sys.grid_panels_w > 0}>Turn on the breaker of the grid-tie inverter.</li>
+          </ol>
+        <% else %>
+          <p class="font-semibold">The steps in an outage</p>
+          <ol class="list-decimal pl-5">
+            <li :if={@sys.grid_panels_w > 0}>Turn off the breaker of the grid-tie inverter.</li>
+            <li>Connect the station to the inlet.</li>
+            <li>Turn on the station.</li>
+            <li>Move the transfer switch from the grid to the station. The main breaker stays on.</li>
+          </ol>
+          <p class="font-semibold mt-1">When the grid comes back</p>
+          <ol class="list-decimal pl-5">
+            <li>Move the transfer switch from the station to the grid.</li>
+            <li>Turn off the station.</li>
+            <li>Disconnect the station from the inlet.</li>
+            <li :if={@sys.grid_panels_w > 0}>Turn on the breaker of the grid-tie inverter.</li>
+          </ol>
+        <% end %>
+      </div>
+    </div>
+    """
+  end
+
+  defp device(%{params: %{"device" => "interlock"}}), do: "the interlock keeps them apart"
+
+  defp device(%{params: %{"device" => "transfer"}}),
+    do: "the switch moves the backup circuits from the grid to the station"
+
+  defp device(%{params: %{"device" => "subpanel"}}),
+    do: "the backup circuits are on the subpanel, and its switch moves them to the station"
+
+  attr :id, :string, required: true
+  attr :power, :map, required: true
+  attr :build, :map, required: true
+
+  # The warnings of a house (honesty rule 5, and the safety of the
+  # workers on the lines): for the house of today, or for the plan.
+  defp warnings(assigns) do
+    assigns =
+      assign(assigns,
+        warnings: Power.warnings(assigns.power),
+        permits: Power.permits(assigns.power.system)
+      )
+
+    ~H"""
+    <div class="space-y-2">
+      <div
+        :if={:backfeed in @warnings}
+        id={"#{@id}-backfeed"}
+        role="alert"
+        class="alert alert-error text-sm"
+      >
         <span>
           Danger: a station that powers circuits of the house needs an interlock or a transfer switch. With no device, one mistake sends its power to the lines of the utility, and it can kill a worker there. Never use a cord with a plug at each end. Add the interlock or the transfer switch to the plan.
         </span>
       </div>
 
-      <div :if={:permit in @warnings} id="permit" class="card card-border p-3 space-y-1 text-sm">
-        <p class="font-semibold">Before the work on the panel</p>
+      <div :if={:grid_tie in @warnings} id={"#{@id}-grid-tie"} class="alert alert-warning text-sm">
+        <span>
+          The house has panels on a grid-tie inverter, and a station that powers the panel. In an outage, the inverter can send its power into the output of the station, and this can damage the station. Turn off the breaker of the inverter before the backup, or ask the maker of the station.
+        </span>
+      </div>
+
+      <div
+        :if={:permit in @warnings}
+        id={"#{@id}-permit"}
+        class="card card-border p-3 space-y-1 text-sm"
+      >
+        <p class="font-semibold">Before the work</p>
+        <ul class="list-disc pl-5">
+          <li :if={:panel in @permits}>
+            An inlet, an interlock, a transfer switch or a subpanel is work on the panel.
+          </li>
+          <li :if={:grid_tie in @permits}>
+            Panels on a grid-tie inverter are work on the panel, and the utility must approve them before they connect.
+          </li>
+          <li :if={:charger in @permits}>A Level 2 charger needs a new circuit of 240 V.</li>
+        </ul>
         <p>
-          An inlet, an interlock or a transfer switch is work on the panel. Most cities need a permit for it. Ask your city first. A licensed electrician must do the work when the city does not let you do it.
+          Most cities need a permit for this work. Ask your city first. A licensed electrician must do the work when the city does not let you do it.
         </p>
         <ul class="list-disc pl-5">
           <li>
@@ -216,37 +378,19 @@ defmodule DIYWeb.PowerPage do
         </ul>
       </div>
 
-      <div :if={@panel and @sys.switch} id="outage-steps" class="text-sm">
-        <p class="font-semibold">The steps in an outage</p>
-        <ol class="list-decimal pl-5">
-          <li>Turn off the main breaker.</li>
-          <li>Turn on the breaker of the inlet ({device(@sys.switch)}).</li>
-          <li>Turn on the station.</li>
-        </ol>
-        <p class="font-semibold mt-1">When the grid comes back</p>
-        <ol class="list-decimal pl-5" start="4">
-          <li>Turn off the station.</li>
-          <li>Turn off the breaker of the inlet.</li>
-          <li>Turn on the main breaker.</li>
-        </ol>
+      <div :if={:overload in @warnings} id={"#{@id}-overload"} class="alert alert-warning text-sm">
+        <span>
+          The items on the stations need {Format.int(@power.watts)} W when they all run at the same time, and the stations give {Format.int(
+            @power.system.output_w
+          )} W. A station stops when it gets more than its output.
+        </span>
       </div>
-
-      <p :if={:overload in @warnings} id="overload" class="text-sm text-warning">
-        The items on the stations need {Format.int(@power.watts)} W when they all run at the same time, and the stations give {Format.int(
-          @sys.output_w
-        )} W. A station stops when it gets more than its output.
-      </p>
-      <p :if={:surge in @warnings} class="text-sm opacity-80">
-        A motor ({Enum.map_join(@power.motors, ", ", &Catalog.name/1)}) needs 2 to 3 times its power for a moment when it starts. Check the surge watts of the station.
+      <p :if={:surge in @warnings} class="text-sm">
+        A motor ({Enum.map_join(@power.motors, ", ", &Catalog.name/1)}) needs 3 to 8 times its running power for about one second when it starts. Its label gives the LRA (locked rotor amps): check it against the surge watts of the station.
       </p>
     </div>
     """
   end
-
-  defp device(%{params: %{"device" => "interlock"}}), do: "the interlock keeps them apart"
-
-  defp device(%{params: %{"device" => "transfer"}}),
-    do: "the switch moves from the grid to the station"
 
   attr :power, :map, required: true
 
@@ -261,7 +405,7 @@ defmodule DIYWeb.PowerPage do
         </p>
       <% else %>
         <p class="text-sm">
-          From a full battery, from 18:00, with the sun of the next days: the stations run {Enum.map_join(
+          From the charge of the battery at 18:00 of an average day, with the sun of the next days: the stations run {Enum.map_join(
             @power.system.backup,
             ", ",
             &Catalog.name/1
@@ -312,7 +456,7 @@ defmodule DIYWeb.PowerPage do
         </table>
       </div>
       <p class="text-xs opacity-80">
-        kWh. The use comes from the estimate. The page Bill shows its math.
+        kWh. The use comes from the estimate (the page Bill shows its math). The cost is the kWh from the grid in the day at the price of the day, and at night at the price of the night, less the kWh to the grid at the price that the plan pays for them.
       </p>
       <p :if={@power.year.lost > 1} class="text-sm">
         {Format.kwh(@power.year.lost)} of sun is lost in one year: the battery is full, or the station takes less solar power than the panels give.
@@ -347,14 +491,16 @@ defmodule DIYWeb.PowerPage do
     ~H"""
     <div :if={@cars != []} id="cars" class="space-y-1">
       <h2 class="text-lg font-bold">Cars</h2>
-      <p :for={{car, charge} <- @cars} class="text-sm">
-        {car.params["miles"]} miles in one day: the home charge is {Format.kwh(charge.kwh)} and {Format.money(
-          charge.cost
-        )} in one year. The gas car uses {Format.money(Power.gas_year(car))} of gas.
-        <span :if={charge.hours > 24} class="text-warning">
+      <div :for={{car, charge} <- @cars} class="space-y-1">
+        <p class="text-sm">
+          {car.params["miles"]} miles in one day: the home charge is {Format.kwh(charge.kwh)} and {Format.money(
+            charge.cost
+          )} in one year. The gas car uses {Format.money(Power.gas_year(car))} of gas.
+        </p>
+        <p :if={charge.hours > 24} class="alert alert-warning text-sm">
           The charger cannot give it in one day: it needs {round(charge.hours)} hours.
-        </span>
-      </p>
+        </p>
+      </div>
     </div>
     """
   end
@@ -415,6 +561,39 @@ defmodule DIYWeb.PowerPage do
       </label>
       <button class="btn btn-sm">Save</button>
     </form>
+    """
+  end
+
+  # The math of the page (honesty rule 1): the steps and the numbers of the
+  # model, with their sources (see DIY.Power).
+  defp math(assigns) do
+    ~H"""
+    <details id="power-math" class="text-sm">
+      <summary class="cursor-pointer font-semibold">How the app gets these numbers</summary>
+      <ul class="list-disc pl-5 space-y-1 pt-1">
+        <li>
+          For each month, the app runs an average day, hour by hour: the sun of the panels, the battery of the stations, and the grid. The use of each item comes from the estimate, with a shape of the day for each kind of item (a simple model of the app).
+        </li>
+        <li>
+          A station uses 95% of its battery and gives 92% of it at its outlets: 87% of its label. Tests of stations at a large load get 87.5% (The Solar Lab) to 89% (PCWorld). It stores 92% of the power that goes into it (a simple model of the app).
+        </li>
+        <li>
+          Panels give 80% of their watts in full sun. PVWatts of NREL counts 14% of losses and an inverter of 96%: 83%. The app takes a little less for the heat. A south roof gives 110% of the sun on a flat surface (EIA, with PVWatts), south-east or south-west 105%, east or west 95% (CAFS, and a study of the UK).
+        </li>
+        <li>
+          The sun of each month: NASA POWER, the same data as the weather. The sun above the solar input of a station is lost.
+        </li>
+        <li>
+          An outage starts at 18:00, with the charge of the battery at that hour of an average day, and the sun of the next days, for 7 days at most.
+        </li>
+        <li>
+          The payback: the price of the planned equipment, divided by the savings of one year. A planned car has no price in the app: the page shows its charge and its gas.
+        </li>
+        <li>
+          A car charger: Level 1 at 1.4 kW (12 A at 120 V), Level 2 at 7.2 kW (30 A at 240 V). The car gets 85% (Level 1) or 90% (Level 2) of the power from the wall: tests of Idaho National Laboratory got 84% to 89% for a Chevrolet Volt.
+        </li>
+      </ul>
+    </details>
     """
   end
 end

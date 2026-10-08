@@ -49,7 +49,9 @@ defmodule DIYWeb.PowerLiveTest do
   } do
     view = open(conn, ~p"/", house())
     refute has_element?(view, "nav a", "Power")
-    assert render_patch(view, ~p"/power") =~ "What feeds what"
+    render_patch(view, ~p"/power")
+    assert has_element?(view, "#no-equipment")
+    refute has_element?(view, "#view")
 
     {build, _id} = add(house(), "Driveway", "ev")
     view = open(conn, ~p"/", build)
@@ -73,12 +75,14 @@ defmodule DIYWeb.PowerLiveTest do
 
     html = render_patch(view, ~p"/power")
     assert html =~ "1 power station: 2.0 kWh, 2,000 W"
-    assert html =~ ~r/by plug:\s+Fridge\./
+    assert html =~ ~r/feed the items that plug into them:\s+Fridge\./
     assert html =~ "In an outage"
+    assert html =~ "From the charge of the battery at 18:00"
     assert html =~ "Jul:"
-    assert html =~ "needs 2 to 3 times its power"
-    refute has_element?(view, "#backfeed")
-    refute has_element?(view, "#permit")
+    assert html =~ "needs 3 to 8 times its running power"
+    assert html =~ "How the app gets these numbers"
+    refute has_element?(view, "#today-backfeed")
+    refute has_element?(view, "#today-permit")
 
     # A bad flag, or a flag of an item that is not there, changes nothing.
     render_change(view, "flag", %{"item_id" => "i999", "planned" => "true"})
@@ -90,7 +94,7 @@ defmodule DIYWeb.PowerLiveTest do
     {build, _id} = add(house(), "Laundry", "power_station")
     view = open(conn, ~p"/power", build)
     assert render(view) =~ "No item is on the stations."
-    assert render(view) =~ ~r/by plug:\s+no item yet \(open an item/
+    assert render(view) =~ ~r/plug into them:\s+no item yet \(open an item/
   end
 
   test "a station that powers the panel: the danger of backfeed, the permit, the steps", %{
@@ -101,23 +105,68 @@ defmodule DIYWeb.PowerLiveTest do
 
     build = build |> flag("fridge", :backup) |> flag("ac", :backup)
     view = open(conn, ~p"/power", build)
-    assert has_element?(view, "#backfeed")
-    assert has_element?(view, "#permit")
-    assert has_element?(view, "#overload")
+    assert has_element?(view, "#today-backfeed")
+    assert has_element?(view, "#today-permit")
+    assert has_element?(view, "#today-overload")
     refute has_element?(view, "#outage-steps")
-    assert render(view) =~ "an inlet → the backup circuits"
+    assert render(view) =~ "feed the backup circuits through an inlet"
 
     {build, _switch} = add(build, "Garage", "transfer_switch")
     view = open(conn, ~p"/power", build)
-    refute has_element?(view, "#backfeed")
-    assert has_element?(view, "#outage-steps")
+    refute has_element?(view, "#today-backfeed")
+    assert has_element?(view, "#outage-steps", "Turn off the main breaker")
     assert render(view) =~ "the interlock keeps them apart"
 
     switch = Enum.find(build.items, &(&1.type == "transfer_switch"))
-    {:ok, build} = Build.update_item(build, switch.id, %{"device" => "transfer"})
+    {:ok, transfer} = Build.update_item(build, switch.id, %{"device" => "transfer"})
+    view = open(conn, ~p"/power", transfer)
+    assert render(view) =~ "the switch moves the backup circuits from the grid to the station"
+    assert has_element?(view, "#outage-steps", "The main breaker stays on")
+    refute has_element?(view, "#outage-steps", "Turn off the main breaker")
+
+    {:ok, subpanel} = Build.update_item(build, switch.id, %{"device" => "subpanel"})
+    view = open(conn, ~p"/power", subpanel)
+    assert render(view) =~ "the backup circuits are on the subpanel"
+
+    # Panels on a grid-tie inverter too: a warning, a permit with the
+    # utility, and a step for the breaker of the inverter.
+    {build, _panels} = add(build, "Roof", "solar_panels", %{"to" => "grid"})
     view = open(conn, ~p"/power", build)
-    assert render(view) =~ "the switch moves from the grid to the station"
+    assert has_element?(view, "#today-grid-tie")
+    assert has_element?(view, "#today-permit", "the utility must approve them")
+    assert has_element?(view, "#outage-steps", "Turn off the breaker of the grid-tie inverter")
     assert id
+  end
+
+  test "the furnace on a station: a month with no use", %{conn: conn} do
+    {build, _id} = add(house(), "Laundry", "power_station")
+    view = open(conn, ~p"/power", flag(build, "furnace", :backup))
+    assert render(view) =~ "Jul: no use"
+    assert render(view) =~ ~r/Jan: \d/
+  end
+
+  test "the page Bill with a planned item, and with a station and a price at night", %{
+    conn: conn
+  } do
+    {build, _id} = add(house(), "Laundry", "power_station")
+    view = open(conn, ~p"/estimate", flag(build, "power_station", :planned))
+    assert has_element?(view, "#planned-note", "1 planned item are not in this bill")
+    assert has_element?(view, "#items")
+    refute has_element?(view, "#bill-math")
+
+    build = Build.set_power(build, %{build.power | night_cents: 5.0})
+    view = open(conn, ~p"/estimate", build)
+    assert has_element?(view, "#bill-math", "at night (22:00 to 6:00)")
+    assert render(view) =~ "kWh × price"
+    assert render_patch(view, ~p"/") =~ "At night (22:00 to 6:00)"
+
+    # Panels on the grid, and a price for the power to the grid.
+    {build, _id} = add(house(), "Roof", "solar_panels", %{"watts" => "9000", "to" => "grid"})
+    build = Build.set_power(build, %{build.power | buyback_cents: 4.0})
+    view = open(conn, ~p"/estimate", build)
+    assert has_element?(view, "#bill-math", "less the kWh to the grid × 4.0¢")
+    assert has_element?(view, "#bill-months", "To the grid")
+    assert render_patch(view, ~p"/") =~ "For each kWh to the grid, the plan pays 4.0¢."
   end
 
   test "the plan: today next to the plan, the payback, and the plan done", %{conn: conn} do
@@ -131,10 +180,16 @@ defmodule DIYWeb.PowerLiveTest do
     assert html =~ "With your plan, in an average month"
     assert html =~ "1 planned item"
 
+    assert html =~ "The range with the plan"
+
     html = render_patch(view, ~p"/power")
     assert has_element?(view, "#plan-months")
-    assert html =~ "They cost $800"
+    assert has_element?(view, "#plan-range")
+    assert html =~ "The planned equipment costs $800"
     assert html =~ "it pays back in"
+    assert html =~ "With the range of the bill, the equipment saves"
+    assert html =~ "A panel lasts 25 to 35 years."
+    refute html =~ "A battery of 3,000 cycles"
     assert html =~ "of sun is lost in one year"
 
     view |> element("button", "I have the planned items now") |> render_click()
@@ -147,8 +202,17 @@ defmodule DIYWeb.PowerLiveTest do
     build = build |> flag("power_station", :planned) |> flag("fridge", :backup)
     view = open(conn, ~p"/power", build)
     html = render(view)
-    assert html =~ "On savings alone, the plan does not pay back"
+    # In the mode backup, the battery stays full: the bill is the same.
+    assert html =~ "On savings alone, the planned equipment saves no money."
     assert html =~ "A different reason: in an outage"
+    assert html =~ "(the month with the fewest hours)"
+    assert html =~ "A battery of 3,000 cycles"
+    # In the mode night with one price, the station costs more.
+    night = Build.set_power(build, %{build.power | mode: "night"})
+
+    assert render(open(conn, ~p"/power", night)) =~
+             "On savings alone, the planned equipment does not pay back: it costs"
+
     # Today the house has no station: the page shows no hours of today.
     refute has_element?(view, "#outage")
     # The planned station is on the item sheet of the fridge.
@@ -163,6 +227,30 @@ defmodule DIYWeb.PowerLiveTest do
 
     view = open(conn, ~p"/power", flag(build, "solar_panels", :planned))
     assert render(view) =~ "it pays back in less than one year"
+
+    # A payback after the life of the panels.
+    {build, _id} =
+      add(house(), "Roof", "solar_panels", %{"watts" => "100", "to" => "grid", "cost" => "50000"})
+
+    view = open(conn, ~p"/power", flag(build, "solar_panels", :planned))
+
+    assert render(view) =~
+             "after its life of near 25 years, so on savings alone it does not pay back"
+  end
+
+  test "the warnings of the plan: a planned station on the panel, too small", %{conn: conn} do
+    {build, _id} =
+      add(house(), "Garage", "power_station", %{"feeds" => "panel", "output_w" => "200"})
+
+    build = build |> flag("power_station", :planned) |> flag("ac", :backup)
+    view = open(conn, ~p"/power", build)
+    assert has_element?(view, "#plan-backfeed")
+    assert has_element?(view, "#plan-overload")
+    assert has_element?(view, "#plan-permit")
+    assert render(view) =~ "cannot run all their items at the same time"
+    refute render(view) =~ "A different reason"
+    # Today the house has no station: no warning of today.
+    refute has_element?(view, "#today-backfeed")
   end
 
   test "the modes and the reserve of the stations, and the price of the power to the grid", %{
@@ -208,6 +296,10 @@ defmodule DIYWeb.PowerLiveTest do
     assert view |> form("#settings-night", %{"night_from" => "30"}) |> render_submit() =~
              "Give an hour from 0 to 23."
 
+    assert view
+           |> form("#settings-night", %{"night_from" => "7", "night_to" => "7"})
+           |> render_submit() =~ "The night must start and end at different hours."
+
     # Free nights lower the bill.
     assert :sys.get_state(view.pid).socket.assigns.bill.cost < before
   end
@@ -225,7 +317,16 @@ defmodule DIYWeb.PowerLiveTest do
              "the cost of the home charge next to gas"
 
     view = open(conn, ~p"/power", flag(build, "ev", :planned))
-    assert render(view) =~ "The planned car saves"
+    html = render(view)
+    assert html =~ "The planned car: its home charge adds"
+    assert html =~ "The car saves"
+    refute has_element?(view, "#payback")
+
+    {build, _id} =
+      add(house(), "Driveway", "ev", %{"miles" => "5", "mpg" => "50", "gas" => "0.5"})
+
+    view = open(conn, ~p"/power", flag(build, "ev", :planned))
+    assert render(view) =~ "The car costs"
   end
 
   test "the features of the panels and of a switch", %{conn: conn} do

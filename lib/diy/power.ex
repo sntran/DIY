@@ -24,24 +24,40 @@ defmodule DIY.Power do
      panels on the grid (a grid-tie inverter) give power to the house
      first, and the rest goes to the grid.
 
-  The app runs the day until the battery has the same charge at the end
-  of the day as at the start (5 days at most).
+  The day starts with the charge that the day gives back at its end (an
+  average day of many days in a row). The charge at the end of a day
+  grows with the charge at its start, but never by more, so the app finds
+  that charge by bisection.
 
-  A station stores 92% of the power that goes into it, and gives 92% of
-  the power that comes out of its battery. It uses 95% of its battery. The
-  panels give 80% of their watts in full sun (the heat, the dust, the
-  wires and the controller), and their direction changes that (south
-  110%, south-east or south-west 105%, east or west 90%, up 100%, for the
-  sun on a flat surface of NASA POWER). The stations of a house work as
-  one: their batteries, their outputs and their inputs add up.
+  The numbers of the model, and their sources:
+
+  - A station uses 95% of its battery, and gives 92% of the power of its
+    battery at its outlets: 87% of the label. Tests of stations at a
+    large load get 87.5% (The Solar Lab, Jackery Explorer 1000 v2) and
+    89% on average (PCWorld).
+  - A station stores 92% of the power that goes into it. This is a simple
+    model of the app: the same loss as the output.
+  - Panels give 80% of their watts in full sun. PVWatts of NREL counts 14%
+    of losses (the dust, the wires, the shade and more) and an inverter
+    of 96%: 83%. The app takes a little less for the heat of Texas.
+  - The direction of the panels changes the sun of a flat surface (NASA
+    POWER): south 110% (EIA, with PVWatts: a south roof at 20° gives 11%
+    more than a flat one), south-east or south-west 105% (5% less than
+    south, CAFS), east or west 95% (85% to 92% of south: CAFS, and a
+    study of the UK at 22°).
+
+  The stations of a house work as one: their batteries, their outputs and
+  their inputs add up. The sun above the solar input of the stations is
+  lost.
 
   ## An outage
 
-  In an outage, the station runs its items from a full battery, from
-  18:00, with the sun of the next days (at most 7 days).
+  In an outage, the station runs its items from the charge of its battery
+  at 18:00 of an average day, with the sun of the next days (at most 7
+  days).
   """
 
-  alias DIY.{Build, Estimate, Profile}
+  alias DIY.{Bill, Build, Estimate, Profile}
 
   @modes [
     {"backup", "Keep the batteries full for an outage"},
@@ -54,8 +70,15 @@ defmodule DIY.Power do
   @discharge 0.92
   @usable 0.95
   @derate 0.8
-  @facing %{"south" => 1.1, "southeast" => 1.05, "east" => 0.9, "flat" => 1.0}
+  @facing %{"south" => 1.1, "southeast" => 1.05, "east" => 0.95, "flat" => 1.0}
   @outage_hours 7 * 24
+
+  # The years that a planned item lasts, for the payback. A battery of
+  # LiFePO4: 3,000 cycles to 80% of its charge (a common label of the
+  # stations), near 8 years of one cycle each day. A panel: 25 to 35 years
+  # (a survey of Berkeley Lab, in the plan of DOE for the end of life of
+  # the panels). The app takes the low end.
+  @life %{"power_station" => 8, "solar_panels" => 25}
 
   @type settings :: %{
           mode: String.t(),
@@ -136,7 +159,8 @@ defmodule DIY.Power do
 
   @doc """
   Changes the settings with the text of a form. An empty price of the
-  night is one price at all hours. The error names the field.
+  night is one price at all hours. The night must have one hour or more.
+  The error names the field (`:night` for a night with no hours).
   """
   @spec update(settings(), map()) :: {:ok, settings()} | {:error, atom()}
   def update(settings, form) do
@@ -147,7 +171,8 @@ defmodule DIY.Power do
          {:ok, night_to} <- field(form, "night_to", settings.night_to, &hour_text/1, :night_to),
          {:ok, buyback} <-
            field(form, "buyback_cents", settings.buyback_cents, &cents_text/1, :buyback_cents),
-         {:ok, reserve} <- field(form, "reserve", settings.reserve, &reserve_text/1, :reserve) do
+         {:ok, reserve} <- field(form, "reserve", settings.reserve, &reserve_text/1, :reserve),
+         true <- night_from != night_to || {:error, :night} do
       {:ok,
        %{
          mode: mode,
@@ -219,6 +244,7 @@ defmodule DIY.Power do
   def system(items) do
     stations = Enum.filter(items, &(&1.type == "power_station"))
     panels = Enum.filter(items, &(&1.type == "solar_panels"))
+    cars = Enum.filter(items, &(&1.type == "ev"))
 
     %{
       stations: stations,
@@ -229,6 +255,7 @@ defmodule DIY.Power do
       station_panels_w: sum(Enum.filter(panels, &(&1.params["to"] == "station")), &panel_w/1),
       grid_panels_w: sum(Enum.filter(panels, &(&1.params["to"] == "grid")), &panel_w/1),
       switch: Enum.find(items, &(&1.type == "transfer_switch")),
+      chargers: Enum.filter(cars, &(&1.params["charger"] == "l2")),
       backup: if(stations == [], do: [], else: Enum.filter(items, & &1.backup))
     }
   end
@@ -257,9 +284,11 @@ defmodule DIY.Power do
         need = add_hours(backup)
         other = add_hours(house)
 
-        pv_station =
-          for s <- shape, do: min(s * sun * sys.station_panels_w / 1_000, sys.solar_in_w / 1_000)
-
+        # The sun of the panels on the stations, and the part of it that
+        # the solar input of the stations takes.
+        pv_panels = for s <- shape, do: s * sun * sys.station_panels_w / 1_000
+        pv_station = for pv <- pv_panels, do: min(pv, sys.solar_in_w / 1_000)
+        cut = Enum.sum(pv_panels) - Enum.sum(pv_station)
         pv_grid = for s <- shape, do: s * sun * sys.grid_panels_w / 1_000
 
         day =
@@ -284,11 +313,11 @@ defmodule DIY.Power do
           day: times.(day.day),
           night: times.(day.night),
           export: times.(day.export),
-          sun: times.(Enum.sum(pv_station) + Enum.sum(pv_grid)),
-          lost: times.(day.lost),
+          sun: times.(Enum.sum(pv_panels) + Enum.sum(pv_grid)),
+          lost: times.(day.lost + cut),
           cost: times.(cost),
           price: price(day.day, day.night, cents, night_cents),
-          outage: outage(need, pv_station, sys)
+          outage: outage(need, pv_station, sys, Enum.at(day.soc, 17))
         }
       end
 
@@ -332,38 +361,53 @@ defmodule DIY.Power do
   end
 
   @doc false
-  # An average day, from a charge of the battery, until the charge at the
-  # end of the day is the charge at the start (5 days at most).
+  # An average day: it starts with the charge that it gives back at its
+  # end (`start`). `soc` has the charge at the end of each hour.
   def day(input, sys, settings) do
-    capacity = sys.kwh * @usable
-    start = if settings.mode == "backup", do: capacity, else: capacity * settings.reserve / 100
-    day(input, sys, settings, start, 5)
+    start = steady(&(elem(run_day(input, sys, settings, &1), 0) - &1), 0.0, sys.kwh * @usable)
+    input |> run_day(sys, settings, start) |> elem(1) |> Map.put(:start, start)
   end
 
-  defp day(input, sys, settings, start, tries) do
-    {soc, result} =
-      Enum.reduce(
-        Profile.hours(),
-        {start, %{day: 0.0, night: 0.0, export: 0.0, lost: 0.0, soc: []}},
-        fn h, {soc, acc} ->
-          {soc, hour} = hour(h, soc, input, sys, settings)
-          night = night?(settings, h)
+  # The charge where the change of one day is zero. The change gets
+  # smaller (or stays the same) when the start gets higher, so a
+  # bisection finds it.
+  defp steady(change, low, high) do
+    cond do
+      change.(high) >= -1.0e-9 -> high
+      change.(low) <= 1.0e-9 -> low
+      true -> bisect(change, low, high, 60)
+    end
+  end
 
-          {soc,
-           %{
-             acc
-             | day: acc.day + if(night, do: 0.0, else: hour.grid),
-               night: acc.night + if(night, do: hour.grid, else: 0.0),
-               export: acc.export + hour.export,
-               lost: acc.lost + hour.lost,
-               soc: acc.soc ++ [soc]
-           }}
-        end
-      )
+  defp bisect(_change, low, high, 0), do: (low + high) / 2
 
-    if abs(soc - start) < 1.0e-6 or tries == 1,
-      do: Map.put(result, :start, start),
-      else: day(input, sys, settings, soc, tries - 1)
+  defp bisect(change, low, high, steps) do
+    middle = (low + high) / 2
+
+    if change.(middle) > 0,
+      do: bisect(change, middle, high, steps - 1),
+      else: bisect(change, low, middle, steps - 1)
+  end
+
+  defp run_day(input, sys, settings, start) do
+    Enum.reduce(
+      Profile.hours(),
+      {start, %{day: 0.0, night: 0.0, export: 0.0, lost: 0.0, soc: []}},
+      fn h, {soc, acc} ->
+        {soc, hour} = hour(h, soc, input, sys, settings)
+        night = night?(settings, h)
+
+        {soc,
+         %{
+           acc
+           | day: acc.day + if(night, do: 0.0, else: hour.grid),
+             night: acc.night + if(night, do: hour.grid, else: 0.0),
+             export: acc.export + hour.export,
+             lost: acc.lost + hour.lost,
+             soc: acc.soc ++ [soc]
+         }}
+      end
+    )
   end
 
   # One hour: the sun, the battery and the grid (see the module doc).
@@ -417,12 +461,13 @@ defmodule DIY.Power do
 
   @doc false
   # The hours that the stations run their items in an outage of a month:
-  # a full battery from 18:00, with the sun of the next days. `:days` when
-  # they run more than 7 days, and `nil` with no item on the stations.
-  def outage(need, pv, sys) do
+  # from the charge of the battery at 18:00, with the sun of the next days.
+  # `:days` when they run more than 7 days, and `nil` with no use on the
+  # stations in the month.
+  def outage(need, pv, sys, soc) do
     if Enum.sum(need) <= 0 or sys.kwh <= 0,
       do: nil,
-      else: outage(need, pv, sys, sys.kwh * @usable, 18, 0)
+      else: outage(need, pv, sys, min(soc, sys.kwh * @usable), 18, 0)
   end
 
   defp outage(_need, _pv, _sys, _soc, _h, hours) when hours >= @outage_hours, do: :days
@@ -448,37 +493,89 @@ defmodule DIY.Power do
   @doc """
   The what-if of a build: the house of today (with no planned item) next
   to the house with the planned items, with the price of the day
-  (`cents`): the power and the cost of each month, the price of the
-  planned items, the savings of one year (with the gas that a planned car
-  saves), and the years of the payback. It is `nil` with no planned item,
-  or when the house of today or of the plan has no estimate yet (for
-  example, a house that I plan, with a planned AC).
+  (`cents`). `today_estimate` and `plan_estimate` are the estimates of the
+  two houses (`DIY.Estimate.run/2`). It is `nil` with no planned item, or
+  when a house has no estimate yet (for example, a house that I plan, with
+  a planned AC).
+
+  The result has the power and the bill (with its range, `DIY.Bill`) of
+  each house, the planned items, and the warnings of the plan. The payback
+  is for the planned equipment with a price: its price, the savings of one
+  year (with their range), the years of the payback, and the years that
+  the equipment lasts. A planned car has no price in the app: its result
+  is its own (`car`), the cost of its charge and the gas that it saves.
   """
-  def whatif(%Build{} = build, climate, cents) do
+  def whatif(%Build{} = build, today_estimate, plan_estimate, climate, cents) do
     planned = Enum.filter(build.items, & &1.planned)
-    today_build = Build.today(build)
 
     with [_ | _] <- planned,
-         %{ready: true} = today_estimate <- Estimate.run(today_build, climate),
-         %{ready: true} = plan_estimate <- Estimate.run(build, climate) do
-      today = run(today_build, today_estimate, climate, cents)
+         %{ready: true} <- today_estimate,
+         %{ready: true} <- plan_estimate do
+      today = run(Build.today(build), today_estimate, climate, cents)
       plan = run(build, plan_estimate, climate, cents)
-      gas = planned |> Enum.filter(&(&1.type == "ev")) |> Enum.map(&gas_year/1) |> Enum.sum()
-      savings = today.year.cost - plan.year.cost + gas
-      price = planned |> Enum.map(&(&1.params["cost"] || 0)) |> Enum.sum()
+      {cars, equipment} = Enum.split_with(planned, &(&1.type == "ev"))
+
+      # The house with the planned equipment and no planned car: the
+      # savings of the equipment.
+      {gear, gear_estimate} =
+        if cars == [] do
+          {plan, plan_estimate}
+        else
+          gear_build = %{build | items: build.items -- cars}
+          gear_estimate = Estimate.run(gear_build, climate)
+          {run(gear_build, gear_estimate, climate, cents), gear_estimate}
+        end
+
+      today_bill = Bill.run(today_estimate, today)
+      gear_bill = Bill.run(gear_estimate, gear)
+      savings = today.year.cost - gear.year.cost
+
+      ends = [
+        today_bill.cost_low - gear_bill.cost_low,
+        today_bill.cost_high - gear_bill.cost_high
+      ]
 
       %{
         today: today,
         plan: plan,
+        today_bill: today_bill,
+        plan_bill: Bill.run(plan_estimate, plan),
         planned: planned,
-        price: price,
-        gas: gas,
+        equipment: equipment,
+        price: equipment |> Enum.map(&(&1.params["cost"] || 0)) |> Enum.sum(),
         savings: savings,
-        payback: if(savings > 0, do: price / savings)
+        savings_low: Enum.min(ends),
+        savings_high: Enum.max(ends),
+        payback: payback(equipment, savings),
+        life:
+          equipment
+          |> Enum.map(&@life[&1.type])
+          |> Enum.reject(&is_nil/1)
+          |> Enum.min(fn -> nil end),
+        car: car(cars, plan, gear),
+        warnings: warnings(plan)
       }
     else
       _ -> nil
     end
+  end
+
+  defp payback([], _savings), do: nil
+
+  defp payback(equipment, savings) when savings > 0,
+    do: (equipment |> Enum.map(&(&1.params["cost"] || 0)) |> Enum.sum()) / savings
+
+  defp payback(_equipment, _savings), do: nil
+
+  # The result of the planned cars: the cost of their home charge (the
+  # bill with the cars, less the bill without them), and the gas that they
+  # save.
+  defp car([], _plan, _gear), do: nil
+
+  defp car(cars, plan, gear) do
+    charge = plan.year.cost - gear.year.cost
+    gas = cars |> Enum.map(&gas_year/1) |> Enum.sum()
+    %{cars: cars, charge: charge, gas: gas, savings: gas - charge}
   end
 
   @doc "The dollars of gas that a car of the same miles uses in one year."
@@ -490,32 +587,64 @@ defmodule DIY.Power do
   """
   def charge_year(%{params: p} = item, settings, cents) do
     kwh = p["miles"] * 365 / p["mi_kwh"] / Estimate.charge_efficiency(p["charger"])
-    price = if p["when"] == "night", do: settings.night_cents || cents, else: cents
+
+    # The part of the charge in the hours of the night, as in the day of a
+    # month (DIY.Profile): a long charge goes past the end of the night.
+    night =
+      item
+      |> Profile.shape(:other, kwh / 365, settings.night_from)
+      |> Enum.with_index()
+      |> Enum.filter(fn {_part, h} -> night?(settings, h) end)
+      |> Enum.map(&elem(&1, 0))
+      |> Enum.sum()
+
+    price = night * (settings.night_cents || cents) + (1 - night) * cents
     %{kwh: kwh, cost: kwh * price / 100, hours: Profile.charge_hours(item, kwh / 365)}
   end
 
   @doc """
-  The warnings of the power of a build (honesty rule 5, and the safety of
-  the people who work on the lines of the utility):
+  The warnings of the power of a build (`run/4`), for honesty rule 5 and
+  the safety of the people who work on the lines of the utility:
 
   - `:backfeed`: a station that powers circuits of the house with no
     interlock and no transfer switch. Its power can go to the grid, and
     kill a worker on the lines (see `specs/Backfeed.tla`).
-  - `:permit`: work on the panel (an inlet, an interlock, a transfer
-    switch) needs a permit in most cities.
+  - `:permit`: work that needs a permit in most cities (`permits/1`).
+  - `:grid_tie`: panels on a grid-tie inverter, and a station that powers
+    the panel. In an outage, the inverter can send its power into the
+    output of the station.
   - `:overload`: the items on the stations need more watts than their
     outputs, when they all run at the same time.
   - `:surge`: a motor needs more power to start.
   """
   def warnings(%{system: sys, watts: watts, motors: motors}) do
-    panel = Enum.any?(sys.stations, &(&1.params["feeds"] == "panel"))
+    panel = panel?(sys)
 
     [
       (panel and is_nil(sys.switch)) && :backfeed,
-      (panel or sys.switch != nil) && :permit,
+      permits(sys) != [] && :permit,
+      (panel and sys.grid_panels_w > 0) && :grid_tie,
       (sys.stations != [] and watts > sys.output_w) && :overload,
       motors != [] && :surge
     ]
     |> Enum.filter(& &1)
   end
+
+  @doc """
+  The work of a build that needs a permit in most cities: `:panel` (an
+  inlet, an interlock, a transfer switch or a subpanel), `:grid_tie`
+  (panels on a grid-tie inverter: the utility must also approve them), and
+  `:charger` (a Level 2 charger needs a new circuit of 240 V).
+  """
+  def permits(sys) do
+    [
+      (panel?(sys) or sys.switch != nil) && :panel,
+      sys.grid_panels_w > 0 && :grid_tie,
+      sys.chargers != [] && :charger
+    ]
+    |> Enum.filter(& &1)
+  end
+
+  @doc "True when a station powers circuits of the house through an inlet."
+  def panel?(sys), do: Enum.any?(sys.stations, &(&1.params["feeds"] == "panel"))
 end

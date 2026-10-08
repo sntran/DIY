@@ -121,6 +121,9 @@ defmodule DIY.PowerTest do
           ] do
         assert Power.update(settings, %{key => value}) == {:error, error}, key
       end
+
+      # A night with no hours.
+      assert Power.update(settings, %{"night_from" => "6"}) == {:error, :night}
     end
 
     test "the hours of the night" do
@@ -143,10 +146,13 @@ defmodule DIY.PowerTest do
       {build, _id} = add(build, "Roof", "solar_panels", %{"watts" => "1000", "facing" => "east"})
       {build, _id} = add(build, "Backyard", "solar_panels", %{"watts" => "400", "to" => "grid"})
       {build, _id} = add(build, "Garage", "transfer_switch")
+      {build, _id} = add(build, "Driveway", "ev", %{"charger" => "l2"})
+      {build, _id} = add(build, "Driveway", "ev", %{"charger" => "l1"})
       sys = Power.system(build.items)
+      assert [%{params: %{"charger" => "l2"}}] = sys.chargers
       assert sys.kwh == 8.2
       assert sys.output_w == 4600.0
-      assert sys.station_panels_w == 900.0
+      assert sys.station_panels_w == 950.0
       assert_in_delta sys.grid_panels_w, 440.0, 1.0e-9
       assert %{type: "transfer_switch"} = sys.switch
       assert [%{type: "fridge"}] = sys.backup
@@ -213,9 +219,12 @@ defmodule DIY.PowerTest do
       # The house can use at most the sun that the station does not lose.
       assert solar.year.grid >= without.year.grid - (solar.year.sun - solar.year.lost)
 
-      # The input of the station limits the sun.
+      # The input of the station cuts the sun: the panels give the same
+      # sun, and the station loses more of it.
       small = run(power(station_input(build, 100), %{mode: "solar"}))
-      assert small.year.sun < solar.year.sun
+      assert_in_delta small.year.sun, solar.year.sun, 1.0e-6
+      assert small.year.lost > solar.year.lost
+      assert small.year.grid > solar.year.grid
     end
 
     test "panels on the grid give to the house first, and the rest goes to the grid" do
@@ -266,7 +275,7 @@ defmodule DIY.PowerTest do
   end
 
   describe "warnings" do
-    test "backfeed, permit, overload and surge" do
+    test "backfeed, permit, grid-tie, overload and surge" do
       assert Power.warnings(run(house())) == []
       {build, id} = station()
       assert Power.warnings(run(build)) == [:surge]
@@ -274,44 +283,118 @@ defmodule DIY.PowerTest do
       assert Power.warnings(run(build)) == [:backfeed, :permit, :surge]
       {build, _id} = add(build, "Garage", "transfer_switch")
       assert Power.warnings(run(build)) == [:permit, :surge]
+      assert Power.permits(run(build).system) == [:panel]
       {:ok, build} = Build.update_item(build, id, %{"output_w" => "100"})
       assert Power.warnings(run(build)) == [:permit, :overload, :surge]
+
+      # Panels on a grid-tie inverter, and a station on the panel.
+      {build, _id} = add(build, "Roof", "solar_panels", %{"to" => "grid"})
+      assert :grid_tie in Power.warnings(run(build))
+      assert Power.permits(run(build).system) == [:panel, :grid_tie]
+    end
+
+    test "panels on the grid, and a Level 2 charger, need a permit" do
+      {build, _id} = add(house(), "Roof", "solar_panels", %{"to" => "grid"})
+      assert Power.warnings(run(build)) == [:permit]
+      assert Power.permits(run(build).system) == [:grid_tie]
+
+      {build, _id} = add(house(), "Driveway", "ev", %{"charger" => "l2"})
+      assert Power.permits(run(build).system) == [:charger]
+      {build, _id} = add(house(), "Driveway", "ev", %{"charger" => "l1"})
+      assert Power.warnings(run(build)) == []
+    end
+
+    test "an outage from the charge at 18:00, and a month with no use" do
+      {build, _id} = station(house(), %{"kwh" => "2", "extra_kwh" => "0", "solar_w" => "0"})
+      full = Enum.at(run(build).months, 6).outage
+
+      # In the mode night, the battery gives power in the day: at 18:00, it
+      # has less charge than in the mode backup.
+      night = Enum.at(run(power(build, %{mode: "night", reserve: 10})).months, 6).outage
+      assert night < full
+
+      # The furnace blower has no use in July: no hours for that month.
+      furnace = of_type(build, "furnace")
+
+      build =
+        build |> flag(of_type(build, "fridge").id, :backup, false) |> flag(furnace.id, :backup)
+
+      months = run(build).months
+      assert Enum.at(months, 6).outage == nil
+      assert Enum.at(months, 0).outage > 0
     end
   end
 
   describe "the what-if" do
-    test "no planned item: no what-if" do
-      assert Power.whatif(house(), climate(), 15.0) == nil
+    defp whatif(build, cents \\ 15.0) do
+      climate = climate()
+
+      Power.whatif(
+        build,
+        Estimate.run(Build.today(build), climate),
+        Estimate.run(build, climate),
+        climate,
+        cents
+      )
     end
 
-    test "planned panels: the savings and the payback" do
+    test "no planned item: no what-if" do
+      assert whatif(house()) == nil
+    end
+
+    test "planned panels: the savings, their range, the payback and the life" do
       {build, _id} = station()
       {build, panels} = add(build, "Roof", "solar_panels", %{"watts" => "1600", "cost" => "800"})
       build = build |> flag(panels, :planned) |> power(%{mode: "solar"})
-      whatif = Power.whatif(build, climate(), 15.0)
+      whatif = whatif(build)
       assert whatif.price == 800
       assert whatif.savings > 0
+      assert whatif.savings_low <= whatif.savings_high
       assert_in_delta whatif.payback, 800 / whatif.savings, 1.0e-9
+      assert whatif.life == 25
+      assert whatif.car == nil
       assert whatif.today.year.sun == 0
       assert whatif.plan.year.sun > 0
+      assert whatif.plan_bill.cost_low <= whatif.plan.year.cost
+      assert whatif.plan.year.cost <= whatif.plan_bill.cost_high
     end
 
     test "a plan that does not pay back on savings alone" do
       {build, id} = station()
       build = flag(build, id, :planned)
-      whatif = Power.whatif(build, climate(), 15.0)
+      whatif = whatif(build)
       assert whatif.savings <= 0
       assert whatif.payback == nil
+      assert whatif.life == 8
     end
 
-    test "a planned car saves gas" do
+    test "a planned car: the cost of its charge and its gas, out of the payback" do
       {build, car} =
         add(house(), "Driveway", "ev", %{"miles" => "40", "mpg" => "25", "gas" => "3"})
 
-      whatif = Power.whatif(flag(build, car, :planned), climate(), 15.0)
-      assert_in_delta whatif.gas, 40 * 365 / 25 * 3, 1.0e-9
+      build = flag(build, car, :planned)
+      whatif = whatif(build)
+      assert_in_delta whatif.car.gas, 40 * 365 / 25 * 3, 1.0e-9
+      assert_in_delta whatif.car.charge, whatif.plan.year.cost - whatif.today.year.cost, 1.0e-6
+      assert_in_delta whatif.car.savings, whatif.car.gas - whatif.car.charge, 1.0e-9
       assert whatif.plan.year.use > whatif.today.year.use
-      assert whatif.savings > 0
+      assert whatif.equipment == [] and whatif.price == 0
+      assert whatif.payback == nil and whatif.life == nil
+      assert_in_delta whatif.savings, 0.0, 1.0e-6
+
+      # With a planned station too: the payback is for the station only.
+      {build, station} = station(build)
+      whatif = whatif(flag(build, station, :planned))
+      assert [%{type: "power_station"}] = whatif.equipment
+      assert whatif.car.gas > 0
+      assert whatif.savings <= 0 and whatif.payback == nil
+    end
+
+    test "the warnings of the plan" do
+      {build, id} = station()
+      {:ok, build} = Build.update_item(build, id, %{"feeds" => "panel", "output_w" => "200"})
+      build = build |> flag(of_type(build, "ac").id, :backup) |> flag(id, :planned)
+      assert [:backfeed, :permit, :overload, :surge] = whatif(build).warnings
     end
 
     test "no what-if when a house has no estimate yet" do
@@ -322,7 +405,7 @@ defmodule DIY.PowerTest do
       {:ok, plan} = Build.set_zip(plan, "75070")
       plan = Build.put_house(plan, house, rooms, [])
       {plan, ac} = add(plan, "Backyard", "ac")
-      assert Power.whatif(flag(plan, ac, :planned), climate(), 15.0) == nil
+      assert whatif(flag(plan, ac, :planned)) == nil
     end
 
     test "the cost of the home charge of a car" do
@@ -344,6 +427,17 @@ defmodule DIY.PowerTest do
                       1.0e-9
 
       assert Power.gas_year(car) > night.cost
+
+      # A long charge at night goes past the end of the night: Level 1, 60
+      # miles, 14.4 hours from 22:00, 8 of them at night.
+      long = %{car | params: %{car.params | "miles" => 60, "charger" => "l1"}}
+      charge = Power.charge_year(long, settings, 15.0)
+      hours = charge.kwh / 365 / 1.4
+      night_part = 8 / hours
+
+      assert_in_delta charge.cost,
+                      charge.kwh * (night_part * 5 + (1 - night_part) * 15) / 100,
+                      1.0e-6
     end
   end
 
@@ -383,19 +477,40 @@ defmodule DIY.PowerTest do
     end
   end
 
-  property "an average day keeps the power in balance" do
+  property "an average day ends with the charge of its start, and keeps the power in balance" do
     check all(input <- day_input(), sys <- system_gen(), settings <- settings_gen()) do
       day = Power.day(input, sys, settings)
       capacity = sys.kwh * 0.95
       assert Enum.all?(day.soc, &(&1 >= -1.0e-9 and &1 <= capacity + 1.0e-9))
       assert day.day >= 0 and day.night >= 0 and day.export >= 0 and day.lost >= -1.0e-9
 
-      # The grid gives at least the use, less the sun that is not lost, and
-      # less the power that the battery gave from its charge at the start.
+      # The day of many days in a row: the charge at its end is the charge
+      # at its start.
+      assert_in_delta List.last(day.soc), day.start, 1.0e-6
+
+      # The grid gives at least the use, less the sun that is not lost.
       use = Enum.sum(input.need) + Enum.sum(input.other)
       sun = Enum.sum(input.pv_station) + Enum.sum(input.pv_grid)
-      grid = day.day + day.night - day.export
-      assert grid >= use - (sun - day.lost) - (day.start - List.last(day.soc)) - 1.0e-6
+      assert day.day + day.night - day.export >= use - (sun - day.lost) - 1.0e-6
+
+      # And at most the other items, and the items of the station through
+      # the battery (92% in, 92% out).
+      assert day.day + day.night <=
+               Enum.sum(input.other) + Enum.sum(input.need) / (0.92 * 0.92) + 1.0e-6
+    end
+  end
+
+  # The probes of a review: a large battery in the mode night, with a slow
+  # charge, takes from the grid near the use, not 3 to 11 times more.
+  test "a large battery in the mode night finds its steady day" do
+    need = List.duplicate(0.05, 24)
+    zero = List.duplicate(0.0, 24)
+    input = %{need: need, other: zero, pv_station: zero, pv_grid: zero}
+    settings = %{Power.settings() | mode: "night"}
+
+    for {kwh, charge} <- [{22.0, 500.0}, {102.0, 1800.0}] do
+      day = Power.day(input, %{kwh: kwh, output_w: 3600.0, charge_w: charge}, settings)
+      assert day.day + day.night <= 1.2 / (0.92 * 0.92) + 1.0e-6
     end
   end
 
@@ -406,8 +521,8 @@ defmodule DIY.PowerTest do
             kwh <- float(min: 0.1, max: 20.0),
             more <- float(min: 0.0, max: 20.0)
           ) do
-      small = Power.outage(need, pv, %{kwh: kwh})
-      large = Power.outage(need, pv, %{kwh: kwh + more})
+      small = Power.outage(need, pv, %{kwh: kwh}, kwh)
+      large = Power.outage(need, pv, %{kwh: kwh + more}, kwh + more)
 
       case {small, large} do
         {nil, nil} -> assert Enum.sum(need) == 0

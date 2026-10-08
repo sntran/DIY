@@ -502,7 +502,7 @@ defmodule DIY.Catalog do
     },
     %{
       type: "transfer_switch",
-      name: "Interlock or transfer switch",
+      name: "Interlock, transfer switch or subpanel",
       emoji: "🔀",
       places: [:indoor, :outdoor],
       features: [:power_view],
@@ -512,7 +512,8 @@ defmodule DIY.Catalog do
           "Device",
           [
             {"interlock", "Interlock kit on the main panel"},
-            {"transfer", "Transfer switch"}
+            {"transfer", "Transfer switch"},
+            {"subpanel", "Subpanel for the backup circuits, with a transfer switch"}
           ],
           "interlock"
         ),

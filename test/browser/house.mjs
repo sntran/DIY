@@ -295,14 +295,33 @@ for (const colorScheme of ["light", "dark"]) {
     await page.click("#item-sheet .btn-ghost[aria-label=Close]")
     await page.waitForSelector('a[id^="item-"]:has-text("Plan")')
 
+    // The page Bill with a planned item: the house of today, and a note.
+    await page.click("nav >> text=Bill")
+    await page.waitForSelector("#planned-note")
+    await page.waitForSelector("#items")
+
     await page.click("nav >> text=Power")
     await page.waitForSelector("#plan")
     await page.waitForSelector("#outage")
-    assert.match(await page.textContent("#payback"), /pays back|does not pay back/)
+    assert.match(
+      await page.textContent("#payback"),
+      /The planned equipment (saves \$[\d,]+ in one year[:.] [Ii]t pays back in|saves no money|does not pay back: it costs)/,
+    )
     await check(page, `${name} power`)
     await page.click("nav >> text=House")
     await page.waitForSelector("#whatif-card")
     await check(page, `${name} front with a plan`)
+
+    // A station that is too small for its items: the warning.
+    await page.click("nav >> text=Rooms")
+    await page.click('a[id^="item-"]:has-text("Power station")')
+    await page.fill("#item-form input[name='item[output_w]']", "100")
+    await page.press("#item-form input[name='item[output_w]']", "Tab")
+    await page.waitForFunction(() => document.querySelector("#item-form input[name='item[output_w]']").value === "100")
+    await page.click("#item-sheet .btn-ghost[aria-label=Close]")
+    await page.click("nav >> text=Power")
+    await page.waitForSelector("#today-overload")
+    await check(page, `${name} power with an overload`)
 
     await context.close()
   }
