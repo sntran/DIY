@@ -139,18 +139,17 @@ defmodule DIYWeb.HomeLiveTest do
     view |> element("#door-planning") |> render_click()
     view |> form("#zip-form", %{"zip" => "75070"}) |> render_submit()
 
-    html =
-      render_submit(view, "preset", %{
-        "preset" => %{
-          "lot" => "5",
-          "size" => "small",
-          "floors" => "1",
-          "heat" => "gas",
-          "start" => "preset"
-        }
-      })
+    preset = %{"size" => "small", "floors" => "1", "heat" => "gas", "start" => "preset"}
 
+    for lot <- ["5", "-5", "abc", "1e9"] do
+      html = render_submit(view, "preset", %{"preset" => Map.put(preset, "lot", lot)})
+      assert html =~ "Give the lot in square feet", lot
+    end
+
+    html = render_submit(view, "preset", %{"preset" => Map.delete(preset, "size")})
     assert html =~ "Choose one of each"
+    render_submit(view, "preset", %{"preset" => Map.put(preset, "lot", "")})
+    assert build(view).house.lot == nil
   end
 
   test "the door goes in: the rooms, the hint, and the items", %{conn: conn} do
@@ -215,6 +214,12 @@ defmodule DIYWeb.HomeLiveTest do
 
     tv = item(view, "tv")
     render_patch(view, ~p"/inside?item=#{tv.id}")
+    html = view |> form("#item-form", %{"item" => %{"watts" => "-1"}}) |> render_change()
+    assert html =~ "Give a number from"
+    # The error stays with its item: a different item has no error.
+    lights = item(view, "lights")
+    refute render_patch(view, ~p"/inside?item=#{lights.id}") =~ "Give a number from"
+    render_patch(view, ~p"/inside?item=#{tv.id}")
     view |> element("#item-sheet button", "Correct") |> render_click()
     refute item(view, "tv").typical
     render_click(view, "check_item", %{"id" => "i999"})
@@ -223,7 +228,7 @@ defmodule DIYWeb.HomeLiveTest do
     render_patch(view, ~p"/inside?item=#{ac.id}")
     view |> form("#item-form", %{"item" => %{"heat_pump" => "true"}}) |> render_change()
     assert item(view, "ac").params["heat_pump"]
-    assert render(view) =~ "It heats too"
+    assert render(view) =~ "kWh of cooling + "
 
     furnace = item(view, "furnace")
     assert render_patch(view, ~p"/inside?item=#{furnace.id}") =~ "for January"
@@ -364,6 +369,57 @@ defmodule DIYWeb.HomeLiveTest do
     Process.sleep(400)
     settle(view)
     assert %{zip: "75010", market: %{utility: "Oncor"}} = build(view)
+  end
+
+  test "the same ZIP code again keeps the market", %{conn: conn} do
+    view = open(conn, ~p"/settings", house("75013"))
+    settle(view)
+    assert %{utility: "Oncor"} = market = build(view).market
+    view |> form("#settings-zip", %{"zip" => "75013"}) |> render_submit()
+    settle(view)
+    assert build(view).market == market
+    refute render_patch(view, ~p"/") =~ "The page asks Power to Choose"
+  end
+
+  test "the answer for a ZIP code that the build left is thrown away", %{conn: conn} do
+    Req.Test.stub(DIY.Market, fn conn ->
+      Process.sleep(100)
+      Req.Test.json(conn, Stubs.ptc())
+    end)
+
+    view = open(conn, ~p"/settings", house("75023"))
+    view |> form("#settings-zip", %{"zip" => "10001"}) |> render_submit()
+    Process.sleep(300)
+    settle(view)
+    assert build(view).market == nil
+
+    # The build gets the ZIP code back: the page asks again.
+    view |> form("#settings-zip", %{"zip" => "75023"}) |> render_submit()
+    Process.sleep(300)
+    settle(view)
+    assert %{zip: "75023", market: %{utility: "Oncor"}} = build(view)
+  end
+
+  test "the events of a house come only after the house", %{conn: conn} do
+    view = open(conn)
+    view |> element("#door-my-house") |> render_click()
+    view |> form("#zip-form", %{"zip" => "75070"}) |> render_submit()
+    room = %{"name" => "Office", "level" => "f1", "place" => "indoor"}
+    assert render_hook(view, "add_room", %{"room" => room}) =~ "Choose a house first."
+    assert render_hook(view, "house", %{"house" => %{"size" => "2000"}}) =~ "Give numbers"
+    assert build(view).house == nil
+
+    view = open(conn, ~p"/inside", house())
+    settle(view)
+
+    assert render_hook(view, "add_room", %{"room" => %{room | "level" => "f9"}}) =~
+             "Choose a floor of the house."
+
+    assert render_hook(view, "add_room", %{"room" => %{room | "place" => "moon"}}) =~
+             "Choose a place: inside, outside or the roof."
+
+    assert render_hook(view, "add_room", %{"room" => %{room | "name" => " "}}) =~
+             "Give the room a name."
   end
 
   test "the settings: ZIP code, utility, price, house, file and start again", %{conn: conn} do

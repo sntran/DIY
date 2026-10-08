@@ -41,9 +41,13 @@ defmodule DIYWeb.HomeLive do
 
   @impl true
   def handle_params(params, _uri, socket) do
+    item = if socket.assigns.live_action == :inside, do: params["item"]
+
     {:noreply,
      socket
-     |> assign(:item, if(socket.assigns.live_action == :inside, do: params["item"]))
+     # The error of a field is for the item that the sheet showed.
+     |> assign(:item_error, if(item == socket.assigns[:item], do: socket.assigns[:item_error]))
+     |> assign(:item, item)
      |> assign(:add, if(socket.assigns.live_action == :inside, do: params["add"]))}
   end
 
@@ -85,7 +89,15 @@ defmodule DIYWeb.HomeLive do
         build = Build.put_house(socket.assigns.build, house, rooms, items)
         {:noreply, put(socket, build)}
 
-      :error ->
+      {:error, :lot} ->
+        {:noreply,
+         put_flash(
+           socket,
+           :error,
+           "Give the lot in square feet, from 100 to 100,000,000, or leave it empty."
+         )}
+
+      {:error, :house} ->
         {:noreply,
          put_flash(
            socket,
@@ -144,7 +156,7 @@ defmodule DIYWeb.HomeLive do
 
     case Build.add_room(socket.assigns.build, name, level, place) do
       {:ok, build, _id} -> {:noreply, put(socket, build)}
-      {:error, _reason} -> {:noreply, put_flash(socket, :error, "Give the room a name.")}
+      {:error, reason} -> {:noreply, put_flash(socket, :error, room_error(reason))}
     end
   end
 
@@ -257,26 +269,32 @@ defmodule DIYWeb.HomeLive do
 
     floors = parse_int(preset["floors"])
     heat = preset["heat"]
-    lot = parse_int(preset["lot"])
+    house = %{size: size, year: year, floors: floors, heat: heat, lot: nil}
 
-    house = %{
-      size: size,
-      year: year,
-      floors: floors,
-      heat: heat,
-      lot: if(lot && lot > 0, do: lot)
-    }
-
-    with true <- is_integer(size) and size in 200..20_000,
-         true <- is_integer(year),
-         true <- floors in 1..3,
-         true <- heat in Build.heats(),
-         true <- is_nil(house.lot) or house.lot in 100..100_000_000 do
+    with true <- (is_integer(size) and size in 200..20_000) || {:error, :house},
+         true <- is_integer(year) || {:error, :house},
+         true <- floors in 1..3 || {:error, :house},
+         true <- heat in Build.heats() || {:error, :house},
+         {:ok, lot} <- lot(preset["lot"]) do
+      house = %{house | lot: lot}
       {:ok, if(preset["start"] == "scratch", do: House.scratch(house), else: House.preset(house))}
-    else
-      _ -> :error
     end
   end
+
+  # The lot of a preset form: empty, or a number of square feet.
+  defp lot(text) when text in [nil, ""], do: {:ok, nil}
+
+  defp lot(text) do
+    case parse_int(text) do
+      lot when is_integer(lot) and lot in 100..100_000_000 -> {:ok, lot}
+      _ -> {:error, :lot}
+    end
+  end
+
+  defp room_error(:name), do: "Give the room a name."
+  defp room_error(:level), do: "Choose a floor of the house."
+  defp room_error(:place), do: "Choose a place: inside, outside or the roof."
+  defp room_error(:house), do: "Choose a house first."
 
   defp lookup(options, key) do
     Enum.find_value(options, fn {k, _label, value} -> if k == key, do: value end)
@@ -284,7 +302,9 @@ defmodule DIYWeb.HomeLive do
 
   ## The build and its data
 
-  # Changes the build, and updates the data of the pages.
+  # Changes the build, and updates the data of the pages. The same build
+  # makes no change.
+  defp put(%{assigns: %{build: build}} = socket, build), do: socket
   defp put(socket, build), do: socket |> Device.put_build(build) |> refresh()
 
   defp refresh(socket) do
@@ -354,24 +374,31 @@ defmodule DIYWeb.HomeLive do
   def handle_async({:market, zip}, result, socket) do
     build = socket.assigns.build
 
-    case result do
-      {:ok, {:ok, market}} when build.zip == zip and build.market == nil ->
-        {:noreply,
-         socket
-         |> assign(:market, %{zip: zip, status: :ok})
-         |> put(Build.set_market(build, market))}
+    cond do
+      build.zip == zip and build.market == nil ->
+        {:noreply, market(socket, zip, result)}
 
-      {:ok, {:error, message}} ->
-        {:noreply, assign(socket, :market, %{zip: zip, status: {:error, message}})}
+      # The answer of a ZIP code that the build does not have now: the page
+      # throws it away, and asks again if the build gets that ZIP code back.
+      socket.assigns.market.zip == zip ->
+        {:noreply, assign(socket, :market, %{zip: nil, status: :none})}
 
-      {:exit, _reason} ->
-        {:noreply,
-         assign(socket, :market, %{zip: zip, status: {:error, "Power to Choose did not answer."}})}
-
-      {:ok, {:ok, _market}} ->
+      true ->
         {:noreply, socket}
     end
   end
+
+  defp market(socket, zip, {:ok, {:ok, market}}) do
+    socket
+    |> assign(:market, %{zip: zip, status: :ok})
+    |> put(Build.set_market(socket.assigns.build, market))
+  end
+
+  defp market(socket, zip, {:ok, {:error, message}}),
+    do: assign(socket, :market, %{zip: zip, status: {:error, message}})
+
+  defp market(socket, zip, {:exit, _reason}),
+    do: assign(socket, :market, %{zip: zip, status: {:error, "Power to Choose did not answer."}})
 
   ## The pages
 

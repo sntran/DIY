@@ -24,6 +24,10 @@ defmodule DIYWeb.Format do
   def value(number) when is_number(number), do: to_string(number)
   def value(value), do: value
 
+  @doc "A count of a thing: 1 month, 2 months."
+  def count(1, word), do: "1 " <> word
+  def count(n, word) when is_integer(n), do: int(n) <> " " <> word <> "s"
+
   @doc "The cost of kWh at a price in cents, in dollars."
   def cost(kwh, cents), do: kwh * cents / 100
 end

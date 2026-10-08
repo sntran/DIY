@@ -1,6 +1,6 @@
 defmodule DIYWeb.Front do
   @moduledoc """
-  The front of the house: a drawing of the house, the user in front of it,
+  The front of the house: a picture of the house, the user in front of it,
   and the bill estimate. The door goes in (`DIYWeb.Inside`).
   """
   use DIYWeb, :html
@@ -25,12 +25,10 @@ defmodule DIYWeb.Front do
           {if @build.door == "planning", do: "The house I'm planning", else: "My house"}
         </h1>
         <p class="text-sm opacity-70">
-          ZIP code {@build.zip}, {Zip.state_name(@place.state)} · {Format.int(@build.house.size)} sq ft · {@build.house.floors} {if @build.house.floors ==
-                                                                                                                                      1,
-                                                                                                                                    do:
-                                                                                                                                      "floor",
-                                                                                                                                    else:
-                                                                                                                                      "floors"}
+          ZIP code {@build.zip}, {Zip.state_name(@place.state)} · {Format.int(@build.house.size)} sq ft · {Format.count(
+            @build.house.floors,
+            "floor"
+          )}
         </p>
       </div>
 
@@ -49,7 +47,7 @@ defmodule DIYWeb.Front do
 
   attr :build, :map, required: true
 
-  # The drawing of the house: one band for each floor, the roof, the door,
+  # The picture of the house: one band for each floor, the roof, the door,
   # and the items outside.
   defp house(assigns) do
     floors = assigns.build.house.floors
@@ -66,7 +64,7 @@ defmodule DIYWeb.Front do
     <.link
       patch={~p"/inside"}
       class="block"
-      aria-label={"Go in: a house with #{@floors} floors, and you in front of the door"}
+      aria-label={"Go in: a house with #{Format.count(@floors, "floor")}, and you in front of the door"}
     >
       <svg
         viewBox="0 0 360 230"
@@ -152,9 +150,9 @@ defmodule DIYWeb.Front do
         {Format.money(Format.cost(@average, @cents))}
       </p>
       <p class="text-sm">
-        Most likely between {Format.money(Format.cost(@estimate.low / 12, @cents))} and {Format.money(
-          Format.cost(@estimate.high / 12, @cents)
-        )} · {Format.kwh(@average)}
+        The range, with the weather of 10 years and the limits of the model: {Format.money(
+          Format.cost(@estimate.low / 12, @cents)
+        )} to {Format.money(Format.cost(@estimate.high / 12, @cents))} · {Format.kwh(@average)}
       </p>
     </div>
     <p id="bill-month" class="text-sm">
