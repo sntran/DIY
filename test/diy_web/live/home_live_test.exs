@@ -39,20 +39,6 @@ defmodule DIYWeb.HomeLiveTest do
   # weather uses a ZIP code far from the others.
 
   # Waits for the weather and the market in the background.
-  # The page after the answers of the weather and of the market: the test
-  # waits until no request is open (2 seconds at most).
-  defp settle(view, tries \\ 100) do
-    assigns = :sys.get_state(view.pid).socket.assigns
-
-    if tries > 0 and :loading in [assigns.weather.status, assigns.market.status] do
-      Process.sleep(20)
-      settle(view, tries - 1)
-    else
-      Process.sleep(5)
-      render(view)
-    end
-  end
-
   defp build(view), do: :sys.get_state(view.pid).socket.assigns.build
   defp room(view, name), do: Enum.find(build(view).rooms, &(&1.name == name))
   defp item(view, type), do: Enum.find(build(view).items, &(&1.type == type))

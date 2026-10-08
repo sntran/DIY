@@ -14,8 +14,7 @@ defmodule DIYWeb.PowerLiveTest do
   defp open(conn, path, build) do
     {:ok, view, _html} = live(conn, path)
     render_hook(view, "device:restore", %{"text" => Build.to_json(build), "stamp" => build.stamp})
-    _ = :sys.get_state(view.pid)
-    Process.sleep(20)
+    settle(view)
     view
   end
 
