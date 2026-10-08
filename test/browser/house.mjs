@@ -73,6 +73,26 @@ async function where(page) {
   return page.evaluate(() => `scrollTop ${document.querySelector("#levels").scrollTop}, hash "${location.hash}"`)
 }
 
+// A CSV of Smart Meter Texas: 15-minute reads from July 2024 to June
+// 2025, with more use in the hot and the cold months.
+function meterFile() {
+  const lines = ["ESIID,USAGE_DATE,REVISION_DATE,USAGE_START_TIME,USAGE_END_TIME,USAGE_KWH,ESTIMATED_ACTUAL,CONSUMPTION_SURPLUSGENERATION"]
+  for (let i = 0; i < 12; i++) {
+    const year = 2024 + Math.floor((6 + i) / 12)
+    const month = ((6 + i) % 12) + 1
+    const days = new Date(Date.UTC(year, month, 0)).getUTCDate()
+    const kwh = 0.3 + (month >= 6 && month <= 9 ? 0.4 : month <= 2 || month === 12 ? 0.2 : 0)
+    for (let day = 1; day <= days; day++) {
+      const date = `${String(month).padStart(2, "0")}/${String(day).padStart(2, "0")}/${year}`
+      for (let q = 0; q < 96; q++) {
+        const time = `${String(Math.floor(q / 4)).padStart(2, "0")}:${String((q % 4) * 15).padStart(2, "0")}`
+        lines.push(`"1044372000000000",${date},${date},${time},${time},${kwh.toFixed(3)},A,Consumption`)
+      }
+    }
+  }
+  return Buffer.from(lines.join("\r\n"))
+}
+
 async function connected(page) {
   await page.waitForSelector(".phx-connected")
 }
@@ -232,6 +252,24 @@ for (const colorScheme of ["light", "dark"]) {
     await page.click("#item-sheet .btn-ghost[aria-label=Close]")
     await page.click("nav >> text=House")
     await page.waitForSelector("#bill-average")
+
+    // The real usage: the person adds the meter, and opens its file. The
+    // file stays in the browser; the page gets the sums of the months.
+    await page.click("#real >> text=Add the meter")
+    await page.waitForSelector("#add-sheet")
+    await page.click("#add-smart_meter")
+    await page.waitForSelector("#usage-file")
+    await check(page, `${name} meter`)
+    await page.setInputFiles("#usage-file", { name: "IntervalMeterUsage.csv", mimeType: "text/csv", buffer: meterFile() })
+    await page.waitForSelector("#usage-months:has-text('Smart Meter Texas: 12 months, from 2024-07 to 2025-06')")
+    await page.click("#item-sheet .btn-ghost[aria-label=Close]")
+    await page.click("nav >> text=Bill")
+    await page.waitForSelector("#real-months")
+    await page.waitForSelector("#fit")
+    assert.match(await page.textContent("#inside-count"), /of 12 real months/)
+    await check(page, `${name} real usage`)
+    await page.click("nav >> text=House")
+    assert.match(await page.textContent("#real-average"), /\$\d+/)
 
     await context.close()
   }
