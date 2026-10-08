@@ -7,7 +7,7 @@ defmodule DIYWeb.Math do
   use DIYWeb, :html
 
   alias DIY.{Catalog, Usage}
-  alias DIYWeb.Format
+  alias DIYWeb.{Format, Icon}
 
   attr :build, :map, required: true, doc: "the house of today (no planned item)"
   attr :planned, :integer, default: 0, doc: "the number of planned items"
@@ -91,7 +91,9 @@ defmodule DIYWeb.Math do
         <ul id="items" class="space-y-1">
           <li :for={item <- by_size(@build.items, @estimate)}>
             <.link patch={~p"/inside?#{[item: item.id]}"} class="link">
-              {Catalog.kind(item.type).emoji} {Catalog.name(item)}
+              <Icon.item type={item.type} class="inline size-5 align-text-bottom" /> {Catalog.name(
+                item
+              )}
             </.link>
             : {Format.kwh(@estimate.items[item.id].year)} in one year
             <span :if={item.typical} class="opacity-60">(typical)</span>

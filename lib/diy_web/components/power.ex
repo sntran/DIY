@@ -252,7 +252,7 @@ defmodule DIYWeb.PowerPage do
       <h2 class="text-lg font-bold">What feeds what</h2>
       <ul class="space-y-2 text-sm">
         <li class="card card-border p-3">
-          <span class="font-semibold"><span aria-hidden="true">⚡</span> The grid</span>
+          <span class="font-semibold"><.icon name="hero-bolt" class="size-4" /> The grid</span>
           feeds the main panel{if @sys.switch,
             do: ", with the #{String.downcase(Catalog.name(@sys.switch))} (#{device(@sys.switch)})"}. The main panel feeds {Format.count(
             @others,
@@ -264,13 +264,13 @@ defmodule DIYWeb.PowerPage do
           class="card card-border p-3"
         >
           <span class="font-semibold">
-            <span aria-hidden="true">☀️</span> {Format.int(p.params["watts"])} W of panels
+            <.icon name="hero-sun" class="size-4" /> {Format.int(p.params["watts"])} W of panels
           </span>
           feed the house first, and the rest goes to the grid.
         </li>
         <li :if={@sys.stations != []} class="card card-border p-3">
           <span class="font-semibold">
-            <span aria-hidden="true">🔋</span>
+            <.icon name="hero-battery-100" class="size-4" />
             {Format.count(length(@sys.stations), "power station")}: {:erlang.float_to_binary(
               @sys.kwh,
               decimals: 1

@@ -213,3 +213,23 @@
 .s-plan { fill: #2563a8; stroke: #e0ecff; stroke-width: 0.8; stroke-linejoin: round }
 .s-plan-line { fill: none; stroke: #e0ecff; stroke-width: 0.8 }
 @media (prefers-reduced-motion: reduce) { .s-flow { animation: none } }
+
+/* The icons of the items (DIYWeb.Icon): a material has a top (-t), a lit
+   left face (-l) and a right face in the shade (-r). */
+.i-white-t { fill: #ffffff } .i-white-l { fill: #eef0f3 } .i-white-r { fill: #cfd4db }
+.i-steel-t { fill: #e5e7eb } .i-steel-l { fill: #c7ccd3 } .i-steel-r { fill: #9ca3af }
+.i-gray-t { fill: #9ca3af } .i-gray-l { fill: #7b828c } .i-gray-r { fill: #5f656e }
+.i-dark-t { fill: #50565f } .i-dark-l { fill: #3a3f47 } .i-dark-r { fill: #2a2e35 }
+.i-wood-t { fill: #d9a873 } .i-wood-l { fill: #c08f5c } .i-wood-r { fill: #9c7044 }
+.i-light-wood-t { fill: #f0d3a8 } .i-light-wood-l { fill: #e2bd88 } .i-light-wood-r { fill: #c9a06a }
+.i-blue-t { fill: #93c5fd } .i-blue-l { fill: #60a5fa } .i-blue-r { fill: #2563eb }
+.i-red-t { fill: #f87171 } .i-red-l { fill: #e5484d } .i-red-r { fill: #b8363a }
+.i-cloth-t { fill: #a5b4fc } .i-cloth-l { fill: #818cf8 } .i-cloth-r { fill: #6366f1 }
+.i-copper-t { fill: #e6a06a } .i-copper-l { fill: #c97b43 } .i-copper-r { fill: #a55f2c }
+.i-pink-t { fill: #fbcfe8 } .i-pink-l { fill: #f9a8d4 } .i-pink-r { fill: #ec4899 }
+.i-line { fill: #6b7280 } .i-black { fill: #1f2328 }
+.i-burner { fill: none; stroke: #6b7280; stroke-width: 1.5; vector-effect: non-scaling-stroke }
+.i-glass { fill: #8ec5ec } .i-glass-dark { fill: #2b3a52 } .i-screen { fill: #1e40af }
+.i-led { fill: #34d399 } .i-hot { fill: #ef4444 } .i-flame { fill: #f59e0b } .i-bulb { fill: #fcd34d }
+.i-pv { fill: #1e3a8a; stroke: #6d8fd6; stroke-width: 1; vector-effect: non-scaling-stroke }
+.i-pv-line { fill: #6d8fd6 }

@@ -46,7 +46,7 @@ defmodule DIYWeb.Front do
       <.market build={@build} market={@market} place={@place} />
 
       <.link patch={~p"/inside"} id="go-in" class="btn btn-primary btn-lg w-full">
-        <span aria-hidden="true">🚪</span> Go in
+        <.icon name="hero-arrow-right-end-on-rectangle" class="size-6" /> Go in
       </.link>
     </section>
     """
@@ -164,7 +164,8 @@ defmodule DIYWeb.Front do
         :if={Enum.any?(@whatif.warnings, &(&1 in [:backfeed, :overload]))}
         class="text-sm font-semibold"
       >
-        <span aria-hidden="true">⚠️</span> The plan has a problem of safety or of size: see the plan.
+        <.icon name="hero-exclamation-triangle" class="size-5" />
+        The plan has a problem of safety or of size: see the plan.
       </p>
       <p class="text-sm">
         {Format.count(length(@whatif.planned), "planned item")}.

@@ -806,5 +806,10 @@ The first page shows a house and a plan.
 - A property test makes random parts of a house: each point of the
   picture is in its box, and each flow and label has its equipment.
 
-The bar of the pages uses the icons of Heroicons (MIT), which Phoenix
-gives.
+Each kind of item has its isometric icon (`DIYWeb.Icon`), in the same
+style: a few boxes, discs and details of a material (white, steel, wood,
+cloth). The icon is next to the name of the item on the cards, in the
+lists to add an item, and on the sheet of an item. A test checks that
+each kind has a square icon that holds all its points. The bar of the
+pages and the other small signs use the icons of Heroicons (MIT), which
+Phoenix gives.

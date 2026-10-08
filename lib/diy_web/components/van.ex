@@ -12,7 +12,7 @@ defmodule DIYWeb.VanPage do
   use DIYWeb, :html
 
   alias DIY.{Build, Catalog, Van}
-  alias DIYWeb.{Format, Inside, Scene}
+  alias DIYWeb.{Format, Icon, Inside, Scene}
 
   attr :build, :map, required: true
   attr :van_id, :string, default: nil
@@ -319,7 +319,7 @@ defmodule DIYWeb.VanPage do
                 id={"van-item-#{item.id}"}
                 class="card card-border p-2 h-full hover:bg-base-200"
               >
-                <span class="text-2xl" aria-hidden="true">{Catalog.kind(item.type).emoji}</span>
+                <Icon.item type={item.type} />
                 <span class="text-sm font-semibold leading-tight">{Catalog.name(item)}</span>
                 <span class="text-xs opacity-80">{lb(Van.weight(item))}</span>
                 <span :if={Van.wh_day(item, 7) > 0} class="text-xs opacity-80">
@@ -334,7 +334,7 @@ defmodule DIYWeb.VanPage do
                 class="card card-border border-dashed p-2 h-full items-center justify-center hover:bg-base-200"
                 aria-label={"Add an item to #{zone.name}"}
               >
-                <span class="text-2xl" aria-hidden="true">＋</span>
+                <.icon name="hero-plus" class="size-6" />
                 <span class="text-sm">Add</span>
               </.link>
             </li>
@@ -409,7 +409,8 @@ defmodule DIYWeb.VanPage do
     ~H"""
     <Inside.sheet
       id="item-sheet"
-      title={"#{@kind.emoji} #{Catalog.name(@item)}"}
+      title={Catalog.name(@item)}
+      icon={@item.type}
       close={~p"/van?#{[id: @van.id]}"}
     >
       <div :if={@item.typical} class="alert alert-warning text-sm">
@@ -500,7 +501,7 @@ defmodule DIYWeb.VanPage do
             phx-value-type={kind.type}
             class="btn btn-block justify-start h-auto py-2"
           >
-            <span aria-hidden="true">{kind.emoji}</span> {kind.name}
+            <Icon.item type={kind.type} class="size-8" /> {kind.name}
           </button>
         </li>
       </ul>
