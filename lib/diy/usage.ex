@@ -138,8 +138,9 @@ defmodule DIY.Usage do
   end
 
   @doc """
-  The kWh of one year from the meter: the sum of the last real month of
-  each month of the year, or `nil` with fewer than 12 months.
+  The kWh of one year from the meter: the sum of each month of the year
+  (the one with the most days, `by_month/1`), or `nil` with fewer than 12
+  months.
   """
   def year(usage) do
     real = by_month(usage)

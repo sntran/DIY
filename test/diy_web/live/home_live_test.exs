@@ -322,6 +322,7 @@ defmodule DIYWeb.HomeLiveTest do
 
     render_patch(view, ~p"/inside?item=#{meter.id}")
     assert render(view) =~ "Smart Meter Texas: 12 months, from January 2025 to December 2025"
+    assert has_element?(view, ~s(#delete-item[data-confirm*="the real usage goes too"]))
     view |> element("#usage-months button", "Remove the real usage") |> render_click()
     assert build(view).usage == nil
 
@@ -387,7 +388,19 @@ defmodule DIYWeb.HomeLiveTest do
     assert has_element?(view, "#no-fit", "The weather of the app ends with 2025")
     html = render_patch(view, ~p"/")
     assert html =~ "1 month of real usage"
-    assert html =~ "the mean of the 1 month of the file"
+    assert html =~ "From your meter: the one month of the file"
+
+    {:ok, two} =
+      DIY.Usage.read(%{
+        "source" => "csv",
+        "months" => [
+          %{"month" => "2025-07", "kwh" => 600, "export" => 0, "days" => 31},
+          %{"month" => "2025-08", "kwh" => 700, "export" => 0, "days" => 31}
+        ]
+      })
+
+    view = open(conn, ~p"/", Build.set_usage(house(), two))
+    assert settle(view) =~ "From your meter: the mean of the 2 months of the file"
   end
 
   test "the math of the estimate", %{conn: conn} do

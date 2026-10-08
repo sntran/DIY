@@ -317,7 +317,11 @@ defmodule DIYWeb.Inside do
         id="delete-item"
         phx-click="delete_item"
         phx-value-id={@item.id}
-        data-confirm="Remove this item?"
+        data-confirm={
+          if @item.type == "smart_meter" and @build.usage,
+            do: "Remove this item? With no smart meter, the real usage goes too.",
+            else: "Remove this item?"
+        }
         class="btn btn-sm btn-error btn-outline"
       >
         Remove the item
@@ -362,7 +366,7 @@ defmodule DIYWeb.Inside do
         />
       </label>
       <p class="text-xs opacity-80">
-        The file stays on this device. The browser reads it, and sends only these numbers for each month: the kWh from the grid, the kWh to the grid, and the days with data.
+        The file stays on this device. The browser reads it. It sends only three numbers for each month: the kWh from the grid, the kWh to the grid, and the days with data.
       </p>
       <details class="text-xs">
         <summary class="cursor-pointer">How to get the file</summary>

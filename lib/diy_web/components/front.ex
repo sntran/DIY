@@ -235,10 +235,16 @@ defmodule DIYWeb.Front do
       <%= cond do %>
         <% @build.usage -> %>
           <p class="text-sm opacity-70">
-            {if @year,
-              do: "From your meter, in an average month",
-              else:
-                "From your meter: the mean of the #{Format.count(length(@build.usage.months), "month")} of the file"}
+            {cond do
+              @year ->
+                "From your meter, in an average month"
+
+              length(@build.usage.months) == 1 ->
+                "From your meter: the one month of the file"
+
+              true ->
+                "From your meter: the mean of the #{length(@build.usage.months)} months of the file"
+            end}
           </p>
           <p id="real-average" class="text-2xl font-bold">
             {Format.money(Format.cost(DIYWeb.Front.average(@build.usage), @price.cents))}

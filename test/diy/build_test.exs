@@ -181,6 +181,12 @@ defmodule DIY.BuildTest do
     assert build.usage == usage
     assert Build.from_json(Build.to_json(build)) == {:ok, build}
     assert Build.set_usage(build, nil).usage == nil
+
+    # A new house with no smart meter keeps no real usage.
+    {house, rooms, items} =
+      House.preset(%{size: 1800, year: 2005, floors: 1, heat: "gas", lot: nil})
+
+    assert Build.put_house(build, house, rooms, items).usage == nil
   end
 
   test "hints close one time" do

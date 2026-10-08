@@ -200,12 +200,14 @@ defmodule DIY.Build do
           {%{build | rooms: build.rooms ++ [new]}, Map.put(ids, room.key, id)}
         end)
 
-      Enum.reduce(items, build, fn item, build ->
+      items
+      |> Enum.reduce(build, fn item, build ->
         {id, build} = next_id(build, "i")
         room = Map.fetch!(ids, item.room)
         item = %{id: id, type: item.type, room: room, typical: true, params: item.params}
         %{build | items: build.items ++ [item]}
       end)
+      |> no_meter_no_usage()
     end)
   end
 

@@ -258,15 +258,17 @@ and the build stays on the device (see above).
 The app reads these files:
 
 - Smart Meter Texas: the CSV of "Energy Data 15 Min Interval", or of the
-  daily reads. The columns: `USAGE_DATE`, `USAGE_KWH` and
+  daily readings. The columns: `USAGE_DATE`, `USAGE_KWH` and
   `CONSUMPTION_SURPLUSGENERATION`.
 - Green Button: the XML (ESPI) of "Download My Data". Each IntervalBlock
   gets the ReadingType of its own MeterReading (the links of the feed).
   The app reads only electric energy in Wh (uom 72, with its power of
-  ten): from the grid, to the grid, or net. It refuses a file of gas or
-  of the demand (kW), and it skips the summaries. With hourly and daily
-  readings of the same days, it takes the finest ones. It uses the time
-  zone and the daylight time of the file.
+  ten), as the change in each interval (not the totals of a register):
+  from the grid, to the grid, or net. The net counts only in a file with
+  no flow from the grid and no flow to the grid. The app refuses a file
+  of gas or of the demand (kW), and it skips the summaries. For each day,
+  it takes the finest readings: hourly and daily readings of the same day
+  count once. It uses the time zone and the daylight time of the file.
 - Green Button CSV, or a CSV with a date and the kWh: a column of the
   kWh to the grid (export) goes to the grid, a net value under zero too,
   and a row of gas or with units that are not kWh or Wh does not count.
@@ -276,8 +278,9 @@ the grid, the kWh to the grid, and the days with data. The page says so.
 `DIY.Usage.read/1` accepts only a usage that it can read in full: a month
 "YYYY-MM" of 2000 to 2099, with at most the days of that month. When a
 file has a month of the year two times (a file of 12 months from the 8th
-of a month), the app takes the one with the most days. With no smart
-meter, the build keeps no real usage.
+of a month), the app takes the one with the most days. The removal of
+the last smart meter (or of its room), or a new house with no meter,
+removes the real usage.
 
 ### The real months and the estimate
 

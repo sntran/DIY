@@ -168,9 +168,14 @@ defmodule DIYWeb.Math do
       </p>
     </div>
     <p :if={is_nil(@fit) and @weather.climate} id="no-fit" class="text-sm opacity-80">
-      The numbers of your house need 6 months of the file with 20 days of data or more, and with the weather of NASA POWER. The weather of the app ends with {@weather.climate.last}: a file with more months of {@weather.climate.last} or before gives them.
+      To find the numbers of your house, the app needs 6 months of the file. Each month needs 20 days of data or more, and the weather of NASA POWER. The weather of the app ends with {@weather.climate.last}. A file with more months of {@weather.climate.last} or before gives the numbers of your house.
     </p>
-    <button type="button" phx-click="clear_usage" class="btn btn-sm btn-ghost">
+    <button
+      type="button"
+      phx-click="clear_usage"
+      data-confirm="Remove the real usage? The file stays on your device."
+      class="btn btn-sm btn-ghost"
+    >
       Remove the real usage
     </button>
     """
