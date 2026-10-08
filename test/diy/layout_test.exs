@@ -35,7 +35,7 @@ defmodule DIY.LayoutTest do
     # The garage is on the right, the driveway in front of it, and the
     # yard in front of the house.
     assert plan.("Garage") == %{x: 438, y: 0, w: 288, d: 288}
-    assert plan.("Driveway") == %{x: 438, y: 288, w: 288, d: 240}
+    assert plan.("Driveway") == %{x: 438, y: 288, w: 288, d: 300}
     assert plan.("Backyard") == %{x: 0, y: 294, w: 438, d: 300}
 
     # Each item is in its room: the first items of a room are along its
@@ -64,14 +64,16 @@ defmodule DIY.LayoutTest do
 
   test "the size of an item: typical, from the user, and an array of panels" do
     fridge = %{type: "fridge", size: nil, turn: 0, params: %{}}
-    assert Layout.size(fridge) == {36, 30, 70}
+    assert Layout.size(fridge) == {33, 33, 70}
     assert Layout.size(%{fridge | size: %{w: 30, d: 28, h: 66}}) == {30, 28, 66}
-    assert Layout.extent(%{fridge | turn: 1}) == {30, 36}
-    assert Layout.extent(%{fridge | turn: 2}) == {36, 30}
+    tv = %{fridge | type: "tv"}
+    assert Layout.extent(%{tv | turn: 1}) == {10, 44}
+    assert Layout.extent(%{tv | turn: 2}) == {44, 10}
 
     panels = %{type: "solar_panels", size: nil, turn: 0, params: %{"watts" => 1600}}
     assert Layout.panel_grid(1600) == {3, 2}
-    assert Layout.size(panels) == {123, 138, 2}
+    assert Layout.size(panels) == {135, 136, 2}
+    assert Layout.panel() == {45, 68}
     assert Layout.panels(100) == 1
     assert Layout.panel_grid(100) == {1, 1}
   end
@@ -79,17 +81,17 @@ defmodule DIY.LayoutTest do
   test "an item stays in its room" do
     fridge = %{type: "fridge", size: nil, turn: 0, params: %{}}
     room = %{x: 0, y: 0, w: 100, d: 50}
-    assert Layout.clamp(%{x: 90, y: -5}, fridge, room) == %{x: 64, y: 0}
+    assert Layout.clamp(%{x: 90, y: -5}, fridge, room) == %{x: 67, y: 0}
     # Larger than its room: at 0.
     assert Layout.clamp(%{x: 10, y: 10}, fridge, %{room | w: 20}) == %{x: 0, y: 10}
   end
 
   test "the free place of an item, and a room with no free place" do
     fridge = %{type: "fridge", size: nil, turn: 0, params: %{}}
-    room = %{x: 0, y: 0, w: 72, d: 30}
+    room = %{x: 0, y: 0, w: 72, d: 33}
     assert Layout.free_at(fridge, room, []) == %{x: 0, y: 0}
-    assert Layout.free_at(fridge, room, [%{x: 0, y: 0, w: 36, d: 30}]) == %{x: 36, y: 0}
-    full = [%{x: 0, y: 0, w: 72, d: 30}]
+    assert Layout.free_at(fridge, room, [%{x: 0, y: 0, w: 36, d: 33}]) == %{x: 36, y: 0}
+    full = [%{x: 0, y: 0, w: 72, d: 33}]
     assert Layout.free_at(fridge, room, full) == %{x: 0, y: 0}
   end
 
@@ -128,9 +130,13 @@ defmodule DIY.LayoutTest do
 
   test "a new room goes to a free place" do
     build = house()
-    # Floor 2 is full: a new room goes on the right of the house.
+    # Floor 2 is full: a new room goes at the back of the house, and the
+    # next one goes next to it.
     {:ok, build, office} = Build.add_room(build, "Office", "f2", :indoor)
-    assert room(build, "Office").plan == %{x: 438, y: 0, w: 144, d: 144}
+    assert room(build, "Office").plan == %{x: 0, y: -144, w: 144, d: 144}
+    {:ok, build, study} = Build.add_room(build, "Study", "f2", :indoor)
+    assert room(build, "Study").plan == %{x: 144, y: -144, w: 144, d: 144}
+    {:ok, build} = Build.delete_room(build, study)
 
     # Floor 3 does not exist in this house; on a house of 3 floors, a room
     # of floor 3 is in the house.
@@ -139,9 +145,9 @@ defmodule DIY.LayoutTest do
     {:ok, build, _id} = Build.add_room(build, "Den", "f3", :indoor)
     assert room(build, "Den").plan == %{x: 0, y: 0, w: 144, d: 144}
 
-    # A second roof is on the right of the first.
+    # A second roof is at the back of the first.
     {:ok, build, _id} = Build.add_room(build, "Porch roof", "roof", :roof)
-    assert room(build, "Porch roof").plan == %{x: 438, y: 0, w: 144, d: 144}
+    assert room(build, "Porch roof").plan == %{x: 0, y: -144, w: 144, d: 144}
 
     # Outside, a new room goes on the right of the rooms of the ground.
     {:ok, build, _id} = Build.add_room(build, "Shed", "outside", :indoor)

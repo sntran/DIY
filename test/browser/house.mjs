@@ -248,9 +248,21 @@ async function build(context, name) {
   await page.waitForSelector("#plan-hint", { state: "detached" })
   await check(page, `${name} rooms`)
 
-  // The plan at scale: the person zooms to the first floor, and drags the
-  // TV from the back wall to the middle of the living room.
+  // The plan at scale: the person zooms to the first floor. A drag of the
+  // AC, held at its top: its top is over the house, but its space stays
+  // in the yard. So it moves in the yard, with no message.
   await page.click("button[data-focus=ground]")
+  const ac = `g[data-item="${await itemId(page, "Central AC")}"]`
+  const [acAt, acIn] = [await page.getAttribute(ac, "data-at"), await page.getAttribute(ac, "data-in")]
+  const acBox = await page.locator(ac).boundingBox()
+  await drag(page, { x: acBox.x + acBox.width / 2, y: acBox.y + 3 }, 10, 6)
+  await page.waitForFunction(([s, at]) => document.querySelector(s).getAttribute("data-at") !== at, [ac, acAt])
+    .catch(() => assert.fail(`${name}: the AC moves with a drag at its top`))
+  assert.equal(await page.getAttribute(ac, "data-in"), acIn, `${name}: the AC stays in the yard`)
+  assert.equal(await page.locator("#flash-error").count(), 0, `${name}: no message after the drag`)
+
+  // The person zooms in, and drags the TV from the back wall to the middle
+  // of the living room.
   await page.click("button[data-zoom=in]")
   const tv = `g[data-item="${await itemId(page, "TV")}"]`
   const tvAt = await page.getAttribute(tv, "data-at")

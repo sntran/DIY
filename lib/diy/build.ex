@@ -65,6 +65,9 @@ defmodule DIY.Build do
   @version 1
   @doors ~w(my_house planning)
   @heats ~w(gas heat_pump electric)
+  # The hints that a person can close. The page Rooms showed the hint
+  # "swipe" before it had the plan: a stored build can have it, so it
+  # stays valid.
   @hints ~w(swipe plan)
   @places Catalog.places()
 

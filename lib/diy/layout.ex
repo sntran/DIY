@@ -15,10 +15,11 @@ defmodule DIY.Layout do
     `DIY.Catalog.size/1`).
   - A zone of a van and an item in a van have no plan and no `at` (`nil`).
 
-  The app makes a draft of the plan (`draft/2`): the floors of the house
-  from its size, the rooms of a floor in rows, and the rooms outside around
-  the house (a garage of 24 by 24 feet: a camper van fits in it). The user
-  then moves the rooms and the items.
+  The app makes a draft of the plan (`draft/2`). The size of the house
+  gives the size of its floors, and the rooms of a floor are in rows. The
+  rooms outside are around the house. The garage is 24 by 24 feet, and the
+  driveway is 24 by 25 feet: a camper van (274 inches long) fits in each.
+  The user then moves the rooms and the items.
 
   The rules (`fill/1` keeps them after each change; `specs/Plan.tla`
   checks them on a small grid):
@@ -42,9 +43,10 @@ defmodule DIY.Layout do
   @max_at 12_000
 
   # The size of one solar panel (on its side, the long side down the
-  # roof), and its watts.
-  @panel_w 41
-  @panel_d 69
+  # roof), and its watts: a module of 108 half cells, 1134 by 1722 mm, of
+  # 400 W (for example STAR-400W-M54H-M10, Greentech Renewables).
+  @panel_w 45
+  @panel_d 68
   @panel_watts 400
 
   @doc "The smallest side of a room, in inches."
@@ -131,6 +133,9 @@ defmodule DIY.Layout do
   @doc "The count of panels for a power: about 400 W each."
   def panels(watts), do: max(1, round(watts / @panel_watts))
 
+  @doc "The size of one solar panel on the plan, in inches: `{w, d}`."
+  def panel, do: {@panel_w, @panel_d}
+
   @doc "The space of an item on its floor, after its turn: `{w, d}`."
   def extent(item) do
     {w, d, _h} = size(item)
@@ -210,7 +215,7 @@ defmodule DIY.Layout do
         _other -> []
       end) ++
         column(garages, yard_w, 0, {288, 288}) ++
-        column(drives, yard_w, 288 * length(garages), {288, 240}) ++
+        column(drives, yard_w, 288 * length(garages), {288, 300}) ++
         strips(yards, {0, d, yard_w, max(300, 90 * yard_rows)})
 
     by_index = Map.new(plans)
@@ -344,8 +349,9 @@ defmodule DIY.Layout do
   defp put_plan(rooms, room, plan),
     do: Enum.map(rooms, &if(&1.id == room.id, do: %{&1 | plan: plan}, else: &1))
 
-  # A free place for a new room: on a floor, in the house where no room is;
-  # else (and outside) next to the rooms of its layer, on their right.
+  # A free place for a new room: on a floor, in the house where no room
+  # is, else at the back of the house; outside (and when no place is
+  # free), next to the rooms of its layer, on their right.
   defp free_plan(build, room) do
     {w, d} = new_size(room, build)
     others = for r <- build.rooms, r.plan, layer(r) == layer(room), do: r.plan
@@ -368,7 +374,23 @@ defmodule DIY.Layout do
         )
       end
 
-    inside || beside(others, house, w, d)
+    inside || back(room, others, house, w, d) || beside(others, house, w, d)
+  end
+
+  # A free place for a new room of a floor at the back of the house (y less
+  # than the house), row by row: so the room is next to the house, not past
+  # the garage or the yard.
+  defp back(%{level: "outside"}, _others, _house, _w, _d), do: nil
+
+  defp back(_room, others, house, w, d) do
+    step = max(12, round6(house.w / 40))
+
+    Enum.find_value(1..20, fn row ->
+      Enum.find_value(range(house.x, house.x + max(house.w - w, 0), step), fn x ->
+        plan = %{x: x, y: house.y - row * d, w: w, d: d}
+        if not Enum.any?(others, &overlap?(&1, plan)), do: plan
+      end)
+    end)
   end
 
   defp beside([], house, w, d), do: %{x: house.x + house.w, y: house.y, w: w, d: d}

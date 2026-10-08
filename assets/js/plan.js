@@ -1,10 +1,10 @@
 // The hook Plan of the plan of the house at scale (DIYWeb.Cutaway). The
 // person moves the items and the rooms with a pointer (a finger or a
-// mouse), zooms with two fingers, the wheel or the buttons, and moves the
-// picture with a drag on an empty place. A tap on an item opens it, and a
-// tap on a room chooses it: the room then has handles on its walls. In the
-// list of the rooms (for a keyboard and a screen reader), the arrow keys
-// move an item or a room.
+// mouse). Two fingers, the wheel or the buttons zoom. A drag on an empty
+// place moves the picture. A tap on an item opens it, and a tap on a room
+// chooses it: the room then has handles on its walls. In the list of the
+// rooms (for a keyboard and a screen reader), the arrow keys move an item
+// or a room.
 //
 // The server draws the SVG. This script only moves parts of it while the
 // pointer moves, and then sends the change: the server then draws it again.
@@ -63,6 +63,19 @@ export function inverse(svg, surface, k) {
   const front = (b + q * (surface.rise + m * ridge) - a) / (2 + q * m)
   const y = front >= ridge ? front : (b + q * (surface.rise - m * ridge) - a) / (2 - q * m)
   return {x: a + y, y}
+}
+
+// True when the point of the plan under an SVG point is on a surface.
+export function onSurface(svg, surface, k) {
+  const p = inverse(svg, surface, k)
+  const [x, y, w, d] = surface.plan
+  return p.x >= x && p.x <= x + w && p.y >= y && p.y <= y + d
+}
+
+// The SVG units of one pixel of the screen. The view fills the SVG on the
+// side that limits it, and keeps its shape.
+export function unitsOf(view, width, height) {
+  return Math.max(view.w / (width || 1), view.h / (height || 1))
 }
 
 // A move on the SVG as a move on a flat plan, in inches.
@@ -140,11 +153,10 @@ export const planHook = {
   mounted() {
     this.svg = this.el.querySelector("svg")
     this.k = numbers(this.svg.getAttribute("data-k"))
-    this.fit = parseView(this.svg.getAttribute("data-fit"))
     this.pointers = new Map()
     this.drag = null
     const saved = this.saved()
-    this.show(saved || this.fit)
+    this.show(saved || this.fit())
 
     this.listeners = {
       pointerdown: (e) => this.down(e),
@@ -167,6 +179,16 @@ export const planHook = {
     this.el.removeEventListener("keydown", this.onKey)
   },
 
+  // The box of all the layers. The server changes it when a room moves or
+  // comes: so the script reads it each time.
+  fit() {
+    return parseView(this.svg.getAttribute("data-fit"))
+  },
+
+  units(view) {
+    return unitsOf(view, this.svg.clientWidth, this.svg.clientHeight)
+  },
+
   // The view that the person had on this page before (a zoom), if any.
   saved() {
     try {
@@ -182,9 +204,10 @@ export const planHook = {
   show(view) {
     this.view = view
     this.svg.setAttribute("viewBox", box(view))
-    const units = view.w / (this.svg.clientWidth || 1)
+    const units = this.units(view)
     this.svg.style.setProperty("--p-label", `${(12 * units).toFixed(3)}px`)
-    this.svg.style.setProperty("--p-handle", `${(9 * units).toFixed(3)}px`)
+    // A handle is 24 pixels wide: the smallest target of WCAG 2.2 (2.5.8).
+    this.svg.style.setProperty("--p-handle", `${(12 * units).toFixed(3)}px`)
     try {
       this.el.ownerDocument.defaultView.sessionStorage.setItem(KEY, box(view))
     } catch (_error) {
@@ -250,7 +273,7 @@ export const planHook = {
 
     if (drag.kind === "pan") {
       // The view moves with the pointer: the start point stays under it.
-      const units = drag.view.w / (this.svg.clientWidth || 1)
+      const units = this.units(drag.view)
       this.show({...drag.view, x: drag.view.x - dx * units, y: drag.view.y - dy * units})
     } else if (drag.kind === "handle") {
       this.preview(drag.el, sdx, sdy)
@@ -291,7 +314,7 @@ export const planHook = {
     const [p, q] = [...this.pointers.values()]
     const span = Math.hypot(p.x - q.x, p.y - q.y)
     const mid = this.point((p.x + q.x) / 2, (p.y + q.y) / 2)
-    this.show(zoom(this.view, span / drag.span, mid.x, mid.y, this.fit))
+    this.show(zoom(this.view, span / drag.span, mid.x, mid.y, this.fit()))
     drag.span = span
   },
 
@@ -359,14 +382,22 @@ export const planHook = {
     this.pushEvent("select_room", {id})
   },
 
-  // An item that the person drops: its center goes to the surface of the
-  // room under the pointer (else its own room).
+  // An item that the person drops: the center of its space on the floor
+  // moves with the pointer. It goes to the room whose surface has that
+  // center: its own room first, then a room of the layer under the
+  // pointer, then a room of its own layer. The pointer is on the body of
+  // the item, above its space: so the pointer does not choose the room.
+  // With no such room, the room under the pointer (else its own room).
   dropItem(drag, e) {
     const own = this.surface(drag.el.getAttribute("data-in"))
     const [cx, cy] = numbers(drag.el.getAttribute("data-at"))
     const start = forward({x: cx, y: cy}, surfaceOf(own), this.k)
-    const target = this.roomAt(e.clientX, e.clientY) || own
-    const center = inverse({x: start.x + drag.sdx, y: start.y + drag.sdy}, surfaceOf(target), this.k)
+    const point = {x: start.x + drag.sdx, y: start.y + drag.sdy}
+    const under = this.roomAt(e.clientX, e.clientY)
+    const layers = [under && under.closest("[data-box]"), own.closest("[data-box]")]
+    const rooms = layers.filter(Boolean).flatMap((layer) => [...layer.querySelectorAll("[data-room]")])
+    const target = [own, ...rooms].find((el) => onSurface(point, surfaceOf(el), this.k)) || under || own
+    const center = inverse(point, surfaceOf(target), this.k)
     this.send(
       "place_item",
       {
@@ -388,7 +419,7 @@ export const planHook = {
   wheel(e) {
     e.preventDefault()
     const p = this.point(e.clientX, e.clientY)
-    this.show(zoom(this.view, Math.exp(-e.deltaY * 0.0015), p.x, p.y, this.fit))
+    this.show(zoom(this.view, Math.exp(-e.deltaY * 0.0015), p.x, p.y, this.fit()))
   },
 
   // The buttons: zoom in, zoom out, all the house, and one layer.
@@ -397,10 +428,10 @@ export const planHook = {
     if (!button) return
     const zoomTo = button.getAttribute("data-zoom")
     const v = this.view
-    if (zoomTo === "fit") return this.show(this.fit)
+    if (zoomTo === "fit") return this.show(this.fit())
     if (zoomTo) {
       const factor = zoomTo === "in" ? 1.5 : 1 / 1.5
-      return this.show(zoom(v, factor, v.x + v.w / 2, v.y + v.h / 2, this.fit))
+      return this.show(zoom(v, factor, v.x + v.w / 2, v.y + v.h / 2, this.fit()))
     }
     const layer = this.svg.querySelector(`#plan-${button.getAttribute("data-focus")}`)
     const [x, y, w, h] = numbers(layer.getAttribute("data-box"))

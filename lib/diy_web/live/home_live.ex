@@ -302,7 +302,19 @@ defmodule DIYWeb.HomeLive do
     end
   end
 
-  # The arrow keys in the list of the rooms.
+  # The move buttons of the sheets send the steps as text.
+  def handle_event(event, %{"id" => id, "dx" => dx, "dy" => dy}, socket)
+      when event in ["nudge_item", "nudge_room"] and is_binary(dx) and is_binary(dy) do
+    case {parse_int(dx), parse_int(dy)} do
+      {dx, dy} when is_integer(dx) and is_integer(dy) ->
+        handle_event(event, %{"id" => id, "dx" => dx, "dy" => dy}, socket)
+
+      _none ->
+        {:noreply, socket}
+    end
+  end
+
+  # The arrow keys in the list of the rooms, and the move buttons.
   def handle_event("nudge_item", %{"id" => id, "dx" => dx, "dy" => dy}, socket)
       when is_integer(dx) and is_integer(dy) do
     build = socket.assigns.build
@@ -326,7 +338,7 @@ defmodule DIYWeb.HomeLive do
   end
 
   def handle_event("turn_item", %{"id" => id}, socket),
-    do: with_build(socket, Build.turn_item(socket.assigns.build, id))
+    do: plan_result(socket, Build.turn_item(socket.assigns.build, id), &turn_status(&1, id))
 
   def handle_event("item_size", %{"item_id" => id, "typical" => "true"}, socket),
     do: with_build(socket, Build.size_item(socket.assigns.build, id, nil))
@@ -345,11 +357,12 @@ defmodule DIYWeb.HomeLive do
   end
 
   # The size of a room from the sheet, in feet: the walls at the front move.
-  def handle_event("room_size", %{"room_id" => id, "w" => w, "d" => d}, socket) do
+  def handle_event("room_size", %{"room_id" => id, "w" => w, "d" => d}, socket)
+      when is_binary(w) and is_binary(d) do
     with {:ok, %{plan: %{} = plan}} <- Build.room(socket.assigns.build, id),
-         {w, ""} <- Float.parse(String.trim(w)),
-         {d, ""} <- Float.parse(String.trim(d)) do
-      new = %{plan | w: round(w * 12), d: round(d * 12)}
+         {:ok, w} <- inches(w),
+         {:ok, d} <- inches(d) do
+      new = %{plan | w: w, d: d}
       plan_result(socket, Build.size_room(socket.assigns.build, id, new), nil)
     else
       _none -> {:noreply, put_flash(socket, :error, move_error(:plan))}
@@ -614,8 +627,9 @@ defmodule DIYWeb.HomeLive do
 
   # The result of a change of the plan: the new build (and a text for a
   # screen reader), or a message.
+  # A change of the plan: a message that stays from an older change goes.
   defp plan_result(socket, {:ok, build}, status) do
-    socket = put(socket, build)
+    socket = socket |> clear_flash(:error) |> put(build)
     {:noreply, assign(socket, :status, status && status.(build))}
   end
 
@@ -628,6 +642,21 @@ defmodule DIYWeb.HomeLive do
   defp move_error(:overlap), do: "A room cannot go over a different room on its floor."
   defp move_error(:place), do: "This item cannot go in that room."
 
+  # An item or a room that is not on the plan now (it went to a van, or a
+  # different tab removed it).
+  defp move_error(_reason), do: "This item or this room is not on the plan now."
+
+  # A length in feet from the sheet, in inches: from more than 0 to the
+  # largest side of a room.
+  defp inches(feet) do
+    with {feet, ""} <- Float.parse(String.trim(feet)),
+         true <- feet > 0 and feet <= Layout.max_room() / 12 do
+      {:ok, round(feet * 12)}
+    else
+      _other -> :error
+    end
+  end
+
   # A move in inches on a grid of 6 inches.
   defp step(inches), do: round(inches / 6) * 6
 
@@ -638,12 +667,20 @@ defmodule DIYWeb.HomeLive do
   defp wall(plan, "y1", _dx, dy), do: {:ok, %{plan | d: plan.d + dy}}
   defp wall(_plan, _edge, _dx, _dy), do: :error
 
-  # The texts for a screen reader after an arrow key.
+  # The texts for a screen reader after an arrow key or a turn. The left
+  # wall is the wall that the Left key goes to, and the top wall is the
+  # wall that the Up key goes to.
   defp item_status(build, id) do
     {:ok, item} = Build.item(build, id)
     {:ok, room} = Build.room(build, item.room)
 
-    "#{Catalog.name(item)}: #{Inside.feet(item.at.x)} from the wall on one side of #{room.name}, #{Inside.feet(item.at.y)} from the wall on the other side."
+    "#{Catalog.name(item)}: #{Inside.feet(item.at.x)} from the left wall of #{room.name}, #{Inside.feet(item.at.y)} from the top wall."
+  end
+
+  defp turn_status(build, id) do
+    {:ok, item} = Build.item(build, id)
+    {w, d} = Layout.extent(item)
+    "#{Catalog.name(item)} turned. Its space is #{Inside.feet(w)} by #{Inside.feet(d)}."
   end
 
   defp room_status(build, id) do

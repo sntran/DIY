@@ -137,6 +137,32 @@ defmodule DIYWeb.CutawayTest do
     assert [{:poly, _corners, "x"}] = Shapes.placed_model(model, %{at: {1, 1, 0}, turn: 2})
   end
 
+  test "for each kind and each turn, no part of a model paints after a part in front of it" do
+    m = 0.0254
+
+    for type <- Catalog.types(), turn <- 0..3 do
+      {w, d, h} = Catalog.size(type)
+      frame = %{at: {0, 0, 0}, size: {w * m, d * m, h * m}, turn: turn}
+      indexed = type |> Shapes.model() |> Shapes.parts(frame) |> Enum.with_index()
+
+      for {a, i} <- indexed, {b, j} <- indexed, i < j, overlap?(part_screen(a), part_screen(b)) do
+        refute behind?(b.box, a.box) and not behind?(a.box, b.box),
+               "#{type} at turn #{turn}: part #{b.id} is behind part #{a.id}"
+      end
+    end
+  end
+
+  # The box of the polygons of a part on the screen.
+  defp part_screen(part) do
+    {xs, ys} =
+      part.polys |> Enum.flat_map(&elem(&1, 0)) |> Enum.map(&Iso.at({0, 0}, &1)) |> Enum.unzip()
+
+    {Enum.min(xs), Enum.min(ys), Enum.max(xs), Enum.max(ys)}
+  end
+
+  defp overlap?({ax0, ay0, ax1, ay1}, {bx0, by0, bx1, by1}),
+    do: ax0 < bx1 - 0.01 and bx0 < ax1 - 0.01 and ay0 < by1 - 0.01 and by0 < ay1 - 0.01
+
   test "three boxes that are each behind the next one still get an order" do
     square = [{[{0, 0, 0}, {1, 0, 0}, {1, 1, 0}, {0, 1, 0}], "x"}]
     object = fn id, box -> %{id: id, box: box, key: 0, loose: false, polys: square} end
@@ -144,9 +170,9 @@ defmodule DIYWeb.CutawayTest do
     a = object.("a", {0, 0, 1, 1, 2, 2})
     b = object.("b", {1, 0, 0, 2, 1, 2})
     c = object.("c", {0, 1, 0, 2, 2, 1})
-    assert Cutaway.order([c, b, a]) |> Enum.map(& &1.id) |> Enum.sort() == ["a", "b", "c"]
+    assert Iso.order([c, b, a]) |> Enum.map(& &1.id) |> Enum.sort() == ["a", "b", "c"]
     # With no cycle: the box at the back first, whatever its key.
-    assert Cutaway.order([%{b | key: -1}, a]) |> Enum.map(& &1.id) == ["a", "b"]
+    assert Iso.order([%{b | key: -1}, a]) |> Enum.map(& &1.id) == ["a", "b"]
   end
 
   ## The property

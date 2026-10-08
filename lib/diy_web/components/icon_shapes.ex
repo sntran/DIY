@@ -10,7 +10,9 @@ defmodule DIYWeb.Icon.Shapes do
   edge, so that a white item shows on a light page.
 
   The unit is near a meter, and the front of an item looks to the left (y).
-  A model (`model/1`) is a list of parts, in the order of the paint:
+  A model (`model/1`) is a list of parts. A part at the back paints first
+  (`parts/2`). Where no part is behind another, the order of the model
+  stays. The parts:
 
   - `{:box, corner, size, material}`: a box.
   - `{:cyl, center, r, h, material}`: a cylinder that stands at a center.
@@ -74,8 +76,38 @@ defmodule DIYWeb.Icon.Shapes do
 
   # The polygons of a model. With no frame, a point stays as it is.
   defp draw(model, frame) do
+    for object <- parts(model, frame),
+        {corners, class} <- object.polys,
+        do: {:poly, corners, class}
+  end
+
+  @doc """
+  The parts of a model in the order of the paint (`DIYWeb.Iso.order/1`),
+  each with its box in the world and its polygons. After a turn, a part at
+  the back paints first. A part that does not show (a face that looks
+  away) is not in the list. With no frame, a point stays as it is.
+  """
+  def parts(model, frame) do
     {point, normal} = transform(model, frame)
-    Enum.flat_map(model, &draw_one(&1, point, normal))
+
+    model
+    |> Enum.with_index()
+    |> Enum.flat_map(fn {part, i} ->
+      case for({:poly, corners, class} <- draw_one(part, point, normal), do: {corners, class}) do
+        [] -> []
+        polys -> [object(i, polys)]
+      end
+    end)
+    |> Iso.order()
+  end
+
+  # A part as an object of the order of the paint: its box in the world.
+  # Its key is its place in the model: the order of the model stays where
+  # no part is behind another.
+  defp object(i, polys) do
+    {xs, ys, zs} = unzip3(Enum.flat_map(polys, &elem(&1, 0)))
+    {{x0, x1}, {y0, y1}, {z0, z1}} = {Enum.min_max(xs), Enum.min_max(ys), Enum.min_max(zs)}
+    %{id: i, polys: polys, box: {x0, y0, z0, x1, y1, z1}, key: i, loose: false}
   end
 
   defp transform(_model, nil), do: {nil, nil}

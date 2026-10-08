@@ -1,11 +1,11 @@
 defmodule DIYWeb.Cutaway do
   @moduledoc """
-  The plan of the house at scale, as a house that is cut open: each floor
-  is a layer, with a gap between the layers, from the ground (the lot,
+  The plan of the house at scale, as a house that is cut open. Each floor
+  is a layer, with a gap between the layers: from the ground (the lot,
   outside and floor 1) up to the attic and the roof. Each room shows at
-  its place and its size, and each item at its place, its size and its
-  turn (`DIY.Layout`). The walls at the back are cut at the height of a
-  table, and the walls at the front are cut near the floor.
+  its place and its size. Each item shows at its place, its size and its
+  turn (`DIY.Layout`). The walls on the outside at the back are cut at
+  the height of a table. The other walls are cut near the floor.
 
   The page moves the items and the rooms with a script (the hook Plan,
   `assets/js/plan.js`). The SVG gives the script what it needs:
@@ -47,10 +47,12 @@ defmodule DIYWeb.Cutaway do
   @doc """
   The layers of the cut-open house, from the bottom to the top, and the
   box of the SVG. A layer has its `id`, its `name` and its height `z`
-  (meters), then its parts in the order of the paint: the lot (`ground`),
-  the surfaces of the rooms outside (`low`), the slabs, the surfaces of
-  the other rooms (`rooms`), the walls and the items (`objects`, from the
-  back to the front), and the names of the rooms (`labels`).
+  (meters). Then it has its parts in the order of the paint:
+
+  - the lot (`ground`), and the surfaces of the rooms outside (`low`);
+  - the slabs, and the surfaces of the other rooms (`rooms`);
+  - the walls and the items (`objects`, from the back to the front);
+  - the names of the rooms (`labels`).
   """
   def view(build) do
     house = build |> Layout.house_box() |> meters()
@@ -81,15 +83,14 @@ defmodule DIYWeb.Cutaway do
     {outdoor, indoor} = Enum.split_with(rooms, &(id == "ground" and &1.place == :outdoor))
     low = Enum.map(outdoor, &room_view(&1, floor_z.(&1)))
     others = Enum.map(indoor, &room_view(&1, floor_z.(&1)))
-    sheds = for r <- indoor, r.level == "outside", do: meters(r.plan)
-    {ground, slabs, walls} = shell(id, z, rooms, house, sheds)
+    {ground, slabs, walls} = shell(id, z, rooms, house, floor_z)
 
     item_views =
       for room <- rooms,
           item <- Map.get(items, room.id, []),
           do: item_view(item, room, floor_z.(room))
 
-    objects = order(walls ++ item_views)
+    objects = Iso.order(walls ++ item_views)
 
     polys =
       Enum.map(ground ++ slabs, &elem(&1, 0)) ++
@@ -123,125 +124,176 @@ defmodule DIYWeb.Cutaway do
 
   ## The shell: the lot, the slabs and the walls
 
-  # The lot (on the ground), the slabs, and the walls (as objects): at the
-  # back, cut at the height of a table; at the front, cut near the floor.
-  # A room outside that is not a yard (a garage) has its slab and walls.
-  defp shell("ground", _z, rooms, house, sheds) do
-    lot = rooms |> Enum.map(&meters(&1.plan)) |> Kernel.++([house]) |> box_of() |> grow(1.6)
+  # The lot (on the ground), a slab under each room, and the walls of the
+  # rooms inside (as objects, `walls/3`). A yard is on the ground: it has
+  # no slab. A floor with no room has the slab of the house.
+  defp shell("roof", _z, _rooms, _house, _floor_z), do: {[], [], []}
+
+  defp shell(id, z, rooms, house, floor_z) do
+    on_slab = Enum.reject(rooms, &(id == "ground" and &1.place == :outdoor))
 
     slabs =
-      slab(house, 0.0, @slab) ++ Enum.flat_map(sheds, &slab(&1, 0.0, 0.1))
+      if on_slab == [] and id != "ground",
+        do: slab(house, z - @slab, z),
+        else:
+          on_slab
+          |> Enum.map(&slab_object(&1, id, z, floor_z.(&1)))
+          |> Iso.order()
+          |> Enum.flat_map(& &1.polys)
 
-    walls =
-      walls("ground-house", house, @slab, @wall) ++
-        Enum.flat_map(Enum.with_index(sheds), fn {shed, i} ->
-          walls("ground-shed#{i}", shed, 0.1, @wall)
-        end)
-
-    {faces(Iso.box({lot.x, lot.y, -0.45}, {lot.w, lot.d, 0.45}), "p-lot"), slabs, walls}
+    high = if id == "attic", do: 0.5, else: @wall
+    inside = Enum.filter(rooms, &(&1.place == :indoor))
+    walls = walls(id, inside, fn room -> {floor_z.(room), high} end)
+    {lot(id, rooms, house), slabs, walls}
   end
 
-  defp shell("roof", _z, _rooms, _house, _sheds), do: {[], [], []}
-
-  defp shell(id, z, _rooms, house, _sheds) do
-    height = if id == "attic", do: 0.5, else: @wall
-    {[], slab(house, z - @slab, @slab), walls("#{id}-house", house, z, height)}
+  defp lot("ground", rooms, house) do
+    lot = rooms |> Enum.map(&meters(&1.plan)) |> Kernel.++([house]) |> box_of() |> grow(1.6)
+    faces(Iso.box({lot.x, lot.y, -0.45}, {lot.w, lot.d, 0.45}), "p-lot")
   end
 
-  # A slab under a box and its walls.
-  defp slab(b, z, h),
+  defp lot(_id, _rooms, _house), do: []
+
+  # The slab under a room: on the ground, up to the floor of the room; on a
+  # floor, under it. The slab is larger than the room: the walls stand on it.
+  defp slab_object(room, id, z, floor) do
+    p = meters(room.plan)
+    low = if id == "ground", do: z, else: floor - @slab
+    polys = slab(p, low, floor)
+    {cx, cy} = {p.x + p.w / 2, p.y + p.d / 2}
+
+    %{
+      id: room.id,
+      box: {p.x - @thick, p.y - @thick, low, p.x + p.w + @thick, p.y + p.d + @thick, floor},
+      key: cx + cy,
+      loose: false,
+      polys: polys
+    }
+  end
+
+  defp slab(b, low, high),
     do:
       faces(
-        Iso.box({b.x - @thick, b.y - @thick, z}, {b.w + 2 * @thick, b.d + 2 * @thick, h}),
+        Iso.box(
+          {b.x - @thick, b.y - @thick, low},
+          {b.w + 2 * @thick, b.d + 2 * @thick, high - low}
+        ),
         "p-slab"
       )
 
-  # The four walls of a box: two at the back (high), two at the front (low).
-  # A wall stands just out of the box. For the order of the paint, a wall
-  # is flat, on the side of the box: so an item in the box is in front of
-  # a wall at the back, and behind a wall at the front.
-  defp walls(id, b, z, height) do
-    {x1, y1, t} = {b.x + b.w, b.y + b.d, @thick}
+  # The walls of the rooms of a layer: on each side of each room. A wall
+  # between two rooms is low, and only the room in front of it draws it. A
+  # wall on the outside is high at the back (x0 and y0), where no room of
+  # the layer is behind it, and low at the front (x1 and y1). `base` gives
+  # the floor of a room and the height of a high wall (meters).
+  defp walls(id, rooms, base) do
+    for room <- rooms,
+        side <- ~w(x0 y0 x1 y1),
+        {{a, b, kind}, i} <- Enum.with_index(spans(room, side, rooms)) do
+      {floor, high} = base.(room)
+      height = if kind == :high, do: high, else: @low
+      wall("#{id}-#{room.id}-#{side}-#{i}", room, side, {a, b, kind}, floor, height)
+    end
+  end
 
-    [
-      {"x0", {b.x - t, b.y - t, z}, {t, b.d + t, height}, {b.x, b.y, b.x, y1}},
-      {"y0", {b.x, b.y - t, z}, {b.w, t, height}, {b.x, b.y, x1, b.y}},
-      {"y1", {b.x - t, y1, z}, {b.w + t, t, @low}, {b.x, y1, x1, y1}},
-      {"x1", {x1, b.y - t, z}, {t, b.d + 2 * t, @low}, {x1, b.y, x1, y1}}
-    ]
-    |> Enum.map(fn {side, corner, {_w, _d, h} = size, {ox0, oy0, ox1, oy1}} ->
-      %{
-        id: "#{id}-#{side}",
-        kind: :wall,
-        loose: false,
-        box: {ox0, oy0, z, ox1, oy1, z + h},
-        key: (ox0 + ox1 + oy0 + oy1) / 2,
-        polys: faces(Iso.box(corner, size), "p-wall")
-      }
+  # The parts of a side of a room, in inches along the side: each with its
+  # kind (:high, :low, or :shared for a low wall between two rooms).
+  defp spans(room, side, rooms) do
+    others = Enum.reject(rooms, &(&1.id == room.id))
+    {line, range} = edge(room.plan, side)
+    touch = for o <- others, across(o.plan, side) == line, do: along(o.plan, side)
+    back? = side in ~w(x0 y0)
+
+    for {a, b, shared?} <- split(range, touch),
+        part <- span(a, b, shared?, back?, behind(others, side, line)),
+        do: part
+  end
+
+  defp span(a, b, true, true, _behind), do: [{a, b, :shared}]
+  defp span(_a, _b, true, false, _behind), do: []
+  defp span(a, b, false, false, _behind), do: [{a, b, :low}]
+
+  defp span(a, b, false, true, behind) do
+    for {p, q, hidden?} <- split({a, b}, behind),
+        do: {p, q, if(hidden?, do: :low, else: :high)}
+  end
+
+  # The line of a side of a plan, and its range along the side.
+  defp edge(p, "x0"), do: {p.x, {p.y, p.y + p.d}}
+  defp edge(p, "x1"), do: {p.x + p.w, {p.y, p.y + p.d}}
+  defp edge(p, "y0"), do: {p.y, {p.x, p.x + p.w}}
+  defp edge(p, "y1"), do: {p.y + p.d, {p.x, p.x + p.w}}
+
+  # The line of the side of a different plan that can touch this side.
+  defp across(p, "x0"), do: p.x + p.w
+  defp across(p, "x1"), do: p.x
+  defp across(p, "y0"), do: p.y + p.d
+  defp across(p, "y1"), do: p.y
+
+  defp along(p, side) when side in ~w(x0 x1), do: {p.y, p.y + p.d}
+  defp along(p, _side), do: {p.x, p.x + p.w}
+
+  # The ranges of the rooms behind the line of a side at the back.
+  defp behind(others, side, line),
+    do: for(o <- others, across(o.plan, side) <= line, do: along(o.plan, side))
+
+  # A range in parts: each part is in the ranges `by`, or out of all of
+  # them. The parts that are next to each other and of the same kind join.
+  defp split({a, b}, by) do
+    [a, b | Enum.flat_map(by, &Tuple.to_list/1)]
+    |> Enum.filter(&(&1 >= a and &1 <= b))
+    |> Enum.uniq()
+    |> Enum.sort()
+    |> Enum.chunk_every(2, 1, :discard)
+    |> Enum.map(fn [p, q] -> {p, q, Enum.any?(by, fn {c, d} -> c < q and p < d end)} end)
+    |> Enum.chunk_by(&elem(&1, 2))
+    |> Enum.map(fn parts ->
+      {elem(hd(parts), 0), elem(List.last(parts), 1), elem(hd(parts), 2)}
     end)
+  end
+
+  # A wall on a side of a room. A wall on the outside stands just out of
+  # the room, and fills the corner. A wall between two rooms stands on the
+  # line between them. For the order of the paint, a wall is flat, on its
+  # line: so an item in the room is in front of a wall at the back, and
+  # behind a wall at the front.
+  defp wall(id, room, side, {a, b, kind}, z, height) do
+    {line, {r0, r1}} = edge(room.plan, side)
+    t = @thick / @m
+    # The ends of an outside wall on x go past the corners of the room.
+    {a, b} =
+      if side in ~w(x0 x1) and kind != :shared,
+        do: {if(a == r0, do: a - t, else: a), if(b == r1, do: b + t, else: b)},
+        else: {a, b}
+
+    near =
+      case {side, kind} do
+        {_side, :shared} -> line - t / 2
+        {side, _kind} when side in ~w(x0 y0) -> line - t
+        _front -> line
+      end
+
+    {corner, size, flat} =
+      if side in ~w(x0 x1),
+        do: {{near, a, 0}, {t, b - a, 0}, {line, a, line, b}},
+        else: {{a, near, 0}, {b - a, t, 0}, {a, line, b, line}}
+
+    {cx, cy, _} = corner
+    {sw, sd, _} = size
+    {ox0, oy0, ox1, oy1} = flat
+
+    %{
+      id: id,
+      kind: :wall,
+      loose: false,
+      box: {ox0 * @m, oy0 * @m, z, ox1 * @m, oy1 * @m, z + height},
+      key: (ox0 + ox1 + oy0 + oy1) / 2 * @m,
+      polys: faces(Iso.box({cx * @m, cy * @m, z}, {sw * @m, sd * @m, height}), "p-wall")
+    }
   end
 
   defp faces(box, class),
     do: [{box.left, class <> "-l"}, {box.right, class <> "-r"}, {box.top, class <> "-t"}]
-
-  ## The order of the paint
-
-  @doc """
-  The walls and the items, from the back to the front. Where two of them
-  cover the same part of the screen, the one at the back comes first: its
-  box (`{x0, y0, z0, x1, y1, z1}`) is on the far side of the other box
-  along x, y or z, and the other box is not on the far side of it. Else
-  the one with the smaller key (x + y of its center) comes first. An item
-  that is larger than its room (`loose`) goes through walls: it comes by
-  its key only. Three boxes can each be behind the next one (a cycle):
-  then the box with the fewest boxes before it comes first.
-  """
-  def order(objects) do
-    screens = Map.new(objects, &{&1.id, screen(&1.polys)})
-
-    after_ =
-      Map.new(objects, fn a ->
-        {a.id,
-         for(
-           b <- objects,
-           b.id != a.id,
-           not a.loose and not b.loose,
-           cover?(screens[a.id], screens[b.id]),
-           behind?(a.box, b.box) and not behind?(b.box, a.box),
-           do: b.id
-         )}
-      end)
-
-    # The count of the objects before each object.
-    count = after_ |> Map.values() |> List.flatten() |> Enum.frequencies()
-    paint(Enum.sort_by(objects, &{&1.key, &1.id}), count, after_, [])
-  end
-
-  # Kahn: the next object is the first one (by key) with no object before
-  # it. With none (a cycle), the one with the fewest objects before it.
-  defp paint([], _count, _after, done), do: Enum.reverse(done)
-
-  defp paint(todo, count, after_, done) do
-    next =
-      Enum.find(todo, &(Map.get(count, &1.id, 0) == 0)) ||
-        Enum.min_by(todo, &Map.get(count, &1.id, 0))
-
-    count = Enum.reduce(after_[next.id], count, &Map.update!(&2, &1, fn n -> n - 1 end))
-    paint(List.delete(todo, next), count, after_, [next | done])
-  end
-
-  defp behind?({_, _, _, ax1, ay1, az1}, {bx0, by0, bz0, _, _, _}),
-    do: ax1 <= bx0 + 1.0e-6 or ay1 <= by0 + 1.0e-6 or az1 <= bz0 + 1.0e-6
-
-  defp screen(polys) do
-    {xs, ys} =
-      polys |> Enum.flat_map(&elem(&1, 0)) |> Enum.map(&Iso.at({0, 0}, &1)) |> Enum.unzip()
-
-    {Enum.min(xs), Enum.min(ys), Enum.max(xs), Enum.max(ys)}
-  end
-
-  defp cover?({ax0, ay0, ax1, ay1}, {bx0, by0, bx1, by1}),
-    do: ax0 < bx1 - 0.01 and bx0 < ax1 - 0.01 and ay0 < by1 - 0.01 and by0 < ay1 - 0.01
 
   ## The rooms
 
@@ -383,7 +435,8 @@ defmodule DIYWeb.Cutaway do
   # has two parts.
   defp on_roof(item, roof, z) do
     {cols, rows} = Layout.panel_grid(item.params["watts"])
-    {pw, pd} = if rem(item.turn, 2) == 0, do: {41, 69}, else: {69, 41}
+    {w, d} = Layout.panel()
+    {pw, pd} = if rem(item.turn, 2) == 0, do: {w, d}, else: {d, w}
     {cols, rows} = if rem(item.turn, 2) == 0, do: {cols, rows}, else: {rows, cols}
     {ax, ay} = {roof.plan.x + item.at.x, roof.plan.y + item.at.y}
     ridge = roof.plan.y + roof.plan.d / 2
@@ -409,15 +462,16 @@ defmodule DIYWeb.Cutaway do
   defp rack(item) do
     {cols, rows} = Layout.panel_grid(item.params["watts"])
     count = Layout.panels(item.params["watts"])
-    {w, d} = {cols * 41 * @m, rows * 69 * @m}
+    {pw, pd} = Layout.panel()
+    {w, d} = {cols * pw * @m, rows * pd * @m}
 
     pad = {:face, [{0, 0, 0.01}, {w, 0, 0.01}, {w, d, 0.01}, {0, d, 0.01}], {0, 0, 1}, "p-pad"}
 
     panels =
       for k <- 0..(count - 1),
           {col, row} = {rem(k, cols), div(k, cols)},
-          {x0, y1} = {col * 41 * @m + 0.03, (row + 1) * 69 * @m - 0.1},
-          {x1, y0} = {x0 + 41 * @m - 0.06, y1 - 1.5},
+          {x0, y1} = {col * pw * @m + 0.03, (row + 1) * pd * @m - 0.1},
+          {x1, y0} = {x0 + pw * @m - 0.06, y1 - 1.5},
           part <- [
             {:box, {(x0 + x1) / 2 - 0.03, y0 + 0.1, 0}, {0.06, 0.06, 1.2}, "steel"},
             {:face, [{x0, y1, 0.4}, {x1, y1, 0.4}, {x1, y0, 1.27}, {x0, y0, 1.27}], nil, "i-pv"}

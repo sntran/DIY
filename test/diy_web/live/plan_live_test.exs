@@ -68,7 +68,7 @@ defmodule DIYWeb.PlanLiveTest do
     kitchen = room(view, "Kitchen")
     living = room(view, "Living room")
 
-    # The center of the fridge (36 by 30) at 100, 100: its corner at 82, 85.
+    # The center of the fridge (33 by 33) at 100, 100: its corner at 84, 84.
     render_hook(view, "place_item", %{
       "id" => fridge.id,
       "room" => kitchen.id,
@@ -76,7 +76,7 @@ defmodule DIYWeb.PlanLiveTest do
       "y" => 100
     })
 
-    assert item_id(view, fridge.id).at == %{x: 82, y: 85}
+    assert item_id(view, fridge.id).at == %{x: 84, y: 84}
 
     render_hook(view, "place_item", %{
       "id" => fridge.id,
@@ -85,7 +85,7 @@ defmodule DIYWeb.PlanLiveTest do
       "y" => 50
     })
 
-    assert %{room: room, at: %{x: 88, y: 35}} = item_id(view, fridge.id)
+    assert %{room: room, at: %{x: 90, y: 34}} = item_id(view, fridge.id)
     assert room == living.id
 
     # A fridge does not go on the roof.
@@ -162,7 +162,7 @@ defmodule DIYWeb.PlanLiveTest do
     assert has_element?(
              view,
              "#plan-status",
-             "Fridge: 2 ft from the wall on one side of Kitchen, 6 in from the wall on the other side."
+             "Fridge: 2 ft from the left wall of Kitchen, 6 in from the top wall."
            )
 
     render_hook(view, "nudge_room", %{"id" => kitchen.id, "dx" => -6, "dy" => 0})
@@ -188,6 +188,17 @@ defmodule DIYWeb.PlanLiveTest do
 
     view |> element("#turn-item") |> render_click()
     assert item_id(view, tv.id).turn == 1
+    assert has_element?(view, "#plan-status", "TV turned. Its space is 10 in by 3 ft 8 in.")
+
+    # The buttons move the item: 6 inches for each tap.
+    at = item_id(view, tv.id).at
+    view |> element("#move-item-right") |> render_click()
+    view |> element("#move-item-down") |> render_click()
+    assert item_id(view, tv.id).at == %{x: at.x + 6, y: at.y + 6}
+    assert has_element?(view, "#move-item-left[aria-label='Move the item 6 in to the left wall']")
+    view |> element("#move-item-left") |> render_click()
+    view |> element("#move-item-up") |> render_click()
+    assert item_id(view, tv.id).at == at
 
     view |> form("#size-form", %{"w" => "57", "d" => "12", "h" => "35"}) |> render_submit()
     assert item_id(view, tv.id).size == %{w: 57, d: 12, h: 35}
@@ -198,6 +209,14 @@ defmodule DIYWeb.PlanLiveTest do
 
     view |> element("#typical-size") |> render_click()
     assert item_id(view, tv.id).size == nil
+
+    # The watts give the size of solar panels: no size fields.
+    roof = room(view, "Roof")
+    render_click(view, "add_item", %{"room" => roof.id, "type" => "solar_panels"})
+    panels = item(view, "solar_panels")
+    render_patch(view, ~p"/inside?#{[item: panels.id]}")
+    assert has_element?(view, "#item-place", "The watts give the size of the array")
+    refute has_element?(view, "#size-form")
   end
 
   test "the sheet of a room sets its size in feet", %{conn: conn} do
@@ -217,6 +236,24 @@ defmodule DIYWeb.PlanLiveTest do
 
     html = view |> form("#size-#{kitchen.id}", %{"w" => "1", "d" => "20"}) |> render_submit()
     assert html =~ "A wall of a room is from 2 to 200 feet long"
+
+    # Too large, 0, or not a text: the room does not change.
+    for {w, d} <- [{"1e308", "20"}, {"0", "20"}, {"20", "201"}] do
+      html = view |> form("#size-#{kitchen.id}", %{"w" => w, "d" => d}) |> render_submit()
+      assert html =~ "A wall of a room is from 2 to 200 feet long"
+    end
+
+    render_hook(view, "room_size", %{"room_id" => kitchen.id, "w" => 12, "d" => 12})
+    assert %{w: 126, d: 240} = room(view, "Kitchen").plan
+
+    # The buttons move the room: 2 feet for each tap. A good change clears
+    # the message of an older change.
+    x = room(view, "Kitchen").plan.x
+    html = view |> element("#move-room-left") |> render_click()
+    refute html =~ "A wall of a room is from 2 to 200 feet long"
+    assert room(view, "Kitchen").plan.x == x - 24
+    render_click(view, "nudge_room", %{"id" => kitchen.id, "dx" => "a", "dy" => "0"})
+    assert room(view, "Kitchen").plan.x == x - 24
 
     # The removal of the room closes its sheet.
     view |> element("#delete-#{kitchen.id}") |> render_click()
@@ -242,9 +279,16 @@ defmodule DIYWeb.PlanLiveTest do
     {:ok, build} = Build.flag_item(build, station, :planned, true)
     view = open(conn, ~p"/inside", build)
     assert has_element?(view, "#room-#{laundry} #away-#{station}", "in the van now")
-    # An item in a van does not move on the plan.
+    # An item in a van does not move on the plan, and a drop of it gives a
+    # message (a different tab can take it to the van while it moves).
     before = build(view)
     render_hook(view, "nudge_item", %{"id" => station, "dx" => 6, "dy" => 0})
+    assert build(view) == before
+
+    html =
+      render_hook(view, "place_item", %{"id" => station, "room" => laundry, "x" => 10, "y" => 10})
+
+    assert html =~ "This item or this room is not on the plan now."
     assert build(view) == before
   end
 end

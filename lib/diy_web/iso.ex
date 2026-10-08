@@ -75,4 +75,68 @@ defmodule DIYWeb.Iso do
 
   @doc "A vector times a number."
   def scale({x, y, z}, k), do: {x * k, y * k, z * k}
+
+  ## The order of the paint
+
+  @doc """
+  Objects in the order of the paint, from the back to the front: the walls
+  and the items of a plan (`DIYWeb.Cutaway`), or the parts of a model
+  (`DIYWeb.Icon.Shapes`). An object has an `id`, a `box` in the world
+  (`{x0, y0, z0, x1, y1, z1}`), a `key`, `loose`, and its `polys`
+  (`{corners, class}`).
+
+  Where two objects cover the same part of the screen, the one at the
+  back comes first: its box is on the far side of the other box along x,
+  y or z, and the other box is not on the far side of it. Else the one
+  with the smaller key (x + y of its center) comes first. A loose object
+  (an item that is larger than its room goes through walls) comes by its
+  key only. Three boxes can each be behind the next one (a cycle): then
+  the box with the fewest boxes before it comes first.
+  """
+  def order(objects) do
+    screens = Map.new(objects, &{&1.id, screen(&1.polys)})
+
+    after_ =
+      Map.new(objects, fn a ->
+        {a.id,
+         for(
+           b <- objects,
+           b.id != a.id,
+           not a.loose and not b.loose,
+           cover?(screens[a.id], screens[b.id]),
+           behind?(a.box, b.box) and not behind?(b.box, a.box),
+           do: b.id
+         )}
+      end)
+
+    # The count of the objects before each object.
+    count = after_ |> Map.values() |> List.flatten() |> Enum.frequencies()
+    paint(Enum.sort_by(objects, &{&1.key, &1.id}), count, after_, [])
+  end
+
+  # Kahn: the next object is the first one (by key) with no object before
+  # it. With none (a cycle), the one with the fewest objects before it.
+  defp paint([], _count, _after, done), do: Enum.reverse(done)
+
+  defp paint(todo, count, after_, done) do
+    next =
+      Enum.find(todo, &(Map.get(count, &1.id, 0) == 0)) ||
+        Enum.min_by(todo, &Map.get(count, &1.id, 0))
+
+    count = Enum.reduce(after_[next.id], count, &Map.update!(&2, &1, fn n -> n - 1 end))
+    paint(List.delete(todo, next), count, after_, [next | done])
+  end
+
+  defp behind?({_, _, _, ax1, ay1, az1}, {bx0, by0, bz0, _, _, _}),
+    do: ax1 <= bx0 + 1.0e-6 or ay1 <= by0 + 1.0e-6 or az1 <= bz0 + 1.0e-6
+
+  defp screen(polys) do
+    {xs, ys} =
+      polys |> Enum.flat_map(&elem(&1, 0)) |> Enum.map(&at({0, 0}, &1)) |> Enum.unzip()
+
+    {Enum.min(xs), Enum.min(ys), Enum.max(xs), Enum.max(ys)}
+  end
+
+  defp cover?({ax0, ay0, ax1, ay1}, {bx0, by0, bx1, by1}),
+    do: ax0 < bx1 - 0.01 and bx0 < ax1 - 0.01 and ay0 < by1 - 0.01 and by0 < ay1 - 0.01
 end

@@ -70,7 +70,7 @@ defmodule DIY.BuildPlanTest do
     garage = room(build, "Garage")
 
     {:ok, moved} = Build.place_item(build, fridge.id, kitchen.id, %{x: 50, y: 900})
-    assert item(moved, fridge.id).at == %{x: 50, y: 294 - 30}
+    assert item(moved, fridge.id).at == %{x: 50, y: 294 - 33}
 
     {:ok, moved} = Build.place_item(build, fridge.id, garage.id, %{x: 10, y: 20})
     assert %{room: room, at: %{x: 10, y: 20}} = item(moved, fridge.id)
@@ -93,9 +93,9 @@ defmodule DIY.BuildPlanTest do
     {:ok, build} = Build.place_item(build, tv.id, living.id, %{x: 100, y: 100})
 
     {:ok, turned} = Build.turn_item(build, tv.id)
-    # 49 by 10: the center stays near 124, 105.
-    assert %{turn: 1, at: %{x: 119, y: 81}} = item(turned, tv.id)
-    assert Layout.extent(item(turned, tv.id)) == {10, 49}
+    # 44 by 10: the center stays near 122, 105.
+    assert %{turn: 1, at: %{x: 117, y: 83}} = item(turned, tv.id)
+    assert Layout.extent(item(turned, tv.id)) == {10, 44}
 
     turned =
       Enum.reduce(1..3, turned, fn _, build -> elem(Build.turn_item(build, tv.id), 1) end)
@@ -105,7 +105,7 @@ defmodule DIY.BuildPlanTest do
     {:ok, sized} = Build.size_item(build, tv.id, %{w: 57, d: 12, h: 35})
     assert Layout.size(item(sized, tv.id)) == {57, 12, 35}
     {:ok, typical} = Build.size_item(sized, tv.id, nil)
-    assert Layout.size(item(typical, tv.id)) == {49, 10, 31}
+    assert Layout.size(item(typical, tv.id)) == {44, 10, 28}
     assert Build.size_item(build, tv.id, %{w: 0, d: 12, h: 35}) == {:error, :size}
 
     # A large size: the item stays in its room, at 0.
@@ -289,17 +289,21 @@ defmodule DIY.BuildPlanTest do
 
   property "each change keeps the rules of the plan, and the JSON gives the same plan" do
     check all(floors <- integer(1..3), seeds <- list_of(integer(), max_length: 20), max_runs: 60) do
+      # The rules hold after each step, not only after the last one.
       build =
         Enum.reduce(seeds, house(floors), fn seed, build ->
           [step] = Enum.take(StreamData.seeded(step(build), seed), 1)
 
           case apply_step(build, step) do
-            {:ok, changed} -> changed
-            {:error, _reason} -> build
+            {:ok, changed} ->
+              assert_rules(changed)
+              changed
+
+            {:error, _reason} ->
+              build
           end
         end)
 
-      assert_rules(build)
       {:ok, read} = Build.from_json(Build.to_json(build))
       assert read.rooms == build.rooms
       assert read.items == build.items

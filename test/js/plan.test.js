@@ -13,6 +13,8 @@ import {
   outline,
   zoom,
   arrow,
+  onSurface,
+  unitsOf,
   planHook,
 } from "../../assets/js/plan.js"
 
@@ -36,20 +38,50 @@ test("the height of a roof: 0 at the eaves, the rise at the ridge", () => {
   assert.equal(heightAt({...roof, rise: 0}, 200), 0)
 })
 
-test("a point goes to the SVG and back, on a floor and on a roof", () => {
-  const point = fc.record({x: fc.double({min: -500, max: 1500, noNaN: true}), y: fc.double({min: 0, max: 400, noNaN: true})})
-  const surface = fc.record({
+// A surface: a floor (rise 0) or a roof (a pitch of 5 in 12, as
+// DIYWeb.Cutaway), at any place of the plan; and a point of the plan (x
+// and y from 0 to 1 of the surface, or out of it).
+const surfaces = fc
+  .record({
     origin: fc.tuple(fc.double({min: -200, max: 200, noNaN: true}), fc.double({min: -200, max: 200, noNaN: true})),
-    plan: fc.tuple(fc.constant(0), fc.constant(0), fc.integer({min: 24, max: 2400}), fc.constant(400)),
-    rise: fc.oneof(fc.constant(0), fc.integer({min: 1, max: 83})),
+    plan: fc.tuple(
+      fc.integer({min: -1000, max: 1000}),
+      fc.integer({min: -1000, max: 1000}),
+      fc.integer({min: 24, max: 2400}),
+      fc.integer({min: 24, max: 2400}),
+    ),
+    roof: fc.boolean(),
   })
+  .map(({origin, plan, roof}) => ({origin, plan, rise: roof ? Math.round(((plan[3] / 2) * 5) / 12) : 0}))
+const part = (min, max) => fc.double({min, max, noNaN: true})
+const at = (s, u, v) => ({x: s.plan[0] + u * s.plan[2], y: s.plan[1] + v * s.plan[3]})
+
+test("a point goes to the SVG and back, on a floor and on a roof", () => {
   fc.assert(
-    fc.property(point, surface, (p, s) => {
+    fc.property(surfaces, part(-0.5, 1.5), part(0, 1), (s, u, v) => {
+      const p = at(s, u, v)
       const back = inverse(forward(p, s, K), s, K)
       near(back.x, p.x, 1e-6)
       near(back.y, p.y, 1e-6)
     }),
   )
+})
+
+test("a point on a surface is on it; a point out of it is not", () => {
+  fc.assert(
+    fc.property(surfaces, part(0.01, 0.99), part(0.01, 0.99), (s, u, v) => {
+      assert.ok(onSurface(forward(at(s, u, v), s, K), s, K))
+      // Out of the surface along x (on its plane).
+      assert.ok(!onSurface(forward(at(s, u + 1, v), s, K), s, K))
+      assert.ok(!onSurface(forward(at(s, u - 1, v), s, K), s, K))
+    }),
+  )
+})
+
+test("the units of one pixel: the side that limits the view", () => {
+  assert.equal(unitsOf({w: 200, h: 400}, 400, 800), 0.5)
+  assert.equal(unitsOf({w: 200, h: 400}, 2000, 100), 4)
+  assert.equal(unitsOf({w: 200, h: 400}, 0, 0), 400)
 })
 
 test("a point on each slope of a roof goes to the SVG and back", () => {
@@ -136,7 +168,7 @@ class El {
 
 // The page of the plan: a kitchen (chosen, with its outline and handles),
 // a living room, a roof, a fridge in the kitchen, and the buttons.
-function setup({storage = new Map(), chosen = true, width = 400} = {}) {
+function setup({storage = new Map(), chosen = true, width = 400, height = 800} = {}) {
   const els = []
   const add = (attrs, parent) => {
     const el = new El(attrs, parent)
@@ -145,6 +177,7 @@ function setup({storage = new Map(), chosen = true, width = 400} = {}) {
   }
   const svg = add({"data-k": K.join(" "), "data-fit": "0 0 200 400", viewBox: "0 0 200 400"})
   svg.clientWidth = width
+  svg.clientHeight = height
   const ground = add({id: "plan-ground", "data-box": "0 100 100 50"}, svg)
   const kitchenG = add({id: "plan-room-r1"}, ground)
   const kitchen = add({"data-room": "r1", "data-plan": "0 0 100 100", "data-origin": "0 0"}, kitchenG)
@@ -165,8 +198,10 @@ function setup({storage = new Map(), chosen = true, width = 400} = {}) {
     while (el && el !== root) el = el.parentNode
     return el === root
   }
-  svg.querySelector = (selector) => els.find((el) => el !== svg && within(el, svg) && el.matches(selector)) || null
-  svg.querySelectorAll = (selector) => els.filter((el) => el !== svg && within(el, svg) && el.matches(selector))
+  for (const root of [svg, ground]) {
+    root.querySelector = (selector) => els.find((el) => el !== root && within(el, root) && el.matches(selector)) || null
+    root.querySelectorAll = (selector) => els.filter((el) => el !== root && within(el, root) && el.matches(selector))
+  }
   svg.captured = []
   svg.setPointerCapture = (id) => svg.captured.push(id)
   // The screen: 2 pixels for one SVG unit, from 10, 20.
@@ -224,13 +259,17 @@ test("the view: the box of the house, or the view that the person had", () => {
   const again = setup({storage: new Map([["plan-view", "1 2 30 60"]])})
   assert.deepEqual(again.hook.view, {x: 1, y: 2, w: 30, h: 60})
 
-  // With no storage, and with no width yet.
-  const none = setup({storage: null, width: 0})
+  // With no storage, and with no size yet.
+  const none = setup({storage: null, width: 0, height: 0})
   assert.deepEqual(none.hook.view, {x: 0, y: 0, w: 200, h: 400})
-  assert.equal(none.svg.style.props["--p-handle"], "1800.000px")
+  assert.equal(none.svg.style.props["--p-handle"], "4800.000px")
   none.pointer("pointerdown", 1, 100, 100)
   none.pointer("pointermove", 1, 110, 100)
-  assert.equal(none.hook.view.x, -2000)
+  assert.equal(none.hook.view.x, -4000)
+
+  // A wide SVG: its height limits the view.
+  const wide = setup({width: 2000, height: 100})
+  assert.equal(wide.svg.style.props["--p-label"], "48.000px")
 })
 
 test("a drag on an empty place moves the view, and a tap clears the choice", () => {
@@ -268,27 +307,41 @@ test("a tap chooses a room or opens an item; a tap on a handle does nothing", ()
   ])
 })
 
-test("an item moves with the pointer, and goes to the room under it", () => {
-  const {hook, pointer, pushed, fridge, fridgeG, living, setUnder} = setup()
+test("an item goes to the room under the center of its space, not under the pointer", () => {
+  const {hook, pointer, pushed, fridge, fridgeG, kitchen, living, setUnder} = setup()
+  // 40 inches along x: the center stays in the kitchen, but the pointer
+  // (on the top of the fridge) is on the living room.
   pointer("pointerdown", 1, 100, 100, fridge)
   pointer("pointermove", 1, 100 + 2 * K[0] * 40, 100 + 2 * K[1] * 40)
   assert.equal(fridgeG.getAttribute("transform"), "translate(8.80 5.08)")
   assert.ok(fridgeG.classes.has("p-dragging"))
   setUnder([fridge, living])
   pointer("pointerup", 1, 100, 100)
-  assert.deepEqual(pushed, [["place_item", {id: "i1", room: "r2", x: 58, y: 15}]])
+  assert.deepEqual(pushed, [["place_item", {id: "i1", room: "r1", x: 58, y: 15}]])
 
   // The reply of the server: the item goes back (the server draws it).
   hook.replies.pop()()
   assert.equal(fridgeG.getAttribute("transform"), null)
   assert.ok(!fridgeG.classes.has("p-dragging"))
 
-  // With no room under the pointer, the item stays in its room.
+  // 100 inches: the center is in the living room, under the kitchen.
+  setUnder([fridge, kitchen])
+  pointer("pointerdown", 1, 100, 100, fridge)
+  pointer("pointermove", 1, 100 + 2 * K[0] * 100, 100 + 2 * K[1] * 100)
+  pointer("pointerup", 1, 100, 100)
+  assert.deepEqual(pushed[1], ["place_item", {id: "i1", room: "r2", x: 118, y: 15}])
+
+  // Far from all the rooms: the room under the pointer, else its own room.
+  setUnder([living])
+  pointer("pointerdown", 1, 100, 100, fridge)
+  pointer("pointermove", 1, 100 + 2 * K[0] * 900, 100 + 2 * K[1] * 900)
+  pointer("pointerup", 1, 100, 100)
+  assert.equal(pushed[2][1].room, "r2")
   setUnder([])
   pointer("pointerdown", 1, 100, 100, fridge)
-  pointer("pointermove", 1, 120, 100)
-  pointer("pointerup", 1, 120, 100)
-  assert.equal(pushed[1][1].room, "r1")
+  pointer("pointermove", 1, 100 + 2 * K[0] * 900, 100 + 2 * K[1] * 900)
+  pointer("pointerup", 1, 100, 100)
+  assert.equal(pushed[3][1].room, "r1")
 })
 
 test("the chosen room moves with its items, and a wall moves with its handle", () => {

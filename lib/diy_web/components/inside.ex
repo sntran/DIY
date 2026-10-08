@@ -1,12 +1,13 @@
 defmodule DIYWeb.Inside do
   @moduledoc """
   The inside of the house: the plan at scale (`DIYWeb.Cutaway`). The house
-  is cut open: each floor is a layer, from the ground up to the roof, and
-  each item stands at its place in its room. The person drags an item to
-  move it (to a different room too), taps an item to open it, and taps a
-  room to choose it: a chosen room has handles on its walls, and a bar
-  with its size and its buttons. The hook Plan (`assets/js/plan.js`) does
-  the drag and the zoom.
+  is cut open: each floor is a layer, from the ground up to the roof. Each
+  item stands at its place in its room. The person drags an item to move
+  it, also to a different room. A tap on an item opens it, and a tap on a
+  room chooses it. A chosen room has handles on its walls, and a bar with
+  its size and its buttons. The hook Plan (`assets/js/plan.js`) does the
+  drag and the zoom. The sheets have buttons that move an item or a room
+  with no drag.
 
   The plan is for the eyes. A list of the rooms and their items gives the
   same facts to a screen reader and to a keyboard: it shows when it has
@@ -78,7 +79,11 @@ defmodule DIYWeb.Inside do
           </button>
         </div>
 
-        <div class="relative h-[calc(100dvh-14rem)] overflow-hidden rounded-box border border-base-300">
+        <%!-- With a chosen room, the plan is shorter: its bar shows under it. --%>
+        <div class={[
+          "relative overflow-hidden rounded-box border border-base-300",
+          if(@chosen, do: "h-[calc(100dvh-19rem)]", else: "h-[calc(100dvh-14rem)]")
+        ]}>
           <Cutaway.cutaway view={@view} selected={@chosen && @chosen.id} />
           <div class="absolute top-2 right-2 flex flex-col gap-2">
             <button
@@ -106,7 +111,6 @@ defmodule DIYWeb.Inside do
               <.icon name="hero-arrows-pointing-out" class="size-4" />
             </button>
           </div>
-          <.room_bar :if={@chosen} room={@chosen} />
           <.link
             :if={!@chosen}
             patch={~p"/inside?#{[sheet: "new_room"]}"}
@@ -116,6 +120,8 @@ defmodule DIYWeb.Inside do
             <.icon name="hero-plus" class="size-4" /> Add a room
           </.link>
         </div>
+
+        <.room_bar :if={@chosen} room={@chosen} />
 
         <.list
           build={@build}
@@ -150,10 +156,7 @@ defmodule DIYWeb.Inside do
   # The bar of the chosen room: its name, its size, and its buttons.
   defp room_bar(assigns) do
     ~H"""
-    <div
-      id="room-bar"
-      class="absolute inset-x-2 bottom-2 card bg-base-100 shadow-lg p-3 flex-row items-center gap-2"
-    >
+    <div id="room-bar" class="card card-border bg-base-100 p-3 flex-row items-center gap-2">
       <div class="grow min-w-0">
         <p class="font-semibold truncate">{@room.name}</p>
         <p class="text-xs opacity-70">
@@ -206,7 +209,7 @@ defmodule DIYWeb.Inside do
       class="sr-only focus-within:not-sr-only focus-within:card focus-within:card-border focus-within:p-3"
     >
       <p class="text-sm">
-        The arrow keys move the item or the room that has the focus: 6 inches, or 2 feet with Shift.
+        The arrow keys move the item or the room that has the focus: 6 inches, or 2 feet with Shift. The Left key moves it to the left wall, and the Up key to the top wall.
       </p>
       <section :for={level <- @levels} id={"list-#{level}"}>
         <h2 class="font-semibold">{Build.level_name(level)}</h2>
@@ -296,6 +299,8 @@ defmodule DIYWeb.Inside do
         </label>
         <button class="btn btn-sm">Rename</button>
       </form>
+
+      <.moves id="move-room" event="nudge_room" target={@room.id} step={24} what="the room" />
 
       <form id={"size-#{@room.id}"} phx-submit="room_size" class="space-y-2">
         <input type="hidden" name="room_id" value={@room.id} />
@@ -402,7 +407,17 @@ defmodule DIYWeb.Inside do
     rooms = Enum.filter(assigns.build.rooms, &(&1.place in kind.places))
     van = Enum.any?(assigns.build.items, &(&1.type == "camper_van"))
     features = if van, do: kind.features, else: kind.features -- @van_features
-    assigns = assign(assigns, kind: kind, room: room, rooms: rooms, van: van, features: features)
+    {pw, pd} = Layout.panel()
+
+    assigns =
+      assign(assigns,
+        kind: kind,
+        room: room,
+        rooms: rooms,
+        van: van,
+        features: features,
+        panel: "#{pw} by #{pd}"
+      )
 
     ~H"""
     <.sheet id="item-sheet" title={Catalog.name(@item)} icon={@item.type}>
@@ -493,8 +508,17 @@ defmodule DIYWeb.Inside do
       </form>
 
       <div :if={@item.at} id="item-place" class="space-y-2 rounded-box bg-base-200 p-3">
-        <p class="text-sm font-semibold">Its size and its turn</p>
-        <form id="size-form" phx-submit="item_size" class="flex flex-wrap items-end gap-2">
+        <p class="text-sm font-semibold">Its place, its size and its turn</p>
+        <.moves id="move-item" event="nudge_item" target={@item.id} step={6} what="the item" />
+        <p :if={@item.type == "solar_panels"} class="text-xs opacity-70">
+          The watts give the size of the array: {@panel} inches for each panel of 400 W.
+        </p>
+        <form
+          :if={@item.type != "solar_panels"}
+          id="size-form"
+          phx-submit="item_size"
+          class="flex flex-wrap items-end gap-2"
+        >
           <input type="hidden" name="item_id" value={@item.id} />
           <label :for={{key, label, value} <- size_fields(@item)}>
             <span class="block text-xs">{label}</span>
@@ -511,7 +535,7 @@ defmodule DIYWeb.Inside do
           </label>
           <button class="btn btn-sm">Set the size</button>
         </form>
-        <p class="text-xs opacity-70">
+        <p :if={@item.type != "solar_panels"} class="text-xs opacity-70">
           In inches.{if @item.size,
             do: " You gave this size.",
             else: " The typical size of this kind: give the size of your item."}
@@ -555,6 +579,47 @@ defmodule DIYWeb.Inside do
         Remove the item
       </button>
     </.sheet>
+    """
+  end
+
+  attr :id, :string, required: true
+  attr :event, :string, required: true, doc: "nudge_item or nudge_room"
+  attr :target, :string, required: true, doc: "the id of the item or of the room"
+  attr :step, :integer, required: true, doc: "inches for each tap"
+  attr :what, :string, required: true
+
+  # Four buttons that move an item or a room: for a person who does not
+  # drag (WCAG 2.2, 2.5.7). Each arrow points as the move goes on the
+  # plan: the left wall is at the top left, and the top wall at the top
+  # right.
+  defp moves(assigns) do
+    assigns =
+      assign(assigns,
+        buttons: [
+          {"left", -assigns.step, 0, "hero-arrow-up-left", "to the left wall"},
+          {"up", 0, -assigns.step, "hero-arrow-up-right", "to the top wall"},
+          {"down", 0, assigns.step, "hero-arrow-down-left", "away from the top wall"},
+          {"right", assigns.step, 0, "hero-arrow-down-right", "away from the left wall"}
+        ]
+      )
+
+    ~H"""
+    <div id={@id} class="flex items-center gap-1" role="group" aria-label={"Move #{@what}"}>
+      <span class="text-xs mr-1">Move {@what}:</span>
+      <button
+        :for={{key, dx, dy, icon, text} <- @buttons}
+        type="button"
+        id={"#{@id}-#{key}"}
+        phx-click={@event}
+        phx-value-id={@target}
+        phx-value-dx={dx}
+        phx-value-dy={dy}
+        class="btn btn-sm btn-square"
+        aria-label={"Move #{@what} #{feet(@step)} #{text}"}
+      >
+        <.icon name={icon} class="size-4" />
+      </button>
+    </div>
     """
   end
 
