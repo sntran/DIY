@@ -146,9 +146,10 @@ defmodule DIYWeb.VanLiveTest do
     {sunny, _} = add(build, van, :van_roof, "van_solar", %{"watts" => "2000"})
     assert render(open(conn, ~p"/van?#{[id: van]}", sunny)) =~ "no limit off the grid"
 
-    # With no weather, no power budget.
+    # With no weather, no power budget. (A ZIP code that no other test
+    # uses: the app keeps the weather of each place.)
     Stubs.weather(503)
-    {:ok, far} = Build.set_zip(build, "96701")
+    {:ok, far} = Build.set_zip(build, "59801")
     view = open(conn, ~p"/van?#{[id: van]}", far)
     assert render(view) =~ "The power shows when the app has the weather of your place."
   end
