@@ -18,7 +18,22 @@ defmodule DIYWeb.HomeLive do
 
   @power_types ~w(power_station solar_panels transfer_switch ev)
 
-  alias DIY.{Bill, Build, Catalog, Estimate, House, Market, Power, Prices, Usage, Weather}
+  alias DIY.{
+    Bill,
+    Build,
+    Catalog,
+    EFL,
+    Estimate,
+    House,
+    Lesson,
+    Market,
+    Plan,
+    Power,
+    Prices,
+    Usage,
+    Weather
+  }
+
   alias DIYWeb.{Device, Format}
 
   @impl true
@@ -33,6 +48,12 @@ defmodule DIYWeb.HomeLive do
      |> assign(:power, nil)
      |> assign(:bill, nil)
      |> assign(:whatif, nil)
+     |> assign(:shares, %{})
+     |> assign(:lesson_step, nil)
+     |> assign(:plan_id, nil)
+     |> assign(:efl, nil)
+     |> assign(:checks, nil)
+     |> assign(:hint, false)
      |> assign(:price, nil)
      |> assign(:item, nil)
      |> assign(:add, nil)
@@ -54,7 +75,10 @@ defmodule DIYWeb.HomeLive do
      # The error of a field is for the item that the sheet showed.
      |> assign(:item_error, if(item == socket.assigns[:item], do: socket.assigns[:item_error]))
      |> assign(:item, item)
-     |> assign(:add, if(socket.assigns.live_action == :inside, do: params["add"]))}
+     |> assign(:add, if(socket.assigns.live_action == :inside, do: params["add"]))
+     |> assign(:lesson_step, parse_int(params["step"]))
+     |> assign(:checks, nil)
+     |> assign(:hint, false)}
   end
 
   @doc false
@@ -270,6 +294,75 @@ defmodule DIYWeb.HomeLive do
     end
   end
 
+  ## The plan lesson
+
+  def handle_event("lesson", %{"step" => step}, socket) do
+    step = parse_int(step)
+
+    if step in 1..4 do
+      build = socket.assigns.build
+      build = if step > build.lesson, do: Build.set_lesson(build, step), else: build
+      {:noreply, socket |> put(build) |> push_patch(to: ~p"/plans?#{[step: step]}")}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_event("lesson_plan", %{"plan" => id}, socket),
+    do: {:noreply, assign(socket, plan_id: id, checks: nil)}
+
+  def handle_event("hint", _params, socket), do: {:noreply, assign(socket, :hint, true)}
+
+  def handle_event("exercise", %{"plan" => id} = params, socket) do
+    build = socket.assigns.build
+    plan = Enum.find(build.plans, &(&1.id == id)) || Lesson.example_plan()
+    {months, _source} = Lesson.months(build, socket.assigns.bill)
+    month = Lesson.exercise_month(months)
+    bill = Plan.bill(plan, month.kwh, month.month, socket.assigns.shares[{plan.id, month.month}])
+    parts = if params["parts"] == "total", do: [:total], else: Lesson.parts(plan)
+    {:noreply, assign(socket, :checks, Lesson.check(bill, params["answer"] || %{}, parts))}
+  end
+
+  def handle_event("efl", %{"name" => name, "lines" => lines}, socket) when is_binary(name) do
+    case EFL.read(lines) do
+      {:ok, result} ->
+        name = name |> Path.rootname() |> String.slice(0, 60)
+        {:noreply, assign(socket, :efl, Map.put(result, :name, name))}
+
+      {:error, _reason} ->
+        {:noreply,
+         put_flash(socket, :error, "The app cannot read this EFL: it has no average prices.")}
+    end
+  end
+
+  def handle_event("efl_error", _params, socket),
+    do:
+      {:noreply,
+       put_flash(socket, :error, "The app cannot read this file. Open the PDF of an EFL.")}
+
+  def handle_event("add_efl_plan", %{"name" => name}, socket) when is_binary(name) do
+    case socket.assigns.efl do
+      %{plan: plan, check: %{ok: true}} ->
+        add_plan(assign(socket, :efl, nil), %{plan | name: plan_name(name, "The plan of the EFL")})
+
+      _ ->
+        {:noreply, socket}
+    end
+  end
+
+  def handle_event("add_plan", %{"plan" => form}, socket) do
+    case Lesson.plan_from_form(form) do
+      {:ok, plan} ->
+        add_plan(socket, plan)
+
+      {:error, field} ->
+        {:noreply, put_flash(socket, :error, plan_error(field))}
+    end
+  end
+
+  def handle_event("delete_plan", %{"id" => id}, socket),
+    do: with_build(socket, Build.delete_plan(socket.assigns.build, id))
+
   def handle_event("utility", %{"choice" => choice}, socket) do
     market = Market.by_user(socket.assigns.build.market, choice == "true")
     {:noreply, put(socket, Build.set_market(socket.assigns.build, market))}
@@ -290,6 +383,37 @@ defmodule DIYWeb.HomeLive do
   def handle_event("upload", _params, socket), do: {:noreply, socket}
 
   def handle_event(_event, _params, socket), do: {:noreply, socket}
+
+  defp add_plan(socket, plan) do
+    case Build.add_plan(socket.assigns.build, plan) do
+      {:ok, build, _id} ->
+        {:noreply,
+         socket |> put(build) |> put_flash(:info, "The worksheet has #{plan.name} now.")}
+
+      {:error, :plans} ->
+        {:noreply, put_flash(socket, :error, "The worksheet has 10 plans. Remove a plan first.")}
+
+      {:error, :plan} ->
+        {:noreply,
+         put_flash(
+           socket,
+           :error,
+           "The app cannot keep this plan. A number of the plan is not in the range that the app accepts."
+         )}
+    end
+  end
+
+  defp plan_name(name, default) do
+    case name |> String.trim() |> String.slice(0, 60) do
+      "" -> default
+      name -> name
+    end
+  end
+
+  defp plan_error(:name), do: "Give the plan a name."
+
+  defp plan_error(_field),
+    do: "Give each number of the plan in the limits: dollars, cents or kWh."
 
   defp flag(build, id, flag, value) when value in ["true", "false"],
     do: Build.flag_item(build, id, flag, value == "true")
@@ -432,14 +556,15 @@ defmodule DIYWeb.HomeLive do
     full = if today == build, do: estimate, else: Estimate.run(build, climate)
     price = if build.zip, do: Prices.price(build)
 
-    {power, bill, whatif} =
+    {power, bill, whatif, shares} =
       if estimate.ready do
         power = Power.run(today, estimate, climate, price.cents)
 
         {power, Bill.run(estimate, power),
-         Power.whatif(build, power, estimate, full, climate, price.cents)}
+         Power.whatif(build, power, estimate, full, climate, price.cents),
+         night_shares(today, estimate, climate, price.cents)}
       else
-        {nil, nil, nil}
+        {nil, nil, nil, %{}}
       end
 
     socket
@@ -449,6 +574,18 @@ defmodule DIYWeb.HomeLive do
     |> assign(:power, power)
     |> assign(:bill, bill)
     |> assign(:whatif, whatif)
+    |> assign(:shares, shares)
+  end
+
+  # The part of the power of each month at night, for each plan with a
+  # price of the night: the day of DIY.Power with the hours of the plan.
+  defp night_shares(build, estimate, climate, cents) do
+    for %{night: %{} = night} = plan <- build.plans,
+        power = %{build.power | night_from: night.from, night_to: night.to},
+        m <- Power.run(%{build | power: power}, estimate, climate, cents).months,
+        into: %{} do
+      {{plan.id, m.month}, if(m.grid > 0, do: m.night / m.grid, else: night.share)}
+    end
   end
 
   @impl true
@@ -508,6 +645,7 @@ defmodule DIYWeb.HomeLive do
       flash={@flash}
       nav={nav?(@build)}
       power={power?(@build)}
+      plans={plans?(@build)}
       action={@live_action}
       saved={Device.saved?(assigns)}
     >
@@ -557,6 +695,21 @@ defmodule DIYWeb.HomeLive do
               whatif={@whatif}
               price={@price}
             />
+          <% @live_action == :plans and plans?(@build) and @bill != nil -> %>
+            <DIYWeb.LessonPage.page
+              build={@build}
+              bill={@bill}
+              step={lesson_step(@lesson_step, @build)}
+              plan_id={@plan_id}
+              efl={@efl}
+              checks={@checks}
+              hint={@hint}
+              shares={@shares}
+            />
+          <% @live_action == :plans -> %>
+            <p id="no-lesson" class="py-8 opacity-80">
+              The plan lesson is for a house in Texas, in an area with retail choice, with its estimate.
+            </p>
           <% @live_action == :settings -> %>
             <DIYWeb.Settings.settings
               build={@build}
@@ -588,4 +741,15 @@ defmodule DIYWeb.HomeLive do
     do: Enum.any?(items, &(&1.planned or &1.type in @power_types))
 
   defp power?(_build), do: false
+
+  # The plan lesson is for an area of Texas with retail choice.
+  defp plans?(%Build{market: %{choice: true}}), do: true
+  defp plans?(_build), do: false
+
+  # The step of the lesson: the step of the page, at most the step that the
+  # user reached.
+  defp lesson_step(step, build) when is_integer(step) and step in 1..4,
+    do: min(step, build.lesson)
+
+  defp lesson_step(_step, build), do: build.lesson
 end

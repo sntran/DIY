@@ -16,7 +16,10 @@ const ROW = 3
 export function group(items, page) {
   const rows = []
   for (const item of items) {
-    if (!item.str || !item.str.trim()) continue
+    // An item with no letters (only spaces, or only characters that clean
+    // takes away) makes no line.
+    const str = clean(item.str || "")
+    if (!str.trim()) continue
     const x = item.transform[4]
     const y = item.transform[5]
     let row = rows.find((r) => Math.abs(r.y - y) <= ROW)
@@ -24,7 +27,7 @@ export function group(items, page) {
       row = {y, parts: []}
       rows.push(row)
     }
-    row.parts.push({x, end: x + (item.width || 0), str: clean(item.str)})
+    row.parts.push({x, end: x + (item.width || 0), str})
   }
   rows.sort((a, b) => b.y - a.y)
   return rows.map((row) => {

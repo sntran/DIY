@@ -87,6 +87,59 @@ defmodule DIY.PlanTest do
     end
   end
 
+  # A plan of any form: tiers, the night, credits of some months, and a
+  # minimum usage fee.
+  defp any_plan do
+    gen all(
+          base <- float(min: 0.0, max: 50.0),
+          cents <- list_of(float(min: 0.0, max: 50.0), min_length: 1, max_length: 4),
+          night <- one_of([constant(nil), float(min: 0.0, max: 30.0)]),
+          share <- float(min: 0.0, max: 1.0),
+          credits <-
+            list_of(
+              fixed_map(%{
+                dollars: float(min: 0.0, max: 200.0),
+                min_kwh: integer(0..2500),
+                months:
+                  one_of([
+                    constant(nil),
+                    map(list_of(integer(1..12), min_length: 1), &Enum.uniq/1)
+                  ])
+              }),
+              max_length: 3
+            ),
+          fee <- one_of([constant(nil), float(min: 0.0, max: 20.0)])
+        ) do
+      energy = cents |> Enum.with_index() |> Enum.map(fn {c, i} -> {i * 500, c} end)
+
+      plan(%{
+        base: base,
+        energy: energy,
+        night: night && %{cents: night, from: 23, to: 6, share: share},
+        credits: credits,
+        min_fee: fee && %{dollars: fee, below_kwh: 1000}
+      })
+    end
+  end
+
+  property "the parts of a bill give its total, and more kWh never cost less energy" do
+    check all(plan <- any_plan(), kwh <- integer(0..5000), more <- integer(0..1000)) do
+      for month <- [nil | Enum.to_list(1..12)] do
+        bill = Plan.bill(plan, kwh, month)
+
+        assert_in_delta bill.total,
+                        bill.base + bill.energy + bill.tdu - bill.credits + bill.fee,
+                        1.0e-6
+
+        assert Plan.bill(plan, kwh + more, month).energy >= bill.energy - 1.0e-9
+      end
+
+      # An average month of an EFL: the mean credit of the 12 months.
+      mean = Enum.sum(for m <- 1..12, do: Plan.bill(plan, kwh, m).credits) / 12
+      assert_in_delta Plan.bill(plan, kwh).credits, mean, 1.0e-6
+    end
+  end
+
   test "averages that no delivery charges can give" do
     efl =
       plan(%{tdu_base: nil, tdu_cents: nil, averages: %{500 => 1.0, 1000 => 1.0, 2000 => 1.0}})

@@ -3,6 +3,7 @@
 import {test} from "node:test"
 import assert from "node:assert/strict"
 import {readFileSync, readdirSync} from "node:fs"
+import fc from "fast-check"
 import {clean, group, readLines, loadPdf, eflHook, MAX_LINES, MAX_PAGES} from "../../assets/js/efl.js"
 
 const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs")
@@ -33,6 +34,27 @@ test("the items of a page make its lines, from the top to the bottom", () => {
 
 test("clean drops control characters and the Private Use Area", () => {
   assert.equal(clean("nerg Charge\u0000­"), "nerg Charge")
+})
+
+// Random items at random places: the lines keep each letter of the items,
+// and have no empty line.
+test("the lines of a page keep each letter of its items", () => {
+  const text = fc.oneof(fc.string({maxLength: 12}), fc.constantFrom("\u0000", "\ue000x", "  ", "13.7000\u00a2", "\t$9.95 "))
+  const anyItem = fc.record({
+    str: text,
+    x: fc.integer({min: 0, max: 600}),
+    y: fc.integer({min: 0, max: 800}),
+    width: fc.integer({min: 0, max: 100}),
+  })
+  const letters = (s) => s.replace(/\s/g, "")
+  fc.assert(fc.property(fc.array(anyItem, {maxLength: 40}), fc.integer({min: 1, max: 3}), (items, page) => {
+    const lines = group(items.map((i) => item(i.str, i.x, i.y, i.width)), page)
+    assert.equal(lines.map((l) => letters(l.text)).join("").length, items.map((i) => letters(clean(i.str))).join("").length)
+    for (const line of lines) {
+      assert.equal(line.page, page)
+      assert.ok(line.text.length > 0 && line.text === line.text.trim())
+    }
+  }))
 })
 
 test("the reader gives the lines of each test EFL", async () => {

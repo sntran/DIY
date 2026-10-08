@@ -1,7 +1,8 @@
 defmodule DIY.EFLTest do
   use ExUnit.Case, async: true
+  use ExUnitProperties
 
-  alias DIY.{EFL, Plan}
+  alias DIY.{Build, EFL, Plan}
 
   # The lines of a test EFL, as the browser gives them
   # (test/fixtures/efl/NAME.json, from scripts/efl_lines.mjs).
@@ -218,5 +219,52 @@ defmodule DIY.EFLTest do
   test "the delivery charges of a utility" do
     assert Plan.tdu("Oncor Electric Delivery") == %{name: "Oncor", base: 4.06, cents: 6.8673}
     assert Plan.tdu("CenterPoint") == nil
+  end
+
+  # The lines of all the test EFLs.
+  @texts "test/fixtures/efl/*.json"
+         |> Path.wildcard()
+         |> Enum.flat_map(&(&1 |> File.read!() |> Jason.decode!()))
+         |> Enum.map(& &1["text"])
+
+  # A line of an EFL with other numbers in it.
+  defp changed_line do
+    bind(member_of(@texts), fn text ->
+      number = one_of([integer(0..100_000), float(min: 0.0, max: 1000.0)])
+
+      map(list_of(number, min_length: 1, max_length: 6), fn numbers ->
+        ~r/\d+(?:\.\d+)?/
+        |> Regex.split(text, include_captures: true)
+        |> Enum.map_reduce(numbers, fn part, [n | rest] ->
+          if part =~ ~r/\A\d/, do: {to_string(n), rest ++ [n]}, else: {part, [n | rest]}
+        end)
+        |> elem(0)
+        |> Enum.join()
+      end)
+    end)
+  end
+
+  defp line do
+    one_of([member_of(@texts), changed_line(), string(:printable, max_length: 80)])
+  end
+
+  # An EFL from parts of the test EFLs, with other numbers and other text:
+  # the reader gives a result or an error, and the build keeps only a plan
+  # that it can load again.
+  property "the reader never raises, and a build with its plan loads again" do
+    check all(texts <- list_of(line(), min_length: 1, max_length: 60)) do
+      case EFL.read(Enum.map(texts, &%{"page" => 1, "text" => &1})) do
+        {:ok, %{plan: plan, check: check}} ->
+          assert check == nil or is_boolean(check.ok)
+
+          case Build.add_plan(Build.new(), %{plan | name: "A plan"}) do
+            {:ok, build, _id} -> assert {:ok, _} = Build.from_json(Build.to_json(build))
+            {:error, :plan} -> :ok
+          end
+
+        {:error, reason} ->
+          assert reason in [:averages, :lines]
+      end
+    end
   end
 end

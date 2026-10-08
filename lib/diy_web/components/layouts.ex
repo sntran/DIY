@@ -15,6 +15,7 @@ defmodule DIYWeb.Layouts do
   attr :nav, :boolean, default: false, doc: "show the bar of the parts of a build"
   attr :action, :atom, default: nil, doc: "the part that shows"
   attr :power, :boolean, default: false, doc: "show the part Power (DIYWeb.PowerPage)"
+  attr :plans, :boolean, default: false, doc: "show the part Plans (DIYWeb.LessonPage)"
   attr :saved, :boolean, default: true, doc: "the device has the last change"
   slot :inner_block, required: true
 
@@ -66,6 +67,14 @@ defmodule DIYWeb.Layouts do
         aria-current={@action == :power && "page"}
       >
         <span aria-hidden="true">🔋</span><span class="dock-label">Power</span>
+      </.link>
+      <.link
+        :if={@plans}
+        patch={~p"/plans"}
+        class={[@action == :plans && "dock-active"]}
+        aria-current={@action == :plans && "page"}
+      >
+        <span aria-hidden="true">📝</span><span class="dock-label">Plans</span>
       </.link>
       <.link
         patch={~p"/settings"}

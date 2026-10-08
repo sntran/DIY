@@ -76,7 +76,7 @@ defmodule DIYWeb.PowerPage do
           The planned equipment costs {Format.money(@whatif.price)}.
         </span>
       </p>
-      <div class="overflow-x-auto">
+      <div class="overflow-x-auto" tabindex="0" role="region" aria-label="Today and the plan">
         <table class="table table-xs sm:table-sm" id="plan-months">
           <thead>
             <tr>
@@ -457,7 +457,7 @@ defmodule DIYWeb.PowerPage do
     ~H"""
     <div class="space-y-1">
       <h2 class="text-lg font-bold">The power of each month</h2>
-      <div class="overflow-x-auto">
+      <div class="overflow-x-auto" tabindex="0" role="region" aria-label="The power of each month">
         <table class="table table-xs sm:table-sm" id="power-months">
           <thead>
             <tr>

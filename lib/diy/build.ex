@@ -34,6 +34,9 @@ defmodule DIY.Build do
   - `usage`: the real usage of the meter file (`DIY.Usage`), or `nil`.
   - `power`: how the house uses its power stations, and the prices of the
     night and of the power to the grid (`DIY.Power.settings/0`).
+  - `plans`: the plans of the worksheet of the plan lesson (`DIY.Plan`), at
+    most 10.
+  - `lesson`: the step of the plan lesson that the user reached (1 to 4).
   - `seq`: the number of the last id.
   - `hints`: the hints that the user closed.
   """
@@ -59,6 +62,8 @@ defmodule DIY.Build do
             items: [],
             usage: nil,
             power: DIY.Power.settings(),
+            plans: [],
+            lesson: 1,
             seq: 0,
             hints: []
 
@@ -92,6 +97,8 @@ defmodule DIY.Build do
           items: [item()],
           usage: DIY.Usage.t() | nil,
           power: DIY.Power.settings(),
+          plans: [DIY.Plan.t()],
+          lesson: 1..4,
           seq: non_neg_integer(),
           hints: [String.t()]
         }
@@ -345,6 +352,37 @@ defmodule DIY.Build do
   @spec set_power(t(), DIY.Power.settings()) :: t()
   def set_power(build, power), do: change(build, &%{&1 | power: power})
 
+  @max_plans 10
+
+  @doc """
+  Adds a plan to the worksheet (at most 10), with a new id. The build keeps
+  only a plan that `DIY.Plan.read/1` accepts, so that the build can always
+  load again.
+  """
+  @spec add_plan(t(), DIY.Plan.t()) :: {:ok, t(), String.t()} | {:error, :plans | :plan}
+  def add_plan(%{plans: plans}, _plan) when length(plans) >= @max_plans, do: {:error, :plans}
+
+  def add_plan(build, plan) do
+    {id, next} = next_id(build, "p")
+
+    case DIY.Plan.read(DIY.Plan.to_map(%{plan | id: id})) do
+      {:ok, plan} -> {:ok, change(next, &%{&1 | plans: &1.plans ++ [plan]}), id}
+      :error -> {:error, :plan}
+    end
+  end
+
+  @doc "Removes a plan of the worksheet."
+  @spec delete_plan(t(), String.t()) :: {:ok, t()} | {:error, :plan}
+  def delete_plan(build, id) do
+    if Enum.any?(build.plans, &(&1.id == id)),
+      do: {:ok, change(build, &%{&1 | plans: Enum.reject(&1.plans, fn p -> p.id == id end)})},
+      else: {:error, :plan}
+  end
+
+  @doc "Sets the step of the plan lesson that the user reached."
+  @spec set_lesson(t(), 1..4) :: t()
+  def set_lesson(build, step) when step in 1..4, do: change(build, &%{&1 | lesson: step})
+
   @doc """
   The build of today: the build with no planned item (the what-if of
   `DIY.Power`).
@@ -427,6 +465,8 @@ defmodule DIY.Build do
       "items" => build.items,
       "usage" => build.usage && DIY.Usage.to_map(build.usage),
       "power" => DIY.Power.to_map(build.power),
+      "plans" => Enum.map(build.plans, &DIY.Plan.to_map/1),
+      "lesson" => build.lesson,
       "seq" => build.seq,
       "hints" => build.hints
     })
@@ -459,8 +499,10 @@ defmodule DIY.Build do
          {:ok, items} <- items(map["items"], rooms),
          {:ok, usage} <- usage(map["usage"]),
          {:ok, power} <- power(map["power"]),
+         {:ok, plans} <- plans(map["plans"]),
+         {:ok, lesson} <- lesson(map["lesson"]),
          {:ok, seq} <- count(map["seq"], :seq),
-         seq = last_id(seq, rooms ++ items),
+         seq = last_id(seq, rooms ++ items ++ plans),
          {:ok, hints} <- hints(map["hints"]) do
       {:ok,
        %__MODULE__{
@@ -475,6 +517,8 @@ defmodule DIY.Build do
          items: items,
          usage: usage,
          power: power,
+         plans: plans,
+         lesson: lesson,
          seq: seq,
          hints: hints
        }}
@@ -525,6 +569,22 @@ defmodule DIY.Build do
       :error -> {:error, :market}
     end
   end
+
+  # A build of an older version has no plans, and is at the start of the
+  # lesson.
+  defp plans(nil), do: {:ok, []}
+
+  defp plans(plans) when is_list(plans) and length(plans) <= @max_plans do
+    plans
+    |> all(&DIY.Plan.read/1)
+    |> unique(:plans)
+  end
+
+  defp plans(_plans), do: {:error, :plans}
+
+  defp lesson(nil), do: {:ok, 1}
+  defp lesson(step) when step in 1..4, do: {:ok, step}
+  defp lesson(_step), do: {:error, :lesson}
 
   # A build of an older version has no power: the default settings.
   defp power(nil), do: {:ok, DIY.Power.settings()}
