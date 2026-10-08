@@ -10,6 +10,8 @@ defmodule DIYWeb.Front do
 
   attr :build, :map, required: true
   attr :estimate, :map, required: true
+  attr :bill, :map, default: nil
+  attr :whatif, :map, default: nil
   attr :price, :map, required: true
   attr :weather, :map, required: true
   attr :market, :map, required: true
@@ -34,7 +36,9 @@ defmodule DIYWeb.Front do
 
       <.house build={@build} />
 
-      <.bill estimate={@estimate} price={@price} weather={@weather} build={@build} />
+      <.bill estimate={@estimate} bill={@bill} price={@price} weather={@weather} build={@build} />
+
+      <.whatif :if={@whatif} whatif={@whatif} />
 
       <.real build={@build} price={@price} />
 
@@ -107,6 +111,7 @@ defmodule DIYWeb.Front do
   end
 
   attr :estimate, :map, required: true
+  attr :bill, :map, required: true
   attr :price, :map, required: true
   attr :weather, :map, required: true
   attr :build, :map, required: true
@@ -126,43 +131,42 @@ defmodule DIYWeb.Front do
         <% not @estimate.ready -> %>
           <p class="opacity-70">The page gets the weather history of your ZIP code from NASA.</p>
         <% true -> %>
-          <.numbers estimate={@estimate} price={@price} />
+          <.numbers estimate={@estimate} bill={@bill} price={@price} />
       <% end %>
     </div>
     """
   end
 
   attr :estimate, :map, required: true
+  attr :bill, :map, required: true
   attr :price, :map, required: true
 
+  # The money comes from the bill: the power from the grid, at the prices
+  # of the house (DIY.Bill).
   defp numbers(assigns) do
-    cents = assigns.price.cents
-    month = Enum.at(assigns.estimate.months, Date.utc_today().month - 1)
-
     assigns =
       assigns
-      |> assign(:cents, cents)
-      |> assign(:month, month)
-      |> assign(:average, assigns.estimate.kwh / 12)
+      |> assign(:cents, assigns.price.cents)
+      |> assign(:month, Enum.at(assigns.bill.months, Date.utc_today().month - 1))
 
     ~H"""
     <div>
       <p class="text-sm opacity-70">Your power bill, in an average month</p>
       <p id="bill-average" class="text-4xl font-bold">
-        {Format.money(Format.cost(@average, @cents))}
+        {Format.money(@bill.cost / 12)}
       </p>
       <p class="text-sm">
         The range, with the weather of 10 years and the limits of the model: {Format.money(
-          Format.cost(@estimate.low / 12, @cents)
-        )} to {Format.money(Format.cost(@estimate.high / 12, @cents))} · {Format.kwh(@average)}
+          @bill.cost_low / 12
+        )} to {Format.money(@bill.cost_high / 12)} · {Format.kwh(@bill.kwh / 12)}
       </p>
     </div>
     <p id="bill-month" class="text-sm">
-      {@month.name}: {Format.money(Format.cost(@month.kwh, @cents))} (between {Format.money(
-        Format.cost(@month.low, @cents)
-      )} and {Format.money(Format.cost(@month.high, @cents))})
+      {@month.name}: {Format.money(@month.cost)} (between {Format.money(@month.cost_low)} and {Format.money(
+        @month.cost_high
+      )})
     </p>
-    <DIYWeb.Front.chart estimate={@estimate} cents={@cents} />
+    <DIYWeb.Front.chart bill={@bill} />
     <p class="text-xs opacity-80">
       At {Format.cents(@cents)} for each kWh: {@price.source}.
       <.link patch={~p"/settings"} class="link">Change the price</.link>
@@ -174,12 +178,30 @@ defmodule DIYWeb.Front do
     """
   end
 
-  @doc "A bar for each month, with the range as a line."
-  attr :estimate, :map, required: true
-  attr :cents, :float, required: true
+  attr :whatif, :map, required: true
+
+  # The what-if: the bill with the planned items, next to the bill of today.
+  defp whatif(assigns) do
+    ~H"""
+    <div id="whatif-card" class="card card-border border-dashed bg-base-100 p-4 space-y-1">
+      <p class="text-sm opacity-70">With your plan, in an average month</p>
+      <p class="text-2xl font-bold">
+        {Format.money(@whatif.plan.year.cost / 12)}
+        <span class="text-base font-normal">· today {Format.money(@whatif.today.year.cost / 12)}</span>
+      </p>
+      <p class="text-sm">
+        {Format.count(length(@whatif.planned), "planned item")}.
+        <.link patch={~p"/power"} class="link">See the plan</.link>
+      </p>
+    </div>
+    """
+  end
+
+  @doc "A bar for each month of a bill (`DIY.Bill`), with the range as a line."
+  attr :bill, :map, required: true
 
   def chart(assigns) do
-    top = Enum.max(Enum.map(assigns.estimate.months, & &1.high)) |> max(1)
+    top = Enum.max(Enum.map(assigns.bill.months, & &1.high)) |> max(1)
     scale = fn kwh -> 100 * kwh / top end
     assigns = assign(assigns, :scale, scale)
 
@@ -190,7 +212,7 @@ defmodule DIYWeb.Front do
       role="img"
       aria-label="The bill of each month, from January to December, with its range."
     >
-      <g :for={{m, i} <- Enum.with_index(@estimate.months)}>
+      <g :for={{m, i} <- Enum.with_index(@bill.months)}>
         <rect
           x={8 + i * 29}
           y={110 - @scale.(m.kwh)}
@@ -198,7 +220,7 @@ defmodule DIYWeb.Front do
           height={@scale.(m.kwh)}
           class="fill-primary/70"
         >
-          <title>{m.name}: {Format.money(Format.cost(m.kwh, @cents))}</title>
+          <title>{m.name}: {Format.money(m.cost)}</title>
         </rect>
         <line
           x1={18 + i * 29}

@@ -75,6 +75,43 @@ defmodule DIYWeb.Settings do
           <button class="btn btn-sm">Save</button>
         </form>
         <p class="text-xs opacity-70">Leave it empty to use the typical price.</p>
+        <form id="settings-night" phx-submit="power" class="space-y-2">
+          <p class="text-sm">
+            A plan with a different price at night (for example, free nights): the price and the hours of the night.
+          </p>
+          <div class="flex flex-wrap gap-2 items-end">
+            <label>
+              <span class="text-sm">At night (cents)</span>
+              <input
+                name="night_cents"
+                value={@build.power.night_cents && Format.value(@build.power.night_cents)}
+                inputmode="decimal"
+                placeholder="none"
+                class="input input-sm w-24 block"
+              />
+            </label>
+            <label>
+              <span class="text-sm">From (hour)</span>
+              <input
+                name="night_from"
+                value={@build.power.night_from}
+                inputmode="numeric"
+                class="input input-sm w-20 block"
+              />
+            </label>
+            <label>
+              <span class="text-sm">To (hour)</span>
+              <input
+                name="night_to"
+                value={@build.power.night_to}
+                inputmode="numeric"
+                class="input input-sm w-20 block"
+              />
+            </label>
+            <button class="btn btn-sm">Save</button>
+          </div>
+          <p class="text-xs opacity-70">Leave the price empty for one price at all hours.</p>
+        </form>
       </div>
 
       <div class="space-y-2">

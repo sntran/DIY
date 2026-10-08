@@ -8,6 +8,7 @@ defmodule DIYWeb.Format do
   def int(number) when is_number(number), do: DIY.Estimate.fmt(number)
 
   @doc "Dollars with no cents: $1,234."
+  def money(dollars) when is_number(dollars) and dollars <= -0.5, do: "-$" <> int(-dollars)
   def money(dollars) when is_number(dollars), do: "$" <> int(dollars)
 
   @doc "kWh with no decimals: 1,234 kWh."
