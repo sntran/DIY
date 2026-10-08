@@ -112,7 +112,10 @@ test("a closed database opens again for the next save", async () => {
   const db = await store.connection()
   db.close()
   assert.deepEqual(await saveOf(store, {text: doc("i"), base: "h"}), {saved: "i"})
-  db.onclose()
+  const again = await store.connection()
+  again.close()
+  assert.equal(await store.read(), doc("i"))
+  ;(await store.connection()).onclose()
   assert.equal(await store.read(), doc("i"))
 })
 
@@ -127,6 +130,9 @@ test("a newer version of the database closes this connection", async () => {
   })
   assert.equal(newer.version, 2)
   newer.close()
+  // This tab has the old version of the app: it cannot open the new
+  // version of the database, and tells it.
+  await assert.rejects(() => store.read(), /version/i)
   const result = await saveOf(store, {text: doc("w"), base: "v"})
   assert.match(result.error, /version/i)
 })

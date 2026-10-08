@@ -9,8 +9,11 @@
 # This workflow deploys nothing: Workers Builds deploys main.
 name: CI
 
+# A pull request runs the checks on its head, and a push to main runs them
+# again on the merge.
 on:
   push:
+    branches: [main]
   pull_request:
 
 permissions:

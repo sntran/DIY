@@ -15,6 +15,9 @@ defmodule DIYWeb.HomeLive do
   end
 
   @impl true
+  def handle_info({Device, :build}, socket), do: {:noreply, socket}
+
+  @impl true
   # No change before the page has the build of the device.
   def handle_event(_event, _params, %{assigns: %{build: nil}} = socket), do: {:noreply, socket}
 

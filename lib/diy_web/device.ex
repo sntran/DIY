@@ -118,8 +118,9 @@ defmodule DIYWeb.Device do
     end
   end
 
+  # A save: the store has the build of the page now, not an unreadable text.
   def handle_event("device:saved", %{"stamp" => stamp}, socket) when is_binary(stamp) do
-    {:halt, assign(socket, :device, %{socket.assigns.device | saved: stamp})}
+    {:halt, assign(socket, :device, %{socket.assigns.device | saved: stamp, unreadable: nil})}
   end
 
   def handle_event(

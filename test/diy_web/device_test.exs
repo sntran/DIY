@@ -53,7 +53,13 @@ defmodule DIYWeb.DeviceTest do
     # A failed save on a different stored build does not ask for a copy.
     render_hook(view, "device:error", %{"error" => "full", "stamp" => "y", "epoch" => epoch})
     view |> element("#door-planning") |> render_click()
-    assert %{backup: false, base: "y"} = save(view)
+    assert %{backup: false, base: "y", epoch: epoch} = save(view)
+
+    # After a save, the store has no unreadable text.
+    render_hook(view, "device:saved", %{"stamp" => "z"})
+    render_hook(view, "device:error", %{"error" => "full", "stamp" => "x", "epoch" => epoch})
+    view |> element("#restart") |> render_click()
+    assert %{backup: false} = save(view)
   end
 
   test "a restore that is not a text, or is too large, gives a new build with a copy", %{

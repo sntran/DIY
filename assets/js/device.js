@@ -48,18 +48,12 @@ export function stampOf(text) {
 
 const message = (error) => String(error && error.message || error)
 
-// Opens the database of the build. The connection closes when a newer
-// version of the app opens the database with a new version, so that the
-// new version does not wait for this tab.
+// Opens the database of the build.
 export function open(factory) {
   return new Promise((resolve, reject) => {
     const request = factory.open(DB, 1)
     request.onupgradeneeded = () => request.result.createObjectStore(STORE)
-    request.onsuccess = () => {
-      const db = request.result
-      db.onversionchange = () => db.close()
-      resolve(db)
-    }
+    request.onsuccess = () => resolve(request.result)
     request.onerror = () => reject(request.error)
   })
 }
@@ -72,7 +66,9 @@ export function open(factory) {
 //
 // The store opens the database at the first use. The browser closes it
 // when the user removes the data of the site: then the store opens it
-// again, one time for each operation.
+// again, one time for each operation. The store closes the connection when
+// a newer version of the app opens the database with a new version, so
+// that the new version does not wait for this tab.
 export function indexedStore(factory) {
   let connection = null
 
@@ -80,6 +76,10 @@ export function indexedStore(factory) {
     if (!connection) {
       connection = open(factory).then((db) => {
         db.onclose = () => { connection = null }
+        db.onversionchange = () => {
+          db.close()
+          connection = null
+        }
         return db
       })
       connection.catch(() => { connection = null })
@@ -105,11 +105,13 @@ export function indexedStore(factory) {
     connection: connect,
 
     read() {
-      return run((db) => new Promise((resolve, reject) => {
+      return run((db) => {
         const request = db.transaction(STORE, "readonly").objectStore(STORE).get(KEY)
-        request.onsuccess = () => resolve(request.result === undefined ? null : request.result)
-        request.onerror = () => reject(request.error)
-      }))
+        return new Promise((resolve, reject) => {
+          request.onsuccess = () => resolve(request.result === undefined ? null : request.result)
+          request.onerror = () => reject(request.error)
+        })
+      })
     },
 
     save({text, base, backup}, report, notify = () => {}) {
