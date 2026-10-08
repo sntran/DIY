@@ -65,6 +65,11 @@ GitHub Actions runs the same checks for each push and each pull request
 (`.github/workflows/ci.yml`). A run fails also when `mix.com precommit`
 changes a file: format the code before the commit.
 
+The last step of CI runs the browser test against `wrangler dev`, with
+the real answers of NASA POWER and Power to Choose. When one of these
+services is down, this step fails: the app cannot work then either.
+Check the service, and run the job again when it is up.
+
 ## Rules for a change
 
 - Each change has tests of its behavior, also for errors and limits, not

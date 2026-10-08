@@ -6,12 +6,13 @@ defmodule DIY.Cache do
   the VM stops, and that is not a problem: the next request gets the data
   again.
 
-  The cache keeps at most 1,000 values (the memory of a Durable Object is
-  small). When it is full, it starts again with no values.
+  The cache keeps at most 200 values: the weather of one place is near 28
+  KB, and the memory of a Durable Object is 128 MB. When it is full, it
+  starts again with no values.
   """
   use GenServer
 
-  @max 1_000
+  @max 200
 
   @doc false
   def start_link(_opts), do: GenServer.start_link(__MODULE__, nil, name: __MODULE__)

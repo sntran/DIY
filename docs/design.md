@@ -182,7 +182,8 @@ it with the Tab key, and gives the focus back to the item when it closes.
 The VM gets the weather and the plans with Req. On Cloudflare, the VM
 sends this HTTP through `fetch()` of the Worker. The cache of the VM
 (`DIY.Cache`) keeps the answers: they have no person in them. It keeps at
-most 1,000 answers, because the memory of a Durable Object is small.
+most 200 answers: the weather of one place is near 28 KB, and the
+memory of a Durable Object is 128 MB.
 
 In the data of NASA POWER, the sun of the last months comes later than
 the degree days. A month with no sun keeps its degree days.
@@ -211,8 +212,11 @@ the degree days. A month with no sun keeps its degree days.
   year with the least and the year with the most kWh.
 
 Each item shows its math for one month (honesty rule 1): each step with
-its numbers, and the kWh of the month at the end. A test checks that the
-last number of each item is its kWh in each month.
+its numbers, and the kWh of the month at the end. A number under 100 has
+one decimal, so that a step adds up on the page. For each item in each
+month, a test reads the math as the page shows it: each step gives the
+value of its numbers (with the rounding of the page), the result of a
+step goes into the next one, and the last step gives the kWh of the item.
 
 The price of one kWh: the price that the user gives, else the median of
 Power to Choose in a Texas area with retail choice, else the average of
@@ -224,12 +228,12 @@ near 10,400 kWh in one year with gas heat, 16,900 with a heat pump, and
 
 ### The tests of phase 1
 
-- Property tests: the JSON of a random build, `from_json` with random
-  text and with a bad value at a random place of a build (and a test of
-  each place with each bad value), the parameters of each kind, the ZIP codes of the file, the
-  median, and the estimate (no item under zero, each month in its range,
-  one more item never lowers the estimate, a better SEER2 never raises
-  it, more degree days never lower it).
+- Property tests: the JSON of a random build; `from_json` with random
+  text, and with a bad value at a random place of a build (and a test of
+  each place with each bad value); the parameters of each kind; the ZIP
+  codes of the file; the median; and the estimate (no item under zero,
+  each month in its range, one more item never lowers the estimate, a
+  better SEER2 never raises it, more degree days never lower it).
 - The pages: `test/diy_web/live/home_live_test.exs`, with the real
   answers of NASA POWER and Power to Choose as stubs.
 - The browser test (`test/browser/house.mjs`): a person builds a house in
