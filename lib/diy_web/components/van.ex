@@ -57,11 +57,11 @@ defmodule DIYWeb.VanPage do
         <p :if={@van.typical} class="alert alert-warning text-sm">
           {if @van.params["model"] == "other",
             do:
-              "The app does not have the numbers of this van. The label in the door frame gives the ratings, and a truck scale gives the weight of each axle.",
+              "The app does not have the numbers of this van: the numbers now are of the last model. The label in the door frame gives the ratings, and a truck scale gives the weight of each axle.",
             else:
               "These numbers are typical of the model. The label in the door frame gives the ratings, and a truck scale gives the weight of each axle."}
         </p>
-        <p :if={source(@van)} id="van-source" class="text-xs opacity-80">
+        <p :if={@van.typical and source(@van)} id="van-source" class="text-xs opacity-80">
           The numbers of the model: {source(@van)}
         </p>
 

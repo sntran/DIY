@@ -9,9 +9,13 @@ defmodule DIY.Build do
   it comes from: the stored stamp must be the stamp of that build (see
   `DIYWeb.Device` and `specs/Device.tla`).
 
-  `from_json/1` accepts only a build that it can read in full. It never
-  raises: a stored text from an old version, or a text that a person
-  changed, gives an error, and the page starts a new build.
+  `from_json/1` never raises. The part of the house must be valid: a
+  stored text from an old version, or a text that a person changed, gives
+  an error, and the page starts a new build (the device keeps a copy). The
+  van part must not stop the build from loading: the reader makes it whole
+  (`repair_vans/1`), and a part of a van that it cannot read goes away. An
+  item in a room that is not there was in a zone that is lost: it goes
+  home, or goes away.
 
   ## The parts
 
@@ -288,16 +292,17 @@ defmodule DIY.Build do
   @doc """
   Removes a room of the house and its items. A camper van in the room goes
   too, with its zones. A station in a van that had its home in the room
-  gets a new home: the first room of the house where it can go. A station
-  with no home goes away with its van.
+  gets a new home: a room of the house where it can go, first on the same
+  level. A station with no home goes away with its van.
   """
   @spec delete_room(t(), String.t()) :: {:ok, t()} | {:error, atom()}
   def delete_room(build, id) do
-    with {:ok, _room} <- house_room(build, id) do
+    with {:ok, removed} <- house_room(build, id) do
       {:ok,
        change(build, fn build ->
          rooms = Enum.reject(build.rooms, &(&1.id == id))
          house = Enum.reject(rooms, &van_level?(&1.level))
+         house = Enum.sort_by(house, &(&1.level != removed.level))
 
          items =
            for item <- build.items,
@@ -343,8 +348,11 @@ defmodule DIY.Build do
     %{build | rooms: rooms, items: Enum.filter(build.items, &(&1.room in ids))}
   end
 
+  @zone_order Catalog.zones() |> Keyword.keys() |> Enum.with_index() |> Map.new()
+
   @doc "The zones of a camper van, in order (`DIY.Catalog.zones/0`)."
-  def zones(build, van_id), do: rooms_on(build, van_level(van_id))
+  def zones(build, van_id),
+    do: build |> rooms_on(van_level(van_id)) |> Enum.sort_by(&Map.fetch!(@zone_order, &1.place))
 
   @doc "The zone of a camper van with a place, or `nil`."
   def zone(build, van_id, place), do: Enum.find(zones(build, van_id), &(&1.place == place))
@@ -861,39 +869,55 @@ defmodule DIY.Build do
     end)
   end
 
-  # The rooms. A zone of a van that the app cannot read is lost.
+  # The rooms. A room of the house must be valid, with an id of its own. A
+  # zone of a van that the app cannot read is lost, and so is a zone with
+  # the id of a room before it.
   defp rooms(rooms, house) when is_list(rooms) do
     levels = if house, do: levels(house.floors), else: []
+    read = Enum.map(rooms, &read_room(&1, levels))
+    ids = for {:house, room} <- read, do: room.id
 
-    rooms
-    |> Enum.reduce_while({:ok, []}, fn room, {:ok, acc} ->
-      case read_room(room, levels) do
-        {:ok, room} -> {:cont, {:ok, [room | acc]}}
-        :lost -> {:cont, {:ok, acc}}
-        :error -> {:halt, :error}
-      end
-    end)
-    |> unique(:rooms)
+    if :error in read or Enum.uniq(ids) != ids,
+      do: {:error, :rooms},
+      else: {:ok, keep_first(read, ids)}
   end
 
   defp rooms(_rooms, _house), do: {:error, :rooms}
 
-  # A zone of a van with a place that the app does not know is lost. A zone
-  # with no valid name gets the name of its place.
-  defp read_room(%{"id" => id, "level" => "van:" <> _ = level} = room, _levels)
-       when is_binary(id) do
-    case Map.fetch(@zone_names, room["place"]) do
-      {:ok, place} ->
-        name =
-          case name(room["name"]) do
-            {:ok, name} -> name
-            {:error, :name} -> Keyword.fetch!(Catalog.zones(), place)
-          end
+  # The rooms (or the items) of the house, and the parts of a van with an
+  # id that is new, in their order.
+  defp keep_first(read, ids) do
+    {list, _seen} =
+      Enum.reduce(read, {[], MapSet.new(ids)}, fn
+        {:house, x}, {acc, seen} ->
+          {[x | acc], seen}
 
-        {:ok, %{id: id, name: name, level: level, place: place}}
+        {:van, x}, {acc, seen} ->
+          if MapSet.member?(seen, x.id),
+            do: {acc, seen},
+            else: {[x | acc], MapSet.put(seen, x.id)}
 
-      :error ->
-        :lost
+        _lost, acc ->
+          acc
+      end)
+
+    Enum.reverse(list)
+  end
+
+  # A zone of a van with a place that the app does not know, or with no
+  # id, is lost. A zone with no valid name gets the name of its place.
+  defp read_room(%{"level" => "van:" <> _ = level} = room, _levels) do
+    with id when is_binary(id) <- room["id"],
+         {:ok, place} <- Map.fetch(@zone_names, room["place"]) do
+      name =
+        case name(room["name"]) do
+          {:ok, name} -> name
+          {:error, :name} -> Keyword.fetch!(Catalog.zones(), place)
+        end
+
+      {:van, %{id: id, name: name, level: level, place: place}}
+    else
+      _ -> :lost
     end
   end
 
@@ -902,7 +926,7 @@ defmodule DIY.Build do
     with {:ok, name} <- name(name),
          true <- level in levels,
          {:ok, place} <- Map.fetch(@place_names, place) do
-      {:ok, %{id: id, name: name, level: level, place: place}}
+      {:house, %{id: id, name: name, level: level, place: place}}
     else
       _ -> :error
     end
@@ -928,56 +952,70 @@ defmodule DIY.Build do
 
   defp unique(:error, error), do: {:error, error}
 
-  # The items: an item of the house must be valid. An item of a van that
-  # the app cannot read, or an item in a room that is not there (a zone
-  # that is lost), goes home or goes away (`van_item/4`).
+  # The items: an item of the house must be valid, with an id of its own.
+  # An item of a van that the app cannot read, or an item in a room that is
+  # not there (a zone that is lost), goes home or goes away (`van_item/4`).
   defp items(items, rooms) when is_list(items) do
     by_id = Map.new(rooms, &{&1.id, &1})
     house = Enum.reject(rooms, &van_level?(&1.level))
+    read = Enum.map(items, &read_item(&1, by_id, house))
+    ids = for {:house, item} <- read, do: item.id
 
-    items
-    |> Enum.reduce_while({:ok, []}, fn item, {:ok, acc} ->
-      case read_item(item, by_id, house) do
-        {:ok, item} -> {:cont, {:ok, [item | acc]}}
-        :skip -> {:cont, {:ok, acc}}
-        :error -> {:halt, :error}
-      end
-    end)
-    |> unique(:items)
+    if :error in read or Enum.uniq(ids) != ids,
+      do: {:error, :items},
+      else: {:ok, keep_first(read, ids)}
   end
 
   defp items(_items, _rooms), do: {:error, :items}
 
-  defp read_item(%{"id" => id, "room" => room} = item, by_id, house)
-       when is_binary(id) and is_binary(room) do
-    case Map.fetch(by_id, room) do
-      {:ok, %{level: level} = room} ->
-        if van_level?(level),
-          do: van_item(item, room, by_id, house),
-          else: house_item(item, room)
-
-      :error ->
-        van_item(item, nil, by_id, house)
+  defp read_item(%{} = item, by_id, house) do
+    case Map.get(by_id, item["room"]) do
+      %{level: "van:" <> _} = zone -> van_item(item, zone, by_id, house)
+      %{} = room -> house_item(item, room, house)
+      nil -> van_item(item, nil, by_id, house)
     end
   end
 
   defp read_item(_item, _by_id, _house), do: :error
 
+  # A camper van: a van must not stop the build from loading. A number that
+  # is not valid gets the default number. A van in a room where it cannot
+  # go goes to the first room where it can go, or goes away.
+  defp house_item(%{"type" => "camper_van", "id" => id} = item, room, house)
+       when is_binary(id) do
+    places = Catalog.kind("camper_van").places
+    room = if room.place in places, do: room, else: Enum.find(house, &(&1.place in places))
+
+    if room,
+      do:
+        {:house,
+         %{
+           id: id,
+           type: "camper_van",
+           room: room.id,
+           typical: Map.get(item, "typical") == true,
+           planned: Map.get(item, "planned") == true,
+           backup: false,
+           home: nil,
+           params: Catalog.loose_params("camper_van", Map.get(item, "params"))
+         }},
+      else: :skip
+  end
+
   # An item of the house. An item of a build of an older version has no
-  # `planned` and no `backup`: false. Only an item in a van has a home. A
-  # camper van with a number that is not valid gets the default number: a
-  # van must not stop the build from loading.
+  # `planned` and no `backup`: false. Only an item in a van has a home.
   defp house_item(
          %{"id" => id, "type" => type, "typical" => typical, "params" => params} = item,
-         room
+         room,
+         _house
        )
-       when is_boolean(typical) do
+       when is_binary(id) and is_boolean(typical) do
     with %{} = kind <- Catalog.kind(type),
          true <- room.place in kind.places,
          planned when is_boolean(planned) <- Map.get(item, "planned", false),
          backup when is_boolean(backup) <- Map.get(item, "backup", false),
-         {:ok, params} <- house_params(type, params) do
-      {:ok,
+         {:ok, params} <- Catalog.params(type, params) do
+      {:house,
        %{
          id: id,
          type: type,
@@ -993,17 +1031,14 @@ defmodule DIY.Build do
     end
   end
 
-  defp house_item(_item, _room), do: :error
+  defp house_item(_item, _room, _house), do: :error
 
-  defp house_params("camper_van", params), do: {:ok, Catalog.loose_params("camper_van", params)}
-  defp house_params(type, params), do: Catalog.params(type, params)
-
-  # An item in a zone of a van, or in a zone that is lost. A number that is
-  # not valid gets the default number. An item that cannot go in its zone
-  # goes to the electrical bay of the van. A station with no zone goes
-  # home. A home must be a room of the house where the kind can go: else
-  # the first such room. Else the item goes away.
-  defp van_item(%{"id" => id, "type" => type} = item, zone, by_id, house) do
+  # An item in a zone of a van, or in a room that is not there. A number
+  # that is not valid gets the default number. An item that cannot go in
+  # its zone goes to the electrical bay of the van. A station with no zone
+  # goes home. A home must be a room of the house where the kind can go:
+  # else the first such room. An item that the app cannot read goes away.
+  defp van_item(%{"id" => id, "type" => type} = item, zone, by_id, house) when is_binary(id) do
     case Catalog.kind(type) do
       %{} = kind ->
         home = item_home(kind, Map.get(item, "home"), house)
@@ -1027,12 +1062,14 @@ defmodule DIY.Build do
           params: Catalog.loose_params(type, Map.get(item, "params"))
         }
 
-        if item.room, do: {:ok, item}, else: :skip
+        if item.room, do: {:van, item}, else: :skip
 
       nil ->
         :skip
     end
   end
+
+  defp van_item(_item, _zone, _by_id, _house), do: :skip
 
   defp item_home(_kind, nil, _house), do: nil
 

@@ -142,11 +142,11 @@ defmodule DIY.VanTest do
       {:ok, no_van} = Build.delete_item(away, id)
       assert van(no_van, station).room == laundry
 
-      # Its home goes: the station gets a new home in the house, and goes
-      # there with the van.
+      # Its home goes: the station gets a new home in the house (first on
+      # the same level), and goes there with the van.
       {:ok, moved} = Build.delete_room(away, laundry)
       home = van(moved, station).home
-      assert Enum.find(moved.rooms, &(&1.id == home)).place in [:indoor, :outdoor]
+      assert %{level: "f1", place: :indoor} = Enum.find(moved.rooms, &(&1.id == home))
       assert %{away: [_]} = Van.stations(moved)
       {:ok, no_van} = Build.delete_item(moved, id)
       assert van(no_van, station).room == home
@@ -209,10 +209,49 @@ defmodule DIY.VanTest do
       zones = for r <- map["rooms"], String.starts_with?(r["level"], "van:"), do: r
       bay = Build.zone(build, id, :bay).id
 
-      # A zone that is missing: the van gets it again, with a new id.
+      # A zone that is missing: the van gets it again, with a new id, in
+      # the order of the zones.
       {:ok, loaded} = load.(%{map | "rooms" => map["rooms"] -- [hd(zones)]})
-      assert length(Build.zones(loaded, id)) == 7
+      assert Enum.map(Build.zones(loaded, id), & &1.place) == Keyword.keys(Catalog.zones())
       refute Enum.any?(loaded.rooms, &(&1.id == hd(zones)["id"]))
+
+      # A zone with no id, or with the id of a room before it, is lost.
+      kitchen = room(build, "Kitchen")
+
+      for bad <- [nil, 7, hd(zones)["id"], kitchen] do
+        rooms = map["rooms"] ++ [%{hd(zones) | "id" => bad}]
+        {:ok, loaded} = load.(%{map | "rooms" => rooms})
+        assert length(Build.zones(loaded, id)) == 7
+        assert Enum.count(loaded.rooms, &(&1.id == kitchen)) == 1
+      end
+
+      # An item of the van with the id of an item of the house, or with no
+      # room, goes away.
+      fridge = Enum.find(map["items"], &(&1["type"] == "fridge"))
+      [battery] = for i <- map["items"], i["type"] == "van_battery", do: i
+
+      for copy <- [%{battery | "id" => fridge["id"]}, Map.delete(battery, "room")] do
+        {:ok, loaded} = load.(%{map | "items" => map["items"] ++ [copy]})
+        assert Enum.find(loaded.items, &(&1.id == fridge["id"])).type == "fridge"
+      end
+
+      # A camper van with flags that are not valid, with no numbers, or in a
+      # room where it cannot go (the roof).
+      odd = fn van -> %{van | "typical" => "yes", "room" => room(build, "Roof")} end
+
+      odd_van =
+        Enum.map(map["items"], &if(&1["id"] == id, do: Map.delete(odd.(&1), "params"), else: &1))
+
+      {:ok, loaded} = load.(%{map | "items" => odd_van})
+      assert %{typical: false, params: params, room: room} = van(loaded, id)
+      assert params == Catalog.defaults("camper_van")
+      assert Enum.find(loaded.rooms, &(&1.id == room)).place in [:outdoor, :indoor]
+
+      # No room where a van can go: the van goes, and its zones.
+      roof_only = Enum.filter(map["rooms"], &(&1["place"] == "roof" or &1["level"] =~ "van:"))
+      {:ok, loaded} = load.(%{map | "rooms" => roof_only, "items" => odd_van})
+      assert Van.vans(loaded) == []
+      refute Enum.any?(loaded.rooms, &Build.van_level?(&1.level))
 
       # A zone with a place that the app does not know: its items go home,
       # or go away.
@@ -266,7 +305,7 @@ defmodule DIY.VanTest do
         Enum.map(map["rooms"], &if(&1["id"] == bay, do: %{&1 | "level" => "f1"}, else: &1))
 
       assert load.(%{map | "rooms" => bad_level}) == {:error, :rooms}
-      assert load.(%{map | "items" => [%{"id" => 1}]}) == {:error, :items}
+      assert load.(%{map | "items" => [1]}) == {:error, :items}
     end
 
     # A change of the van part of a stored build.
@@ -357,6 +396,83 @@ defmodule DIY.VanTest do
 
         assert Enum.all?(loaded.rooms, &(not Build.van_level?(&1.level) or &1.level in vans))
         assert Build.from_json(Build.to_json(loaded)) == {:ok, loaded}
+      end
+    end
+  end
+
+  # Any term of JSON.
+  defp json_term do
+    one_of([
+      constant(nil),
+      boolean(),
+      integer(),
+      float(),
+      string(:printable, max_length: 8),
+      constant("van:i1"),
+      list_of(integer(), max_length: 2),
+      map_of(string(:alphanumeric, max_length: 4), integer(), max_length: 2)
+    ])
+  end
+
+  # A change of a key of a map: a new term, or no key.
+  defp change_key(map, key, :delete) when is_map(map), do: Map.delete(map, key)
+  defp change_key(map, key, {:set, value}) when is_map(map), do: Map.put(map, key, value)
+  defp change_key(other, _key, _how), do: other
+
+  defp change_at(list, i, fun) when is_list(list) and list != [],
+    do: List.update_at(list, rem(i, length(list)), fun)
+
+  defp change_at(list, _i, _fun), do: list
+
+  property "from_json never raises, for each change of a stored build" do
+    {build, _id, _station} = stored()
+    map = build |> Build.to_json() |> Jason.decode!()
+    keys = ~w(id type room level place name typical planned backup home params)
+    how = one_of([constant(:delete), tuple({constant(:set), json_term()})])
+
+    steps =
+      list_of(
+        one_of([
+          tuple({constant(:top), member_of(Map.keys(map)), how}),
+          tuple({constant(:room), integer(0..40), member_of(keys), how}),
+          tuple({constant(:item), integer(0..40), member_of(keys), how}),
+          tuple({constant(:param), integer(0..40), string(:alphanumeric, max_length: 6), how}),
+          tuple({constant(:whole), member_of(["rooms", "items"]), integer(0..40), json_term()})
+        ]),
+        min_length: 1,
+        max_length: 6
+      )
+
+    check all(steps <- steps, max_runs: 300) do
+      changed =
+        Enum.reduce(steps, map, fn
+          {:top, key, how}, map ->
+            change_key(map, key, how)
+
+          {:room, i, key, how}, map ->
+            Map.update(map, "rooms", [], &change_at(&1, i, fn r -> change_key(r, key, how) end))
+
+          {:item, i, key, how}, map ->
+            Map.update(map, "items", [], &change_at(&1, i, fn r -> change_key(r, key, how) end))
+
+          {:param, i, key, how}, map ->
+            Map.update(map, "items", [], fn items ->
+              change_at(items, i, fn
+                %{"params" => p} = item when is_map(p) ->
+                  %{item | "params" => change_key(p, key, how)}
+
+                item ->
+                  item
+              end)
+            end)
+
+          {:whole, key, i, value}, map ->
+            Map.update(map, key, [], &change_at(&1, i, fn _ -> value end))
+        end)
+
+      case Build.from_json(Jason.encode!(changed)) do
+        {:ok, %Build{} = loaded} -> assert Build.from_json(Build.to_json(loaded)) == {:ok, loaded}
+        {:error, _reason} -> :ok
       end
     end
   end

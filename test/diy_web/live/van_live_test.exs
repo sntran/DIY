@@ -233,7 +233,7 @@ defmodule DIYWeb.VanLiveTest do
 
     refute has_element?(view, "#van-model")
     refute has_element?(view, "#van-source")
-    assert render(view) =~ "The app does not have the numbers of this van."
+    assert render(view) =~ "The app does not have the numbers of this van: the numbers now are"
   end
 
   test "the page of the rooms shows the features of a van only with a van", %{conn: conn} do

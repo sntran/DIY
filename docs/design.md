@@ -697,10 +697,11 @@ trip (`DIY.Build.take_to_van/3`), and back (`bring_home/2`).
   (`DIY.Build.house_view/1`). The page Power tells which station is in a
   van.
 - The removal of the van sends the station home.
-- The removal of its home room gives it a new home: the first room of the
-  house where it can go. When the removed room has the van too, the
-  station goes to its new home. A station goes away only with its own
-  room, or when the house has no room for it.
+- The removal of its home room gives it a new home: a room of the house
+  where it can go, first on the level of the removed room. When the
+  removed room has the van too, the station goes to its new home. A
+  station goes away only with its own room, or when the house has no room
+  for it.
 - A station of the van (one that the user added in a zone) has no home,
   and stays in the van.
 
@@ -719,15 +720,26 @@ The van part of a stored build must not stop the build from loading
 
 - A zone that is missing comes back with a new id. A second zone with the
   same place gives its items to the first. A zone of no van goes.
-- A zone with a place that the app does not know is lost.
+- A zone with a place that the app does not know, with no id, or with the
+  id of a room before it, is lost.
 - An item of a van with a number that is not valid gets the default
   number. An item that cannot go in its zone goes to the electrical bay.
-- An item in a room that is not there goes home, or goes away.
+  An item of a van that the app cannot read goes away, and so does an
+  item of a van with the id of an item before it.
+- An item in a room that is not there was in a zone that is lost: it
+  goes home, or goes away.
 - A home must be a room of the house where the kind can go: else the
   first such room.
+- A camper van with a number that is not valid gets the default number.
+  A van in a room where it cannot go goes to the first room where it can
+  go, or goes away with its zones.
 
-The part of the house stays strict. A property test changes the van part
-of a stored build in many ways: the build loads, with the same house.
+The rest of the house stays strict: a room or an item of the house that
+is not valid gives an error, and the page starts a new build (the device
+keeps a copy). `from_json/1` never raises. Two property tests check it:
+one changes the van part of a stored build in many ways (the build loads,
+with the same house), and one changes each key of the rooms, the items
+and the build (the reader gives a build or an error).
 
 ### The tests of phase 5
 
