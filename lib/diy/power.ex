@@ -73,6 +73,12 @@ defmodule DIY.Power do
   @facing %{"south" => 1.1, "southeast" => 1.05, "east" => 0.95, "flat" => 1.0}
   @outage_hours 7 * 24
 
+  @doc "The part of the label of a station that its battery gives (95%)."
+  def usable, do: @usable
+
+  @doc "The part of the watts of a panel in full sun (80%)."
+  def derate, do: @derate
+
   # The years that a planned item lasts, for the payback. A battery of
   # LiFePO4: 3,000 cycles to 80% of its charge (a common label of the
   # stations), near 8 years of one cycle each day. A panel: 25 to 35 years

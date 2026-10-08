@@ -565,7 +565,7 @@ defmodule DIY.PowerTest do
   end
 
   test "the shapes of the day" do
-    for kind <- DIY.Catalog.house_kinds(), part <- [:cooling, :heating, :other] do
+    for kind <- DIY.Kinds.house(), part <- [:cooling, :heating, :other] do
       item = %{type: kind.type, params: DIY.Catalog.defaults(kind.type)}
       shape = Profile.shape(item, part, 10.0)
       assert length(shape) == 24

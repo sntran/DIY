@@ -820,9 +820,13 @@ defmodule DIYWeb.HomeLive do
   defp nav?(%Build{house: house}) when is_map(house), do: true
   defp nav?(_build), do: false
 
-  # The page Power is for a house with power equipment, a car, or a plan.
-  defp power?(%Build{items: items}),
-    do: Enum.any?(items, &(&1.planned or &1.type in @power_types))
+  # The page Power is for a house with power equipment, a car, or a plan,
+  # or with a station that is in a van now (the page tells it). An item in
+  # a van does not count.
+  defp power?(%Build{} = build),
+    do:
+      Enum.any?(Build.house_view(build).items, &(&1.planned or &1.type in @power_types)) or
+        Van.stations(build).away != []
 
   defp power?(_build), do: false
 

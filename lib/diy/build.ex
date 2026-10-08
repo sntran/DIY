@@ -450,24 +450,43 @@ defmodule DIY.Build do
   @spec van_model(t(), String.t()) :: {:ok, t()} | {:error, atom()}
   def van_model(build, id) do
     with {:ok, %{type: "camper_van"} = van} <- item(build, id) do
-      {_key, _name, numbers} = List.keyfind(Catalog.van_models(), van.params["model"], 0)
-      {:ok, replace_item(build, %{van | params: Map.merge(van.params, numbers), typical: true})}
+      {:ok, replace_item(build, model_numbers(van))}
     else
       _ -> {:error, :item}
     end
   end
 
+  defp model_numbers(van) do
+    {_key, _name, numbers, _source} = List.keyfind(Catalog.van_models(), van.params["model"], 0)
+    %{van | params: Map.merge(van.params, numbers), typical: true}
+  end
+
+  # The numbers of a van that come from its label (or from a scale).
+  @label ~w(gvwr front_gawr rear_gawr front_empty rear_empty)
+
   @doc """
   Changes the numbers of an item. The item is not typical after this: the
-  user checked it.
+  user checked it. A camper van with a new model gets the numbers of the
+  model (typical). A camper van is not typical only after a change of a
+  number of its label.
   """
   @spec update_item(t(), String.t(), map()) :: {:ok, t()} | {:error, term()}
   def update_item(build, id, values) when is_map(values) do
     with {:ok, item} <- item(build, id),
          {:ok, params} <- Catalog.params(item.type, Map.merge(item.params, values)) do
-      {:ok, replace_item(build, %{item | params: params, typical: false})}
+      {:ok, replace_item(build, checked(item, params))}
     end
   end
+
+  defp checked(%{type: "camper_van", params: old} = van, params) do
+    cond do
+      params["model"] != old["model"] -> model_numbers(%{van | params: params})
+      Enum.any?(@label, &(params[&1] != old[&1])) -> %{van | params: params, typical: false}
+      true -> %{van | params: params}
+    end
+  end
+
+  defp checked(item, params), do: %{item | params: params, typical: false}
 
   defp new_item(id, type, room, params),
     do: %{
@@ -544,12 +563,18 @@ defmodule DIY.Build do
     with {:ok, item} <- item(build, id), do: {:ok, replace_item(build, %{item | typical: false})}
   end
 
-  @doc "Moves an item to a different room, where its kind can go."
+  @doc """
+  Moves an item to a different room, where its kind can go. An item does
+  not go between the house and a van: a station goes with
+  `take_to_van/3` and `bring_home/2`.
+  """
   @spec move_item(t(), String.t(), String.t()) :: {:ok, t()} | {:error, atom()}
   def move_item(build, id, room_id) do
     with {:ok, item} <- item(build, id),
+         {:ok, from} <- room(build, item.room),
          {:ok, room} <- room(build, room_id),
-         true <- room.place in Catalog.kind(item.type).places || {:error, :place} do
+         true <- room.place in Catalog.kind(item.type).places || {:error, :place},
+         true <- van_level?(from.level) == van_level?(room.level) || {:error, :place} do
       {:ok, replace_item(build, %{item | room: room_id})}
     end
   end

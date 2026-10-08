@@ -9,9 +9,8 @@ defmodule DIY.Van do
   weight. The items, the water, the people and the gear take it. Each zone
   has a place from the front axle to the rear axle (`@places`): the part
   of the weight of a zone on the rear axle is that place, and the rest is
-  on the front axle (a lever). A place over 1 is behind the rear axle: it
-  takes weight from the front axle. The places are a simple model of the
-  app: a typical layout, with the bed and the electrical bay over the rear
+  on the front axle (a lever). The places are a simple model of the app:
+  a typical layout, with the bed and the electrical bay over the rear
   axle.
 
   The water of a tank weighs 8.34 lb for each gallon (USGS, "Water
@@ -25,10 +24,13 @@ defmodule DIY.Van do
   app counts 90% for the inverter (the data sheets of inverters give 85% to
   94%). The day gets power from the sun (the panels in full sun for the
   hours of the sun of NASA POWER at the house, at 80%, as `DIY.Power`), and
-  from the alternator charger when the engine runs (its amps at 12.8 V).
-  The batteries keep power: a lithium battery (LiFePO4) gives 90% of its
-  label, a lead acid or AGM battery 50% (it lasts longer when it gives
-  only half), and a power station 95% (`DIY.Power`).
+  from the alternator charger when the engine runs (its amps at the
+  voltage of the batteries: 12.8 V for each 12 V). The batteries keep
+  power: a lithium battery (LiFePO4) gives 90% of its label, a lead acid
+  or AGM battery 50% (it lasts longer when it gives only half), and a
+  power station 95% (`DIY.Power`). The app does not count the loss of
+  the outlets of a station (`DIY.Power` counts 92% for a house): an item
+  on 120 V loses 10% in the inverter.
 
   The days off the grid: the batteries, divided by the power that the day
   uses more than it gets. When the sun and the engine give more than the
@@ -50,10 +52,8 @@ defmodule DIY.Van do
 
   @water_lb 8.34
   @inverter 0.9
-  @derate 0.8
-  @charge_volts 12.8
+  @cell_volts 12.8 / 12
   @usable %{"lifepo4" => 0.9, "agm" => 0.5}
-  @station_usable 0.95
 
   # The kinds that burn fuel in the van.
   @fuel ~w(propane butane diesel)
@@ -133,13 +133,13 @@ defmodule DIY.Van do
     items = items(build, van.id)
     storage = items |> Enum.map(fn {_zone, item} -> storage(item) end) |> Enum.sum()
     panels = sum(items, "van_solar", "watts")
-    drive = sum(items, "dc_charger", "amps") * @charge_volts * van.params["drive_hours"]
+    drive = sum(items, "dc_charger", "amps") * volts(items) * van.params["drive_hours"]
 
     months =
       for m <- 1..12 do
         sun = climate && climate.months[m].sun
         use = items |> Enum.map(fn {_zone, item} -> wh_day(item, m) end) |> Enum.sum()
-        solar = if sun, do: panels * sun * @derate, else: 0.0
+        solar = if sun, do: panels * sun * DIY.Power.derate(), else: 0.0
         net = use - solar - drive
 
         %{
@@ -158,6 +158,17 @@ defmodule DIY.Van do
   defp sum(items, type, key),
     do: Enum.sum(for {_zone, %{type: ^type, params: p}} <- items, do: p[key] / 1)
 
+  # The voltage of the batteries when they charge: 12.8 V for each 12 V of
+  # the first battery (LiFePO4), or 12.8 V with no battery.
+  defp volts(items) do
+    bank =
+      Enum.find_value(items, "12", fn {_zone, i} ->
+        i.type == "van_battery" && i.params["volts"]
+      end)
+
+    String.to_integer(bank) * @cell_volts
+  end
+
   defp days(storage, _net) when storage <= 0, do: nil
   defp days(_storage, net) when net <= 0, do: :unlimited
   defp days(storage, net), do: storage / net
@@ -167,7 +178,7 @@ defmodule DIY.Van do
     do: p["ah"] * String.to_integer(p["volts"]) * @usable[p["chemistry"]]
 
   defp storage(%{type: "power_station", params: p}),
-    do: (p["kwh"] + p["extra_kwh"]) * 1_000 * @station_usable
+    do: (p["kwh"] + p["extra_kwh"]) * 1_000 * DIY.Power.usable()
 
   defp storage(_item), do: 0.0
 
@@ -193,36 +204,59 @@ defmodule DIY.Van do
   @doc """
   The safety notes of a van, where they apply:
 
-  - `{:fuse, item}`: a battery with no fuse near its positive post. The
-    ABYC standard E-11 for boats, which many van builders use, puts the
-    fuse within 7 inches of the battery.
+  - `{:fuse, item, n}`: battery `n` has no fuse near its positive post.
+    The ABYC standard E-11 for boats, which many van builders use, puts
+    the fuse within 7 inches of the battery.
+  - `:air`: a stove or a heater that burns fuel: it needs fresh air.
   - `:co`: a stove or a heater that burns fuel, with no alarm of carbon
-    monoxide. It needs fresh air too.
+    monoxide.
+  - `:heater`: a diesel heater: its air comes from outside the van, and
+    its gas goes out.
   - `:propane`: a propane or butane stove: the alarm goes low, because
     propane is heavier than air.
   - `:inverter`: an item on an outlet of 120 V, with no inverter and no
     power station.
+  - `{:output, load, output}`: the items on 120 V need more watts than the
+    inverters and the stations give.
   - `:no_battery`: items that use power, with no battery and no station.
   """
   def warnings(build, van) do
     items = Enum.map(items(build, van.id), &elem(&1, 1))
     types = Enum.map(items, & &1.type)
     fuel = Enum.filter(items, &burns?/1)
+    load = items |> Enum.filter(&ac?/1) |> Enum.map(& &1.params["watts"]) |> Enum.sum()
+    output = output(items)
 
     Enum.filter(
-      for(%{type: "van_battery", params: %{"fused" => false}} = b <- items, do: {:fuse, b}) ++
+      for(
+        {%{params: %{"fused" => false}} = b, n} <-
+          Enum.with_index(Enum.filter(items, &(&1.type == "van_battery")), 1),
+        do: {:fuse, b, n}
+      ) ++
         [
+          fuel != [] && :air,
           (fuel != [] and "co_alarm" not in types) && :co,
+          "diesel_heater" in types && :heater,
           Enum.any?(fuel, &(&1.type == "stove" and &1.params["fuel"] in ["propane", "butane"])) &&
             :propane,
-          (Enum.any?(items, &ac?/1) and
-             not Enum.any?(types, &(&1 in ["inverter", "power_station"]))) &&
-            :inverter,
+          (load > 0 and output == 0) && :inverter,
+          (output > 0 and load > output) && {:output, load, output},
           (Enum.any?(items, &(wh_day(&1, 7) > 0 or wh_day(&1, 1) > 0)) and
              not Enum.any?(types, &(&1 in ["van_battery", "power_station"]))) && :no_battery
         ],
       & &1
     )
+  end
+
+  # The watts of the outlets of 120 V: the inverters and the stations.
+  defp output(items) do
+    items
+    |> Enum.map(fn
+      %{type: "inverter", params: p} -> p["watts"]
+      %{type: "power_station", params: p} -> p["output_w"]
+      _item -> 0
+    end)
+    |> Enum.sum()
   end
 
   defp burns?(%{type: "stove", params: p}), do: p["fuel"] in @fuel

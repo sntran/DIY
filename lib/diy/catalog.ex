@@ -93,21 +93,11 @@ defmodule DIY.Catalog do
     shell: "Shell"
   ]
 
-  # The models of camper vans, with typical numbers. The label in the door
-  # frame of a van gives its weight rating (GVWR) and the rating of each
-  # axle (GAWR); a truck scale gives the weight of each axle of the empty
-  # van. 0 for the rating of an axle: the app does not know it.
-  #
-  # - Ram ProMaster 2500, 159 in, high roof: GVWR 8,900 lb and curb weight
-  #   4,895 lb (Autopadre, 2025 Tradesman). Axles 4,629 and 5,291 lb, and
-  #   64% of the empty weight on the front axle (Auto123, 2025 ProMaster
-  #   2500 136 in: reserves of 1,731 and 3,679 lb).
-  # - Ford Transit 250, 148 in, high roof: GVWR 9,070 lb and curb weight
-  #   5,330 lb (Autopadre, 2025). The axles: not known; 55% on the front
-  #   axle is a guess of the app.
-  # - Mercedes-Benz Sprinter 2500, 170 in, high roof: GVWR 9,050 lb, curb
-  #   weight 4,993 to 5,743 lb by the options (Autopadre, 2022); the app
-  #   takes 5,400. The axles: not known; 55% on the front axle is a guess.
+  # The models of camper vans, with typical numbers and their source (the
+  # page shows it). The label in the door frame of a van gives its weight
+  # rating (GVWR) and the rating of each axle (GAWR); a truck scale gives
+  # the weight of each axle of the empty van. 0 for the rating of an axle:
+  # the app does not know it.
   @van_models [
     {"promaster_159", "Ram ProMaster 2500, 159 in, high roof",
      %{
@@ -116,7 +106,8 @@ defmodule DIY.Catalog do
        "rear_gawr" => 5291,
        "front_empty" => 3133,
        "rear_empty" => 1762
-     }},
+     },
+     "The rating (8,900 lb) and the empty weight (4,895 lb): Autopadre, 2025 Tradesman. The ratings of the axles, and 64% of the empty weight on the front axle: Auto123, 2025 ProMaster 2500 with 136 in (reserves of 1,731 and 3,679 lb)."},
     {"transit_148", "Ford Transit 250, 148 in, high roof",
      %{
        "gvwr" => 9070,
@@ -124,7 +115,8 @@ defmodule DIY.Catalog do
        "rear_gawr" => 0,
        "front_empty" => 2932,
        "rear_empty" => 2398
-     }},
+     },
+     "The rating (9,070 lb) and the empty weight (5,330 lb): Autopadre, 2025. The app does not know the ratings of the axles. 55% of the empty weight on the front axle is a guess of the app."},
     {"sprinter_170", "Mercedes-Benz Sprinter 2500, 170 in, high roof",
      %{
        "gvwr" => 9050,
@@ -132,8 +124,9 @@ defmodule DIY.Catalog do
        "rear_gawr" => 0,
        "front_empty" => 2970,
        "rear_empty" => 2430
-     }},
-    {"other", "Another van", %{}}
+     },
+     "The rating (9,050 lb): Autopadre, 2022. The empty weight is 4,993 to 5,743 lb with the options: the app takes 5,400 lb. The app does not know the ratings of the axles. 55% of the empty weight on the front axle is a guess of the app."},
+    {"other", "Another van", %{}, nil}
   ]
 
   @fuels [{"electric", "Electric"}, {"gas", "Gas"}]
@@ -627,7 +620,7 @@ defmodule DIY.Catalog do
       type: "camper_van",
       name: "Camper van",
       emoji: "🚐",
-      places: [:outdoor],
+      places: [:outdoor, :indoor],
       features: [:van],
       params: [
         choice(
@@ -686,7 +679,7 @@ defmodule DIY.Catalog do
         int("gear_lb", "Gear, clothes and food", "lb", 200, 0, 5000),
         float(
           "drive_hours",
-          "Hours of driving in one day",
+          "Hours that you drive in one day",
           "h",
           1.0,
           0.0,
@@ -942,7 +935,15 @@ defmodule DIY.Catalog do
       places: [:bay],
       features: [:weight, :van_power],
       params: [
-        int("watts", "Output", "W", 2000, 100, 10000, nil),
+        int(
+          "watts",
+          "Output",
+          "W",
+          2000,
+          100,
+          10000,
+          "The most power of its outlets, all the time (not the surge)."
+        ),
         int(
           "idle_w",
           "Power when it is on, with no load",
@@ -961,19 +962,8 @@ defmodule DIY.Catalog do
       name: "Shore power inlet and charger",
       emoji: "🔌",
       places: [:bay],
-      features: [:weight, :van_power],
-      params: [
-        int(
-          "watts",
-          "Charge",
-          "W",
-          600,
-          0,
-          10000,
-          "The label of the charger gives its amps or watts."
-        ),
-        weight(10)
-      ]
+      features: [:weight],
+      params: [weight(10)]
     },
     %{
       type: "van_solar",
@@ -1050,11 +1040,8 @@ defmodule DIY.Catalog do
   @doc "The zones of a camper van, with their names, in order."
   def zones, do: @zones
 
-  @doc "The models of camper vans: `{key, name, numbers}`."
+  @doc "The models of camper vans: `{key, name, numbers, source}`."
   def van_models, do: @van_models
-
-  @doc "The kinds of items of a house (with a place in a house)."
-  def house_kinds, do: Enum.filter(@kinds, &Enum.any?(&1.places, fn p -> p in @places end))
 
   @doc "The kinds that can go in a place."
   def kinds_for(place), do: Enum.filter(@kinds, &(place in &1.places))

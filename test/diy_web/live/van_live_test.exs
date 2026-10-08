@@ -93,7 +93,7 @@ defmodule DIYWeb.VanLiveTest do
     # A battery with no fuse.
     bay = Build.zone(build(view), van, :bay)
     render_click(view, "add_item", %{"room" => bay.id, "type" => "van_battery"})
-    assert has_element?(view, "#van-notes", "Put a fuse near the positive post")
+    assert has_element?(view, "#van-notes", "Battery 1 (200 Ah, 12 V) has no fuse")
     assert render(view) =~ "The batteries keep 2,160 Wh."
 
     # The item goes: the page shows the van again.
@@ -138,7 +138,9 @@ defmodule DIYWeb.VanLiveTest do
 
     {build, _} = add(build, van, :bay, "van_battery", %{"ah" => "100", "fused" => "true"})
     view = open(conn, ~p"/van?#{[id: van]}", build)
-    assert render(view) =~ ~r/Off the grid: \d+\.\d days in the month with the least sun/
+
+    assert render(view) =~
+             ~r/Off the grid: \d+\.\d days in [A-Z][a-z]+, the month with the fewest days/
 
     {large, _} = add(build, van, :bay, "van_battery", %{"ah" => "2000", "fused" => "true"})
     assert render(open(conn, ~p"/van?#{[id: van]}", large)) =~ "30 days or more"
@@ -194,6 +196,84 @@ defmodule DIYWeb.VanLiveTest do
     {with_van, _} = add(with_van, van, :galley, "van_fridge")
     assert [_, n] = feeds.(build)
     assert [_, ^n] = feeds.(with_van)
+  end
+
+  test "the notes of a heater and of a small inverter, and an empty weight that is too large",
+       %{conn: conn} do
+    {build, van} = with_van()
+    {build, _} = add(build, van, :bay, "diesel_heater")
+    {build, _} = add(build, van, :galley, "stove", %{"fuel" => "induction", "watts" => "1800"})
+    {build, _} = add(build, van, :bay, "inverter", %{"watts" => "300"})
+    {:ok, build} = Build.update_item(build, van, %{"front_empty" => "9000"})
+    view = open(conn, ~p"/van?#{[id: van]}", build)
+    assert has_element?(view, "#van-notes", "takes its air from outside the van")
+
+    assert has_element?(
+             view,
+             "#van-notes",
+             "need 1,800 W, and the inverters and the stations give 300 W"
+           )
+
+    assert has_element?(view, "#van-weight", "is not less than the rating")
+    refute has_element?(view, "#van-weight", "The van can take")
+    # A number of the label: the user checked the numbers.
+    refute render(view) =~ "These numbers are typical of the model"
+  end
+
+  test "the numbers of another van, and the source of the numbers of a model", %{conn: conn} do
+    {build, van} = with_van()
+    view = open(conn, ~p"/van?#{[id: van, item: van]}", build)
+    assert has_element?(view, "#van-source", "Autopadre")
+    assert has_element?(view, "#item-sheet", "typical of the model")
+
+    view
+    |> form("#item-form", %{"item_id" => van, "item" => %{"model" => "other"}})
+    |> render_change()
+
+    refute has_element?(view, "#van-model")
+    refute has_element?(view, "#van-source")
+    assert render(view) =~ "The app does not have the numbers of this van."
+  end
+
+  test "the page of the rooms shows the features of a van only with a van", %{conn: conn} do
+    build = house()
+    {:ok, build, station} = Build.add_item(build, room(build, "Laundry"), "power_station")
+    view = open(conn, ~p"/inside?item=#{station}", build)
+    refute has_element?(view, "#item-sheet", "the weight budget of the van")
+    refute has_element?(view, "#item-form input[name='item[weight]']")
+
+    {build, van} = with_van(build)
+    view = open(conn, ~p"/inside?item=#{station}", build)
+    assert has_element?(view, "#item-sheet", "the weight budget of the van")
+    assert has_element?(view, "#item-form input[name='item[weight]']")
+
+    # The van itself: no station runs it, and its numbers are of its model.
+    render_patch(view, ~p"/inside?item=#{van}")
+    refute has_element?(view, "#flags-form input[name=backup]")
+    assert has_element?(view, "#item-sheet", "typical of the model")
+  end
+
+  test "a station in the van: the page Power of the house tells it", %{conn: conn} do
+    {build, van} = with_van()
+    {:ok, build, station} = Build.add_item(build, room(build, "Laundry"), "power_station")
+    {:ok, build} = Build.take_to_van(build, station, van)
+    view = open(conn, ~p"/power", build)
+    assert has_element?(view, "nav a", "Power")
+    assert has_element?(view, "#power-away", "is in the van now")
+    refute has_element?(view, "#no-equipment")
+
+    # The buttons tell which station.
+    render_patch(view, ~p"/van?#{[id: van]}")
+
+    assert has_element?(
+             view,
+             "#van-stations button[aria-label='Bring it home: Power station (2 kWh)']"
+           )
+
+    # A station of the van does not show the page Power.
+    {own, other} = with_van()
+    {:ok, own, _} = Build.add_item(own, Build.zone(own, other, :bay).id, "power_station")
+    refute has_element?(open(conn, ~p"/", own), "nav a", "Power")
   end
 
   test "an item of a van does not open on the page of the rooms", %{conn: conn} do

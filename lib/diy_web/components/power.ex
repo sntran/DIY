@@ -43,6 +43,7 @@ defmodule DIYWeb.PowerPage do
 
       <%= cond do %>
         <% is_nil(@power) -> %>
+        <% not equipment?(@build) and @away != [] -> %>
         <% not equipment?(@build) -> %>
           <p id="no-equipment" class="text-sm">
             The house has no power equipment yet. Add a power station, solar panels, an interlock or an electric car in a room.

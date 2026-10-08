@@ -83,6 +83,18 @@ defmodule DIY.VanTest do
 
       # A new number of floors keeps the van.
       assert {:ok, %{house: %{floors: 2}}} = Build.update_house(build, %{floors: 2})
+
+      # An item does not move between the house and a van, but it moves
+      # between two zones, and between two rooms.
+      {:ok, build, station} = Build.add_item(build, room(build, "Laundry"), "power_station")
+      assert Build.move_item(build, station, bay.id) == {:error, :place}
+      {:ok, away} = Build.take_to_van(build, station, id)
+      assert Build.move_item(away, station, room(build, "Garage")) == {:error, :place}
+      assert {:ok, _} = Build.move_item(away, station, Build.zone(away, id, :bed).id)
+      assert {:ok, _} = Build.move_item(build, station, room(build, "Garage"))
+
+      # A van can go in the garage.
+      assert {:ok, _} = Build.move_item(build, id, room(build, "Garage"))
     end
 
     test "the removal of the van, or of its room, removes its zones and items" do
@@ -155,13 +167,25 @@ defmodule DIY.VanTest do
 
     test "the numbers of a model" do
       {build, id} = with_van()
+
+      # A new model gives its numbers: typical.
       {:ok, build} = Build.update_item(build, id, %{"model" => "transit_148"})
-      refute van(build, id).typical
-      {:ok, build} = Build.van_model(build, id)
       assert %{"gvwr" => 9070, "front_gawr" => 0} = van(build, id).params
       assert van(build, id).typical
-      {:ok, build} = Build.update_item(build, id, %{"model" => "other"})
-      {:ok, other} = Build.van_model(build, id)
+
+      # A number that is not on the label: still typical. A number of the
+      # label: the user checked the numbers.
+      {:ok, build} = Build.update_item(build, id, %{"people" => "3"})
+      assert van(build, id).typical
+      {:ok, build} = Build.update_item(build, id, %{"gvwr" => "9100"})
+      refute van(build, id).typical
+
+      # The numbers of the model again.
+      {:ok, build} = Build.van_model(build, id)
+      assert van(build, id).params["gvwr"] == 9070 and van(build, id).typical
+
+      # Another van: the app has no numbers, and the numbers stay.
+      {:ok, other} = Build.update_item(build, id, %{"model" => "other"})
       assert van(other, id).params["gvwr"] == 9070
       fridge = Enum.find(build.items, &(&1.type == "fridge")).id
       assert Build.van_model(build, fridge) == {:error, :item}
@@ -433,6 +457,14 @@ defmodule DIY.VanTest do
       assert_in_delta july.drive, 30 * 12.8, 1.0e-9
       assert july.days == :unlimited
 
+      # The charge of the engine is at the voltage of the batteries.
+      [battery] = for {_zone, %{type: "van_battery"} = b} <- Van.items(build, id), do: b.id
+      {:ok, high} = Build.update_item(build, battery, %{"volts" => "24"})
+
+      assert_in_delta Enum.at(Van.power(high, van(high, id), climate).months, 6).drive,
+                      30 * 25.6,
+                      1.0e-9
+
       # A station and a lead acid battery.
       {build, _} =
         add(build, id, :bed, "van_battery", %{
@@ -502,21 +534,33 @@ defmodule DIY.VanTest do
     assert Van.warnings(build, van(build, id)) == []
 
     {build, battery} = add(build, id, :bay, "van_battery")
+    {build, second} = add(build, id, :bed, "van_battery")
     {build, _} = add(build, id, :galley, "stove", %{"fuel" => "propane"})
     {:ok, b} = Build.item(build, battery)
-    assert Van.warnings(build, van(build, id)) == [{:fuse, b}, :co, :propane]
+    {:ok, b2} = Build.item(build, second)
+
+    assert Van.warnings(build, van(build, id)) ==
+             [{:fuse, b2, 1}, {:fuse, b, 2}, :air, :co, :propane]
 
     {:ok, build} = Build.update_item(build, battery, %{"fused" => "true"})
+    {:ok, build} = Build.update_item(build, second, %{"fused" => "true"})
     {build, _} = add(build, id, :living, "co_alarm")
-    assert Van.warnings(build, van(build, id)) == [:propane]
+    assert Van.warnings(build, van(build, id)) == [:air, :propane]
 
     # A heater that burns diesel, and an item on an outlet of 120 V with no
     # inverter and no battery.
     {build2, id2} = with_van()
     {build2, _} = add(build2, id2, :bay, "diesel_heater")
     {build2, _} = add(build2, id2, :living, "devices", %{"outlet" => "ac"})
-    assert Van.warnings(build2, van(build2, id2)) == [:co, :inverter, :no_battery]
+    assert Van.warnings(build2, van(build2, id2)) == [:air, :co, :heater, :inverter, :no_battery]
     {build2, _} = add(build2, id2, :bay, "power_station")
-    assert Van.warnings(build2, van(build2, id2)) == [:co]
+    assert Van.warnings(build2, van(build2, id2)) == [:air, :co, :heater]
+
+    # An induction stove of 1,800 W on an inverter of 300 W.
+    {build3, id3} = with_van()
+    {build3, _} = add(build3, id3, :galley, "stove", %{"fuel" => "induction", "watts" => "1800"})
+    {build3, _} = add(build3, id3, :bay, "inverter", %{"watts" => "300"})
+    {build3, _} = add(build3, id3, :bay, "van_battery", %{"fused" => "true"})
+    assert Van.warnings(build3, van(build3, id3)) == [{:output, 1800, 300}]
   end
 end

@@ -17,6 +17,9 @@ defmodule DIYWeb.Inside do
 
   @place_names %{indoor: "Inside", outdoor: "Outside", roof: "On the roof"}
 
+  # The features of a van: a house with no van does not show them.
+  @van_features [:weight, :van_power, :safety]
+
   attr :build, :map, required: true
   attr :estimate, :map, required: true, doc: "the estimate with the planned items"
   attr :bill, :map, default: nil, doc: "the bill of today (DIY.Bill)"
@@ -284,14 +287,21 @@ defmodule DIYWeb.Inside do
     kind = Catalog.kind(assigns.item.type)
     {:ok, room} = Build.room(assigns.build, assigns.item.room)
     rooms = Enum.filter(assigns.build.rooms, &(&1.place in kind.places))
-    assigns = assign(assigns, kind: kind, room: room, rooms: rooms)
+    van = Enum.any?(assigns.build.items, &(&1.type == "camper_van"))
+    features = if van, do: kind.features, else: kind.features -- @van_features
+    assigns = assign(assigns, kind: kind, room: room, rooms: rooms, van: van, features: features)
 
     ~H"""
     <.sheet id="item-sheet" title={"#{@kind.emoji} #{Catalog.name(@item)}"}>
       <p class="text-sm opacity-80">In {@room.name} ({Build.level_name(@room.level)})</p>
 
       <div :if={@item.typical} class="alert alert-warning text-sm">
-        <span>These numbers are a guess for a house like yours. Check them on the label of the item.</span>
+        <span>
+          {if @item.type == "camper_van",
+            do: "These numbers are typical of the model. Check them on the label in the door frame.",
+            else:
+              "These numbers are a guess for a house like yours. Check them on the label of the item."}
+        </span>
         <button type="button" phx-click="check_item" phx-value-id={@item.id} class="btn btn-xs">Correct</button>
       </div>
 
@@ -323,6 +333,7 @@ defmodule DIYWeb.Inside do
         <input type="hidden" name="item_id" value={@item.id} />
         <.param
           :for={param <- @kind.params}
+          :if={param.key != "weight" or @van}
           param={param}
           value={@item.params[param.key]}
           error={@error == param.key}
@@ -342,7 +353,7 @@ defmodule DIYWeb.Inside do
       </div>
 
       <p class="text-sm">
-        <span class="font-semibold">It turns on:</span> {features(@kind)}.
+        <span class="font-semibold">It turns on:</span> {features(@features)}.
       </p>
 
       <.usage :if={:usage in @kind.features} usage={@build.usage} />
@@ -391,7 +402,7 @@ defmodule DIYWeb.Inside do
 
   # The items that a station can run: the items that use power.
   defp loads_power?(%{type: type}),
-    do: type not in ~w(power_station solar_panels transfer_switch smart_meter)
+    do: type not in ~w(power_station solar_panels transfer_switch smart_meter camper_van)
 
   # A month that shows the work of an item: January for heat, July else.
   defp math_month(%{type: type}) when type in ["furnace", "heat_strips", "space_heater"], do: 1
@@ -399,8 +410,8 @@ defmodule DIYWeb.Inside do
 
   defp month_name(month), do: Enum.at(Estimate.month_names(), month - 1)
 
-  @doc "The features that a kind of item turns on, in words."
-  def features(kind), do: Enum.map_join(kind.features, ", ", &feature/1)
+  @doc "Features of a kind of item, in words."
+  def features(features), do: Enum.map_join(features, ", ", &feature/1)
 
   defp feature(:estimate), do: "the usage estimate"
   defp feature(:backup), do: "the hours of backup in an outage"

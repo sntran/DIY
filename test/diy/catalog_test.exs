@@ -44,11 +44,11 @@ defmodule DIY.CatalogTest do
     assert [{:cab, "Cab"} | _] = Catalog.zones()
     assert length(Catalog.zones()) == 7
     assert Enum.any?(Catalog.kinds_for(:bay), &(&1.type == "power_station"))
-    refute Enum.any?(Catalog.house_kinds(), &(&1.type == "van_fridge"))
-    assert Enum.any?(Catalog.house_kinds(), &(&1.type == "camper_van"))
+    refute Enum.any?(DIY.Kinds.house(), &(&1.type == "van_fridge"))
+    assert Enum.any?(DIY.Kinds.house(), &(&1.type == "camper_van"))
 
     # The numbers of each model are valid numbers of a van.
-    for {key, _name, numbers} <- Catalog.van_models() do
+    for {key, _name, numbers, _source} <- Catalog.van_models() do
       assert {:ok, params} = Catalog.params("camper_van", Map.put(numbers, "model", key))
       assert params["model"] == key
     end
