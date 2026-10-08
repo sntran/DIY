@@ -11,7 +11,7 @@ defmodule DIYWeb.HomeLiveTest do
     :ok
   end
 
-  defp restore(view, build \\ nil) do
+  defp restore(view, build) do
     payload =
       if build,
         do: %{"text" => Build.to_json(build), "stamp" => build.stamp},

@@ -4,7 +4,7 @@ defmodule DIY.BuildTest do
 
   alias DIY.{Build, Catalog, House}
 
-  defp house(overrides \\ %{}),
+  defp house(overrides),
     do: Map.merge(%{size: 1800, year: 2005, floors: 2, heat: "gas", lot: nil}, overrides)
 
   # A build with the preset of a house.
