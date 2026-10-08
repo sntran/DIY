@@ -306,8 +306,7 @@ defmodule DIYWeb.HomeLiveTest do
           "month" => name,
           "kwh" => 800 + m * 50,
           "export" => 0,
-          "days" => DIY.Usage.days_in(name),
-          "hours" => List.duplicate(1.0, 24)
+          "days" => DIY.Usage.days_in(name)
         }
       end
 
@@ -322,8 +321,30 @@ defmodule DIYWeb.HomeLiveTest do
     assert has_element?(view, "#fit")
 
     render_patch(view, ~p"/inside?item=#{meter.id}")
-    assert render(view) =~ "Smart Meter Texas: 12 months, from 2025-01 to 2025-12"
-    view |> element("#usage-months button") |> render_click()
+    assert render(view) =~ "Smart Meter Texas: 12 months, from January 2025 to December 2025"
+    view |> element("#usage-months button", "Remove the real usage") |> render_click()
+    assert build(view).usage == nil
+
+    # The Bill page can remove the usage too, and so does the removal of the
+    # meter.
+    render_hook(view, "usage", %{"source" => "smt", "months" => months})
+    render_patch(view, ~p"/estimate")
+    view |> element("button", "Remove the real usage") |> render_click()
+    assert build(view).usage == nil
+    render_hook(view, "usage", %{"source" => "smt", "months" => months})
+    render_click(view, "delete_item", %{"id" => meter.id})
+    assert build(view).usage == nil
+
+    # A month that is not "YYYY-MM", or with more days than the month has:
+    # no crash, and no usage.
+    for month <- [
+          %{hd(months) | "month" => "-2025-07", "days" => 25},
+          %{hd(months) | "month" => "2025-02", "days" => 31}
+        ] do
+      assert render_hook(view, "usage", %{"source" => "smt", "months" => [month]}) =~
+               "The app cannot read the usage of this file"
+    end
+
     assert build(view).usage == nil
 
     assert render_hook(view, "usage", %{"source" => "x"}) =~
@@ -335,20 +356,38 @@ defmodule DIYWeb.HomeLiveTest do
              "The file has no usage"
   end
 
+  test "a house with no room outside adds the meter inside", %{conn: conn} do
+    build = house()
+
+    build =
+      Enum.reduce(Enum.filter(build.rooms, &(&1.place == :outdoor)), build, fn room, b ->
+        elem(Build.delete_room(b, room.id), 1)
+      end)
+
+    view = open(conn, ~p"/", build)
+    settle(view)
+    inside = Enum.find(build.rooms, &(&1.place == :indoor))
+    assert has_element?(view, ~s(#real a[href="/inside?add=#{inside.id}"]), "Add the meter")
+  end
+
   test "a few months of usage show their mean, and a partial month has a note", %{conn: conn} do
     {:ok, usage} =
       DIY.Usage.read(%{
         "source" => "green_button",
         "months" => [
-          %{"month" => "2025-07", "kwh" => 600, "export" => 0, "days" => 10, "hours" => nil}
+          %{"month" => "2025-07", "kwh" => 600, "export" => 0, "days" => 10}
         ]
       })
 
     view = open(conn, ~p"/estimate", Build.set_usage(house(), usage))
     html = settle(view)
-    assert html =~ "The file has a part of this month"
+    assert html =~ "July 2025 (part of the month)"
+    assert html =~ "For a part of a month"
     refute has_element?(view, "#fit")
-    assert render_patch(view, ~p"/") =~ "1 month of real usage"
+    assert has_element?(view, "#no-fit", "The weather of the app ends with 2025")
+    html = render_patch(view, ~p"/")
+    assert html =~ "1 month of real usage"
+    assert html =~ "the mean of the 1 month of the file"
   end
 
   test "the math of the estimate", %{conn: conn} do

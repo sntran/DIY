@@ -346,10 +346,10 @@ defmodule DIYWeb.Inside do
     <div id="usage" class="space-y-2 rounded-box bg-base-200 p-3">
       <h3 class="font-semibold">Your real usage</h3>
       <p :if={@usage} id="usage-months" class="text-sm">
-        {DIY.Usage.source_name(@usage.source)}: {Format.count(length(@usage.months), "month")}, from {hd(
-          @usage.months
-        ).month} to {List.last(@usage.months).month}.
-        <button type="button" phx-click="clear_usage" class="link">Remove it</button>
+        {DIY.Usage.source_name(@usage.source)}: {Format.count(length(@usage.months), "month")}, from {Format.month(
+          hd(@usage.months).month
+        )} to {Format.month(List.last(@usage.months).month)}.
+        <button type="button" phx-click="clear_usage" class="link">Remove the real usage</button>
       </p>
       <label class="block text-sm">
         <span class="font-semibold">Open the file of your meter</span>
@@ -362,16 +362,16 @@ defmodule DIYWeb.Inside do
         />
       </label>
       <p class="text-xs opacity-80">
-        The file stays on this device: the browser reads it, and sends only the sum of each month.
+        The file stays on this device. The browser reads it, and sends only these numbers for each month: the kWh from the grid, the kWh to the grid, and the days with data.
       </p>
       <details class="text-xs">
         <summary class="cursor-pointer">How to get the file</summary>
         <ul class="list-disc pl-5 space-y-1 pt-1">
           <li>
-            Texas: log in at smartmetertexas.com, open "Energy Data 15 Min Interval", choose the last 12 months, and export the CSV.
+            Texas: log in at smartmetertexas.com. Open "Energy Data 15 Min Interval". Choose the last 12 months. Export the CSV.
           </li>
           <li>
-            Other states: on the site of your utility, find "Green Button" or "Download My Data", and save the file.
+            Other states: on the site of your utility, find "Green Button" or "Download My Data". Save the file. A .zip file has the file in it: open the .zip file first.
           </li>
         </ul>
       </details>

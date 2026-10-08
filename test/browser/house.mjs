@@ -261,7 +261,7 @@ for (const colorScheme of ["light", "dark"]) {
     await page.waitForSelector("#usage-file")
     await check(page, `${name} meter`)
     await page.setInputFiles("#usage-file", { name: "IntervalMeterUsage.csv", mimeType: "text/csv", buffer: meterFile() })
-    await page.waitForSelector("#usage-months:has-text('Smart Meter Texas: 12 months, from 2024-07 to 2025-06')")
+    await page.waitForSelector("#usage-months:has-text('Smart Meter Texas: 12 months, from July 2024 to June 2025')")
     await page.click("#item-sheet .btn-ghost[aria-label=Close]")
     await page.click("nav >> text=Bill")
     await page.waitForSelector("#real-months")

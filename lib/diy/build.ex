@@ -261,11 +261,11 @@ defmodule DIY.Build do
     with {:ok, _room} <- room(build, id) do
       {:ok,
        change(build, fn build ->
-         %{
+         no_meter_no_usage(%{
            build
            | rooms: Enum.reject(build.rooms, &(&1.id == id)),
              items: Enum.reject(build.items, &(&1.room == id))
-         }
+         })
        end)}
     end
   end
@@ -336,8 +336,18 @@ defmodule DIY.Build do
   @spec delete_item(t(), String.t()) :: {:ok, t()} | {:error, :item}
   def delete_item(build, id) do
     with {:ok, _item} <- item(build, id) do
-      {:ok, change(build, &%{&1 | items: Enum.reject(&1.items, fn i -> i.id == id end)})}
+      {:ok,
+       change(
+         build,
+         &no_meter_no_usage(%{&1 | items: Enum.reject(&1.items, fn i -> i.id == id end)})
+       )}
     end
+  end
+
+  # With no smart meter, the build keeps no real usage: a person removes the
+  # meter to remove the data of the meter.
+  defp no_meter_no_usage(build) do
+    if Enum.any?(build.items, &(&1.type == "smart_meter")), do: build, else: %{build | usage: nil}
   end
 
   @doc "Puts the real usage of a meter file, or removes it with `nil`."

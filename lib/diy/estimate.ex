@@ -397,7 +397,8 @@ defmodule DIY.Estimate do
 
   def kwh(%{type: "always_on", params: p}, ctx), do: other(p["watts"] * 24 * ctx.days / 1_000)
 
-  # A meter counts the power. It uses none that counts.
+  # A meter measures the power of the house. Its own power is too small to
+  # show.
   def kwh(%{type: "smart_meter"}, _ctx), do: other(0)
 
   def kwh(%{params: p} = item, ctx),
@@ -598,7 +599,7 @@ defmodule DIY.Estimate do
   end
 
   defp steps(%{type: "smart_meter"}, _m, _data, _estimate),
-    do: ["The meter counts the power of the house. It uses none that counts."]
+    do: ["The meter measures the power of the house. Its own power is too small to show."]
 
   defp steps(%{type: "always_on", params: p}, m, _data, _estimate),
     do: ["#{num(p["watts"])} W × 24 hours × #{m.days} days ÷ 1,000."]

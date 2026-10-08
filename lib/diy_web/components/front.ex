@@ -222,14 +222,24 @@ defmodule DIYWeb.Front do
   # The real usage from the meter, or the next step to get it.
   defp real(assigns) do
     meter = Enum.find(assigns.build.items, &(&1.type == "smart_meter"))
-    outside = Enum.find(assigns.build.rooms, &(&1.place == :outdoor))
-    assigns = assign(assigns, meter: meter, outside: outside)
+    # A room for the meter: outside, else inside.
+    room =
+      Enum.find(assigns.build.rooms, &(&1.place == :outdoor)) ||
+        Enum.find(assigns.build.rooms, &(&1.place == :indoor))
+
+    year = assigns.build.usage && DIY.Usage.year(assigns.build.usage)
+    assigns = assign(assigns, meter: meter, room: room, year: year)
 
     ~H"""
     <div id="real" class="card card-border bg-base-100 p-4 space-y-1">
       <%= cond do %>
         <% @build.usage -> %>
-          <p class="text-sm opacity-70">From your meter, in an average month</p>
+          <p class="text-sm opacity-70">
+            {if @year,
+              do: "From your meter, in an average month",
+              else:
+                "From your meter: the mean of the #{Format.count(length(@build.usage.months), "month")} of the file"}
+          </p>
           <p id="real-average" class="text-2xl font-bold">
             {Format.money(Format.cost(DIYWeb.Front.average(@build.usage), @price.cents))}
             <span class="text-base font-normal">· {Format.kwh(DIYWeb.Front.average(@build.usage))}</span>
@@ -246,7 +256,7 @@ defmodule DIYWeb.Front do
         <% true -> %>
           <p class="text-sm">
             A next small step: add your smart meter (it is outside, on a wall), and open its file. The app then shows your real usage.
-            <.link :if={@outside} patch={~p"/inside?#{[add: @outside.id]}"} class="link">Add the meter</.link>
+            <.link :if={@room} patch={~p"/inside?#{[add: @room.id]}"} class="link">Add the meter</.link>
           </p>
       <% end %>
     </div>
@@ -255,7 +265,8 @@ defmodule DIYWeb.Front do
 
   @doc """
   The kWh of an average month from the meter: one year divided by 12, or
-  the mean of the full months.
+  the mean of the full months of a file with fewer months (the page says
+  so).
   """
   def average(usage) do
     case DIY.Usage.year(usage) do

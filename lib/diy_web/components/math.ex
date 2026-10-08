@@ -142,7 +142,7 @@ defmodule DIYWeb.Math do
         </thead>
         <tbody>
           <tr :for={row <- @compare.rows}>
-            <td>{row.from}{if row.partial, do: "*"}</td>
+            <td>{Format.month(row.from)}{if row.partial, do: " (part of the month)"}</td>
             <td class="text-right">{Format.int(row.real)}</td>
             <td class="text-right">{Format.int(row.estimate)}</td>
             <td class="text-right">{Format.int(row.low)} to {Format.int(row.high)}</td>
@@ -152,7 +152,7 @@ defmodule DIYWeb.Math do
       </table>
     </div>
     <p :if={Enum.any?(@compare.rows, & &1.partial)} class="text-xs opacity-80">
-      * The file has a part of this month. The app gives the other days the mean of the days in the file.
+      For a part of a month, the app gives the other days the mean of the days in the file.
     </p>
     <div :if={@fit} id="fit" class="text-sm space-y-1">
       <p class="font-semibold">
@@ -167,6 +167,12 @@ defmodule DIYWeb.Math do
         The fit explains {round(@fit.r2 * 100)}% of the change from month to month.
       </p>
     </div>
+    <p :if={is_nil(@fit) and @weather.climate} id="no-fit" class="text-sm opacity-80">
+      The numbers of your house need 6 months of the file with 20 days of data or more, and with the weather of NASA POWER. The weather of the app ends with {@weather.climate.last}: a file with more months of {@weather.climate.last} or before gives them.
+    </p>
+    <button type="button" phx-click="clear_usage" class="btn btn-sm btn-ghost">
+      Remove the real usage
+    </button>
     """
   end
 

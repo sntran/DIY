@@ -173,7 +173,7 @@ defmodule DIY.BuildTest do
       DIY.Usage.read(%{
         "source" => "smt",
         "months" => [
-          %{"month" => "2025-07", "kwh" => 900, "export" => 0, "days" => 31, "hours" => nil}
+          %{"month" => "2025-07", "kwh" => 900, "export" => 0, "days" => 31}
         ]
       })
 
@@ -312,7 +312,22 @@ defmodule DIY.BuildTest do
     end
   end
 
-  @bad [nil, [], %{}, [1], %{"a" => 1}, 10 ** 400, -(10 ** 400), 1.0e300, "2026-13-40", :delete]
+  @bad [
+    nil,
+    [],
+    %{},
+    [1],
+    %{"a" => 1},
+    10 ** 400,
+    -(10 ** 400),
+    1.0e300,
+    "2026-13-40",
+    "-2025-07",
+    "+2025-01",
+    "0000-01",
+    "2025-7",
+    :delete
+  ]
 
   test "from_json never raises for a build with a bad value at any place" do
     build = preset()
@@ -333,19 +348,24 @@ defmodule DIY.BuildTest do
         "usage" => %{
           "source" => "smt",
           "months" => [
-            %{"month" => "2025-07", "kwh" => 1500, "export" => 0, "days" => 31, "hours" => nil},
-            %{
-              "month" => "2025-08",
-              "kwh" => 1600.5,
-              "export" => 2.5,
-              "days" => 20,
-              "hours" => List.duplicate(2.5, 24)
-            }
+            %{"month" => "2025-07", "kwh" => 1500, "export" => 0, "days" => 31},
+            %{"month" => "2025-08", "kwh" => 1600.5, "export" => 2.5, "days" => 20}
           ]
         }
     }
 
     assert {:ok, %{usage: %{months: [_, _]}}} = map |> Jason.encode!() |> Build.from_json()
+
+    # A month with more days than the month has.
+    february =
+      put_at(map, ["usage", "months", 1], %{
+        "month" => "2025-02",
+        "kwh" => 1,
+        "export" => 0,
+        "days" => 29
+      })
+
+    assert Build.from_json(Jason.encode!(february)) == {:error, :usage}
 
     for path <- paths(map, []), value <- @bad do
       text = map |> put_at(path, value) |> Jason.encode!()

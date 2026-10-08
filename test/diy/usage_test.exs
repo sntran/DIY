@@ -9,38 +9,34 @@ defmodule DIY.UsageTest do
     climate
   end
 
-  defp month(name, kwh, days \\ nil, hours \\ nil) do
-    %{
-      "month" => name,
-      "kwh" => kwh,
-      "export" => 0,
-      "days" => days || Usage.days_in(name),
-      "hours" => hours
-    }
+  defp month(name, kwh, days \\ nil) do
+    %{"month" => name, "kwh" => kwh, "export" => 0, "days" => days || Usage.days_in(name)}
   end
 
   defp usage(months), do: elem(Usage.read(%{"source" => "smt", "months" => months}), 1)
 
   test "read accepts the sums of the months, in order" do
-    hours = List.duplicate(0.5, 24)
-
     assert {:ok, %{source: "green_button", months: [first, second]}} =
              Usage.read(%{
                "source" => "green_button",
-               "months" => [month("2025-08", 900), month("2025-07", 1000, 30, hours)]
+               "months" => [
+                 month("2025-08", 900),
+                 Map.put(month("2025-07", 1000, 30), "hours", [1])
+               ]
              })
 
-    assert first == %{
-             month: "2025-07",
-             kwh: 1000.0,
-             export: 0.0,
-             days: 30,
-             hours: List.duplicate(0.5, 24)
-           }
-
-    assert second.hours == nil
+    # An older build had the hours of each month: the usage forgets them.
+    assert first == %{month: "2025-07", kwh: 1000.0, export: 0.0, days: 30}
+    assert second.month == "2025-08"
     assert Usage.source_name("smt") == "Smart Meter Texas"
     assert Usage.source_name("green_button") == "Green Button"
+    assert Usage.source_name("csv") == "A CSV file"
+
+    assert {:ok, %{source: "csv"}} =
+             Usage.read(%{
+               "source" => "csv",
+               "months" => [first |> Map.new(fn {k, v} -> {Atom.to_string(k), v} end)]
+             })
   end
 
   test "read refuses a usage that it cannot read in full" do
@@ -56,9 +52,14 @@ defmodule DIY.UsageTest do
           %{"source" => "smt", "months" => [%{good | "kwh" => -1}]},
           %{"source" => "smt", "months" => [%{good | "export" => "0"}]},
           %{"source" => "smt", "months" => [%{good | "days" => 0}]},
-          %{"source" => "smt", "months" => [%{good | "hours" => [1]}]},
-          %{"source" => "smt", "months" => [%{good | "hours" => List.duplicate(-1, 24)}]},
-          %{"source" => "smt", "months" => [%{good | "hours" => "flat"}]},
+          # A name that is not "YYYY-MM" of 2000 to 2099, or more days than
+          # the month has.
+          %{"source" => "smt", "months" => [%{good | "month" => "-2025-07"}]},
+          %{"source" => "smt", "months" => [%{good | "month" => "+2025-01"}]},
+          %{"source" => "smt", "months" => [%{good | "month" => "0000-01"}]},
+          %{"source" => "smt", "months" => [%{good | "month" => "2025-7"}]},
+          %{"source" => "smt", "months" => [%{month("2025-02", 100) | "days" => 29}]},
+          %{"source" => "smt", "months" => [%{good | "days" => 32}]},
           %{"source" => "smt", "months" => ["July"]},
           "usage"
         ] do
@@ -72,16 +73,12 @@ defmodule DIY.UsageTest do
     check all(
             first <- member_of(@names),
             flags <- list_of(boolean(), length: length(@names)),
-            kwh <- float(min: 0.0, max: 5000.0),
-            hourly <- boolean()
+            kwh <- float(min: 0.0, max: 5000.0)
           ) do
       # The first month, and the other months with a true flag: 24 at most.
       others = for {name, true} <- Enum.zip(@names, flags), name != first, do: name
       months = Enum.take([first | others], 24)
-
-      raw =
-        for name <- months,
-            do: month(name, kwh, 10, if(hourly, do: List.duplicate(kwh / 300, 24)))
+      raw = for name <- months, do: month(name, kwh, 10)
 
       {:ok, usage} = Usage.read(%{"source" => "smt", "months" => raw})
       assert Usage.read(Usage.to_map(usage)) == {:ok, usage}
@@ -93,9 +90,47 @@ defmodule DIY.UsageTest do
     assert Usage.full(%{month: "2025-07", kwh: 100.0, days: 10}) == 310.0
   end
 
-  test "the last real month of each month of the year, and one year" do
+  # Any month, with any days and kWh: the reader accepts it or not, and an
+  # accepted usage never makes the pages raise.
+  property "an accepted usage never makes the math raise" do
+    name =
+      one_of([
+        member_of(@names),
+        string(:ascii, max_length: 8),
+        map({integer(-10..2200), integer(-2..14)}, fn {y, m} -> "#{y}-#{m}" end)
+      ])
+
+    check all(
+            raw <-
+              list_of(
+                fixed_map(%{
+                  "month" => name,
+                  "kwh" => float(min: 0.0, max: 3000.0),
+                  "export" => constant(0),
+                  "days" => integer(0..32)
+                }),
+                min_length: 1,
+                max_length: 24
+              )
+          ) do
+      with {:ok, usage} <- Usage.read(%{"source" => "smt", "months" => raw}) do
+        estimate = Estimate.run(build(1800, "gas"), climate())
+        assert %{rows: _} = Usage.compare(usage, estimate)
+        assert Usage.year(usage) == nil or is_float(Usage.year(usage))
+        assert Usage.fit(usage, climate()) == nil or is_map(Usage.fit(usage, climate()))
+        assert Enum.all?(usage.months, &(Usage.full(&1) >= 0))
+      end
+    end
+  end
+
+  test "the real month of each month of the year, and one year" do
     usage = usage([month("2024-07", 900), month("2025-07", 1000), month("2025-08", 1100)])
     assert %{7 => %{month: "2025-07"}, 8 => %{month: "2025-08"}} = Usage.by_month(usage)
+
+    # A file of 12 months from the 8th: the month with the most days, not
+    # the newest one.
+    usage = usage([month("2024-10", 800, 24), month("2025-10", 300, 7)])
+    assert %{10 => %{month: "2024-10"}} = Usage.by_month(usage)
     assert Usage.year(usage) == nil
 
     year = usage(for m <- 1..12, do: month("2025-#{String.pad_leading("#{m}", 2, "0")}", 1000))
@@ -182,15 +217,26 @@ defmodule DIY.UsageTest do
     assert Usage.fit(future, climate) == nil
   end
 
-  test "the fit of months with the same usage has no heat and no cooling" do
+  test "the fit of months with the same usage each day has no heat and no cooling" do
     flat =
       usage(
         for {y, m} <- year_months(),
-            do: month("#{y}-#{String.pad_leading("#{m}", 2, "0")}", 31 * 20)
+            name = "#{y}-#{String.pad_leading("#{m}", 2, "0")}",
+            do: month(name, 20 * Usage.days_in(name))
       )
 
     fit = Usage.fit(flat, climate())
-    assert fit.cool < 0.5 and fit.heat < 0.5
+    assert_in_delta fit.base, 20.0, 1.0e-6
+    assert fit.cool < 1.0e-6 and fit.heat < 1.0e-6
+
+    # A number of 0 has no sign on the page.
+    zero =
+      usage(
+        for {y, m} <- year_months(), do: month("#{y}-#{String.pad_leading("#{m}", 2, "0")}", 0)
+      )
+
+    assert %{base: base, cool: cool, heat: heat} = Usage.fit(zero, climate())
+    assert Enum.all?([base, cool, heat], &(:erlang.float_to_binary(&1, decimals: 2) == "0.00"))
   end
 
   test "with no degree days, the fit has only the base" do
@@ -212,11 +258,21 @@ defmodule DIY.UsageTest do
   end
 
   # The check of phase 2: the estimate falls in its own range for test
-  # houses with meter data. Each test house is a preset with other numbers
-  # (the size of its heat loss, its AC, its other items), and its months
-  # come from the real weather of July 2024 to June 2025, with noise. The
-  # estimate of the preset does not know these numbers.
-  test "the estimate falls in its range for test houses with meter data" do
+  # houses with meter data. It is a check of the app with itself, on
+  # synthetic meter data: each test house comes from the same model as the
+  # estimate (DIY.Estimate), with other numbers, so the check cannot find a
+  # fault of the model itself (docs/design.md).
+  #
+  # - The estimate of each preset uses the weather of 2016 to 2023 only.
+  #   The months of each test house come from the weather of July 2024 to
+  #   June 2025 (degree days and temperature of each month), out of that
+  #   history, with 5% noise.
+  # - Each test house is its preset with other numbers that the estimate
+  #   does not know: a heat loss up to 10% larger or smaller, an AC of one
+  #   SEER2 more or less, a furnace blower and other items up to 20% more
+  #   or less, and one person more or less at the water heater.
+  test "the estimate falls in its range for test houses with synthetic meter data" do
+    {:ok, history} = Weather.parse(Stubs.power(), 33.25, -96.75, 2016, 2023)
     climate = climate()
     :rand.seed(:exsss, {1, 2, 3})
 
@@ -224,7 +280,7 @@ defmodule DIY.UsageTest do
       for size <- [1200, 1800, 2500, 3500], heat <- ["gas", "heat_pump", "electric"], _ <- 1..2 do
         preset = build(size, heat)
         truth = vary(preset)
-        estimate = Estimate.run(preset, climate)
+        estimate = Estimate.run(preset, history)
 
         months =
           for {year, m} <- year_months() do
@@ -232,7 +288,8 @@ defmodule DIY.UsageTest do
 
             weather = %{
               climate
-              | months: Map.put(climate.months, m, %{climate.months[m] | cdd: w.cdd, hdd: w.hdd})
+              | months:
+                  Map.put(climate.months, m, %{climate.months[m] | cdd: w.cdd, hdd: w.hdd, t: w.t})
             }
 
             real =
@@ -245,12 +302,10 @@ defmodule DIY.UsageTest do
         Usage.compare(usage(months), estimate).inside
       end
 
-    # Each house has 9 of its 12 months in the range at least, and the
-    # houses together have 90% of their months in it (in October 2026: 282
-    # of 288 months, 98%). The months out of the range: the hot October of
-    # 2024, a hot August and a cold January, in houses that are larger than
-    # their preset and have more items.
-    assert Enum.all?(results, &(&1 >= 9)), inspect(results)
+    # Each house has 10 of its 12 months in the range at least, and the
+    # houses together have 90% of their months in it (in October 2026: 269
+    # of 288 months, 93%).
+    assert Enum.all?(results, &(&1 >= 10)), inspect(results)
     assert Enum.sum(results) / (12 * length(results)) >= 0.9, inspect(results)
   end
 
@@ -262,8 +317,9 @@ defmodule DIY.UsageTest do
     Build.put_house(build, house, rooms, items)
   end
 
-  # A real house like the preset: a heat loss up to 10% larger or smaller,
-  # an AC of one SEER2 more or less, and other items up to 20% more or less.
+  # A test house like the preset: a heat loss up to 10% larger or smaller,
+  # an AC of one SEER2 more or less, a furnace blower and other items up to
+  # 20% more or less, and one person more or less at the water heater.
   defp vary(build) do
     size = round(build.house.size * (0.9 + :rand.uniform() * 0.2))
 
@@ -276,8 +332,16 @@ defmodule DIY.UsageTest do
               | params: %{item.params | "seer2" => item.params["seer2"] + :rand.uniform() * 2 - 1}
             }
 
-          type when type in ["furnace", "heat_strips", "water_heater"] ->
+          "heat_strips" ->
             item
+
+          "water_heater" ->
+            people = max(item.params["people"] + Enum.random(-1..1), 1)
+            %{item | params: %{item.params | "people" => people}}
+
+          "furnace" ->
+            factor = 0.8 + :rand.uniform() * 0.4
+            %{item | params: %{item.params | "blower" => round(item.params["blower"] * factor)}}
 
           _ ->
             factor = 0.8 + :rand.uniform() * 0.4

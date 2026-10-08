@@ -6,10 +6,10 @@ defmodule DIY.Usage do
 
   A usage is a map:
 
-  - `source`: `"smt"` (Smart Meter Texas) or `"green_button"`.
+  - `source`: `"smt"` (Smart Meter Texas), `"green_button"`, or `"csv"`
+    (a different CSV).
   - `months`: for each month (`"YYYY-MM"`), the kWh from the grid, the kWh
-    to the grid (`export`), the days with data, and the mean kWh of each
-    hour of the day (24 numbers, or `nil` for daily data).
+    to the grid (`export`), and the days with data.
 
   `compare/2` puts the real months next to the estimate, and `fit/2` finds
   the numbers of the house from the meter and the weather: the kWh of one
@@ -17,21 +17,16 @@ defmodule DIY.Usage do
   and of heating.
   """
 
-  @sources ~w(smt green_button)
+  @sources ~w(smt green_button csv)
   @max_months 24
 
-  @type month :: %{
-          month: String.t(),
-          kwh: float(),
-          export: float(),
-          days: pos_integer(),
-          hours: [float()] | nil
-        }
+  @type month :: %{month: String.t(), kwh: float(), export: float(), days: pos_integer()}
   @type t :: %{source: String.t(), months: [month()]}
 
   @doc "The name of a source."
   def source_name("smt"), do: "Smart Meter Texas"
   def source_name("green_button"), do: "Green Button"
+  def source_name("csv"), do: "A CSV file"
 
   @doc """
   Reads a usage from the browser or from a stored build. It accepts only
@@ -61,29 +56,17 @@ defmodule DIY.Usage do
     end)
   end
 
-  defp month(%{"month" => name, "kwh" => kwh, "export" => export, "days" => days} = month)
+  # A month: "YYYY-MM" (2000 to 2099), with at most the days of the month.
+  defp month(%{"month" => name, "kwh" => kwh, "export" => export, "days" => days})
        when is_binary(name) and is_number(kwh) and kwh >= 0 and kwh < 1_000_000 and
               is_number(export) and export >= 0 and export < 1_000_000 and
               is_integer(days) and days in 1..31 do
-    with {:ok, _date} <- Date.from_iso8601(name <> "-01"),
-         {:ok, hours} <- hours(month["hours"]) do
-      {:ok, %{month: name, kwh: kwh / 1, export: export / 1, days: days, hours: hours}}
-    else
-      _ -> :error
-    end
-  end
-
-  defp month(_month), do: :error
-
-  defp hours(nil), do: {:ok, nil}
-
-  defp hours(hours) when is_list(hours) and length(hours) == 24 do
-    if Enum.all?(hours, &(is_number(&1) and &1 >= 0 and &1 < 10_000)),
-      do: {:ok, Enum.map(hours, &(&1 / 1))},
+    if name =~ ~r/\A20\d\d-(0[1-9]|1[0-2])\z/ and days <= days_in(name),
+      do: {:ok, %{month: name, kwh: kwh / 1, export: export / 1, days: days}},
       else: :error
   end
 
-  defp hours(_hours), do: :error
+  defp month(_month), do: :error
 
   @doc "The usage as a map for JSON."
   def to_map(%{source: source, months: months}) do
@@ -95,8 +78,7 @@ defmodule DIY.Usage do
             "month" => m.month,
             "kwh" => m.kwh,
             "export" => m.export,
-            "days" => m.days,
-            "hours" => m.hours
+            "days" => m.days
           }
         end)
     }
@@ -115,13 +97,15 @@ defmodule DIY.Usage do
   def full(%{month: name, kwh: kwh, days: days}), do: kwh * days_in(name) / days
 
   @doc """
-  The last real month of each month of the year (January is 1), for the
-  months of the usage.
+  The real month of each month of the year (January is 1), for the months
+  of the usage: the month with the most days of data, and the newest of
+  two with the same days. A file of 12 months from the 8th of a month has a
+  part of that month at each end.
   """
   def by_month(%{months: months}) do
     months
     |> Enum.group_by(&(&1.month |> String.slice(5, 2) |> String.to_integer()))
-    |> Map.new(fn {month, list} -> {month, Enum.max_by(list, & &1.month)} end)
+    |> Map.new(fn {month, list} -> {month, Enum.max_by(list, &{&1.days, &1.month})} end)
   end
 
   @doc """
@@ -201,7 +185,10 @@ defmodule DIY.Usage do
     # The base alone always has a solution: its column (the days) is never
     # zero, and the kWh are never under zero.
     |> Enum.min_by(&elem(&1, 0))
-    |> then(fn {_error, [base, cool, heat]} ->
+    # abs/1: a number of 0 can be -0.0, and the page shows its sign.
+    |> then(fn {_error, coef} ->
+      [base, cool, heat] = Enum.map(coef, &abs/1)
+
       %{
         base: base,
         cool: cool,
