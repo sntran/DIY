@@ -424,10 +424,15 @@ defmodule DIYWeb.Inside do
   attr :title, :string, required: true
   slot :inner_block, required: true
 
-  # A sheet over the page. The close link goes back to the rooms.
+  # A sheet over the page. The close link goes back to the rooms. The hook
+  # Sheet closes it with the Escape key, and keeps the focus in it.
   defp sheet(assigns) do
     ~H"""
-    <div id={@id} class="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40">
+    <div
+      id={@id}
+      phx-hook="Sheet"
+      class="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40"
+    >
       <.link patch={~p"/inside"} class="absolute inset-0" aria-label="Close" tabindex="-1"></.link>
       <div
         role="dialog"
@@ -438,7 +443,9 @@ defmodule DIYWeb.Inside do
       >
         <div class="flex items-center justify-between">
           <h2 id={"#{@id}-title"} class="text-lg font-bold">{@title}</h2>
-          <.link patch={~p"/inside"} class="btn btn-sm btn-ghost" aria-label="Close">✕</.link>
+          <.link patch={~p"/inside"} class="btn btn-sm btn-ghost" aria-label="Close" data-close>
+            ✕
+          </.link>
         </div>
         {render_slot(@inner_block)}
       </div>
