@@ -130,7 +130,7 @@
   --s-lamp: #fff3c4; --s-vglass: #8fb7d6;
   --s-van-l: #f3f4f6; --s-van-r: #d4d7dc; --s-van-t: #ffffff; --s-van-trim: #6b7280; --s-van-door: #c4c8ce;
   --s-shadow: rgb(30 41 59 / 0.28);
-  --s-chip: rgb(15 23 42 / 0.82); --s-chip-text: #ffffff;
+  --s-chip: rgb(15 23 42 / 0.82); --s-chip-text: #ffffff; --s-chip-line: transparent;
   --s-grid: #60a5fa; --s-sunflow: #f59e0b; --s-battery: #22c55e;
 }
 @media (prefers-color-scheme: dark) {
@@ -145,6 +145,9 @@
     --s-water: #2f6f93; --s-gdoor: #a8a296; --s-gline: #8a847a;
     --s-van-l: #b8bcc3; --s-van-r: #969aa2; --s-van-t: #c9ccd2; --s-vglass: #2b3a52;
     --s-shadow: rgb(0 0 0 / 0.4);
+    --s-ac-l: #9ca3ad; --s-ac-r: #7d8590; --s-ac-t: #b3b9c2;
+    --s-meter-l: #8a909a; --s-meter-r: #6f757f; --s-meter-t: #a0a6af;
+    --s-chip: rgb(51 65 85 / 0.92); --s-chip-line: rgb(255 255 255 / 0.35);
   }
 }
 [data-theme=dark] .scene {
@@ -158,6 +161,9 @@
   --s-water: #2f6f93; --s-gdoor: #a8a296; --s-gline: #8a847a;
   --s-van-l: #b8bcc3; --s-van-r: #969aa2; --s-van-t: #c9ccd2; --s-vglass: #2b3a52;
   --s-shadow: rgb(0 0 0 / 0.4);
+  --s-ac-l: #9ca3ad; --s-ac-r: #7d8590; --s-ac-t: #b3b9c2;
+  --s-meter-l: #8a909a; --s-meter-r: #6f757f; --s-meter-t: #a0a6af;
+  --s-chip: rgb(51 65 85 / 0.92); --s-chip-line: rgb(255 255 255 / 0.35);
 }
 .s-sky1 { stop-color: var(--s-sky1) } .s-sky2 { stop-color: var(--s-sky2) }
 .s-grass1 { stop-color: var(--s-grass1) } .s-grass2 { stop-color: var(--s-grass2) }
@@ -194,7 +200,7 @@
 .s-van-l { fill: var(--s-van-l) } .s-van-r { fill: var(--s-van-r) } .s-van-t { fill: var(--s-van-t) }
 .s-van-trim { fill: var(--s-van-trim) } .s-van-door { fill: var(--s-van-door) }
 .s-shadow { fill: var(--s-shadow) }
-.s-chip { fill: var(--s-chip) } .s-chip-bad { fill: #b91c1c } .s-chip-good { fill: #15803d }
+.s-chip { fill: var(--s-chip); stroke: var(--s-chip-line); stroke-width: 1 } .s-chip-bad { fill: #b91c1c } .s-chip-good { fill: #15803d }
 .s-chip-sun { fill: #b45309 }
 .s-chip-text { fill: var(--s-chip-text); font-size: 9px; font-weight: 600 }
 .s-flow { fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-dasharray: 2 6; animation: s-flow 0.9s linear infinite }

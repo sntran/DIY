@@ -15,6 +15,7 @@ defmodule DIYWeb.Front do
   attr :price, :map, required: true
   attr :weather, :map, required: true
   attr :market, :map, required: true
+  attr :scene, :map, required: true, doc: "the parts of the picture (`DIYWeb.Scene.parts/1`)"
 
   def front(assigns) do
     {:ok, place} = Zip.lookup(assigns.build.zip)
@@ -34,7 +35,7 @@ defmodule DIYWeb.Front do
         </p>
       </div>
 
-      <.house build={@build} />
+      <.house scene={@scene} />
 
       <.bill estimate={@estimate} bill={@bill} price={@price} weather={@weather} build={@build} />
 
@@ -51,7 +52,7 @@ defmodule DIYWeb.Front do
     """
   end
 
-  attr :build, :map, required: true
+  attr :scene, :map, required: true
 
   # The picture of the house, with its equipment (`DIYWeb.Scene`). The door
   # goes in.
@@ -61,9 +62,9 @@ defmodule DIYWeb.Front do
       patch={~p"/inside"}
       id="house-picture"
       class="block overflow-hidden rounded-box"
-      aria-label={"Go in. The picture: #{Scene.label(@build)}, and you in front of the door."}
+      aria-label={"Go in. The picture: #{Scene.label(@scene)}, and you in front of the door."}
     >
-      <Scene.house id="front" build={@build} />
+      <Scene.house id="front" parts={@scene} />
     </.link>
     """
   end

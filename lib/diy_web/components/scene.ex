@@ -1,18 +1,25 @@
 defmodule DIYWeb.Scene do
   @moduledoc """
-  The isometric pictures of the app, in SVG: the house on its lot with the
-  equipment of the build and the flows of the power (`house/1`), a camper
-  van with its two budgets (`van/1`), and the two houses of the first page
-  (`sample/1`).
+  The isometric pictures of the app, in SVG. `house/1` draws the house on
+  its lot, with the equipment of the build and the flows of the power.
+  `van/1` draws a camper van with its two budgets. `sample/1` draws the
+  two houses of the first page.
 
-  A picture shows only what the build has: the floors of the house, a
-  garage when the build has a room outside that is not a yard, the panels
-  on the roof or in the yard, the stations, the AC, the pool, the car and
-  the van. The math of the points is in `DIYWeb.Iso`. The colors are CSS
-  variables (`assets/css/app.css`): one set for the light mode (a day) and
-  one for the dark mode (a night). The pictures are for the eyes only: the
-  text of the page gives the same facts, and a link with a picture has a
-  label (`label/1`).
+  A picture shows only what the house of today has (`DIY.Build.today/1`,
+  with no planned item). It shows the floors and a garage (a room outside
+  that is not a yard). It shows the panels on the roof or in the yard, the
+  stations, the AC, the pool, the car and the van. A flow shows only where
+  the power goes in the model (`DIY.Power`).
+
+  The page gives the parts of a picture (`parts/1`, `van_parts/2`), and the
+  LiveView keeps them as an assign. So the page sends a picture again only
+  when its parts change.
+
+  The math of the points is in `DIYWeb.Iso`. The colors are CSS variables
+  (`assets/css/app.css`): one set for the light mode (a day) and one for
+  the dark mode (a night). The pictures are for the eyes only: the text of
+  the page gives the same facts, and a link with a picture has a label
+  (`label/1`).
 
   A shape is one of:
 
@@ -24,7 +31,7 @@ defmodule DIYWeb.Scene do
   """
   use DIYWeb, :html
 
-  alias DIY.Build
+  alias DIY.{Build, Power, Van}
   alias DIYWeb.{Format, Iso}
 
   # The house: its width (x), its depth (y), the height of a floor, the
@@ -35,8 +42,9 @@ defmodule DIYWeb.Scene do
   @rise 2.4
   @eave 0.5
 
-  # The lot: from x0 to x1, and from y0 to y1.
+  # The lot: from x0 to x1, and from y0 to y1, and its depth.
   @lot {-3.0, 19.0, -2.5, 13.5}
+  @slab 1.2
 
   # The garage, on the right of the house: x, y, width, depth, height.
   @garage {@w, 1.8, 5.2, @d - 1.8, 2.8}
@@ -45,6 +53,9 @@ defmodule DIYWeb.Scene do
   # and the SVG point of the sun (or of the moon).
   @origin {152.0, 92.0}
   @sun {44, 30}
+
+  # The size of the labels in the picture of the house.
+  @chip 1.3
 
   # The watts of a panel, for the count of the panels in a picture: one of
   # a house, and one of a van.
@@ -60,10 +71,10 @@ defmodule DIYWeb.Scene do
   @sample %{
     floors: 2,
     garage: true,
-    roof_w: 0,
-    yard_w: 0,
-    grid_tie: false,
+    roof: %{station: 0, grid: 0},
+    yard: %{station: 0, grid: 0},
     stations: [],
+    panel: false,
     switch: false,
     ac: true,
     pool: false,
@@ -71,27 +82,128 @@ defmodule DIYWeb.Scene do
     van: nil
   }
 
-  attr :id, :string, required: true, doc: "the prefix of the ids of the gradients"
-  attr :build, :map, required: true, doc: "the build: the house and its vans"
-  attr :flows, :boolean, default: true, doc: "show the flows of the power and their labels"
+  @doc """
+  The parts of the picture of a house, from a build: the house of today
+  (with no item of a van, and no planned item), and its first van.
+  """
+  def parts(build) do
+    house = build |> Build.house_view() |> Build.today()
+    places = Map.new(house.rooms, &{&1.id, &1.place})
+    of = fn type -> Enum.filter(house.items, &(&1.type == type)) end
+    stations = of.("power_station")
 
-  @doc "The house on its lot, with its equipment."
+    # The watts of the panels in a place, to a station and to the grid.
+    panels = fn place ->
+      on = Enum.filter(of.("solar_panels"), &(places[&1.room] == place))
+      to = fn to -> watts(Enum.filter(on, &(&1.params["to"] == to))) end
+      %{station: to.("station"), grid: to.("grid")}
+    end
+
+    %{
+      floors: house.house.floors,
+      garage: Enum.any?(house.rooms, &(&1.level == "outside" and &1.place == :indoor)),
+      roof: panels.(:roof),
+      yard: panels.(:outdoor),
+      stations:
+        Enum.map(
+          stations,
+          &{&1.params["kwh"] + &1.params["extra_kwh"], &1.params["extra_kwh"] > 0}
+        ),
+      panel: Power.panel?(Power.system(house.items)),
+      switch: of.("transfer_switch") != [],
+      ac: Enum.any?(house.items, &(&1.type in ["ac", "mini_split"])),
+      pool: of.("pool_pump") != [],
+      car: of.("ev") != [],
+      van:
+        case of.("camper_van") do
+          [van | _] -> van_look(build, van)
+          [] -> nil
+        end
+    }
+  end
+
+  # What a van shows from the outside: the watts of its panels, and a fan.
+  defp van_look(build, van) do
+    items = Enum.map(Van.items(build, van.id), &elem(&1, 1))
+
+    %{
+      solar: watts(Enum.filter(items, &(&1.type == "van_solar"))),
+      fan: Enum.any?(items, &(&1.type == "van_fan"))
+    }
+  end
+
+  @doc """
+  The parts of the picture of a van: its panels and its fan, the weight on
+  each axle and the ratings of the axles, and the Wh of its batteries.
+  """
+  def van_parts(build, van) do
+    weight = Van.weight(build, van)
+
+    Map.merge(van_look(build, van), %{
+      front: weight.front,
+      rear: weight.rear,
+      front_gawr: weight.front_gawr,
+      rear_gawr: weight.rear_gawr,
+      storage: Van.storage(build, van)
+    })
+  end
+
+  defp watts(panels), do: panels |> Enum.map(& &1.params["watts"]) |> Enum.sum()
+
+  @doc "A text for a screen reader: what the picture of the house shows."
+  def label(parts) do
+    count = length(parts.stations)
+
+    things =
+      Enum.filter(
+        [
+          parts.roof.station + parts.roof.grid > 0 && "solar panels on the roof",
+          parts.yard.station + parts.yard.grid > 0 && "solar panels in the yard",
+          count == 1 && "a power station",
+          count > 1 && "#{count} power stations",
+          parts.ac && "an AC",
+          parts.pool && "a pool",
+          parts.car && "an electric car",
+          parts.van && "a camper van"
+        ],
+        & &1
+      )
+
+    "a house with #{Format.count(parts.floors, "floor")}" <>
+      Enum.map_join(things, "", &(", " <> &1))
+  end
+
+  attr :id, :string, required: true, doc: "the prefix of the ids of the gradients"
+  attr :parts, :map, required: true, doc: "the parts of the picture (`parts/1`)"
+
+  @doc "The house on its lot, with its equipment and the flows of its power."
   def house(assigns) do
-    parts = parts(assigns.build)
-    shapes = house_shapes(parts) ++ if(assigns.flows, do: flows(parts), else: [])
-    top = top(parts)
+    parts = assigns.parts
+    {back, front} = house_shapes(parts)
+    {lines, chips} = flows(parts)
 
     assigns =
       assign(assigns,
-        shapes: shapes,
-        view: {0.0, top, 360.0, 258.0 - top},
+        shapes: back ++ lines ++ front ++ chips,
+        view: house_view(parts),
         origin: @origin,
-        sun: @sun
+        sun: @sun,
+        chip: @chip
       )
 
     ~H"""
-    <.canvas id={@id} view={@view} origin={@origin} shapes={@shapes} sun={@sun} />
+    <.canvas id={@id} view={@view} origin={@origin} shapes={@shapes} sun={@sun} chip={@chip} />
     """
+  end
+
+  # The box of the picture of a house: from some sky over the ridge of the
+  # roof to the front corner of the lot.
+  defp house_view(parts) do
+    {_x, ridge} = Iso.at(@origin, {@w / 2, @d / 2, height(parts) + @rise})
+    {_x0, x1, _y0, y1} = @lot
+    {_x, bottom} = Iso.at(@origin, {x1, y1, -@slab})
+    top = min(ridge - 40, 0.0)
+    {0.0, top, 360.0, bottom + 4 - top}
   end
 
   attr :id, :string, required: true
@@ -99,17 +211,17 @@ defmodule DIYWeb.Scene do
 
   @doc "A house for the first page: a house that is there, or a plan."
   def sample(assigns) do
+    {back, front} = house_shapes(@sample)
+
     shapes =
       if assigns.plan,
         do: Enum.map(lot() ++ ground(@sample) ++ building(@sample) ++ garage(@sample), &plan/1),
-        else: house_shapes(@sample)
-
-    top = top(@sample)
+        else: back ++ front
 
     assigns =
       assign(assigns,
         shapes: shapes,
-        view: {0.0, top + 10, 360.0, 248.0 - top},
+        view: house_view(@sample),
         origin: @origin,
         sun: if(assigns.plan, do: nil, else: @sun)
       )
@@ -131,10 +243,7 @@ defmodule DIYWeb.Scene do
   defp plan({:line, points, _class}), do: {:line, points, "s-plan-line"}
 
   attr :id, :string, required: true
-  attr :build, :map, required: true
-  attr :van, :map, required: true, doc: "the camper van (an item)"
-  attr :weight, :map, required: true, doc: "the weight budget (`DIY.Van.weight/2`)"
-  attr :power, :map, default: nil, doc: "the power budget (`DIY.Van.power/3`)"
+  attr :parts, :map, required: true, doc: "the parts of the picture (`van_parts/2`)"
 
   @doc """
   A camper van on its spot, with its two budgets: the weight on each axle
@@ -142,7 +251,7 @@ defmodule DIYWeb.Scene do
   the watts of its panels.
   """
   def van(assigns) do
-    parts = van_parts(assigns.build, assigns.van)
+    parts = assigns.parts
     {x0, x1, y0, y1} = {-1.6, @van_w + 1.6, -1.4, @van_l + 1.6}
     slab = Iso.box({x0, y0, -0.5}, {x1 - x0, y1 - y0, 0.5})
 
@@ -151,7 +260,7 @@ defmodule DIYWeb.Scene do
         {:poly, slab.left, "s-dirt-l"},
         {:poly, slab.right, "s-dirt-r"},
         {:poly, slab.top, "s-drive"}
-      ] ++ van_body({0.0, 0.0}, parts) ++ van_chips(assigns.weight, assigns.power, parts)
+      ] ++ van_body({0.0, 0.0}, parts) ++ van_chips(parts)
 
     origin = {0.0, 0.0}
     assigns = assign(assigns, shapes: shapes, origin: origin, view: bounds(origin, shapes, 6))
@@ -163,18 +272,18 @@ defmodule DIYWeb.Scene do
 
   # The labels of the van: the weight on each axle at its wheels, the Wh of
   # the batteries, and the watts of the panels.
-  defp van_chips(weight, power, parts) do
+  defp van_chips(parts) do
     axle = fn lb, limit -> if limit > 0 and lb > limit, do: "s-chip-bad", else: "s-chip" end
 
     [
-      {:chip, {@van_w + 1.0, 5.6, 0.0}, "Front #{lb(weight.front)}",
-       axle.(weight.front, weight.front_gawr)},
-      {:chip, {@van_w + 1.0, 1.2, 0.0}, "Rear #{lb(weight.rear)}",
-       axle.(weight.rear, weight.rear_gawr)}
+      {:chip, {@van_w + 1.0, 5.6, 0.0}, "Front #{lb(parts.front)}",
+       axle.(parts.front, parts.front_gawr)},
+      {:chip, {@van_w + 1.0, 1.2, 0.0}, "Rear #{lb(parts.rear)}",
+       axle.(parts.rear, parts.rear_gawr)}
     ] ++
-      if(power && power.storage > 0,
+      if(parts.storage > 0,
         do: [
-          {:chip, {@van_w / 2, 1.0, @van_h + 1.2}, "#{Format.int(power.storage)} Wh",
+          {:chip, {@van_w / 2, 1.0, @van_h + 1.2}, "#{Format.int(parts.storage)} Wh",
            "s-chip-good"}
         ],
         else: []
@@ -214,9 +323,11 @@ defmodule DIYWeb.Scene do
   attr :chip, :float, default: 1.0, doc: "the size of the labels"
   attr :class, :any, default: nil
 
-  # The SVG of a picture: the sky, the sun, and the shapes.
+  # The SVG of a picture: the sky, the sun, and the shapes. It defines only
+  # the gradients and the filter that its shapes use.
   defp canvas(assigns) do
     {x, y, w, h} = assigns.view
+    classes = MapSet.new(assigns.shapes, &elem(&1, tuple_size(&1) - 1))
 
     assigns =
       assign(assigns,
@@ -225,7 +336,9 @@ defmodule DIYWeb.Scene do
         y: Iso.round1(y),
         w: Iso.round1(w),
         h: Iso.round1(h),
-        bottom: Iso.round1(y + h)
+        bottom: Iso.round1(y + h),
+        fills: for(c <- ~w(s-grass s-glass s-pv), MapSet.member?(classes, c), do: c),
+        blur: MapSet.member?(classes, "s-shadow")
       )
 
     ~H"""
@@ -242,19 +355,11 @@ defmodule DIYWeb.Scene do
           <stop offset="0" class="s-sky1" />
           <stop offset="1" class="s-sky2" />
         </linearGradient>
-        <linearGradient id={"#{@id}-grass"} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" class="s-grass1" />
-          <stop offset="1" class="s-grass2" />
+        <linearGradient :for={fill <- @fills} id={"#{@id}-#{fill}"} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" class={fill <> "1"} />
+          <stop offset="1" class={fill <> "2"} />
         </linearGradient>
-        <linearGradient id={"#{@id}-glass"} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" class="s-glass1" />
-          <stop offset="1" class="s-glass2" />
-        </linearGradient>
-        <linearGradient id={"#{@id}-pv"} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" class="s-pv1" />
-          <stop offset="1" class="s-pv2" />
-        </linearGradient>
-        <filter id={"#{@id}-blur"} x="-20%" y="-20%" width="140%" height="140%">
+        <filter :if={@blur} id={"#{@id}-blur"} x="-20%" y="-20%" width="140%" height="140%">
           <feGaussianBlur stdDeviation="3" />
         </filter>
       </defs>
@@ -333,105 +438,50 @@ defmodule DIYWeb.Scene do
   end
 
   # A fill of a gradient, or a filter, for the classes that have one.
-  defp fills("s-grass", id), do: [fill: "url(##{id}-grass)"]
-  defp fills("s-glass", id), do: [fill: "url(##{id}-glass)"]
-  defp fills("s-pv", id), do: [fill: "url(##{id}-pv)"]
+  defp fills("s-grass", id), do: [fill: "url(##{id}-s-grass)"]
+  defp fills("s-glass", id), do: [fill: "url(##{id}-s-glass)"]
+  defp fills("s-pv", id), do: [fill: "url(##{id}-s-pv)"]
   defp fills("s-shadow", id), do: [filter: "url(##{id}-blur)"]
   defp fills(_class, _id), do: []
 
   defp chip_w(text), do: String.length(text) * 5.6 + 14
 
-  @doc "A text for a screen reader: what the picture of the house shows."
-  def label(build) do
-    parts = parts(build)
-
-    things =
-      Enum.filter(
-        [
-          parts.roof_w > 0 && "solar panels on the roof",
-          parts.yard_w > 0 && "solar panels in the yard",
-          parts.stations != [] && "a power station",
-          parts.ac && "an AC",
-          parts.pool && "a pool",
-          parts.car && "an electric car",
-          parts.van && "a camper van"
-        ],
-        & &1
-      )
-
-    "A house with #{Format.count(parts.floors, "floor")}" <>
-      Enum.map_join(things, "", &(", " <> &1))
-  end
-
-  # What the picture of the house shows, from the build: the house (with
-  # no item of a van), and the first van.
-  defp parts(build) do
-    house = Build.house_view(build)
-    places = Map.new(house.rooms, &{&1.id, &1.place})
-    panels = Enum.filter(house.items, &(&1.type == "solar_panels"))
-    of = fn type -> Enum.filter(house.items, &(&1.type == type)) end
-    on = fn place -> watts(Enum.filter(panels, &(places[&1.room] == place))) end
-    van = List.first(of.("camper_van"))
-
-    %{
-      floors: house.house.floors,
-      garage: Enum.any?(house.rooms, &(&1.level == "outside" and &1.place == :indoor)),
-      roof_w: on.(:roof),
-      yard_w: on.(:outdoor),
-      grid_tie: Enum.any?(panels, &(&1.params["to"] == "grid")),
-      stations: of.("power_station"),
-      switch: of.("transfer_switch") != [],
-      ac: Enum.any?(house.items, &(&1.type in ["ac", "mini_split"])),
-      pool: of.("pool_pump") != [],
-      car: of.("ev") != [],
-      van: van && van_parts(build, van)
-    }
-  end
-
-  # What the picture of a van shows: the watts of its panels, and its fan.
-  defp van_parts(build, van) do
-    items = Enum.map(DIY.Van.items(build, van.id), &elem(&1, 1))
-
-    %{
-      solar: watts(Enum.filter(items, &(&1.type == "van_solar"))),
-      fan: Enum.any?(items, &(&1.type == "van_fan"))
-    }
-  end
-
-  defp watts(panels), do: panels |> Enum.map(& &1.params["watts"]) |> Enum.sum()
-
-  # The top of the picture: the ridge of the roof, and some sky.
-  defp top(parts) do
-    {_x, sy} = Iso.at(@origin, {@w / 2, @d / 2, height(parts) + @rise})
-    min(sy - 34, 0.0)
-  end
-
   defp height(parts), do: parts.floors * @floor
 
-  # The shapes of the house and of its lot, in the order of the paint: from
-  # the back to the front.
+  # The shapes of the house and of its lot, in the order of the paint (from
+  # the back to the front, by hand for each object): the shapes behind the
+  # flows of the power, and the shapes in front of them.
   defp house_shapes(parts) do
-    lot() ++
-      pole() ++
-      tree({14.4, -1.6}, 1.0) ++
-      yard_panels(parts) ++
-      ground(parts) ++
-      shadow(parts) ++
-      building(parts) ++
-      garage(parts) ++
-      meter(parts) ++
-      ac(parts) ++
-      stations(parts) ++
+    back =
+      lot() ++
+        pole() ++
+        tree({14.4, -1.6}, 1.0) ++
+        ground(parts) ++
+        shadow(parts) ++
+        building(parts) ++
+        garage(parts) ++
+        meter(parts) ++
+        yard_panels(parts) ++
+        ac(parts) ++
+        stations(parts)
+
+    front =
       bushes() ++
-      person() ++
-      car(parts) ++
-      if(parts.van, do: van_body({11.6, 7.3}, parts.van), else: []) ++
-      tree({-2.1, 12.4}, 0.8)
+        person() ++
+        car(parts) ++
+        if(parts.van, do: van_body({van_x(parts), 7.3}, parts.van), else: []) ++
+        tree({-2.1, 12.4}, 0.8)
+
+    {back, front}
   end
+
+  # The van and the car share the drive.
+  defp van_x(%{car: true}), do: 10.7
+  defp van_x(_parts), do: 11.6
 
   defp lot do
     {x0, x1, y0, y1} = @lot
-    slab = Iso.box({x0, y0, -1.2}, {x1 - x0, y1 - y0, 1.2})
+    slab = Iso.box({x0, y0, -@slab}, {x1 - x0, y1 - y0, @slab})
     turf = Iso.box({x0, y0, -0.25}, {x1 - x0, y1 - y0, 0.25})
 
     [
@@ -467,12 +517,16 @@ defmodule DIYWeb.Scene do
   end
 
   # The panels in the yard: rows that face the front (the south).
-  defp yard_panels(%{yard_w: 0}), do: []
+  defp yard_panels(%{yard: yard}) do
+    case yard.station + yard.grid do
+      0 ->
+        []
 
-  defp yard_panels(%{yard_w: watts}) do
-    for i <- 0..(count(watts, @panel_w, 8) - 1),
-        shape <- yard_panel({15.6 + rem(i, 3) * 1.15, 3.6 - div(i, 3) * 1.9}),
-        do: shape
+      watts ->
+        for i <- 0..(count(watts, @panel_w, 8) - 1),
+            shape <- yard_panel({15.6 + rem(i, 3) * 1.15, 3.6 - div(i, 3) * 1.9}),
+            do: shape
+    end
   end
 
   defp yard_panel({x, y}) do
@@ -614,10 +668,14 @@ defmodule DIYWeb.Scene do
   end
 
   # The panels on the front of the roof: rows from the eave, at the middle.
-  defp roof_panels(%{roof_w: 0}, _h, _ridge), do: []
+  defp roof_panels(%{roof: roof}, h, ridge) do
+    case roof.station + roof.grid do
+      0 -> []
+      watts -> roof_panels(count(watts, @panel_w, 16), h, ridge)
+    end
+  end
 
-  defp roof_panels(%{roof_w: watts}, h, ridge) do
-    n = count(watts, @panel_w, 16)
+  defp roof_panels(n, h, ridge) do
     slope = {0.0, -(@d + @eave - ridge), @rise}
     up = Iso.scale(slope, 1 / :math.sqrt(elem(slope, 1) ** 2 + @rise ** 2))
     eave = {-0.4, @d + @eave, h + 0.04}
@@ -680,8 +738,8 @@ defmodule DIYWeb.Scene do
 
   # The stations, at the front wall: each with its extra batteries under it.
   defp stations(parts) do
-    for {station, i} <- Enum.with_index(Enum.take(parts.stations, 2)),
-        shape <- station({6.4 + i * 0.95, @d + 0.15}, station.params["extra_kwh"] > 0),
+    for {{_kwh, extra}, i} <- Enum.with_index(Enum.take(parts.stations, 2)),
+        shape <- station({6.4 + i * 0.95, @d + 0.15}, extra),
         do: shape
   end
 
@@ -721,12 +779,15 @@ defmodule DIYWeb.Scene do
   defp car(%{car: false}), do: []
 
   defp car(parts) do
-    x = if parts.van, do: 15.6, else: 11.8
-    {y, l} = {8.2, 4.5}
+    {x, y} = if parts.van, do: {13.0, 7.5}, else: {11.8, 8.2}
+    l = 4.5
 
-    top = fn a, b ->
-      [{x + a, y + 1.5, 1.5}, {x + b, y + 1.5, 1.5}, {x + b, y + 3.0, 1.5}, {x + a, y + 3.0, 1.5}]
-    end
+    roof = [
+      {x + 0.2, y + 1.5, 1.5},
+      {x + 1.6, y + 1.5, 1.5},
+      {x + 1.6, y + 3.0, 1.5},
+      {x + 0.2, y + 3.0, 1.5}
+    ]
 
     side = [
       {x + 1.8, y + 1.1, 0.98},
@@ -744,7 +805,7 @@ defmodule DIYWeb.Scene do
 
     wheels(x + 1.8, [y + 0.9, y + l - 0.9], 0.34) ++
       faces(Iso.box({x, y, 0.28}, {1.8, l, 0.7}), "s-car") ++
-      [{:poly, side, "s-vglass"}, {:poly, shield, "s-vglass"}, {:poly, top.(0.2, 1.6), "s-car-t"}] ++
+      [{:poly, side, "s-vglass"}, {:poly, shield, "s-vglass"}, {:poly, roof, "s-car-t"}] ++
       lights({x, y + l, 0.6}, 1.8)
   end
 
@@ -829,59 +890,65 @@ defmodule DIYWeb.Scene do
     panels ++ fan
   end
 
-  # The flows of the power, with their labels: the grid to the meter, the
-  # panels down the corner of the house to the stations (or into the house
-  # with a grid-tie inverter), and the stations to the switch of the panel.
+  # The flows of the power (lines), and the labels (chips), as the model of
+  # the power has them (`DIY.Power`):
+  #
+  # - the grid to the meter;
+  # - the panels on the roof, down the corner of the house: to the stations,
+  #   or into the house with a grid-tie inverter;
+  # - the panels in the yard, along the ground: to the stations, or to the
+  #   meter with a grid-tie inverter;
+  # - the stations to the switch of the panel, when a station powers the
+  #   circuits of the house through an inlet.
+  #
+  # Panels on a station that is not there (in a van) give no flow.
   defp flows(parts) do
     h = height(parts)
     {mx, my} = meter_at(parts)
     pole = {18.1, -2.0, 6.4}
     meter = {mx + 0.2, my + 0.25, 1.65}
+    stations = parts.stations != []
+    to_station = {7.2, @d + 0.4, 0.6}
     corner = [{9.8, @d + @eave, h - 0.2}, {9.8, @d + 0.2, 0.6}]
+    yard = [{16.1, 3.7, 0.45}, {16.1, @d + 0.3, 0.05}]
 
-    grid = [
-      {:wire, pole, meter, "s-wire"},
-      {:wire, pole, meter, "s-flow s-flow-grid"},
-      {:chip, Iso.add(pole, {0, 0, 0.9}), "Grid", "s-chip"}
-    ]
+    lines =
+      [{:wire, pole, meter, "s-wire"}, {:wire, pole, meter, "s-flow s-flow-grid"}] ++
+        flow(parts.roof.station > 0 and stations, corner ++ [to_station], "s-flow-sun") ++
+        flow(parts.roof.grid > 0, corner, "s-flow-sun") ++
+        flow(
+          parts.yard.station > 0 and stations,
+          yard ++ [{8.0, @d + 0.3, 0.05}, to_station],
+          "s-flow-sun"
+        ) ++
+        flow(parts.yard.grid > 0, [{16.1, 3.7, 0.45}, {mx + 0.2, 3.7, 0.45}, meter], "s-flow-sun") ++
+        flow(
+          parts.panel,
+          [{6.8, @d + 0.4, station_top(parts)}, {6.8, @d + 0.2, 1.55}, {8.85, @d + 0.2, 1.55}],
+          "s-flow-battery"
+        )
 
-    # Panels on a station that is not there (in a van) give nothing.
-    sun =
-      cond do
-        parts.roof_w == 0 -> []
-        parts.grid_tie -> [{:line, corner, "s-flow s-flow-sun"}]
-        parts.stations != [] -> [{:line, corner ++ [{7.2, @d + 0.4, 0.6}], "s-flow s-flow-sun"}]
-        true -> []
-      end
+    roof = parts.roof.station + parts.roof.grid
+    yard_w = parts.yard.station + parts.yard.grid
 
-    sun_chip =
-      if parts.roof_w + parts.yard_w > 0,
-        do: [{:chip, {4.6, 5.6, h + 1.9}, kw(parts.roof_w + parts.yard_w), "s-chip"}],
-        else: []
+    chips =
+      [{:chip, Iso.add(pole, {0, 0, 0.9}), "Grid", "s-chip"}] ++
+        if(roof > 0, do: [{:chip, {4.6, 5.6, h + 1.9}, kw(roof), "s-chip"}], else: []) ++
+        if(yard_w > 0, do: [{:chip, {17.4, 1.2, 2.2}, kw(yard_w), "s-chip"}], else: []) ++
+        if(stations, do: [{:chip, {7.0, @d + 2.6, 0.0}, kwh(parts.stations), "s-chip"}], else: [])
 
-    grid ++ sun ++ store(parts) ++ sun_chip
+    {lines, chips}
   end
 
-  # The flow from the stations to the switch of the panel, and the kWh of
-  # the stations.
-  defp store(%{stations: []}), do: []
+  defp flow(true, points, class), do: [{:line, points, "s-flow " <> class}]
+  defp flow(false, _points, _class), do: []
 
-  defp store(parts) do
-    kwh = parts.stations |> Enum.map(&(&1.params["kwh"] + &1.params["extra_kwh"])) |> Enum.sum()
-    top = if Enum.any?(parts.stations, &(&1.params["extra_kwh"] > 0)), do: 1.02, else: 0.62
-    station = {6.8, @d + 0.4, top}
+  defp station_top(parts),
+    do: if(Enum.any?(parts.stations, &elem(&1, 1)), do: 1.02, else: 0.62)
 
-    wire =
-      if parts.switch,
-        do: [
-          {:line, [station, {6.8, @d + 0.2, 1.55}, {8.85, @d + 0.2, 1.55}],
-           "s-flow s-flow-battery"}
-        ],
-        else: []
-
-    wire ++
-      [{:chip, {7.0, @d + 2.6, 0.0}, "#{Format.value(Float.round(kwh / 1, 1))} kWh", "s-chip"}]
-  end
+  defp kwh(stations),
+    do:
+      "#{stations |> Enum.map(&elem(&1, 0)) |> Enum.sum() |> Kernel./(1) |> Float.round(1) |> Format.value()} kWh"
 
   defp kw(watts) when watts >= 1000, do: "#{Format.value(Float.round(watts / 1000, 1))} kW"
   defp kw(watts), do: "#{watts} W"

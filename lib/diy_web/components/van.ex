@@ -20,6 +20,7 @@ defmodule DIYWeb.VanPage do
   attr :add, :string, default: nil
   attr :climate, :map, default: nil
   attr :item_error, :string, default: nil
+  attr :scene, :map, default: nil, doc: "the parts of the picture (`DIYWeb.Scene.van_parts/2`)"
 
   def page(assigns) do
     vans = Van.vans(assigns.build)
@@ -73,7 +74,7 @@ defmodule DIYWeb.VanPage do
         </p>
 
         <div id="van-picture" class="overflow-hidden rounded-box">
-          <Scene.van id="van-scene" build={@build} van={@van} weight={@weight} power={@power} />
+          <Scene.van id="van-scene" parts={@scene} />
         </div>
 
         <.weight weight={@weight} />
