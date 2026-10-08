@@ -36,4 +36,10 @@ The owner decides about each item.
 - The range of the sun (the sunniest and the cloudiest year).
 - A mode for each station, in place of one mode for the house.
 - A heat pump gives less heat in the cold: its size at 17 °F.
-
+- The direction of the panels for each month (a south roof gives more in
+  winter), and the shape of the day of panels to the east or to the west.
+  Today one factor for the year, and the same shape of the day.
+- A house that I plan: with a planned AC, the front shows no estimate
+  until the AC is not planned.
+- The circuits of a subpanel by name, in place of the items that a
+  station runs.

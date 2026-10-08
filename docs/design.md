@@ -335,7 +335,8 @@ Phase 3 adds four kinds of items (`DIY.Catalog`):
   by plug, or circuits of the house through an inlet), and its price.
 - Solar panels: their watts, their direction, what they connect to (a
   power station, or the house and the grid), and their price.
-- An interlock or a transfer switch, and its price.
+- An interlock, a transfer switch, or a subpanel for the backup circuits
+  with a transfer switch, and its price.
 - An electric car: its miles in one day, its miles for each kWh, its
   charger, when it charges, and the gas car that it replaces.
 
@@ -361,69 +362,108 @@ hours of an average day (cooling in the afternoon, heat before the
 sunrise, lights in the evening, a car at the power of its charger), and
 the sun from the sunrise to the sunset of the latitude. `DIY.Power` runs
 that day hour by hour: the sun, the battery and the grid (see its module
-doc), until the battery has the same charge at the end of the day as at
-the start. The result of each month: the use, the power from the grid in
-the day and at night, the power to the grid, the sun, the sun that is
-lost, the cost, and the hours of an outage.
+doc). The day starts with the charge that it gives back at its end: the
+average day of many days in a row. The charge at the end of a day grows
+with the charge at its start, but never by more, so a bisection finds
+that charge. The result of each month: the use, the power from the grid
+in the day and at night, the power to the grid, the sun of the panels,
+the sun that is lost (a full battery, or the sun above the solar input of
+a station), the cost, and the hours of an outage.
 
 `DIY.Bill` gives the bill from the power of the grid, at the price of the
 day and of the night, with the range of the estimate of the use. With no
 equipment and one price, the bill is the same as the estimate times the
 price.
 
-The numbers of the model:
+The numbers of the model, and their sources:
 
-| Number | Value |
-|---|---|
-| The power that goes into a battery and stays in it | 92% |
-| The power of a battery that comes out of the outlets | 92% |
-| The part of the battery that a station uses | 95% |
-| The power of panels in full sun, for each watt on their labels | 80% |
-| Direction of the panels (for the sun of NASA POWER on a flat surface) | south 110%, south-east or south-west 105%, east or west 90%, up 100% |
-| The part of the power of a charger that goes into a car | Level 1: 85%, Level 2: 90% |
-| A battery lasts | near 10 years |
-| A panel lasts | near 25 years |
+| Number | Value | Source |
+|---|---|---|
+| The part of the battery that a station uses | 95% | With the next row: 87% of the label at the outlets. Tests of stations at a large load: 87.5% (The Solar Lab, Jackery Explorer 1000 v2), 89% on average (PCWorld). |
+| The power of a battery that comes out of the outlets | 92% | See above. |
+| The power that goes into a battery and stays in it | 92% | A simple model of the app: the same loss as the output. |
+| The power of panels in full sun, for each watt on their labels | 80% | PVWatts of NREL: 14% of losses and an inverter of 96% give 83%. A little less for the heat of Texas. |
+| Direction of the panels (for the sun of NASA POWER on a flat surface) | south 110%, south-east or south-west 105%, east or west 95%, up 100% | EIA with PVWatts: a south roof at 20° gives 11% more than a flat one. CAFS: south-west 5% less than south, east or west near 15% less; a study of the UK: east or west 92% of south. |
+| The part of the power of a charger that goes into a car | Level 1: 85%, Level 2: 90% | Idaho National Laboratory, Chevrolet Volt: 84% to 89%. |
+| The power of a charger | Level 1: 1.4 kW, Level 2: 7.2 kW | 12 A at 120 V, and 30 A at 240 V. |
+| A battery of a station lasts | near 8 years | 3,000 cycles to 80% (a common label of LiFePO4 stations), one cycle each day. |
+| A panel lasts | 25 to 35 years | A survey of Berkeley Lab, in the plan of DOE for the end of life of the panels. The payback uses 25 years. |
+| A motor needs to start | 3 to 8 times its running power, for about one second | A guide to the size of generators (smps.us). The label of the motor gives its LRA. |
+
+The shape of the day of each kind of item, and the running watts of an
+item (for the check of the output of a station), are a simple model of
+the app, not a measurement (`DIY.Profile`).
 
 ### The what-if
 
-`DIY.Power.whatif/3` runs the house of today and the house with the
-planned items: the cost of each month, the price of the planned items,
-the savings of one year (with the gas that a planned car saves), and the
-payback. The page says it when the plan does not pay back on savings
-alone, and shows the hours of backup as a different reason (honesty rule
-2). With one price at all hours, the page says that a charge at night
-does not save money: the station loses near 15% of the power.
+`DIY.Power.whatif/5` runs the house of today and the house with the
+planned items: the cost of each month, and the bill of each house with
+its range (`DIY.Bill`, honesty rule 3). The payback is for the planned
+equipment with a price: its price, the savings of one year (with their
+range), and the years of the payback, next to the years that the
+equipment lasts. A payback after that time is not a payback. A planned
+car has no price in the app: the page shows the cost of its charge and
+the gas that it saves, out of the payback. The page says it when the
+plan does not pay back on savings alone, and shows the hours of backup
+(the month with the fewest hours) as a different reason (honesty rule 2).
+With one price at all hours, the page says that a charge at night does
+not save money: the station loses near 15% of the power.
+
+The page Bill shows the house of today (the planned items are on the page
+Power). With a station, panels on the grid, or a price at night, it also
+shows the bill of each month from the power of the grid at the prices of
+the house, with its range.
 
 ### The power view and the safety
 
 The page Power shows what feeds what: the grid, the main panel and its
 interlock or transfer switch, the panels, the stations, and the items
-that the stations run. `DIY.Power.warnings/1` gives:
+that the stations run. `DIY.Power.warnings/1` gives, for the house of
+today and for the plan:
 
 - `:backfeed`: a station that powers circuits of the house with no
   interlock and no transfer switch. The page shows a danger: its power
   can go to the lines of the utility, and kill a worker there.
-- `:permit`: work on the panel needs a permit in most cities (honesty
-  rule 5), with the rules of Dallas and New Braunfels as examples.
+- `:permit`: work that needs a permit in most cities (honesty rule 5), with
+  the rules of Dallas and New Braunfels as examples: work on the panel
+  (an inlet, an interlock, a transfer switch or a subpanel), panels on a
+  grid-tie inverter (the utility must also approve them), and a Level 2
+  charger (a new circuit of 240 V).
+- `:grid_tie`: panels on a grid-tie inverter and a station on the panel.
+  In an outage, the inverter can send its power into the output of the
+  station. The steps of the page turn off its breaker first.
 - `:overload`: the items on the stations need more watts than their
-  outputs, when they all run at the same time.
+  outputs, when they all run at the same time. Then the plan shows no
+  hours of backup.
 - `:surge`: a motor needs more power to start.
 
-`specs/Backfeed.tla` is the model of the main breaker, the inlet breaker,
-the station and the grid. With an interlock or a transfer switch, the
-station never sends power to the grid, also when the person turns any
-breaker on or off at any time (`Backfeed.cfg`, `Backfeed.transfer.cfg`).
-With the steps of the page in an outage, the house gets the backup, and
-the grid when it comes back (`Backfeed.steps.cfg`). With no device, TLC
-finds the backfeed (`Backfeed.none.cfg`). A person who stops before the
-end of the steps does not get the backup (`Backfeed.stop.cfg`).
+The page gives the steps of each device: with an interlock, the main
+breaker goes off before the inlet breaker goes on; with a transfer switch
+(or a subpanel with one), the main breaker stays on, and the switch moves
+the backup circuits.
+
+`specs/Backfeed.tla` is the model of the grid, the main breaker, the
+inlet, the transfer switch and the station. What it checks: the rule of
+each device is enough to stop a backfeed, also when the person changes
+anything at any time (`Backfeed.cfg` for an interlock,
+`Backfeed.transfer.cfg` for a transfer switch); and the steps of the page
+give the backup in an outage, and the grid when it comes back
+(`Backfeed.steps.cfg`, `Backfeed.transfer-steps.cfg`). The steps are the
+main value of the model: the rule of a device stops a backfeed by its
+design. TLC finds the faults: no device (`Backfeed.none.cfg`), a switch
+that makes the new side before it breaks the old one
+(`Backfeed.makefirst.cfg`), and a person who stops before the end of the
+steps (`Backfeed.stop.cfg`). The model has one station and one inlet; the
+app adds the stations of a house as one, and it finds a device anywhere
+in the house.
 
 ### The tests of phase 3
 
-- Property tests: an average day keeps the power in balance (the charge
-  of the battery stays in its limits, and the grid gives at least the use
-  less the sun that is not lost), and more battery never gives fewer hours
-  in an outage.
+- Property tests: an average day ends with the charge of its start, the
+  charge of the battery stays in its limits, and the grid gives at least
+  the use less the sun that is not lost, and at most the other items and
+  the items of the station through the battery; more battery never gives
+  fewer hours in an outage.
 - A check with the numbers of a label: a station of 2,048 Wh runs a
   fridge of 400 kWh in one year for 39 hours, as the math by hand gives.
 - The pages: `test/diy_web/live/power_live_test.exs`.
