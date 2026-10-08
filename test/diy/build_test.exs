@@ -246,7 +246,9 @@ defmodule DIY.BuildTest do
     assert bad.(%{"items" => "fridge"}) == {:error, :items}
     assert bad.(%{"items" => [%{"id" => "i1"}]}) == {:error, :items}
     assert bad.(%{"items" => good["items"] ++ [hd(good["items"])]}) == {:error, :items}
-    assert bad.(%{"items" => [Map.put(hd(good["items"]), "room", "r999")]}) == {:error, :items}
+    # An item in a room that is not there was in a zone of a van that is
+    # lost: it goes away.
+    assert {:ok, %{items: []}} = bad.(%{"items" => [Map.put(hd(good["items"]), "room", "r999")]})
     assert bad.(%{"items" => [Map.put(hd(good["items"]), "type", "rocket")]}) == {:error, :items}
 
     assert bad.(%{"items" => [Map.put(hd(good["items"]), "params", %{"tons" => 99})]}) ==

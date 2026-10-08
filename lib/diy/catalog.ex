@@ -1098,6 +1098,23 @@ defmodule DIY.Catalog do
 
   def params(_type, _values), do: {:error, {:param, nil}}
 
+  @doc """
+  Reads the parameters as `params/2`, but a value that is not valid gets
+  the default value (for the parts of a stored build that must not stop
+  the build from loading).
+  """
+  @spec loose_params(String.t(), term()) :: map()
+  def loose_params(type, values) when is_map(values) do
+    Map.new(kind(type).params, fn param ->
+      case value(param, Map.get(values, param.key, param.default)) do
+        {:ok, value} -> {param.key, value}
+        :error -> {param.key, param.default}
+      end
+    end)
+  end
+
+  def loose_params(type, _values), do: defaults(type)
+
   # A value from JSON or from a form: a form gives text.
   defp value(%{type: :int} = p, value) when is_integer(value), do: range(p, value)
 

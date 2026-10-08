@@ -102,13 +102,11 @@ defmodule DIY.VanTest do
       {build, id} = with_van()
       laundry = room(build, "Laundry")
       {:ok, build, station} = Build.add_item(build, laundry, "power_station")
-      {:ok, build} = Build.flag_item(build, station, :backup, true)
 
       {:ok, away} = Build.take_to_van(build, station, id)
       item = van(away, station)
       assert item.room == Build.zone(away, id, :bay).id
       assert item.home == laundry
-      refute item.backup
       # The house loses the station while the van has it.
       refute Enum.any?(Build.house_view(away).items, &(&1.id == station))
       assert %{at_home: [], away: [{%{id: ^station}, %{id: ^id}}]} = Van.stations(away)
@@ -128,24 +126,31 @@ defmodule DIY.VanTest do
       assert Build.bring_home(build, station) == {:error, :item}
       assert Build.bring_home(build, "i999") == {:error, :item}
 
-      # The van goes: the station goes home. Its home goes: the station
-      # stays in the van with no home, and goes back to a room inside.
+      # The van goes: the station goes home.
       {:ok, no_van} = Build.delete_item(away, id)
       assert van(no_van, station).room == laundry
 
-      {:ok, no_home} = Build.delete_room(away, laundry)
-      assert van(no_home, station).home == nil
-      {:ok, back} = Build.bring_home(no_home, station)
-      assert Enum.find(back.rooms, &(&1.id == van(back, station).room)).place == :indoor
+      # Its home goes: the station gets a new home in the house, and goes
+      # there with the van.
+      {:ok, moved} = Build.delete_room(away, laundry)
+      home = van(moved, station).home
+      assert Enum.find(moved.rooms, &(&1.id == home)).place in [:indoor, :outdoor]
+      assert %{away: [_]} = Van.stations(moved)
+      {:ok, no_van} = Build.delete_item(moved, id)
+      assert van(no_van, station).room == home
 
-      # A station of the van with no home, in a house with no room inside.
-      {house, rooms, []} =
-        House.scratch(%{size: 900, year: 2000, floors: 1, heat: "gas", lot: nil})
+      # The station and the van in the same room: the removal of the room
+      # sends the station to its new home.
+      driveway = room(build, "Driveway")
+      {:ok, both, other} = Build.add_item(build, driveway, "power_station")
+      {:ok, both} = Build.take_to_van(both, other, id)
+      {:ok, both} = Build.delete_room(both, driveway)
+      refute Enum.any?(both.items, &(&1.id == id))
+      assert Enum.find(both.rooms, &(&1.id == van(both, other).room)).place == :indoor
 
-      outside = Build.put_house(house(), house, Enum.filter(rooms, &(&1.place == :outdoor)), [])
-      {outside, van_id} = with_van(outside)
-      {outside, own} = add(outside, van_id, :bay, "power_station")
-      assert Build.bring_home(outside, own) == {:error, :room}
+      # A station of the van has no home: it does not go to the house.
+      {build, own} = add(build, id, :bay, "power_station")
+      assert Build.bring_home(build, own) == {:error, :item}
     end
 
     test "the numbers of a model" do
@@ -162,43 +167,173 @@ defmodule DIY.VanTest do
       assert Build.van_model(build, fridge) == {:error, :item}
     end
 
-    test "a stored build with zones that are not right does not load" do
+    # A house with a van, items in its zones, and a station of the house in
+    # the van.
+    defp stored do
       {build, id} = with_van()
-      {build, station} = add(build, id, :bay, "power_station")
+      {build, _} = add(build, id, :galley, "van_fridge")
+      {build, _} = add(build, id, :bay, "van_battery")
+      {:ok, build, station} = Build.add_item(build, room(build, "Laundry"), "power_station")
+      {:ok, build} = Build.take_to_van(build, station, id)
+      {build, id, station}
+    end
+
+    test "a van part that is not right does not stop the build from loading" do
+      {build, id, station} = stored()
       map = build |> Build.to_json() |> Jason.decode!()
       load = &Build.from_json(Jason.encode!(&1))
-      assert {:ok, _} = load.(map)
-
       zones = for r <- map["rooms"], String.starts_with?(r["level"], "van:"), do: r
+      bay = Build.zone(build, id, :bay).id
 
-      # A zone of no van, a van with a zone that is missing, a zone on a
-      # level of the house, and a place of the house on the level of a van.
-      no_van = %{map | "items" => Enum.reject(map["items"], &(&1["id"] == id))}
-      no_van = %{no_van | "items" => Enum.reject(no_van["items"], &(&1["id"] == station))}
-      assert load.(no_van) == {:error, :vans}
-      assert load.(%{map | "rooms" => map["rooms"] -- [hd(zones)]}) == {:error, :vans}
+      # A zone that is missing: the van gets it again, with a new id.
+      {:ok, loaded} = load.(%{map | "rooms" => map["rooms"] -- [hd(zones)]})
+      assert length(Build.zones(loaded, id)) == 7
+      refute Enum.any?(loaded.rooms, &(&1.id == hd(zones)["id"]))
 
-      bad_place =
-        Enum.map(map["rooms"], fn r ->
-          if r["id"] == hd(zones)["id"], do: %{r | "place" => "indoor"}, else: r
+      # A zone with a place that the app does not know: its items go home,
+      # or go away.
+      lost =
+        Enum.map(map["rooms"], &if(&1["id"] == bay, do: %{&1 | "place" => "attic"}, else: &1))
+
+      {:ok, loaded} = load.(%{map | "rooms" => lost})
+      assert van(loaded, station).room == room(build, "Laundry")
+      refute Enum.any?(loaded.items, &(&1.type == "van_battery"))
+
+      # A model that the app does not know: the default model.
+      bad_model =
+        Enum.map(map["items"], fn i ->
+          if i["id"] == id, do: put_in(i, ["params", "model"], "transit_130"), else: i
         end)
 
-      assert load.(%{map | "rooms" => bad_place}) == {:error, :rooms}
+      {:ok, loaded} = load.(%{map | "items" => bad_model})
+      assert van(loaded, id).params["model"] == "promaster_159"
 
+      # Numbers that are not a map: the default numbers.
+      no_params =
+        Enum.map(
+          map["items"],
+          &if(&1["type"] == "van_battery", do: %{&1 | "params" => "x"}, else: &1)
+        )
+
+      {:ok, loaded} = load.(%{map | "items" => no_params})
+      assert [%{params: params}] = Enum.filter(loaded.items, &(&1.type == "van_battery"))
+      assert params == Catalog.defaults("van_battery")
+
+      # A home on the roof: the first room of the house where a station can
+      # go.
+      roof = room(build, "Roof")
+
+      on_roof =
+        Enum.map(map["items"], &if(&1["id"] == station, do: %{&1 | "home" => roof}, else: &1))
+
+      {:ok, loaded} = load.(%{map | "items" => on_roof})
+      home = van(loaded, station).home
+      assert Enum.find(loaded.rooms, &(&1.id == home)).place in [:indoor, :outdoor]
+
+      # An item in a room that is not there goes away.
+      fridge = Enum.find(map["items"], &(&1["type"] == "fridge"))
+      gone = Enum.map(map["items"], &if(&1 == fridge, do: %{&1 | "room" => "r999"}, else: &1))
+      {:ok, loaded} = load.(%{map | "items" => gone})
+      refute Enum.any?(loaded.items, &(&1.id == fridge["id"]))
+
+      # The part of the house stays strict: a zone on a level of the house,
+      # and an item that is not an item.
       bad_level =
-        Enum.map(map["rooms"], fn r ->
-          if r["id"] == hd(zones)["id"], do: %{r | "level" => "f1"}, else: r
-        end)
+        Enum.map(map["rooms"], &if(&1["id"] == bay, do: %{&1 | "level" => "f1"}, else: &1))
 
       assert load.(%{map | "rooms" => bad_level}) == {:error, :rooms}
+      assert load.(%{map | "items" => [%{"id" => 1}]}) == {:error, :items}
+    end
 
-      # A home that is not a room of the house.
-      bad_home =
-        Enum.map(map["items"], fn i ->
-          if i["id"] == station, do: Map.put(i, "home", hd(zones)["id"]), else: i
-        end)
+    # A change of the van part of a stored build.
+    defp change(map, {:drop_zone, i}, zones, _items),
+      do: %{map | "rooms" => map["rooms"] -- [Enum.at(zones, i)]}
 
-      assert load.(%{map | "items" => bad_home}) == {:error, :items}
+    defp change(map, {:zone_place, i, place}, zones, _items),
+      do: update(map, "rooms", Enum.at(zones, i)["id"], &%{&1 | "place" => place})
+
+    defp change(map, {:zone_name, i, name}, zones, _items),
+      do: update(map, "rooms", Enum.at(zones, i)["id"], &%{&1 | "name" => name})
+
+    defp change(map, {:copy_zone, i}, zones, _items) do
+      copy = %{Enum.at(zones, i) | "id" => "r#{System.unique_integer([:positive]) + 900}"}
+      %{map | "rooms" => map["rooms"] ++ [copy]}
+    end
+
+    defp change(map, {:item_room, j, i}, zones, items),
+      do:
+        update(map, "items", Enum.at(items, j)["id"], &%{&1 | "room" => Enum.at(zones, i)["id"]})
+
+    defp change(map, {:item_type, j, type}, _zones, items),
+      do: update(map, "items", Enum.at(items, j)["id"], &%{&1 | "type" => type})
+
+    defp change(map, {:item_param, j, key, value}, _zones, items),
+      do: update(map, "items", Enum.at(items, j)["id"], &put_in(&1, ["params", key], value))
+
+    defp change(map, {:home, j, home}, _zones, items),
+      do: update(map, "items", Enum.at(items, j)["id"], &Map.put(&1, "home", home))
+
+    defp update(map, key, id, fun),
+      do: Map.update!(map, key, &Enum.map(&1, fn x -> if x["id"] == id, do: fun.(x), else: x end))
+
+    property "a change of the van part gives a build that loads, with the same house" do
+      {build, id, station} = stored()
+      map = build |> Build.to_json() |> Jason.decode!()
+      zones = for r <- map["rooms"], String.starts_with?(r["level"], "van:"), do: r
+      # The van (the first), and the items in its zones. The type of the van
+      # is a part of the house: it does not change.
+      items =
+        for i <- map["items"], i["id"] == id or i["room"] in Enum.map(zones, & &1["id"]), do: i
+
+      z = integer(0..(length(zones) - 1))
+      j = integer(0..(length(items) - 1))
+      k = integer(1..(length(items) - 1))
+      text = one_of([constant("attic"), constant(""), constant(nil), string(:alphanumeric)])
+      value = one_of([text, integer(), constant(-1.5)])
+      key = member_of(~w(model gvwr people ah volts chemistry wh_day kwh weight fused))
+
+      steps =
+        list_of(
+          one_of([
+            tuple({constant(:drop_zone), z}),
+            tuple(
+              {constant(:zone_place), z, one_of([text, constant("bay"), constant("indoor")])}
+            ),
+            tuple({constant(:zone_name), z, value}),
+            tuple({constant(:copy_zone), z}),
+            tuple({constant(:item_room), j, z}),
+            tuple({constant(:item_type), k, one_of([text, constant("fridge")])}),
+            tuple({constant(:item_param), j, key, value}),
+            tuple({constant(:home), j, one_of([text, member_of(Enum.map(build.rooms, & &1.id))])})
+          ]),
+          min_length: 1,
+          max_length: 5
+        )
+
+      house = Build.house_view(build)
+      house_items = Enum.reject(house.items, &(&1.type == "camper_van"))
+
+      check all(steps <- steps) do
+        changed = Enum.reduce(steps, map, &change(&2, &1, zones, items))
+        assert {:ok, loaded} = Build.from_json(Jason.encode!(changed))
+
+        # The house is the same, and the station of the house is there.
+        assert Build.house_view(loaded).rooms == house.rooms
+        assert Enum.all?(house_items, &(&1 in loaded.items))
+        touched = for {_, j, _} <- steps, do: Enum.at(items, j)["id"]
+        assert station in touched or Enum.any?(loaded.items, &(&1.id == station))
+
+        # Each van has each zone one time, and each zone has its van.
+        for van <- Van.vans(loaded) do
+          places = Enum.map(Build.zones(loaded, van.id), & &1.place)
+          assert Enum.sort(places) == Enum.sort(Keyword.keys(Catalog.zones()))
+        end
+
+        vans = MapSet.new(Van.vans(loaded), &Build.van_level(&1.id))
+
+        assert Enum.all?(loaded.rooms, &(not Build.van_level?(&1.level) or &1.level in vans))
+        assert Build.from_json(Build.to_json(loaded)) == {:ok, loaded}
+      end
     end
   end
 
