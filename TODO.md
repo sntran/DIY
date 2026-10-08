@@ -15,3 +15,12 @@ The owner decides about each item.
   permits only?
 - Web app only, or also app stores?
 - The name of the app. Today: "Small Steps Home", a name that is not final.
+
+## Ideas
+
+- The weather of the state, in the file of the app, for the estimate when
+  NASA POWER does not answer.
+- The appraisal data of a county for the preset (phase "later" of the
+  plan).
+- A lot from a subdivision plan, for "a house I'm planning". Today the
+  user gives the size of the lot.

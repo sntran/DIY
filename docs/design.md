@@ -9,6 +9,7 @@ the code.
 | Part | What |
 |---|---|
 | `DIY` | The model of a build and the calculations, with no web code. |
+| `priv/data/zips.bin` | The center and the state of each ZIP code (`scripts/zips.exs`). |
 | `DIYWeb` | The pages: Phoenix LiveView. |
 | `assets/js/` | The script of the page: the hooks of LiveView. |
 | `specs/` | The TLA+ models. |
@@ -134,3 +135,87 @@ The tests:
 - `test/diy_web/device_test.exs`: the LiveView part, and a property test
   (StreamData) with real LiveViews, a fake device and reconnects, in
   random order.
+
+## The house builder (phase 1)
+
+### The first session
+
+The first screen has two doors: "My house" and "A house I'm planning".
+Then the user gives the ZIP code, and picks a preset: "a house like mine"
+by size, age, floors and heat. The front of the house shows the bill
+estimate at once, before the user adds an item. For a house that the user
+plans, the estimate shows when the house has an AC (the plan: "as soon as
+the house has walls and an AC").
+
+A preset has the rooms of the house and its typical items
+(`DIY.House`). A typical item has a dashed border and the word "Typical":
+its numbers are a guess of the app. A change of a number, or a tap on
+"Correct", makes it checked. The range of a checked item is smaller.
+
+### The rooms
+
+The page shows one room at a time (`DIYWeb.Inside`). The rooms of a floor
+are in a row, and the floors are in a column, with CSS scroll snap: a
+swipe left or right goes to the next room, and a swipe up or down to a
+different floor. The browser does the swipe, with no script. Links do the
+same for a keyboard. Each room shows its name, its floor and dots. The
+roof, the attic, the garage, the backyard and the driveway are rooms too.
+At the start, the rooms show the first floor (the hook `ScrollStart`).
+
+An element that a patch of LiveView moves loses the place of its scroll.
+So no element before `#levels` in its parent comes and goes: the hint is
+in a fixed element.
+
+### The data of a place
+
+| Data | Source | Where |
+|---|---|---|
+| The state and the center of a ZIP code | US Census Bureau: the 2024 Gazetteer of the ZCTAs, and the 2020 ZCTA to county file | `priv/data/zips.bin`, `DIY.Zip` |
+| The weather: degree days, temperature, sun, by month, 10 years | NASA POWER, monthly API, no key | `DIY.Weather` |
+| Retail choice in Texas, the utility, the median price at 1,000 kWh | Power to Choose (PUCT), the API of its plans | `DIY.Market` |
+| The average price for homes of a state | EIA, Electric Power Monthly, table 5.6.B | `DIY.Prices` |
+
+The VM gets the weather and the plans with Req. On Cloudflare, the VM
+sends this HTTP through `fetch()` of the Worker. The cache of the VM
+(`DIY.Cache`) keeps the answers: they have no person in them.
+
+### The estimate
+
+`DIY.Estimate` gives the kWh of each item in each month, and a range.
+
+- The heat through the walls, the roof and the windows: `UA × degree days
+  × 24 hours`. UA is the size × a factor for the age × a factor for the
+  floors. The factors are a simple model of the app, not a measurement,
+  and the page says so.
+- An AC: `BTU ÷ (SEER2 × 1,000)`, at most 85% of the hours of a month at
+  its size. A heat pump: `BTU ÷ (HSPF2 × 1,000)`. Electric heat: `BTU ÷
+  3,412`. A gas furnace: only its blower.
+- A water heater: 15 gallons for each person in one day, from the
+  temperature of the ground to 120 °F.
+- The other items: power × hours, or the kWh in one year of the label.
+- The range: the weather (the mildest and the hardest of the 10 years)
+  and the model (15% for heat and cooling, 20% for a typical item, 10% for
+  a checked item), added as squares, because they are independent.
+
+The price of one kWh: the price that the user gives, else the median of
+Power to Choose in a Texas area with retail choice, else the average of
+the state. The page tells the source of the price.
+
+A typical house of 2,000 square feet from 2005, in Plano, Texas, gives
+near 10,400 kWh in one year with gas heat, 16,900 with a heat pump, and
+21,800 with heat strips. A test keeps these numbers in plausible limits.
+
+### The tests of phase 1
+
+- Property tests: the JSON of a random build, `from_json` with random
+  text, the parameters of each kind, the ZIP codes of the file, the
+  median, and the estimate (no item under zero, each month in its range,
+  one more item never lowers the estimate, a better SEER2 never raises
+  it, more degree days never lower it).
+- The pages: `test/diy_web/live/home_live_test.exs`, with the real
+  answers of NASA POWER and Power to Choose as stubs.
+- The browser test (`test/browser/house.mjs`): a person builds a house in
+  Chromium, in the light and the dark mode, on a phone and on a desk, and
+  axe-core checks each screen. A reload keeps the build, a second tab
+  follows the first, and a reconnect restores the build. The same script
+  runs against `wrangler dev`.

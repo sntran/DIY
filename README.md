@@ -16,7 +16,7 @@ The build stays on the device of the user. The server keeps no copy. See
 | Phase | What | State |
 |---|---|---|
 | 0 | The project: Phoenix, the build on the device, the deploy to Cloudflare Workers | Done |
-| 1 | The house builder: two doors, presets, rooms, floors, appliances, the weather estimate | Not started |
+| 1 | The house builder: two doors, presets, rooms, floors, appliances, the weather estimate | Done |
 | 2 | Real usage: the files of Smart Meter Texas and Green Button | Not started |
 | 3 | What-if equipment: power station, solar, subpanel, transfer switch, EV | Not started |
 | 4 | The plan lesson: the EFL reader and the worksheet (Texas retail choice) | Not started |
