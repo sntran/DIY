@@ -34,6 +34,17 @@ async function check(page, name) {
   }
 }
 
+// True when an element is at the center of its row (a room), or at the top
+// of #levels (a level): the snap of the swipe.
+function snapped([selector, axis]) {
+  const el = document.querySelector(selector)
+  const box = el.getBoundingClientRect()
+  const parent = el.parentElement.getBoundingClientRect()
+  return axis === "x"
+    ? Math.abs(box.left + box.width / 2 - (parent.left + parent.width / 2)) < 2
+    : Math.abs(box.top - document.querySelector("#levels").getBoundingClientRect().top) < 2
+}
+
 async function connected(page) {
   await page.waitForSelector(".phx-connected")
 }
@@ -83,9 +94,42 @@ async function build(context, name) {
   assert.equal(await page.$eval("#levels", (el) => el.scrollTop), start, "the rooms stay at the first floor")
   await check(page, `${name} rooms`)
 
+  // A swipe to the left goes to the next room: the row snaps to it. (A
+  // swipe that is shorter than half of a room snaps back.)
+  const rooms = await page.$$eval("#level-f1 article[id^=room-]", (els) => els.map((el) => `#${el.id}`))
+  const first = await page.$eval(rooms[0], (el) => el.getBoundingClientRect())
+  await page.mouse.move(first.x + first.width / 2, first.y + first.height / 2)
+  await page.mouse.wheel(300, 0)
+  await page.waitForFunction(snapped, [rooms[1], "x"], { timeout: 3000 })
+    .catch(() => assert.fail(`${name}: a swipe to the left snaps to the next room`))
+
+  // A swipe up goes to the level below: #levels snaps to it.
+  await page.mouse.wheel(0, 600)
+  await page.waitForFunction(snapped, ["#level-outside", "y"], { timeout: 3000 })
+    .catch(() => assert.fail(`${name}: a swipe up snaps to the level below`))
+
+  // The links do the same for a keyboard.
+  await page.focus('#level-outside a[aria-label="The level above"]')
+  await page.keyboard.press("Enter")
+  await page.waitForFunction(snapped, ["#level-f1", "y"], { timeout: 3000 })
+    .catch(() => assert.fail(`${name}: the link goes to the level above`))
+
   await page.click('a[id^="item-"]:has-text("Fridge")')
   await page.waitForSelector("#item-sheet")
   await check(page, `${name} item`)
+
+  // The sheet keeps the focus, and the Escape key closes it. The focus goes
+  // back to the item.
+  const inSheet = () => page.evaluate(() => document.querySelector("#item-sheet").contains(document.activeElement))
+  for (let i = 0; i < 30; i++) {
+    await page.keyboard.press(i % 3 === 0 ? "Shift+Tab" : "Tab")
+    assert.ok(await inSheet(), `${name}: the focus stays in the sheet`)
+  }
+  await page.keyboard.press("Escape")
+  await page.waitForSelector("#item-sheet", { state: "detached" })
+  assert.match(await page.evaluate(() => document.activeElement.textContent), /Fridge/)
+  await page.click('a[id^="item-"]:has-text("Fridge")')
+  await page.waitForSelector("#item-sheet")
   await page.fill("#item-form input[name='item[kwh_year]']", "700")
   await page.waitForFunction(() => document.querySelector("#item-math")?.textContent.includes("700 kWh"))
   await page.click("#item-sheet .btn-ghost[aria-label=Close]")

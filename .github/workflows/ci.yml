@@ -151,3 +151,8 @@ jobs:
           done
           cat "$RUNNER_TEMP/wrangler.log"
           grep -q "Small Steps Home" "$RUNNER_TEMP/page.html"
+
+      # The browser test on the Worker: the VM gets the real answers of
+      # NASA POWER and Power to Choose through fetch() of the Worker.
+      - name: The browser test on the Worker
+        run: CHROMIUM=$(command -v google-chrome) node test/browser/house.mjs http://127.0.0.1:8787
