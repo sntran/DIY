@@ -93,6 +93,8 @@ defmodule DIY.MarketTest do
           %{good | "date" => "yesterday"},
           %{good | "utility" => 5},
           %{good | "median" => -1},
+          %{good | "median" => 10 ** 400},
+          %{good | "date" => 5},
           %{good | "source" => "x"},
           %{good | "plans" => -1},
           "market"

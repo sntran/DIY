@@ -71,6 +71,8 @@ defmodule DIY.BuildTest do
     assert build.market == market
     {:ok, other} = Build.set_zip(build, "78701")
     assert other.market == nil
+    # The same ZIP code makes no change: the market stays.
+    assert Build.set_zip(build, "75070") == {:ok, build}
 
     assert {:ok, %{price: 14.5}} = Build.set_price(build, 14.5)
     assert {:ok, %{price: 14.0}} = Build.set_price(build, 14)
@@ -106,6 +108,9 @@ defmodule DIY.BuildTest do
     assert Build.update_house(build, %{floors: 1}) == {:error, :floors}
     assert Build.update_house(build, %{size: 10}) == {:error, :house}
     assert Build.update_house(build, %{heat: "wood"}) == {:error, :house}
+    # A build with no house yet.
+    assert Build.update_house(Build.new(), %{size: 2000}) == {:error, :house}
+    assert Build.add_room(Build.new(), "Office", "f1", :indoor) == {:error, :house}
   end
 
   test "rooms: add, rename and remove" do
@@ -212,6 +217,14 @@ defmodule DIY.BuildTest do
              {:error, :items}
 
     assert bad.(%{"seq" => nil}) == {:error, :seq}
+
+    # A small seq gets the number of the last id, so that a new id is new.
+    {:ok, build} = bad.(%{"seq" => 0})
+    assert build.seq == preset().seq
+    {:ok, _build, id} = Build.add_room(build, "Office", "f1", :indoor)
+    assert id == "r#{preset().seq + 1}"
+    room = %{hd(good["rooms"]) | "id" => "kitchen"}
+    assert {:ok, %{seq: 0}} = bad.(%{"seq" => 0, "rooms" => [room], "items" => []})
     assert bad.(%{"hints" => ["x"]}) == {:error, :hints}
     assert bad.(%{"hints" => "swipe"}) == {:error, :hints}
     # An AC cannot be in a kitchen (inside).
@@ -268,6 +281,73 @@ defmodule DIY.BuildTest do
       assert Build.from_json(Build.to_json(build)) == {:ok, build}
     end
   end
+
+  property "from_json never raises for a build with one bad value" do
+    check all(
+            build <- build(),
+            index <- integer(0..10_000),
+            value <- bad_value()
+          ) do
+      map = build |> Build.to_json() |> Jason.decode!()
+      all = paths(map, [])
+      text = map |> put_at(Enum.at(all, rem(index, length(all))), value) |> Jason.encode!()
+      assert {status, _} = Build.from_json(text)
+      assert status in [:ok, :error]
+    end
+  end
+
+  @bad [nil, [], %{}, [1], %{"a" => 1}, 10 ** 400, -(10 ** 400), 1.0e300, "2026-13-40", :delete]
+
+  test "from_json never raises for a build with a bad value at any place" do
+    build = preset()
+    {:ok, build, _id} = Build.add_item(build, room_named(build, "Kitchen").id, "other")
+    map = build |> Build.to_json() |> Jason.decode!()
+
+    map = %{
+      map
+      | "market" => %{
+          "choice" => true,
+          "utility" => "Oncor",
+          "median" => 13.4,
+          "plans" => 3,
+          "date" => "2026-10-08",
+          "source" => "ptc"
+        },
+        "price" => 12.5
+    }
+
+    for path <- paths(map, []), value <- @bad do
+      text = map |> put_at(path, value) |> Jason.encode!()
+      assert {status, _} = Build.from_json(text), inspect({path, value})
+      assert status in [:ok, :error]
+    end
+  end
+
+  defp bad_value do
+    one_of([integer(), float(), string(:printable), boolean(), member_of(@bad)])
+  end
+
+  # The path of each value of a JSON map: its keys and its list indexes.
+  defp paths(map, path) when is_map(map),
+    do: Enum.flat_map(map, fn {key, value} -> [path ++ [key] | paths(value, path ++ [key])] end)
+
+  defp paths(list, path) when is_list(list) do
+    list
+    |> Enum.with_index()
+    |> Enum.flat_map(fn {value, i} -> [path ++ [i] | paths(value, path ++ [i])] end)
+  end
+
+  defp paths(_value, _path), do: []
+
+  defp put_at(map, [key], :delete) when is_map(map), do: Map.delete(map, key)
+  defp put_at(list, [i], :delete) when is_list(list), do: List.delete_at(list, i)
+  defp put_at(_data, [], value), do: value
+
+  defp put_at(map, [key | rest], value) when is_map(map),
+    do: Map.put(map, key, put_at(map[key], rest, value))
+
+  defp put_at(list, [i | rest], value) when is_list(list),
+    do: List.replace_at(list, i, put_at(Enum.at(list, i), rest, value))
 
   property "from_json never raises" do
     check all(text <- one_of([string(:printable), json()])) do

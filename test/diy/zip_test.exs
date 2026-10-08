@@ -13,7 +13,20 @@ defmodule DIY.ZipTest do
   end
 
   test "a ZIP code that is not in the data, or is not 5 digits, is an error" do
-    for zip <- ["00000", "99999", "7507", "750700", "7507a", "-7507", "+7507", nil, 75070] do
+    for zip <- [
+          "00000",
+          "99999",
+          "7507",
+          "750700",
+          "7507a",
+          "-7507",
+          "+7507",
+          "+2108",
+          " 2108",
+          "0210８",
+          nil,
+          75070
+        ] do
       assert Zip.lookup(zip) == :error, inspect(zip)
     end
   end

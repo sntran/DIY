@@ -154,13 +154,14 @@ defmodule DIY.Build do
 
   @doc """
   Sets the ZIP code. A ZIP code that is not in the data is an error. A new
-  ZIP code clears the utility area.
+  ZIP code clears the utility area. The same ZIP code makes no change.
   """
   @spec set_zip(t(), String.t()) :: {:ok, t()} | {:error, :zip}
   def set_zip(build, zip) when is_binary(zip) do
     zip = String.trim(zip)
 
     case DIY.Zip.lookup(zip) do
+      {:ok, _place} when zip == build.zip -> {:ok, build}
       {:ok, _place} -> {:ok, change(build, &%{&1 | zip: zip, market: nil})}
       :error -> {:error, :zip}
     end
@@ -219,6 +220,8 @@ defmodule DIY.Build do
     end
   end
 
+  def update_house(_build, _changes), do: {:error, :house}
+
   defp fit(rooms, floors) do
     levels = levels(floors)
     if Enum.all?(rooms, &(&1.level in levels)), do: :ok, else: {:error, :floors}
@@ -236,6 +239,8 @@ defmodule DIY.Build do
       {:ok, change(build, &%{&1 | rooms: &1.rooms ++ [room]}), id}
     end
   end
+
+  def add_room(_build, _name, _level, _place), do: {:error, :house}
 
   @doc "Gives a room a new name."
   @spec rename_room(t(), String.t(), String.t()) :: {:ok, t()} | {:error, atom()}
@@ -392,6 +397,7 @@ defmodule DIY.Build do
          {:ok, rooms} <- rooms(map["rooms"], house),
          {:ok, items} <- items(map["items"], rooms),
          {:ok, seq} <- count(map["seq"], :seq),
+         seq = last_id(seq, rooms ++ items),
          {:ok, hints} <- hints(map["hints"]) do
       {:ok,
        %__MODULE__{
@@ -414,6 +420,18 @@ defmodule DIY.Build do
     do: {:error, {:version, version}}
 
   defp from_map(_map), do: {:error, :not_a_build}
+
+  # The number of the last id: at least the number of each id of the build,
+  # so that a new id is new (a text that a person changed can have a small
+  # `seq`).
+  defp last_id(seq, list) do
+    Enum.reduce(list, seq, fn %{id: id}, seq ->
+      case Integer.parse(String.slice(id, 1..-1//1)) do
+        {number, ""} -> max(seq, number)
+        _ -> seq
+      end
+    end)
+  end
 
   defp count(value, _error) when is_integer(value) and value >= 0, do: {:ok, value}
   defp count(_value, error), do: {:error, error}

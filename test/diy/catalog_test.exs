@@ -64,6 +64,9 @@ defmodule DIY.CatalogTest do
 
   test "params gives the first parameter that is not valid" do
     assert Catalog.params("ac", %{"tons" => "99"}) == {:error, {:param, "tons"}}
+    # A very large integer has no float: it is out of the range.
+    assert Catalog.params("ac", %{"tons" => 10 ** 400}) == {:error, {:param, "tons"}}
+    assert {:ok, %{"tons" => 3.0}} = Catalog.params("ac", %{"tons" => 3})
     assert Catalog.params("ac", %{"tons" => "three"}) == {:error, {:param, "tons"}}
     assert Catalog.params("ac", %{"heat_pump" => "yes"}) == {:error, {:param, "heat_pump"}}
     assert Catalog.params("fridge", %{"kwh_year" => "6.5"}) == {:error, {:param, "kwh_year"}}

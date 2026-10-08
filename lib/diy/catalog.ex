@@ -437,7 +437,7 @@ defmodule DIY.Catalog do
 
   @doc """
   Reads the parameters of an item of a type, from the map of a form or of a
-  stored build. A missing parameter gets its default value, and an unknown
+  stored build. A parameter that is not in the values gets its default value, and an unknown
   key goes away. The error names the first parameter that is not valid.
   """
   @spec params(String.t(), map()) :: {:ok, map()} | {:error, {:param, String.t()}}
@@ -465,7 +465,12 @@ defmodule DIY.Catalog do
     end
   end
 
-  defp value(%{type: :float} = p, value) when is_number(value), do: range(p, value / 1)
+  defp value(%{type: :float} = p, value) when is_float(value), do: range(p, value)
+
+  # The range first: a very large integer has no float.
+  defp value(%{type: :float} = p, value) when is_integer(value) do
+    with {:ok, value} <- range(p, value), do: {:ok, value / 1}
+  end
 
   defp value(%{type: :float} = p, value) when is_binary(value) do
     case Float.parse(String.trim(value)) do

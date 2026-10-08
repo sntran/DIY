@@ -89,12 +89,9 @@ defmodule DIY.Zip do
   not in the data (for example a ZIP code of a post office box only).
   """
   @spec lookup(term()) :: {:ok, place()} | :error
-  def lookup(<<_::binary-size(5)>> = zip) do
-    case Integer.parse(zip) do
-      {number, ""} when number >= 0 -> search(data(), number, zip)
-      _ -> :error
-    end
-  end
+  def lookup(<<a, b, c, d, e>> = zip)
+      when a in ?0..?9 and b in ?0..?9 and c in ?0..?9 and d in ?0..?9 and e in ?0..?9,
+      do: search(data(), String.to_integer(zip), zip)
 
   def lookup(_zip), do: :error
 

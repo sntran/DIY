@@ -133,10 +133,14 @@ defmodule DIY.Market do
   @doc "Reads a market from a stored build."
   @spec from_map(term()) :: {:ok, t()} | :error
   def from_map(%{"choice" => choice, "plans" => plans, "date" => date, "source" => source} = map)
-      when is_boolean(choice) and is_integer(plans) and plans >= 0 and source in ["ptc", "user"] do
+      when is_boolean(choice) and is_integer(plans) and plans >= 0 and is_binary(date) and
+             source in ["ptc", "user"] do
+    # A median in cents, at most 200¢ (as the price of the user): a very
+    # large integer has no float.
     with {:ok, _date} <- Date.from_iso8601(date),
          utility when is_nil(utility) or is_binary(utility) <- map["utility"],
-         median when is_nil(median) or (is_number(median) and median > 0) <- map["median"] do
+         median when is_nil(median) or (is_number(median) and median > 0 and median <= 200) <-
+           map["median"] do
       {:ok,
        %{
          choice: choice,
