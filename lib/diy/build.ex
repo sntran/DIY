@@ -25,12 +25,17 @@ defmodule DIY.Build do
     (built), `floors` (1 to 3), `heat` (`"gas"`, `"heat_pump"` or
     `"electric"`), and `lot` (square feet, or `nil`).
   - `rooms`: each room has an `id`, a `name`, a `level` (see `levels/1`)
-    and a `place` (`:indoor`, `:outdoor` or `:roof`).
+    and a `place` (`:indoor`, `:outdoor` or `:roof`). A camper van (an
+    item) has its own rooms: its zones (`DIY.Catalog.zones/0`), on the level
+    `"van:ID"` (the id of the van). They are fixed: the user cannot add,
+    rename or remove a zone. The house and its numbers have only the rooms
+    of the house (`house_view/1`).
   - `items`: each item has an `id`, a `type` (`DIY.Catalog`), a `room`,
     `typical` (true for an item of a preset that the user did not check),
     `planned` (true for an item that the user does not have yet: the
     what-if of `DIY.Power`), `backup` (true for an item that a power
-    station runs) and its `params`.
+    station runs), `home` (for a power station in a van: the room of the
+    house where it goes back, or `nil`) and its `params`.
   - `usage`: the real usage of the meter file (`DIY.Usage`), or `nil`.
   - `power`: how the house uses its power stations, and the prices of the
     night and of the power to the grid (`DIY.Power.settings/0`).
@@ -78,6 +83,7 @@ defmodule DIY.Build do
           typical: boolean(),
           planned: boolean(),
           backup: boolean(),
+          home: String.t() | nil,
           params: map()
         }
   @type house :: %{
@@ -248,7 +254,10 @@ defmodule DIY.Build do
 
   defp fit(rooms, floors) do
     levels = levels(floors)
-    if Enum.all?(rooms, &(&1.level in levels)), do: :ok, else: {:error, :floors}
+
+    if Enum.all?(rooms, &(van_level?(&1.level) or &1.level in levels)),
+      do: :ok,
+      else: {:error, :floors}
   end
 
   @doc "Adds a room on a level."
@@ -270,25 +279,119 @@ defmodule DIY.Build do
   @spec rename_room(t(), String.t(), String.t()) :: {:ok, t()} | {:error, atom()}
   def rename_room(build, id, name) do
     with {:ok, name} <- name(name),
-         {:ok, _room} <- room(build, id) do
+         {:ok, _room} <- house_room(build, id) do
       rooms = Enum.map(build.rooms, &if(&1.id == id, do: %{&1 | name: name}, else: &1))
       {:ok, change(build, &%{&1 | rooms: rooms})}
     end
   end
 
-  @doc "Removes a room and its items."
+  @doc """
+  Removes a room of the house and its items. A camper van in the room goes
+  too, with its zones. A station in a van that had its home in the room
+  stays in the van, with no home.
+  """
   @spec delete_room(t(), String.t()) :: {:ok, t()} | {:error, atom()}
   def delete_room(build, id) do
-    with {:ok, _room} <- room(build, id) do
+    with {:ok, _room} <- house_room(build, id) do
       {:ok,
        change(build, fn build ->
-         no_meter_no_usage(%{
-           build
-           | rooms: Enum.reject(build.rooms, &(&1.id == id)),
-             items: Enum.reject(build.items, &(&1.room == id))
-         })
+         items =
+           for item <- build.items,
+               item.room != id,
+               do: if(item.home == id, do: %{item | home: nil}, else: item)
+
+         %{build | rooms: Enum.reject(build.rooms, &(&1.id == id)), items: items}
+         |> drop_vans()
+         |> no_meter_no_usage()
        end)}
     end
+  end
+
+  defp house_room(build, id) do
+    case room(build, id) do
+      {:ok, %{level: level} = room} ->
+        if van_level?(level), do: {:error, :room}, else: {:ok, room}
+
+      error ->
+        error
+    end
+  end
+
+  @doc "The level of the zones of a camper van."
+  def van_level(van_id), do: "van:" <> van_id
+
+  @doc "True for the level of the zones of a camper van."
+  def van_level?(level), do: String.starts_with?(level, "van:")
+
+  @doc """
+  The house: the build with only the rooms of the house and their items
+  (no zone of a van, and no item in a van).
+  """
+  @spec house_view(t()) :: t()
+  def house_view(build) do
+    rooms = Enum.reject(build.rooms, &van_level?(&1.level))
+    ids = MapSet.new(rooms, & &1.id)
+    %{build | rooms: rooms, items: Enum.filter(build.items, &(&1.room in ids))}
+  end
+
+  @doc "The zones of a camper van, in order (`DIY.Catalog.zones/0`)."
+  def zones(build, van_id), do: rooms_on(build, van_level(van_id))
+
+  @doc "The zone of a camper van with a place, or `nil`."
+  def zone(build, van_id, place), do: Enum.find(zones(build, van_id), &(&1.place == place))
+
+  # The zones of a van that is not in the build go, with their items. A
+  # station with a home in the house goes back to its home.
+  defp drop_vans(build) do
+    vans = for i <- build.items, i.type == "camper_van", do: van_level(i.id)
+    {gone, rooms} = Enum.split_with(build.rooms, &(van_level?(&1.level) and &1.level not in vans))
+    gone = MapSet.new(gone, & &1.id)
+    homes = MapSet.new(rooms, & &1.id)
+
+    items =
+      for item <- build.items,
+          not MapSet.member?(gone, item.room) or MapSet.member?(homes, item.home || ""),
+          do:
+            if(MapSet.member?(gone, item.room),
+              do: %{item | room: item.home, home: nil},
+              else: item
+            )
+
+    %{build | rooms: rooms, items: items}
+  end
+
+  @doc """
+  Takes a power station of the house to the electrical bay of a van. The
+  station keeps its room of the house as its home: the house loses its
+  capacity while the van has it.
+  """
+  @spec take_to_van(t(), String.t(), String.t()) :: {:ok, t()} | {:error, atom()}
+  def take_to_van(build, id, van_id) do
+    with {:ok, item} <- item(build, id),
+         {:ok, _room} <- house_room(build, item.room),
+         true <- item.type == "power_station" || {:error, :item},
+         %{} = bay <- zone(build, van_id, :bay) || {:error, :van} do
+      {:ok, replace_item(build, %{item | room: bay.id, home: item.room, backup: false})}
+    end
+  end
+
+  @doc """
+  Brings a power station of a van to the house: to its home, else to the
+  first room inside the house.
+  """
+  @spec bring_home(t(), String.t()) :: {:ok, t()} | {:error, atom()}
+  def bring_home(build, id) do
+    with {:ok, item} <- item(build, id),
+         {:ok, room} <- room(build, item.room),
+         true <- (item.type == "power_station" and van_level?(room.level)) || {:error, :item},
+         %{} = home <- home(build, item) || {:error, :room} do
+      {:ok, replace_item(build, %{item | room: home.id, home: nil})}
+    end
+  end
+
+  defp home(build, item) do
+    rooms = house_view(build).rooms
+    Enum.find(rooms, &(&1.id == item.home)) || Enum.find(rooms, &(&1.place == :indoor))
   end
 
   @doc "The room with an id."
@@ -315,7 +418,37 @@ defmodule DIY.Build do
          true <- room.place in kind.places || {:error, :place} do
       {id, build} = next_id(build, "i")
       item = new_item(id, type, room_id, Catalog.defaults(type))
-      {:ok, change(build, &%{&1 | items: &1.items ++ [item]}), id}
+      {:ok, change(build, &(%{&1 | items: &1.items ++ [item]} |> van_zones(item))), id}
+    end
+  end
+
+  # A camper van gets its zones. Its numbers are the numbers of its model:
+  # typical, until the user checks them on the label of the van.
+  defp van_zones(build, %{type: "camper_van"} = van) do
+    Enum.reduce(Catalog.zones(), replace(build, %{van | typical: true}), fn {place, name},
+                                                                            build ->
+      {id, build} = next_id(build, "r")
+
+      %{
+        build
+        | rooms: build.rooms ++ [%{id: id, name: name, level: van_level(van.id), place: place}]
+      }
+    end)
+  end
+
+  defp van_zones(build, _item), do: build
+
+  defp replace(build, item),
+    do: %{build | items: Enum.map(build.items, &if(&1.id == item.id, do: item, else: &1))}
+
+  @doc "Gives a camper van the numbers of its model (`DIY.Catalog.van_models/0`)."
+  @spec van_model(t(), String.t()) :: {:ok, t()} | {:error, atom()}
+  def van_model(build, id) do
+    with {:ok, %{type: "camper_van"} = van} <- item(build, id) do
+      {_key, _name, numbers} = List.keyfind(Catalog.van_models(), van.params["model"], 0)
+      {:ok, replace_item(build, %{van | params: Map.merge(van.params, numbers), typical: true})}
+    else
+      _ -> {:error, :item}
     end
   end
 
@@ -339,6 +472,7 @@ defmodule DIY.Build do
       typical: false,
       planned: false,
       backup: false,
+      home: nil,
       params: params
     }
 
@@ -428,7 +562,9 @@ defmodule DIY.Build do
       {:ok,
        change(
          build,
-         &no_meter_no_usage(%{&1 | items: Enum.reject(&1.items, fn i -> i.id == id end)})
+         &(%{&1 | items: Enum.reject(&1.items, fn i -> i.id == id end)}
+           |> drop_vans()
+           |> no_meter_no_usage())
        )}
     end
   end
@@ -507,6 +643,7 @@ defmodule DIY.Build do
          {:ok, house} <- house(map["house"]),
          {:ok, rooms} <- rooms(map["rooms"], house),
          {:ok, items} <- items(map["items"], rooms),
+         :ok <- vans(rooms, items),
          {:ok, usage} <- usage(map["usage"]),
          {:ok, power} <- power(map["power"]),
          {:ok, plans} <- plans(map["plans"]),
@@ -662,6 +799,22 @@ defmodule DIY.Build do
   defp name(_name), do: {:error, :name}
 
   @place_names Map.new(@places, &{Atom.to_string(&1), &1})
+  @zone_names Map.new(Catalog.zones(), fn {zone, _name} -> {Atom.to_string(zone), zone} end)
+
+  # Each van has each of its zones one time, and each zone has its van.
+  defp vans(rooms, items) do
+    vans = for i <- items, i.type == "camper_van", do: van_level(i.id)
+    zones = Enum.filter(rooms, &van_level?(&1.level))
+    want = Enum.sort(Keyword.keys(Catalog.zones()))
+
+    ok =
+      Enum.all?(zones, &(&1.level in vans)) and
+        Enum.all?(vans, fn van ->
+          Enum.sort(for(z <- zones, z.level == van, do: z.place)) == want
+        end)
+
+    if ok, do: :ok, else: {:error, :vans}
+  end
 
   defp rooms(rooms, house) when is_list(rooms) do
     levels = if house, do: levels(house.floors), else: []
@@ -674,10 +827,12 @@ defmodule DIY.Build do
   defp rooms(_rooms, _house), do: {:error, :rooms}
 
   defp read_room(%{"id" => id, "name" => name, "level" => level, "place" => place}, levels)
-       when is_binary(id) do
+       when is_binary(id) and is_binary(level) do
+    places = if van_level?(level), do: @zone_names, else: @place_names
+
     with {:ok, name} <- name(name),
-         true <- level in levels,
-         {:ok, place} <- Map.fetch(@place_names, place) do
+         true <- van_level?(level) or level in levels,
+         {:ok, place} <- Map.fetch(places, place) do
       {:ok, %{id: id, name: name, level: level, place: place}}
     else
       _ -> :error
@@ -706,20 +861,22 @@ defmodule DIY.Build do
 
   defp items(items, rooms) when is_list(items) do
     places = Map.new(rooms, &{&1.id, &1.place})
+    homes = for r <- rooms, not van_level?(r.level), do: r.id
 
     items
-    |> all(&read_item(&1, places))
+    |> all(&read_item(&1, places, homes))
     |> unique(:items)
   end
 
   defp items(_items, _rooms), do: {:error, :items}
 
-  # An item of a build of an older version has no `planned` and no
-  # `backup`: they are false.
+  # An item of a build of an older version has no `planned`, no `backup`
+  # and no `home`: false, false and nil.
   defp read_item(
          %{"id" => id, "type" => type, "room" => room, "typical" => typical, "params" => params} =
            item,
-         places
+         places,
+         homes
        )
        when is_binary(id) and is_boolean(typical) do
     with %{} = kind <- Catalog.kind(type),
@@ -727,6 +884,8 @@ defmodule DIY.Build do
          true <- place in kind.places,
          planned when is_boolean(planned) <- Map.get(item, "planned", false),
          backup when is_boolean(backup) <- Map.get(item, "backup", false),
+         home = Map.get(item, "home"),
+         true <- is_nil(home) or home in homes,
          {:ok, params} <- Catalog.params(type, params) do
       {:ok,
        %{
@@ -736,6 +895,7 @@ defmodule DIY.Build do
          typical: typical,
          planned: planned,
          backup: backup,
+         home: home,
          params: params
        }}
     else
@@ -743,7 +903,7 @@ defmodule DIY.Build do
     end
   end
 
-  defp read_item(_item, _places), do: :error
+  defp read_item(_item, _places, _homes), do: :error
 
   defp hints(hints) when is_list(hints) do
     if Enum.all?(hints, &(&1 in @hints)), do: {:ok, Enum.uniq(hints)}, else: {:error, :hints}

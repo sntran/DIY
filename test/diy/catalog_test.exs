@@ -5,8 +5,16 @@ defmodule DIY.CatalogTest do
   alias DIY.Catalog
 
   test "each kind has its places, features and valid defaults" do
+    zones = Keyword.keys(Catalog.zones())
+
     for kind <- Catalog.kinds() do
-      assert kind.places != [] and Enum.all?(kind.places, &(&1 in Catalog.places()))
+      assert kind.places != [] and
+               Enum.all?(kind.places, &(&1 in Catalog.places() or &1 in zones))
+
+      # An item of a van has its weight.
+      if Enum.any?(kind.places, &(&1 in zones)),
+        do: assert(Enum.any?(kind.params, &(&1.key == "weight")), kind.type)
+
       assert kind.features != []
       assert {:ok, defaults} = Catalog.params(kind.type, %{})
       assert defaults == Catalog.defaults(kind.type)
@@ -27,6 +35,23 @@ defmodule DIY.CatalogTest do
 
     assert %{key: "season", default: "all"} = Param.season("all")
     assert length(Param.seasons()) == 5
+  end
+
+  test "the zones and the models of a camper van" do
+    assert [{:cab, "Cab"} | _] = Catalog.zones()
+    assert length(Catalog.zones()) == 7
+    assert Enum.any?(Catalog.kinds_for(:bay), &(&1.type == "power_station"))
+    refute Enum.any?(Catalog.house_kinds(), &(&1.type == "van_fridge"))
+    assert Enum.any?(Catalog.house_kinds(), &(&1.type == "camper_van"))
+
+    # The numbers of each model are valid numbers of a van.
+    for {key, _name, numbers} <- Catalog.van_models() do
+      assert {:ok, params} = Catalog.params("camper_van", Map.put(numbers, "model", key))
+      assert params["model"] == key
+    end
+
+    assert {:ok, %{"model" => "promaster_159", "gvwr" => 8900}} =
+             Catalog.params("camper_van", %{})
   end
 
   test "the kinds of a place" do

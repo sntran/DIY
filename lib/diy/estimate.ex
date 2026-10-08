@@ -398,8 +398,8 @@ defmodule DIY.Estimate do
   def kwh(%{type: "always_on", params: p}, ctx), do: other(p["watts"] * 24 * ctx.days / 1_000)
 
   # A meter measures the power of the house. Its own power is too small to
-  # show.
-  def kwh(%{type: "smart_meter"}, _ctx), do: other(0)
+  # show. A camper van has its own build, with its own power (DIY.Van).
+  def kwh(%{type: type}, _ctx) when type in ["smart_meter", "camper_van"], do: other(0)
 
   # The power equipment changes the power from the grid, not the use of
   # the house: see DIY.Power.
@@ -609,6 +609,11 @@ defmodule DIY.Estimate do
       ],
       else: ["The fans are off in #{m.name} (#{season_text(p)})."]
   end
+
+  defp steps(%{type: "camper_van"}, _m, _data, _estimate),
+    do: [
+      "A camper van has its own build, with its own batteries and power: see the page Van. Its charge at home is not in this estimate."
+    ]
 
   defp steps(%{type: "smart_meter"}, _m, _data, _estimate),
     do: ["The meter measures the power of the house. Its own power is too small to show."]

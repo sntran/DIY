@@ -8,8 +8,13 @@ defmodule DIYWeb.HomeLive do
     next room of a floor, or to a different floor. `?item=ID` opens an
     item, and `?add=ROOM` the list of the items for a room.
   - `/estimate` (`:estimate`): the math of the estimate, month by month.
+  - `/van` (`:van`): the build of a camper van (`?id=ID`), with its zones,
+    an item (`?item=ID`) and the items for a zone (`?add=ZONE`).
   - `/settings` (`:settings`): the place, the price, the numbers of the
     house, and the file of the build.
+
+  The numbers of the house come from the house only (`DIY.Build.house_view/1`):
+  a van has its own budgets (`DIY.Van`).
 
   The weather of the ZIP code (`DIY.Weather`) and the utility area of a
   Texas ZIP code (`DIY.Market`) come in the background.
@@ -31,6 +36,7 @@ defmodule DIYWeb.HomeLive do
     Power,
     Prices,
     Usage,
+    Van,
     Weather
   }
 
@@ -57,6 +63,7 @@ defmodule DIYWeb.HomeLive do
      |> assign(:price, nil)
      |> assign(:item, nil)
      |> assign(:add, nil)
+     |> assign(:van_id, nil)
      |> allow_upload(:build_file,
        accept: ~w(.json),
        max_entries: 1,
@@ -68,14 +75,16 @@ defmodule DIYWeb.HomeLive do
 
   @impl true
   def handle_params(params, _uri, socket) do
-    item = if socket.assigns.live_action == :inside, do: params["item"]
+    sheets? = socket.assigns.live_action in [:inside, :van]
+    item = if sheets?, do: params["item"]
 
     {:noreply,
      socket
      # The error of a field is for the item that the sheet showed.
      |> assign(:item_error, if(item == socket.assigns[:item], do: socket.assigns[:item_error]))
      |> assign(:item, item)
-     |> assign(:add, if(socket.assigns.live_action == :inside, do: params["add"]))
+     |> assign(:add, if(sheets?, do: params["add"]))
+     |> assign(:van_id, params["id"])
      |> assign(:lesson_step, parse_int(params["step"]))
      |> assign(:checks, nil)
      |> assign(:hint, false)}
@@ -147,7 +156,7 @@ defmodule DIYWeb.HomeLive do
   def handle_event("add_item", %{"room" => room, "type" => type}, socket) do
     case Build.add_item(socket.assigns.build, room, type) do
       {:ok, build, id} ->
-        {:noreply, socket |> put(build) |> push_patch(to: ~p"/inside?#{[item: id]}")}
+        {:noreply, socket |> put(build) |> push_patch(to: item_path(build, id))}
 
       {:error, _reason} ->
         {:noreply, socket}
@@ -197,11 +206,24 @@ defmodule DIYWeb.HomeLive do
   end
 
   def handle_event("delete_item", %{"id" => id}, socket) do
-    case Build.delete_item(socket.assigns.build, id) do
-      {:ok, build} -> {:noreply, socket |> put(build) |> push_patch(to: ~p"/inside")}
-      {:error, _reason} -> {:noreply, socket}
+    build = socket.assigns.build
+
+    with {:ok, item} <- Build.item(build, id),
+         {:ok, build} <- Build.delete_item(build, id) do
+      {:noreply, socket |> put(build) |> push_patch(to: page_of(socket.assigns.build, item))}
+    else
+      _ -> {:noreply, socket}
     end
   end
+
+  def handle_event("take_to_van", %{"item" => id, "van" => van}, socket),
+    do: with_build(socket, Build.take_to_van(socket.assigns.build, id, van))
+
+  def handle_event("bring_home", %{"item" => id}, socket),
+    do: with_build(socket, Build.bring_home(socket.assigns.build, id))
+
+  def handle_event("van_model", %{"id" => id}, socket),
+    do: with_build(socket, Build.van_model(socket.assigns.build, id))
 
   def handle_event(
         "add_room",
@@ -445,6 +467,30 @@ defmodule DIYWeb.HomeLive do
 
   defp flag(build, _id, _flag, _value), do: {:ok, build}
 
+  # The page of a new item: the van of a zone, else the rooms.
+  defp item_path(build, id) do
+    {:ok, item} = Build.item(build, id)
+
+    case van_of(build, item) do
+      nil -> ~p"/inside?#{[item: id]}"
+      van -> ~p"/van?#{[id: van, item: id]}"
+    end
+  end
+
+  # The page of an item that goes: its van, else the rooms.
+  defp page_of(build, item) do
+    case van_of(build, item) do
+      nil -> ~p"/inside"
+      van -> ~p"/van?#{[id: van]}"
+    end
+  end
+
+  # The id of the van of an item in a zone, or nil.
+  defp van_of(build, item) do
+    {:ok, room} = Build.room(build, item.room)
+    if Build.van_level?(room.level), do: String.replace_prefix(room.level, "van:", "")
+  end
+
   defp with_build(socket, {:ok, build}), do: {:noreply, put(socket, build)}
   defp with_build(socket, {:error, _reason}), do: {:noreply, socket}
 
@@ -574,7 +620,7 @@ defmodule DIYWeb.HomeLive do
   # and its bill, the estimate with the planned items (for the math of an
   # item), and the what-if (DIY.Power).
   defp estimate(socket) do
-    build = socket.assigns.build
+    build = Build.house_view(socket.assigns.build)
     climate = socket.assigns.weather.climate
     today = Build.today(build)
     estimate = Estimate.run(today, climate)
@@ -670,6 +716,7 @@ defmodule DIYWeb.HomeLive do
       flash={@flash}
       nav={nav?(@build)}
       power={power?(@build)}
+      van={van?(@build)}
       plans={plans?(@build)}
       action={@live_action}
       saved={Device.saved?(assigns)}
@@ -695,7 +742,8 @@ defmodule DIYWeb.HomeLive do
             <DIYWeb.Start.preset build={@build} />
           <% @live_action == :inside -> %>
             <DIYWeb.Inside.inside
-              build={@build}
+              build={Build.house_view(@build)}
+              away={Van.stations(@build).away}
               estimate={@full}
               bill={@bill}
               price={@price}
@@ -705,8 +753,8 @@ defmodule DIYWeb.HomeLive do
             />
           <% @live_action == :estimate -> %>
             <DIYWeb.Math.estimate
-              build={Build.today(@build)}
-              planned={Enum.count(@build.items, & &1.planned)}
+              build={Build.today(Build.house_view(@build))}
+              planned={Enum.count(Build.house_view(@build).items, & &1.planned)}
               estimate={@estimate}
               power={@power}
               bill={@bill}
@@ -715,7 +763,7 @@ defmodule DIYWeb.HomeLive do
             />
           <% @live_action == :power -> %>
             <DIYWeb.PowerPage.page
-              build={@build}
+              build={Build.house_view(@build)}
               power={@power}
               whatif={@whatif}
               price={@price}
@@ -736,6 +784,15 @@ defmodule DIYWeb.HomeLive do
             <p id="no-lesson" class="py-8 opacity-80">
               The plan lesson is for a house in Texas, in an area with retail choice, with its estimate.
             </p>
+          <% @live_action == :van -> %>
+            <DIYWeb.VanPage.page
+              build={@build}
+              van_id={@van_id}
+              item={@item}
+              add={@add}
+              climate={@weather.climate}
+              item_error={assigns[:item_error]}
+            />
           <% @live_action == :settings -> %>
             <DIYWeb.Settings.settings
               build={@build}
@@ -767,6 +824,10 @@ defmodule DIYWeb.HomeLive do
     do: Enum.any?(items, &(&1.planned or &1.type in @power_types))
 
   defp power?(_build), do: false
+
+  # The page Van is for a build with a camper van.
+  defp van?(%Build{} = build), do: Van.vans(build) != []
+  defp van?(_build), do: false
 
   # The plan lesson is for an area of Texas with retail choice.
   defp plans?(%Build{market: %{choice: true}}), do: true

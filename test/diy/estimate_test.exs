@@ -288,7 +288,7 @@ defmodule DIY.EstimateTest do
 
   test "the explanation of each item gives its kWh in each month" do
     build =
-      Enum.reduce(Catalog.kinds(), build(), fn kind, build ->
+      Enum.reduce(Catalog.house_kinds(), build(), fn kind, build ->
         room = Enum.find(build.rooms, &(&1.place in kind.places))
         {:ok, build, _id} = Build.add_item(build, room.id, kind.type)
         build
@@ -430,7 +430,7 @@ defmodule DIY.EstimateTest do
 
     check all(
             build <- house_build(),
-            kind <- member_of(Catalog.kinds())
+            kind <- member_of(Catalog.house_kinds())
           ) do
       before = Estimate.run(build, climate).kwh
       room = Enum.find(build.rooms, &(&1.place in kind.places))

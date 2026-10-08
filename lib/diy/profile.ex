@@ -154,7 +154,13 @@ defmodule DIY.Profile do
   def watts(%{type: "ev", params: p}), do: charger_kw(p["charger"]) * 1_000
 
   def watts(%{type: type})
-      when type in ["smart_meter", "power_station", "solar_panels", "transfer_switch"],
+      when type in [
+             "smart_meter",
+             "power_station",
+             "solar_panels",
+             "transfer_switch",
+             "camper_van"
+           ],
       do: 0.0
 
   def watts(%{params: %{"watts" => watts}}), do: watts / 1

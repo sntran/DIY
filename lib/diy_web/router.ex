@@ -19,6 +19,7 @@ defmodule DIYWeb.Router do
       live "/estimate", HomeLive, :estimate
       live "/power", HomeLive, :power
       live "/plans", HomeLive, :plans
+      live "/van", HomeLive, :van
       live "/settings", HomeLive, :settings
     end
   end

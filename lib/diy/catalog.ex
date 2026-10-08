@@ -47,6 +47,13 @@ defmodule DIY.Catalog.Param do
       note: note
     }
 
+  # The weight of an item of a van, in pounds.
+  def weight(default, note \\ "The label or the page of the maker gives it."),
+    do: int("weight", "Weight", "lb", default, 0, 3000, note)
+
+  # A power that an item uses some minutes in one day.
+  def minutes(default), do: int("minutes", "Minutes in one day", "min", default, 0, 1440)
+
   def choice(key, label, values, default),
     do: %{key: key, label: label, unit: nil, type: {:choice, values}, default: default, note: nil}
 
@@ -74,6 +81,60 @@ defmodule DIY.Catalog do
 
   @places [:indoor, :outdoor, :roof]
   @seasons DIY.Catalog.Param.seasons()
+
+  # The zones of a camper van: the rooms of its build.
+  @zones [
+    cab: "Cab",
+    galley: "Galley",
+    living: "Living area",
+    bed: "Bed",
+    bay: "Electrical bay",
+    van_roof: "Roof of the van",
+    shell: "Shell"
+  ]
+
+  # The models of camper vans, with typical numbers. The label in the door
+  # frame of a van gives its weight rating (GVWR) and the rating of each
+  # axle (GAWR); a truck scale gives the weight of each axle of the empty
+  # van. 0 for the rating of an axle: the app does not know it.
+  #
+  # - Ram ProMaster 2500, 159 in, high roof: GVWR 8,900 lb and curb weight
+  #   4,895 lb (Autopadre, 2025 Tradesman). Axles 4,629 and 5,291 lb, and
+  #   64% of the empty weight on the front axle (Auto123, 2025 ProMaster
+  #   2500 136 in: reserves of 1,731 and 3,679 lb).
+  # - Ford Transit 250, 148 in, high roof: GVWR 9,070 lb and curb weight
+  #   5,330 lb (Autopadre, 2025). The axles: not known; 55% on the front
+  #   axle is a guess of the app.
+  # - Mercedes-Benz Sprinter 2500, 170 in, high roof: GVWR 9,050 lb, curb
+  #   weight 4,993 to 5,743 lb by the options (Autopadre, 2022); the app
+  #   takes 5,400. The axles: not known; 55% on the front axle is a guess.
+  @van_models [
+    {"promaster_159", "Ram ProMaster 2500, 159 in, high roof",
+     %{
+       "gvwr" => 8900,
+       "front_gawr" => 4629,
+       "rear_gawr" => 5291,
+       "front_empty" => 3133,
+       "rear_empty" => 1762
+     }},
+    {"transit_148", "Ford Transit 250, 148 in, high roof",
+     %{
+       "gvwr" => 9070,
+       "front_gawr" => 0,
+       "rear_gawr" => 0,
+       "front_empty" => 2932,
+       "rear_empty" => 2398
+     }},
+    {"sprinter_170", "Mercedes-Benz Sprinter 2500, 170 in, high roof",
+     %{
+       "gvwr" => 9050,
+       "front_gawr" => 0,
+       "rear_gawr" => 0,
+       "front_empty" => 2970,
+       "rear_empty" => 2430
+     }},
+    {"other", "Another van", %{}}
+  ]
 
   @fuels [{"electric", "Electric"}, {"gas", "Gas"}]
 
@@ -393,7 +454,7 @@ defmodule DIY.Catalog do
       type: "power_station",
       name: "Power station",
       emoji: "🔋",
-      places: [:indoor, :outdoor],
+      places: [:indoor, :outdoor, :bay, :bed],
       features: [:backup, :shift, :power_view],
       params: [
         float(
@@ -450,7 +511,8 @@ defmodule DIY.Catalog do
           0,
           200_000,
           "What you paid, or what it costs: for the payback."
-        )
+        ),
+        weight(50, "The label gives it. It counts in a van.")
       ]
     },
     %{
@@ -562,6 +624,401 @@ defmodule DIY.Catalog do
       ]
     },
     %{
+      type: "camper_van",
+      name: "Camper van",
+      emoji: "🚐",
+      places: [:outdoor],
+      features: [:van],
+      params: [
+        choice(
+          "model",
+          "Model",
+          Enum.map(@van_models, &{elem(&1, 0), elem(&1, 1)}),
+          "promaster_159"
+        ),
+        int(
+          "gvwr",
+          "Weight rating (GVWR)",
+          "lb",
+          8900,
+          2000,
+          30000,
+          "The label in the door frame of the driver gives it."
+        ),
+        int(
+          "front_gawr",
+          "Rating of the front axle (GAWR)",
+          "lb",
+          4629,
+          0,
+          20000,
+          "The same label. 0: the app does not know it."
+        ),
+        int(
+          "rear_gawr",
+          "Rating of the rear axle (GAWR)",
+          "lb",
+          5291,
+          0,
+          20000,
+          "The same label. 0: the app does not know it."
+        ),
+        int(
+          "front_empty",
+          "Empty weight on the front axle",
+          "lb",
+          3133,
+          0,
+          20000,
+          "A truck scale gives the weight of each axle of the empty van."
+        ),
+        int(
+          "rear_empty",
+          "Empty weight on the rear axle",
+          "lb",
+          1762,
+          0,
+          20000,
+          "A truck scale gives the weight of each axle of the empty van."
+        ),
+        int("people", "People", nil, 2, 0, 9),
+        int("person_lb", "Weight of one person", "lb", 180, 0, 500),
+        int("gear_lb", "Gear, clothes and food", "lb", 200, 0, 5000),
+        float(
+          "drive_hours",
+          "Hours of driving in one day",
+          "h",
+          1.0,
+          0.0,
+          24.0,
+          "The alternator charger works when the engine runs."
+        )
+      ]
+    },
+    %{
+      type: "swivel_seat",
+      name: "Swivel seat base",
+      emoji: "💺",
+      places: [:cab],
+      features: [:weight],
+      params: [weight(35)]
+    },
+    %{
+      type: "dc_charger",
+      name: "Alternator charger (DC-DC)",
+      emoji: "🔌",
+      places: [:cab, :bay],
+      features: [:weight, :van_power],
+      params: [int("amps", "Charge", "A", 30, 1, 200, "The label gives its amps."), weight(5)]
+    },
+    %{
+      type: "van_fridge",
+      name: "12 V fridge",
+      emoji: "🧊",
+      places: [:galley, :living],
+      features: [:weight, :van_power],
+      params: [
+        int(
+          "wh_day",
+          "Power in one day",
+          "Wh",
+          400,
+          0,
+          5000,
+          "The label gives Ah in one day at 12 V: 30 Ah is near 360 Wh."
+        ),
+        weight(45)
+      ]
+    },
+    %{
+      type: "stove",
+      name: "Stove",
+      emoji: "🍳",
+      places: [:galley],
+      features: [:weight, :van_power, :safety],
+      params: [
+        choice(
+          "fuel",
+          "Fuel",
+          [
+            {"propane", "Propane"},
+            {"butane", "Butane"},
+            {"diesel", "Diesel"},
+            {"induction", "Induction (electric)"}
+          ],
+          "propane"
+        ),
+        int("watts", "Power of an induction stove", "W", 1800, 0, 5000, nil),
+        minutes(30),
+        weight(15)
+      ]
+    },
+    %{
+      type: "sink",
+      name: "Sink and faucet",
+      emoji: "🚰",
+      places: [:galley],
+      features: [:weight],
+      params: [weight(15)]
+    },
+    %{
+      type: "water_tank",
+      name: "Water tank",
+      emoji: "💧",
+      places: [:galley, :bed, :bay, :living],
+      features: [:weight],
+      params: [
+        choice("water", "Water", [{"fresh", "Fresh water"}, {"grey", "Grey water"}], "fresh"),
+        int(
+          "gallons",
+          "Water in it when you drive",
+          "gal",
+          20,
+          0,
+          100,
+          "A gallon of water weighs 8.34 lb."
+        ),
+        weight(10, "The weight of the empty tank.")
+      ]
+    },
+    %{
+      type: "water_pump",
+      name: "Water pump",
+      emoji: "🚿",
+      places: [:galley, :bed, :bay],
+      features: [:weight, :van_power],
+      params: [int("watts", "Power", "W", 60, 0, 1000, nil), minutes(10), weight(3)]
+    },
+    %{
+      type: "counter",
+      name: "Counter and cabinets",
+      emoji: "🗄️",
+      places: [:galley, :living],
+      features: [:weight],
+      params: [weight(80)]
+    },
+    %{
+      type: "bench",
+      name: "Bench or seat",
+      emoji: "🛋️",
+      places: [:living],
+      features: [:weight],
+      params: [weight(50)]
+    },
+    %{
+      type: "van_table",
+      name: "Table",
+      emoji: "🪑",
+      places: [:living],
+      features: [:weight],
+      params: [weight(20)]
+    },
+    %{
+      type: "van_fan",
+      name: "Roof fan",
+      emoji: "🌀",
+      places: [:van_roof, :living],
+      features: [:weight, :van_power],
+      params: [
+        int("watts", "Power", "W", 30, 0, 500, nil),
+        float("hours", "Hours in one day", "h", 8.0, 0.0, 24.0, nil),
+        season("warm"),
+        weight(15)
+      ]
+    },
+    %{
+      type: "window",
+      name: "Window",
+      emoji: "🪟",
+      places: [:living, :galley, :bed],
+      features: [:weight],
+      params: [weight(20)]
+    },
+    %{
+      type: "van_lights",
+      name: "Lights",
+      emoji: "💡",
+      places: [:living, :galley, :bed],
+      features: [:weight, :van_power],
+      params: [
+        int("watts", "Power", "W", 20, 0, 500, nil),
+        float("hours", "Hours in one day", "h", 4.0, 0.0, 24.0, nil),
+        weight(3)
+      ]
+    },
+    %{
+      type: "devices",
+      name: "Phones and a laptop",
+      emoji: "💻",
+      places: [:living, :bed, :cab],
+      features: [:weight, :van_power],
+      params: [
+        int("watts", "Power", "W", 60, 0, 3000, nil),
+        float("hours", "Hours in one day", "h", 3.0, 0.0, 24.0, nil),
+        choice(
+          "outlet",
+          "They plug into",
+          [{"usb", "USB or 12 V"}, {"ac", "An outlet of 120 V (the inverter)"}],
+          "usb"
+        ),
+        weight(5)
+      ]
+    },
+    %{
+      type: "diesel_heater",
+      name: "Diesel heater",
+      emoji: "🔥",
+      places: [:bay, :living, :bed],
+      features: [:weight, :van_power, :safety],
+      params: [
+        int("watts", "Power of its fan and pump", "W", 25, 0, 500, nil),
+        float("hours", "Hours in one day", "h", 8.0, 0.0, 24.0, nil),
+        season("cold"),
+        weight(25)
+      ]
+    },
+    %{
+      type: "co_alarm",
+      name: "Carbon monoxide and propane alarm",
+      emoji: "🚨",
+      places: [:living, :galley, :bed],
+      features: [:weight, :safety],
+      params: [weight(1)]
+    },
+    %{
+      type: "bed_platform",
+      name: "Bed and mattress",
+      emoji: "🛏️",
+      places: [:bed],
+      features: [:weight],
+      params: [weight(120)]
+    },
+    %{
+      type: "storage",
+      name: "Storage",
+      emoji: "📦",
+      places: [:bed, :living, :galley, :cab],
+      features: [:weight],
+      params: [weight(40, "The cabinets or the boxes, with no gear in them.")]
+    },
+    %{
+      type: "van_battery",
+      name: "Battery bank",
+      emoji: "🔋",
+      places: [:bay, :bed],
+      features: [:weight, :van_power, :safety],
+      params: [
+        int(
+          "ah",
+          "Capacity",
+          "Ah",
+          200,
+          1,
+          5000,
+          "The label of each battery gives it. Add the Ah of the batteries that are in parallel."
+        ),
+        choice("volts", "Voltage", [{"12", "12 V"}, {"24", "24 V"}, {"48", "48 V"}], "12"),
+        choice(
+          "chemistry",
+          "Kind",
+          [{"lifepo4", "Lithium (LiFePO4)"}, {"agm", "Lead acid or AGM"}],
+          "lifepo4"
+        ),
+        %{
+          key: "fused",
+          label: "It has a fuse near its positive post",
+          unit: nil,
+          type: :bool,
+          default: false,
+          note: nil
+        },
+        weight(50)
+      ]
+    },
+    %{
+      type: "inverter",
+      name: "Inverter",
+      emoji: "🔁",
+      places: [:bay],
+      features: [:weight, :van_power],
+      params: [
+        int("watts", "Output", "W", 2000, 100, 10000, nil),
+        int(
+          "idle_w",
+          "Power when it is on, with no load",
+          "W",
+          15,
+          0,
+          200,
+          "The data sheet calls it the no-load power."
+        ),
+        float("hours", "Hours on in one day", "h", 6.0, 0.0, 24.0, nil),
+        weight(15)
+      ]
+    },
+    %{
+      type: "shore_power",
+      name: "Shore power inlet and charger",
+      emoji: "🔌",
+      places: [:bay],
+      features: [:weight, :van_power],
+      params: [
+        int(
+          "watts",
+          "Charge",
+          "W",
+          600,
+          0,
+          10000,
+          "The label of the charger gives its amps or watts."
+        ),
+        weight(10)
+      ]
+    },
+    %{
+      type: "van_solar",
+      name: "Solar panels",
+      emoji: "☀️",
+      places: [:van_roof],
+      features: [:weight, :van_power],
+      params: [
+        int(
+          "watts",
+          "Power",
+          "W",
+          400,
+          0,
+          5000,
+          "The label of each panel gives its watts. Add them."
+        ),
+        weight(60, "The panels and their mounts.")
+      ]
+    },
+    %{
+      type: "insulation",
+      name: "Insulation",
+      emoji: "🧱",
+      places: [:shell],
+      features: [:weight],
+      params: [weight(40)]
+    },
+    %{
+      type: "walls",
+      name: "Walls and ceiling",
+      emoji: "🪵",
+      places: [:shell],
+      features: [:weight],
+      params: [weight(150)]
+    },
+    %{
+      type: "van_floor",
+      name: "Floor",
+      emoji: "🟫",
+      places: [:shell],
+      features: [:weight],
+      params: [weight(100)]
+    },
+    %{
       type: "other",
       name: "Other",
       emoji: "⚙️",
@@ -589,6 +1046,15 @@ defmodule DIY.Catalog do
 
   @doc "The places of a room: inside, outside, or on the roof."
   def places, do: @places
+
+  @doc "The zones of a camper van, with their names, in order."
+  def zones, do: @zones
+
+  @doc "The models of camper vans: `{key, name, numbers}`."
+  def van_models, do: @van_models
+
+  @doc "The kinds of items of a house (with a place in a house)."
+  def house_kinds, do: Enum.filter(@kinds, &Enum.any?(&1.places, fn p -> p in @places end))
 
   @doc "The kinds that can go in a place."
   def kinds_for(place), do: Enum.filter(@kinds, &(place in &1.places))
