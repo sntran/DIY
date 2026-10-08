@@ -81,12 +81,15 @@ defmodule DIY.Estimate do
   end
 
   @doc """
-  The estimate of a build with the weather of its place. The result has
-  `ready` false, and the reason in `missing`, when the build cannot have an
-  estimate yet.
+  The estimate of a build with the weather of its place: of the house only
+  (`DIY.Build.house_view/1`), with no van and no item in a van. The result
+  has `ready` false, and the reason in `missing`, when the build cannot
+  have an estimate yet.
   """
   @spec run(Build.t(), DIY.Weather.t() | nil) :: map()
   def run(%Build{} = build, climate) do
+    build = Build.house_view(build)
+
     case missing(build, climate) do
       [] -> estimate(build, climate)
       missing -> %{ready: false, missing: missing}

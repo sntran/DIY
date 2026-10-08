@@ -361,6 +361,18 @@ defmodule DIY.VanTest do
     end
   end
 
+  test "the estimate and the power of the house do not count the van" do
+    {build, id} = with_van()
+    {build, _} = add(build, id, :galley, "van_fridge")
+    {build, _} = add(build, id, :bay, "power_station")
+    climate = climate()
+    estimate = Estimate.run(build, climate)
+    assert estimate == Estimate.run(Build.house_view(build), climate)
+
+    assert DIY.Power.run(build, estimate, climate, 14.0) ==
+             DIY.Power.run(Build.house_view(build), estimate, climate, 14.0)
+  end
+
   describe "the weight budget" do
     test "the weight on each axle, with a lever from the front axle" do
       {build, id} = with_van()

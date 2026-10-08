@@ -275,11 +275,13 @@ defmodule DIY.Power do
   defp sum(list, fun), do: list |> Enum.map(fun) |> Enum.sum() |> Kernel./(1)
 
   @doc """
-  The power of a build from the grid in each month: the estimate of its
-  use (`DIY.Estimate.run/2` of the same items), the equipment, the
-  settings of `build.power`, and the price of the day (`cents`).
+  The power of a build from the grid in each month, for the house only
+  (`DIY.Build.house_view/1`): the estimate of its use (`DIY.Estimate.run/2`
+  of the same items), the equipment, the settings of `build.power`, and
+  the price of the day (`cents`).
   """
   def run(%Build{} = build, %{ready: true} = estimate, climate, cents) do
+    build = Build.house_view(build)
     settings = build.power
     sys = system(build.items)
     night_cents = settings.night_cents || cents
