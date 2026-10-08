@@ -149,6 +149,13 @@ defmodule DIYWeb.SceneTest do
     assert html =~ "s-chip-bad"
     assert html =~ "2,160 Wh"
     assert html =~ "400 W"
+
+    # A planned panel: the page Van counts it, and the house does not show it.
+    {:ok, build, panel} = Build.add_item(build, Build.zone(build, van, :van_roof).id, "van_solar")
+    {:ok, build} = Build.flag_item(build, panel, :planned, true)
+    {:ok, item} = Build.item(build, van)
+    assert Scene.van_parts(build, item).solar == 800
+    assert Scene.parts(build).van.solar == 400
   end
 
   test "the two houses of the first page" do
@@ -192,10 +199,17 @@ defmodule DIYWeb.SceneTest do
 
   defp watts, do: one_of([constant(0), integer(1..20_000)])
 
+  defp roof?(parts), do: parts.roof.station + parts.roof.grid > 0
+  defp yard?(parts), do: parts.yard.station + parts.yard.grid > 0
+
   property "each point of a picture of a house is in its box, and each label has its equipment" do
     check all(parts <- parts()) do
       html = render_component(&Scene.house/1, id: "p", parts: parts)
       [x, y, w, h] = box(html)
+
+      # Each label of the equipment, and the label of the grid.
+      assert length(chips(html)) ==
+               4 * Enum.count([true, roof?(parts), yard?(parts), parts.stations != []], & &1)
 
       for [px, py] <- points(html) ++ chips(html) do
         assert px >= x and px <= x + w and py >= y and py <= y + h
@@ -224,10 +238,16 @@ defmodule DIYWeb.SceneTest do
     box |> String.split() |> Enum.map(&(&1 |> Float.parse() |> elem(0)))
   end
 
-  # The points of the labels.
+  # The corners of the labels: a label is a rect at a point, with a scale.
   defp chips(html) do
-    for [_, x, y] <- Regex.scan(~r/translate\((-?[\d.]+) (-?[\d.]+)\)/, html),
-        do: Enum.map([x, y], &(&1 |> Float.parse() |> elem(0)))
+    for [_, x, y, k, rx, w] <-
+          Regex.scan(
+            ~r/translate\((-?[\d.]+) (-?[\d.]+)\) scale\(([\d.]+)\)">\s*<rect x="(-?[\d.]+)" y="-8" width="([\d.]+)" height="15"/,
+            html
+          ),
+        [x, y, k, rx, w] = Enum.map([x, y, k, rx, w], &(&1 |> Float.parse() |> elem(0))),
+        {dx, dy} <- [{rx, -8}, {rx + w, -8}, {rx, 7}, {rx + w, 7}],
+        do: [x + dx * k, y + dy * k]
   end
 
   # The points of the polygons.

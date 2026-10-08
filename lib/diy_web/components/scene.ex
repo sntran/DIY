@@ -84,7 +84,8 @@ defmodule DIYWeb.Scene do
 
   @doc """
   The parts of the picture of a house, from a build: the house of today
-  (with no item of a van, and no planned item), and its first van.
+  (with no item of a van, and no planned item), and its first van (with no
+  planned item too).
   """
   def parts(build) do
     house = build |> Build.house_view() |> Build.today()
@@ -116,16 +117,16 @@ defmodule DIYWeb.Scene do
       car: of.("ev") != [],
       van:
         case of.("camper_van") do
-          [van | _] -> van_look(build, van)
+          [van | _] -> van_look(Enum.reject(van_items(build, van), & &1.planned))
           [] -> nil
         end
     }
   end
 
-  # What a van shows from the outside: the watts of its panels, and a fan.
-  defp van_look(build, van) do
-    items = for {_zone, item} <- Van.items(build, van.id), not item.planned, do: item
+  defp van_items(build, van), do: for({_zone, item} <- Van.items(build, van.id), do: item)
 
+  # What a van shows from the outside: the watts of its panels, and a fan.
+  defp van_look(items) do
     %{
       solar: watts(Enum.filter(items, &(&1.type == "van_solar"))),
       fan: Enum.any?(items, &(&1.type == "van_fan"))
@@ -134,12 +135,13 @@ defmodule DIYWeb.Scene do
 
   @doc """
   The parts of the picture of a van: its panels and its fan, the weight on
-  each axle and the ratings of the axles, and the Wh of its batteries.
+  each axle and the ratings of the axles, and the Wh of its batteries. As
+  the page Van, it counts the planned items too.
   """
   def van_parts(build, van) do
     weight = Van.weight(build, van)
 
-    Map.merge(van_look(build, van), %{
+    Map.merge(van_look(van_items(build, van)), %{
       front: weight.front,
       rear: weight.rear,
       front_gawr: weight.front_gawr,
@@ -941,10 +943,16 @@ defmodule DIYWeb.Scene do
     chips =
       [{:chip, Iso.add(pole, {0, 0, 0.9}), "Grid", "s-chip"}] ++
         if(roof > 0, do: [{:chip, {4.6, 5.6, h + 1.9}, kw(roof), "s-chip"}], else: []) ++
-        if(yard_w > 0, do: [{:chip, {19.2, 1.0, 0.3}, kw(yard_w), "s-chip"}], else: []) ++
-        if(stations, do: [{:chip, {5.2, 12.8, 0.0}, kwh(parts.stations), "s-chip"}], else: [])
+        if(yard_w > 0, do: [{:chip, yard_chip(yard_w), kw(yard_w), "s-chip"}], else: []) ++
+        if(stations, do: [{:chip, {6.7, @d + 2.8, 0.0}, kwh(parts.stations), "s-chip"}], else: [])
 
     {lines, chips}
+  end
+
+  # The label of the panels in the yard: above the top of the back row.
+  defp yard_chip(watts) do
+    rows = div(count(watts, @panel_w, 8) + 2, 3)
+    {17.2, 2.4 - 1.9 * (rows - 1), 3.3}
   end
 
   defp flow(true, points, class), do: [{:line, points, "s-flow " <> class}]
