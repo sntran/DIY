@@ -433,14 +433,15 @@ defmodule DIYWeb.Icon.Shapes do
   end
 
   # A shore power inlet: a box with a round socket and its yellow lid, and
-  # a cable.
+  # a cable that bends to the side.
   def shapes("shore_power") do
     box({0, 0, 0}, {0.4, 0.15, 0.4}, "gray") ++
       [
         disc({0.2, 0.16, 0.2}, :front, 0.13, "i-black"),
         disc({0.2, 0.17, 0.2}, :front, 0.05, "i-flame")
       ] ++
-      box({0.17, 0.15, -0.3}, {0.06, 0.06, 0.32}, "dark")
+      box({0.17, 0.15, -0.12}, {0.06, 0.25, 0.06}, "dark") ++
+      box({0.17, 0.4, -0.12}, {0.45, 0.06, 0.06}, "dark")
   end
 
   def shapes("van_solar") do

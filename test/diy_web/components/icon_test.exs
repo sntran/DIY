@@ -38,19 +38,16 @@ defmodule DIYWeb.IconTest do
       assert w == h
     end
 
-    # Each point of the sprite is in the box of its icon.
+    # Each point of the sprite is in the box of its icon, with a margin for
+    # the edge of the faces.
     for kind <- Catalog.kinds() do
       [_, box] = Regex.run(~r/viewBox="([^"]+)"/, render_component(&Icon.item/1, type: kind.type))
       [x, y, w, h] = box |> String.split() |> Enum.map(&(&1 |> Float.parse() |> elem(0)))
 
       for {:poly, corners, _class} <- Shapes.shapes(kind.type), corner <- corners do
         {px, py} = DIYWeb.Iso.at({0, 0}, corner)
-        assert px >= x and px <= x + w and py >= y and py <= y + h
+        assert px >= x + 0.9 and px <= x + w - 0.9 and py >= y + 0.9 and py <= y + h - 0.9
       end
     end
-  end
-
-  test "a kind that the app does not know has the icon of the kind \"other\"" do
-    assert render_component(&Icon.item/1, type: "rocket", class: "size-5") =~ "#icon-other"
   end
 end

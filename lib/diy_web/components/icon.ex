@@ -42,20 +42,21 @@ defmodule DIYWeb.Icon do
   attr :type, :string, required: true, doc: "the kind of the item"
   attr :class, :string, default: "size-10"
 
-  @doc "The icon of a kind of item. A kind that the app does not know has the icon of \"other\"."
+  @doc "The icon of a kind of item."
   def item(assigns) do
-    type = if Map.has_key?(@icons, assigns.type), do: assigns.type, else: "other"
-    {view, _svg} = Map.fetch!(@icons, type)
-    assigns = assign(assigns, view: view, href: "#icon-" <> type)
+    {view, _svg} = Map.fetch!(@icons, assigns.type)
+    assigns = assign(assigns, view: view, href: "#icon-" <> assigns.type)
 
     ~H"""
     <svg viewBox={@view} class={["shrink-0", @class]} aria-hidden="true"><use href={@href} /></svg>
     """
   end
 
+  @groups Enum.sort(@icons)
+
   @doc "The sprite of the icons, for the root layout: it shows nothing."
   def sprite(assigns) do
-    assigns = assign(assigns, :groups, Enum.sort(@icons))
+    assigns = assign(assigns, :groups, @groups)
 
     ~H"""
     <svg width="0" height="0" class="absolute" aria-hidden="true" focusable="false">

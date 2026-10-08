@@ -809,18 +809,23 @@ The first page shows a house and a plan.
 Each kind of item has its isometric icon (`DIYWeb.Icon`), in the same
 style. An icon is a few boxes, discs and details of a material (white,
 steel, wood, cloth). The faces have a thin edge, so that a white item
-shows on a light page. The icon is next to the name of the item on the
-cards of the rooms and of the zones, in the lists to add an item, on the
-sheet of an item, and in the list of the items on the page Bill.
+shows on a light page. The icon is next to the name of the item in these
+places:
+
+- the cards of the rooms and of the zones;
+- the lists to add an item;
+- the sheet of an item;
+- the list of the items on the page Bill.
+
 
 - The root layout has a sprite of the icons: the shapes of each kind one
   time. An icon on a page is a small SVG that uses the shapes of its kind.
   So a page sends each icon in about 100 bytes. The app makes the sprite
   one time, when it compiles.
-- The tests check that each kind has shapes of its own, that each class
-  of the icons has a rule in `app.css`, and that each point is in the box
-  of its icon.
+- The tests check that each kind has shapes of its own. They check that
+  each class of the icons has a rule in `app.css`. They also check that
+  each point is in the box of its icon, with a margin for the edge.
 
-The bar of the pages and the other small signs (the arrows, the close
-buttons, the checks of the lesson) use the icons of Heroicons (MIT), which
-Phoenix gives.
+The bar of the pages uses the icons of Heroicons (MIT), which Phoenix
+gives. The other small signs use them too: the arrows, the close buttons,
+and the checks of the lesson.
