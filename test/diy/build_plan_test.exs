@@ -82,7 +82,14 @@ defmodule DIY.BuildPlanTest do
 
     {:ok, build, van} = Build.add_item(build, room(build, "Driveway").id, "camper_van")
     bed = Build.zone(build, van, :bed)
-    assert Build.place_item(build, fridge.id, bed.id, %{x: 0, y: 0}) == {:error, :room}
+    assert Build.place_item(build, fridge.id, bed.id, %{x: 0, y: 0}) == {:error, :place}
+    # A station can go in the bed of a van, but not from the house.
+    {:ok, build, station} = Build.add_item(build, kitchen.id, "power_station")
+    assert Build.place_item(build, station, bed.id, %{x: 0, y: 0}) == {:error, :place}
+
+    assert Build.place_item(build, fridge.id, Build.zone(build, van, :shell).id, %{x: 0, y: 0}) ==
+             {:error, :room}
+
     assert Build.place_item(build, "nothing", kitchen.id, %{x: 0, y: 0}) == {:error, :item}
   end
 
@@ -133,7 +140,7 @@ defmodule DIY.BuildPlanTest do
     assert item(huge, tv.id).at.x == 0
   end
 
-  test "an item in a van has no place, and gets a free place at home" do
+  test "an item in a van has a place in its zone, an item of the shell has none" do
     build = house()
     {:ok, build, station} = Build.add_item(build, room(build, "Laundry").id, "power_station")
     {:ok, build, van} = Build.add_item(build, room(build, "Driveway").id, "camper_van")
@@ -141,9 +148,13 @@ defmodule DIY.BuildPlanTest do
     assert Build.turn_item(build, Build.zone(build, van, :bay).id) == {:error, :item}
 
     {:ok, away} = Build.take_to_van(build, station, van)
-    assert item(away, station).at == nil
-    assert Build.turn_item(away, station) == {:error, :room}
-    assert Enum.all?(Build.zones(away, van), &(&1.plan == nil))
+    assert %{at: %{x: 0, y: 0}} = item(away, station)
+    {:ok, turned} = Build.turn_item(away, station)
+    assert item(turned, station).turn == 1
+    assert Build.zone(away, van, :shell).plan == nil
+    {:ok, shelled, walls} = Build.add_item(away, Build.zone(away, van, :shell).id, "walls")
+    assert item(shelled, walls).at == nil
+    assert Build.turn_item(shelled, walls) == {:error, :room}
 
     {:ok, home} = Build.bring_home(away, station)
     assert %{at: %{}} = item(home, station)
@@ -207,16 +218,32 @@ defmodule DIY.BuildPlanTest do
   # A random change of the plan.
   defp step(build) do
     rooms = Enum.reject(build.rooms, &Build.van_level?(&1.level))
+    # The rooms and the zones with a plan, for a move.
+    placed = Enum.filter(build.rooms, & &1.plan)
     ids = Enum.map(build.items, & &1.id)
+    vans = for i <- build.items, i.type == "camper_van", do: i.id
 
     on_rooms =
       if rooms == [],
         do: [],
         else: [
-          tuple({constant(:move_room), member_of(rooms), integer(-600..900), integer(-600..900)}),
-          tuple({constant(:size_room), member_of(rooms), plan()}),
-          tuple({constant(:add_item), member_of(rooms), member_of(Catalog.types())}),
+          tuple(
+            {constant(:move_room), member_of(placed), integer(-600..900), integer(-600..900)}
+          ),
+          tuple({constant(:size_room), member_of(placed), plan()}),
+          tuple({constant(:add_item), member_of(build.rooms), member_of(Catalog.types())}),
+          tuple({constant(:add_item), member_of(rooms), constant("camper_van")}),
           tuple({constant(:delete_room), member_of(rooms)})
+        ]
+
+    on_vans =
+      if vans == [],
+        do: [],
+        else: [
+          tuple(
+            {constant(:van_model), member_of(vans),
+             member_of(Enum.map(Catalog.van_models(), &elem(&1, 0)))}
+          )
         ]
 
     on_items =
@@ -224,7 +251,7 @@ defmodule DIY.BuildPlanTest do
         do: [],
         else: [
           tuple(
-            {constant(:place), member_of(ids), member_of(rooms), integer(-100..900),
+            {constant(:place), member_of(ids), member_of(placed), integer(-100..900),
              integer(-100..900)}
           ),
           tuple({constant(:turn), member_of(ids)}),
@@ -238,7 +265,7 @@ defmodule DIY.BuildPlanTest do
           {constant(:add_room), member_of(Build.levels(build.house.floors)),
            member_of(Catalog.places())}
         )
-      ] ++ on_rooms ++ on_items
+      ] ++ on_rooms ++ on_vans ++ on_items
     )
   end
 
@@ -277,6 +304,9 @@ defmodule DIY.BuildPlanTest do
     with {:ok, build, _id} <- Build.add_item(build, room.id, type), do: {:ok, build}
   end
 
+  defp apply_step(build, {:van_model, van, model}),
+    do: Build.update_item(build, van, %{"model" => model})
+
   defp apply_step(build, {:delete_room, room}), do: Build.delete_room(build, room.id)
   defp apply_step(build, {:delete_item, id}), do: Build.delete_item(build, id)
 
@@ -284,10 +314,22 @@ defmodule DIY.BuildPlanTest do
   defp assert_rules(build) do
     {house, vans} = Enum.split_with(build.rooms, &(not Build.van_level?(&1.level)))
     assert Enum.all?(house, &Layout.valid_plan?(&1.plan))
-    assert Enum.all?(vans, &(&1.plan == nil))
 
-    for {a, i} <- Enum.with_index(house),
-        {b, j} <- Enum.with_index(house),
+    # The shell of a van has no plan; each other zone is in its van.
+    for zone <- vans do
+      "van:" <> van = zone.level
+      {:ok, van} = Build.item(build, van)
+
+      if zone.place == :shell,
+        do: assert(zone.plan == nil),
+        else:
+          assert(Layout.valid_plan?(zone.plan) and Layout.inside?(zone.plan, Layout.van_box(van)))
+    end
+
+    placed = Enum.filter(build.rooms, & &1.plan)
+
+    for {a, i} <- Enum.with_index(placed),
+        {b, j} <- Enum.with_index(placed),
         i < j,
         Layout.layer(a) == Layout.layer(b),
         do: refute(Layout.overlap?(a.plan, b.plan), "#{a.name} and #{b.name} overlap")
@@ -308,7 +350,7 @@ defmodule DIY.BuildPlanTest do
   end
 
   property "each change keeps the rules of the plan, and the JSON gives the same plan" do
-    check all(floors <- integer(1..3), seeds <- list_of(integer(), max_length: 20), max_runs: 60) do
+    check all(floors <- integer(1..3), seeds <- list_of(integer(), max_length: 25), max_runs: 80) do
       # The rules hold after each step, not only after the last one.
       build =
         Enum.reduce(seeds, house(floors), fn seed, build ->

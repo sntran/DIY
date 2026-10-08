@@ -288,16 +288,14 @@ defmodule DIYWeb.PlanLiveTest do
     {:ok, build} = Build.flag_item(build, station, :planned, true)
     view = open(conn, ~p"/inside", build)
     assert has_element?(view, "#room-#{laundry} #away-#{station}", "in the van now")
-    # An item in a van does not move on the plan, and a drop of it gives a
-    # message. (A different tab can take it to the van while it moves.)
-    before = build(view)
+    # The station has its place in the van: the arrow keys move it there.
     render_hook(view, "nudge_item", %{"id" => station, "dx" => 6, "dy" => 0})
-    assert build(view) == before
+    assert elem(Build.item(build(view), station), 1).at.x == 6
 
+    # On the plan, it does not go from the van to a room of the house.
     html =
       render_hook(view, "place_item", %{"id" => station, "room" => laundry, "x" => 10, "y" => 10})
 
-    assert html =~ "This item or this room is not on the plan now."
-    assert build(view) == before
+    assert html =~ "This item cannot go in that room."
   end
 end

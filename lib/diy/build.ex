@@ -33,9 +33,9 @@ defmodule DIY.Build do
     item) has its own rooms: its zones (`DIY.Catalog.zones/0`), on the level
     `"van:ID"` (the id of the van). They are fixed: the user cannot add,
     rename or remove a zone. The house and its numbers have only the rooms
-    of the house (`house_view/1`). A room of the house has a `plan`: its
-    place and its size at scale, in inches (`DIY.Layout`). A zone has no
-    plan.
+    of the house (`house_view/1`). A room of the house and a zone of a van
+    have a `plan`: their place and their size at scale, in inches
+    (`DIY.Layout`). The shell of a van has no plan.
   - `items`: each item has these fields:
     - `id`, `type` (`DIY.Catalog`), `room` and `params`;
     - `typical`: true for an item of a preset that the user did not check;
@@ -45,7 +45,7 @@ defmodule DIY.Build do
     - `home`: for a power station in a van, the room of the house where it
       goes back, or `nil`;
     - `at` (its place in its room), `turn` and `size` (`DIY.Layout`). An
-      item in a van has no `at`.
+      item in the shell of a van has no `at`.
   - `usage`: the real usage of the meter file (`DIY.Usage`), or `nil`.
   - `power`: how the house uses its power stations, and the prices of the
     night and of the power to the grid (`DIY.Power.settings/0`).
@@ -620,30 +620,48 @@ defmodule DIY.Build do
   end
 
   @doc """
-  Moves a room of the house: `x` and `y` are its new back corner, in
-  inches. Its items go with it. The room must not overlap a room of its
-  layer (`DIY.Layout.layer/1`).
+  Moves a room of the house or a zone of a van: `x` and `y` are its new
+  back corner, in inches. Its items go with it. The room must not overlap
+  a room of its layer (`DIY.Layout.layer/1`), and a zone stays in its van.
   """
   @spec move_room(t(), String.t(), integer(), integer()) :: {:ok, t()} | {:error, atom()}
   def move_room(build, id, x, y) when is_integer(x) and is_integer(y) do
-    with {:ok, room} <- house_room(build, id),
+    with {:ok, room} <- plan_room(build, id),
          do: put_room_plan(build, room, %{room.plan | x: x, y: y}, {0, 0})
   end
 
   @doc """
-  Gives a room of the house a new plan: the user moves a wall. The items
-  keep their place in the house, and stay in the room. The room must not
-  overlap a room of its layer.
+  Gives a room of the house or a zone of a van a new plan: the user moves a
+  wall. The items keep their place, and stay in the room. The room must
+  not overlap a room of its layer, and a zone stays in its van.
   """
   @spec size_room(t(), String.t(), plan()) :: {:ok, t()} | {:error, atom()}
   def size_room(build, id, %{x: x, y: y} = plan) do
-    with {:ok, room} <- house_room(build, id),
+    with {:ok, room} <- plan_room(build, id),
          do: put_room_plan(build, room, plan, {x - room.plan.x, y - room.plan.y})
   end
 
+  # A room or a zone with a plan (not the shell of a van).
+  defp plan_room(build, id) do
+    case room(build, id) do
+      {:ok, %{plan: %{}} = room} -> {:ok, room}
+      _other -> {:error, :room}
+    end
+  end
+
+  # The box of a zone of a van, or nil for a room of the house.
+  defp van_box(build, %{level: "van:" <> van_id}) do
+    {:ok, van} = item(build, van_id)
+    Layout.van_box(van)
+  end
+
+  defp van_box(_build, _room), do: nil
+
   defp put_room_plan(build, room, plan, {dx, dy}) do
+    box = van_box(build, room)
+
     cond do
-      not Layout.valid_plan?(plan) ->
+      not Layout.valid_plan?(plan) or (box != nil and not Layout.inside?(plan, box)) ->
         {:error, :plan}
 
       not Layout.free?(build, room, plan) ->
@@ -672,25 +690,27 @@ defmodule DIY.Build do
   @doc """
   Puts an item at a place in a room: its room, or a different room where
   its kind can go. `at` is the back corner of the item in the room, in
-  inches. The item stays in the room.
+  inches. The item stays in the room. An item does not go between the
+  house and a van (as `move_item/3`).
   """
   @spec place_item(t(), String.t(), String.t(), %{x: integer(), y: integer()}) ::
           {:ok, t()} | {:error, atom()}
   def place_item(build, id, room_id, %{x: x, y: y}) when is_integer(x) and is_integer(y) do
     with {:ok, item} <- item(build, id),
-         {:ok, _from} <- house_room(build, item.room),
-         {:ok, room} <- house_room(build, room_id),
-         true <- room.place in Catalog.kind(item.type).places || {:error, :place} do
+         {:ok, from} <- plan_room(build, item.room),
+         {:ok, room} <- plan_room(build, room_id),
+         true <- room.place in Catalog.kind(item.type).places || {:error, :place},
+         true <- van_level?(from.level) == van_level?(room.level) || {:error, :place} do
       at = Layout.clamp(%{x: x, y: y}, item, room.plan)
       {:ok, replace_item(build, %{item | room: room.id, at: at})}
     end
   end
 
-  @doc "Turns an item of the house a quarter turn, around its center."
+  @doc "Turns an item a quarter turn, around its center."
   @spec turn_item(t(), String.t()) :: {:ok, t()} | {:error, atom()}
   def turn_item(build, id) do
     with {:ok, item} <- item(build, id),
-         {:ok, _room} <- house_room(build, item.room) do
+         {:ok, _room} <- plan_room(build, item.room) do
       {w, d} = Layout.extent(item)
       turned = %{item | turn: rem(item.turn + 1, 4)}
       {tw, td} = Layout.extent(turned)
@@ -1043,7 +1063,7 @@ defmodule DIY.Build do
           {:error, :name} -> Keyword.fetch!(Catalog.zones(), place)
         end
 
-      {:van, %{id: id, name: name, level: level, place: place, plan: nil}}
+      {:van, %{id: id, name: name, level: level, place: place, plan: read_plan(room["plan"])}}
     else
       _ -> :lost
     end

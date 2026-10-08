@@ -129,6 +129,53 @@ defmodule DIY.Catalog do
     {"other", "Another van", %{}, nil}
   ]
 
+  # The size of each model, in inches: outside (the length, the width with
+  # no mirrors, the height), the wheelbase, the front overhang (from the
+  # front of the van to the front axle), and the cargo area (its length and
+  # its width at the floor, its height, and the width between the wheel
+  # wells). Each model has the source of its size (the page shows it).
+  @van_sizes %{
+    "promaster_159" => %{
+      length: 236,
+      width: 80,
+      height: 102,
+      wheelbase: 159,
+      front: 41,
+      cargo_length: 146,
+      cargo_width: 76,
+      cargo_height: 76,
+      wells: 56,
+      source:
+        "The cargo area (146 by 75.6 in, 55.8 in between the wheel wells, 76 in high): vandimensions.com, ProMaster L3 H2. The length (236 in) and the height (102.1 in): Merchants Fleet, 2025. The width with no mirrors (80 in): Cars.com. The place of the front axle is a guess of the app."
+    },
+    "transit_148" => %{
+      length: 236,
+      width: 81,
+      height: 109,
+      wheelbase: 148,
+      front: 40,
+      cargo_length: 144,
+      cargo_width: 70,
+      cargo_height: 82,
+      wells: 55,
+      source:
+        "The length of the cargo floor (143.7 in) and the width between the wheel wells (54.8 in): Ford Canada. The width (70.2 in) and the height (81.5 in) of the cargo area: Ford Middle East. The length (235.5 in), the width with no mirrors (81 in) and the height (109 in): Autopadre, 2025. The place of the front axle is a guess of the app."
+    },
+    "sprinter_170" => %{
+      length: 274,
+      width: 80,
+      height: 107,
+      wheelbase: 170,
+      front: 39,
+      cargo_length: 174,
+      cargo_width: 70,
+      cargo_height: 79,
+      wells: 53,
+      source:
+        "The length (274.3 in) and the height (107.3 in): Mercedes-Benz of Warwick, 2024. The cargo area (173.6 by 70.4 in, 53.1 in between the wheel wells, 79.1 in high): tables of Mercedes-Benz dealers. The width with no mirrors (80 in) and the place of the front axle are guesses of the app."
+    }
+  }
+
   @fuels [{"electric", "Electric"}, {"gas", "Gas"}]
 
   @kinds [
@@ -1127,6 +1174,25 @@ defmodule DIY.Catalog do
 
   @doc "The models of camper vans: `{key, name, numbers, source}`."
   def van_models, do: @van_models
+
+  @doc """
+  The size of a model of camper van, in inches (`@van_sizes`), with its
+  source. A model that the app does not know (\"other\") gets the size
+  of a typical van: the Ford Transit 148 in.
+  """
+  def van_size(model) do
+    case Map.fetch(@van_sizes, model) do
+      {:ok, size} ->
+        size
+
+      :error ->
+        %{
+          @van_sizes["transit_148"]
+          | source:
+              "The app does not have the size of this van: it uses the size of a typical van, the Ford Transit 148 in."
+        }
+    end
+  end
 
   @doc "The kinds that can go in a place."
   def kinds_for(place), do: Enum.filter(@kinds, &(place in &1.places))

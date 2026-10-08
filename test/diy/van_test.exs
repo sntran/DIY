@@ -531,27 +531,53 @@ defmodule DIY.VanTest do
   end
 
   describe "the weight budget" do
-    test "the weight on each axle, with a lever from the front axle" do
+    test "the weight on each axle, with a lever from the place of each item" do
       {build, id} = with_van()
 
       {:ok, build} =
         Build.update_item(build, id, %{"people" => "2", "person_lb" => "150", "gear_lb" => "100"})
 
       {build, _} = add(build, id, :bay, "van_battery", %{"weight" => "60"})
-      {build, _} = add(build, id, :galley, "water_tank", %{"gallons" => "10", "weight" => "10"})
-      w = Van.weight(build, van(build, id))
 
-      # The people in the cab (0.1), the gear under the bed (1.0), the
-      # battery in the bay (0.95), the tank in the galley (0.4).
+      {build, tank_id} =
+        add(build, id, :galley, "water_tank", %{"gallons" => "10", "weight" => "10"})
+
+      van = van(build, id)
+      w = Van.weight(build, van)
+
+      # A ProMaster 159: 236 in long, the front axle 41 in from the front,
+      # and the doors at the back 3 in thick. On the plan, the bed is from
+      # 0 to 61 in, the bay from 61 in, the galley from 115 in, and the cab
+      # from 146 to 182 in. The people sit at the middle of the cab (164),
+      # the gear is at the middle of the bed (30.5), the battery (7 in
+      # deep) at 64.5 and the tank (15 in deep) at 122.5.
+      lever = fn y -> (236 - 3 - y - 41) / 159 end
+      assert_in_delta Van.lever(van, 30.5), lever.(30.5), 1.0e-9
       tank = 10 + 10 * 8.34
       assert_in_delta w.load, 300 + 100 + 60 + tank, 1.0e-9
-      rear = 300 * 0.1 + 100 * 1.0 + 60 * 0.95 + tank * 0.4
+
+      rear =
+        300 * lever.(164) + 100 * lever.(30.5) + 60 * lever.(64.5) + tank * lever.(122.5)
+
       assert_in_delta w.rear, 1762 + rear, 1.0e-9
       assert_in_delta w.front, 3133 + w.load - rear, 1.0e-9
       assert w.payload == 8900 - 4895 and w.empty == 4895
       assert w.over == []
       assert {:galley, tank_lb} = List.keyfind(w.zones, :galley, 0)
       assert_in_delta tank_lb, tank, 1.0e-9
+
+      # The tank goes to the front of the galley: more weight on the front
+      # axle. The bed is behind the rear axle: its gear takes some weight
+      # off the front axle.
+      {:ok, front_tank} =
+        Build.place_item(build, tank_id, Build.zone(build, id, :galley).id, %{x: 0, y: 16})
+
+      assert Van.weight(front_tank, van).front > w.front
+      assert lever.(30.5) > 1
+
+      # An item of the shell is at the middle of the van (91 in).
+      {walls, _} = add(build, id, :shell, "walls", %{"weight" => "100"})
+      assert_in_delta Van.weight(walls, van).rear, w.rear + 100 * lever.(91), 1.0e-9
 
       # Over the rating of the van and of the rear axle.
       {heavy, _} = add(build, id, :bed, "storage", %{"weight" => "3000"})
@@ -572,22 +598,39 @@ defmodule DIY.VanTest do
               pounds <- integer(0..2000)
             ) do
         {build, id} = with_van()
-        kind = Enum.find(Catalog.kinds_for(zone), &(&1.type != "power_station"))
-        {build, _} = add(build, id, zone, kind.type, %{"weight" => "#{pounds}"})
+
+        kind =
+          Enum.find(Catalog.kinds_for(zone), &(&1.type not in ["power_station", "water_tank"]))
+
+        {build, a} = add(build, id, zone, kind.type, %{"weight" => "#{pounds}"})
         w = Van.weight(build, van(build, id))
         assert_in_delta w.front + w.rear, w.empty + w.load, 1.0e-6
         assert_in_delta w.total, w.empty + w.load, 1.0e-6
 
-        # The same weight in a zone more to the back puts more on the rear
-        # axle.
-        kind2 = Enum.find(Catalog.kinds_for(back), &(&1.type != "power_station"))
-        {other, _} = add(with_van() |> elem(0), id, back, kind2.type, %{"weight" => "#{pounds}"})
+        # The same weight at a place more to the back (a smaller y on the
+        # plan) puts more on the rear axle.
+        kind2 =
+          Enum.find(Catalog.kinds_for(back), &(&1.type not in ["power_station", "water_tank"]))
+
+        {other, b} = add(with_van() |> elem(0), id, back, kind2.type, %{"weight" => "#{pounds}"})
         w2 = Van.weight(other, van(other, id))
 
-        if Van.place(back) >= Van.place(zone) and kind.type != "water_tank" and
-             kind2.type != "water_tank",
-           do: assert(w2.rear >= w.rear - 1.0e-6)
+        if along(other, b) <= along(build, a), do: assert(w2.rear >= w.rear - 1.0e-6)
       end
+    end
+  end
+
+  # The place along the van of an item (as DIY.Van): the middle of the item
+  # on the plan, or the middle of the van for an item of the shell.
+  defp along(build, id) do
+    {:ok, item} = Build.item(build, id)
+    {:ok, zone} = Build.room(build, item.room)
+    "van:" <> van_id = zone.level
+    {:ok, van} = Build.item(build, van_id)
+
+    case {item.at, zone.plan} do
+      {%{y: y}, %{y: zone_y}} -> zone_y + y + elem(DIY.Layout.extent(item), 1) / 2
+      _shell -> DIY.Layout.van_box(van).d / 2
     end
   end
 
