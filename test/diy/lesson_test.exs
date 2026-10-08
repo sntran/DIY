@@ -79,6 +79,8 @@ defmodule DIY.LessonTest do
     assert Lesson.check(bill, %{}, [:total]) == %{total: :empty}
     assert Lesson.check(bill, %{"total" => " "}, [:total]) == %{total: :empty}
     assert Lesson.check(bill, %{"total" => "about 160"}, [:total]) == %{total: :invalid}
+    # A crafted answer that is not text.
+    assert Lesson.check(bill, %{"total" => %{"a" => 1}}, [:total]) == %{total: :invalid}
     # A credit with no sign, or with its sign.
     assert Lesson.check(bill, %{"credits" => "100"}, [:credits]) == %{credits: :ok}
     assert Lesson.check(bill, %{"credits" => "-100.00"}, [:credits]) == %{credits: :ok}

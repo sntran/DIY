@@ -68,17 +68,17 @@ export async function readLines(pdfjs, data) {
 
 // Loads the file of pdf.js (assets/js/pdf.js) one time, when the person
 // opens the first EFL: the other pages do not need it.
-let pending = null
+let loaded = null
 
 export function loadPdf(doc, src) {
   const win = doc.defaultView
   if (win.DIYPdf) return Promise.resolve(win.DIYPdf)
-  if (!pending) {
-    pending = new Promise((resolve, reject) => {
+  if (!loaded) {
+    loaded = new Promise((resolve, reject) => {
       const script = doc.createElement("script")
       script.src = src
       const fail = () => {
-        pending = null
+        loaded = null
         reject(new Error("pdf.js"))
       }
       script.onload = () => (win.DIYPdf ? resolve(win.DIYPdf) : fail())
@@ -86,7 +86,7 @@ export function loadPdf(doc, src) {
       doc.head.appendChild(script)
     })
   }
-  return pending
+  return loaded
 }
 
 // The most lines that the hook sends (an EFL has near 60), the most bytes
@@ -151,6 +151,9 @@ export const eflHook = {
           if (!kept) return this.pushEvent("efl_error", {})
           if (pdfUrl) URL.revokeObjectURL(pdfUrl)
           pdfUrl = URL.createObjectURL(new Blob([buffer], {type: "application/pdf"}))
+          // The same result from the server gets no update: the links of
+          // the page get the new URL now.
+          setLinks(this.el.ownerDocument)
           this.pushEvent("efl", {name: file.name, lines: kept})
         },
         () => this.pushEvent("efl_error", {}),

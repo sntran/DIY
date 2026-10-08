@@ -215,7 +215,7 @@ Each item shows its math for one month (honesty rule 1): each step with
 its numbers, and the kWh of the month at the end. A number under 100 has
 one decimal, so that a step adds up on the page. For each item in each
 month, a test reads the math as the page shows it: each step gives the
-value of its numbers (with the rounding of the page), the result of a
+value of its numbers (as the page rounds them), the result of a
 step goes into the next one, and the last step gives the kWh of the item.
 
 The price of one kWh: the price that the user gives, else the median of
@@ -561,16 +561,18 @@ names of the months of a credit need a capital letter ("may" is not May),
 and the reader reads a range ("June through September").
 
 The check of an EFL: the bill of the plan at 500, 1,000 and 2,000 kWh must
-give the averages of the label, within 0.05¢ (the rounding of the label).
-The user can add the plan of
-an EFL to the worksheet only when the check passes. When it does not
-pass, the page shows which average does not agree, and the user can give
-the numbers of the plan in a form. The build keeps only a plan that it can
+give the averages of the label, within 0.05¢ (a label rounds to 0.1¢).
+The user can add the plan of an EFL to the worksheet only when the check
+passes. When it does not pass, the page shows which average does not
+agree, and the user can give the numbers of the plan in a form. A
+minimum usage fee under 500 kWh is not in the averages: the page says
+that the check does not include it. The build keeps only a plan that it can
 read again (`DIY.Plan.read/1`): a number out of range gives an error, not
 a build that does not load.
 
 The forms of the EFLs of the providers are not all the same. Of 34 EFLs
-of October 2026 (Oncor), the check of 29 passes. The other forms put the
+of October 2026 (Oncor), the check of 29 passes (counted with the reader
+of this version and a check within 0.05¢). The other forms put the
 numbers in columns under their names, or give the charges in a table that
 the lines do not keep.
 
@@ -585,8 +587,9 @@ the lines do not keep.
   letters, and one of a form that the reader does not know (its check
   fails).
 - Property tests: an answer from the numbers of the page is right, and an
-  answer 6 cents off is wrong; the parts of a bill give its total, more kWh never cost
-  less energy, and an average month has the mean credit of the 12 months;
+  answer 6 cents off is wrong; the parts of a bill give its total, more
+  kWh never cost less energy, and an average month has the mean credit of
+  the 12 months;
   the delivery charges from the averages give the averages back; a plan
   to JSON and back; the EFL reader never raises for lines from parts of
   the test EFLs with other numbers and other text, and a build with its

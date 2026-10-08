@@ -98,6 +98,11 @@ function fakeDocument(behavior) {
         })
       },
     },
+    links: [],
+    querySelectorAll(selector) {
+      assert.equal(selector, "a[data-efl-page]")
+      return this.links
+    },
   }
   return {doc, win, scripts}
 }
@@ -209,9 +214,12 @@ test("the hook reads the file in the browser, and the result links the numbers t
   after.h.updated()
   assert.equal(after.links[0].href, "blob:0#page=2")
 
-  // A second file: the first URL goes away.
+  // The same file again: the result of the server does not change, so the
+  // hook sets the links of the page itself.
+  h.el.ownerDocument.links = after.links
   await h.read()
   assert.deepEqual(revoked, ["blob:0"])
+  assert.equal(after.links[0].href, "blob:1#page=2")
 })
 
 test("an encrypted EFL: the reader gives its lines", async () => {

@@ -308,8 +308,8 @@ defmodule DIYWeb.LessonPage do
 
   defp hint(:energy, %{night: night}, month, bill),
     do:
-      "The price of the tiers for all #{Format.int(month.kwh)} kWh, for the #{Format.int(month.kwh - bill.night_kwh)} kWh of the day, and " <>
-        "#{Format.int(bill.night_kwh)} kWh × #{num(night.cents)}¢ ÷ 100 for the night. " <>
+      "Day: (the price of the tiers for #{Format.int(month.kwh)} kWh) × #{Format.int(month.kwh - bill.night_kwh)} ÷ #{Format.int(month.kwh)}, and night: " <>
+        "#{Format.int(bill.night_kwh)} kWh × #{num(night.cents)}¢ ÷ 100. " <>
         night_text(night, bill)
 
   defp hint(:base, plan, _month, _bill), do: "The base charge of the plan: #{money(plan.base)}."
@@ -334,7 +334,7 @@ defmodule DIYWeb.LessonPage do
   # Where the kWh at night come from.
   defp night_text(night, %{night_from: :house}),
     do:
-      "The kWh at night (#{night.from}:00 to #{night.to}:00) come from the day of your house (the page Power), not from the EFL."
+      "The kWh at night (#{night.from}:00 to #{night.to}:00) come from the model of a day of your house (the hours of use of each item), not from the EFL."
 
   defp night_text(night, %{night_from: :efl}),
     do: "The kWh at night: #{round(night.share * 100)}% of the month, as the EFL says."
@@ -445,7 +445,7 @@ defmodule DIYWeb.LessonPage do
             <tr>
               <th>Month</th>
               <th class="text-right">kWh</th>
-              <th :if={@source == :estimate} class="text-right">Range</th>
+              <th :if={@source == :estimate} class="text-right">Range (kWh)</th>
               <th :for={{p, _year} <- @years} class="text-right">{p.name}</th>
             </tr>
           </thead>
@@ -526,7 +526,8 @@ defmodule DIYWeb.LessonPage do
   end
 
   defp night_source(%{night_from: :house}),
-    do: "They come from the day of your house (the page Power), not from the EFL."
+    do:
+      "They come from the model of a day of your house (the hours of use of each item), not from the EFL."
 
   defp night_source(%{night_from: :efl}), do: "They come from the part that the EFL says."
 
@@ -686,6 +687,11 @@ defmodule DIYWeb.LessonPage do
             </tr>
           </tbody>
         </table>
+        <p :if={@efl.plan.min_fee && @efl.plan.min_fee.below_kwh <= 500} class="text-xs">
+          The averages at 500, 1,000 and 2,000 kWh do not check the minimum usage fee: it is for a month under {Format.kwh(
+            @efl.plan.min_fee.below_kwh
+          )}.
+        </p>
         <p :if={@efl.sources.tdu_from == :averages} class="text-xs">
           The EFL gives no delivery charges: the app finds them from the averages at 500 and 2,000 kWh. So only the average at 1,000 kWh checks these numbers.
         </p>

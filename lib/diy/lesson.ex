@@ -176,7 +176,11 @@ defmodule DIY.Lesson do
   end
 
   defp answer(text) when text in [nil, ""], do: :empty
-  defp answer(text), do: dollars(text) || if(String.trim(text) == "", do: :empty, else: :invalid)
+
+  defp answer(text) when is_binary(text),
+    do: dollars(text) || if(String.trim(text) == "", do: :empty, else: :invalid)
+
+  defp answer(_value), do: :invalid
 
   defp close(value, right), do: if(abs(value - right) <= 0.05, do: :ok, else: :wrong)
 

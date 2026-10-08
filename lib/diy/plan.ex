@@ -124,8 +124,8 @@ defmodule DIY.Plan do
   @doc """
   The check of the numbers of a plan: the average prices of the plan at
   500, 1,000 and 2,000 kWh next to the averages of its EFL. An EFL rounds
-  its averages to 0.1¢. `ok` is true when each one is within 0.05¢ (the
-  rounding of the label).
+  its averages to 0.1¢. `ok` is true when each one is within 0.05¢ (a label
+  rounds to 0.1¢).
   """
   def check(%{averages: averages} = plan) when is_map(averages) do
     rows =

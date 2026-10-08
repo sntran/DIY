@@ -340,17 +340,24 @@ defmodule DIYWeb.HomeLive do
 
       {:error, :averages} ->
         {:noreply,
-         put_flash(socket, :error, "The app cannot read this EFL: it has no average prices.")}
+         socket
+         |> assign(:efl, nil)
+         |> put_flash(:error, "The app cannot read this EFL: it has no average prices.")}
 
       {:error, :lines} ->
-        {:noreply, put_flash(socket, :error, "The app cannot read the text of this file.")}
+        {:noreply,
+         socket
+         |> assign(:efl, nil)
+         |> put_flash(:error, "The app cannot read the text of this file.")}
     end
   end
 
   def handle_event("efl_error", _params, socket),
     do:
       {:noreply,
-       put_flash(socket, :error, "The app cannot read this file. Open the PDF of an EFL.")}
+       socket
+       |> assign(:efl, nil)
+       |> put_flash(:error, "The app cannot read this file. Open the PDF of an EFL.")}
 
   def handle_event("add_efl_plan", %{"name" => name}, socket) when is_binary(name) do
     case socket.assigns.efl do

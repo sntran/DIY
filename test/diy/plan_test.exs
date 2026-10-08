@@ -78,12 +78,12 @@ defmodule DIY.PlanTest do
       efl = %{truth | tdu_base: nil, tdu_cents: nil, averages: averages(truth)}
 
       case Plan.fit_tdu(efl) do
-        # The rounding of the averages can give a charge a little under 0.
+        # The averages are round numbers: a charge can come a little under 0.
         nil ->
           assert tdu_base < 0.6 or tdu_cents < 0.1
 
         # The fit gives the averages at 500 and 2,000 kWh. At 1,000 kWh,
-        # the rounding of the two averages adds to the rounding of the
+        # the error of the two round averages adds to the error of the
         # third.
         fitted ->
           [r500, r1000, r2000] = Plan.check(fitted).rows

@@ -23,8 +23,7 @@ defmodule DIYWeb.LessonLiveTest do
   defp open(conn, path, build) do
     {:ok, view, _html} = live(conn, path)
     render_hook(view, "device:restore", %{"text" => Build.to_json(build), "stamp" => build.stamp})
-    _ = :sys.get_state(view.pid)
-    Process.sleep(20)
+    settle(view)
     view
   end
 
@@ -175,6 +174,7 @@ defmodule DIYWeb.LessonLiveTest do
              "The app cannot read this EFL"
 
     assert render_hook(view, "efl_error", %{}) =~ "Open the PDF of an EFL"
+    refute has_element?(view, "#efl-result")
 
     long = List.duplicate(%{"page" => 1, "text" => String.duplicate("x", 2000)}, 33)
 
@@ -278,7 +278,12 @@ defmodule DIYWeb.LessonLiveTest do
     # The range of the year, and the kWh at night of the plan of the EFL.
     assert render(view) =~ "Range of the year"
     [_first, chariot_plan] = build(view).plans
-    assert has_element?(view, "#night-#{chariot_plan.id}", "come from the day of your house")
+
+    assert has_element?(
+             view,
+             "#night-#{chariot_plan.id}",
+             "come from the model of a day of your house"
+           )
 
     # The order of the table is the order of the worksheet.
     html = render(view)
@@ -348,7 +353,7 @@ defmodule DIYWeb.LessonLiveTest do
     render_change(view, "lesson_plan", %{"plan" => chariot.id})
     html = render(view)
     assert html =~ "At night (23:00 to 6:00)"
-    assert html =~ "come from the day of your house"
+    assert html =~ "come from the model of a day of your house"
 
     [_, day, day_cents, night, night_cents] =
       Regex.run(
@@ -411,6 +416,10 @@ defmodule DIYWeb.LessonLiveTest do
     })
 
     assert has_element?(view, "#efl-result", "Minimum usage fee")
+
+    # A fee under 500 kWh: the averages do not check it.
+    render_hook(view, "efl", %{"name" => "je.pdf", "lines" => efl("just-energy-smart-choice-12")})
+    assert has_element?(view, "#efl-result", "do not check the minimum usage fee")
   end
 
   test "a worksheet with no plan", %{conn: conn} do
@@ -496,7 +505,7 @@ defmodule DIYWeb.LessonLiveTest do
 
     assigns = %{build: build, bill: bill, step: 2, plan_id: "p1", shares: %{}}
     html = render_component(&DIYWeb.LessonPage.page/1, assigns)
-    assert html =~ "The price of the tiers for all 1,200 kWh"
+    assert html =~ "(the price of the tiers for 1,200 kWh)"
     assert html =~ "30% of the month, as the EFL says"
 
     html = render_component(&DIYWeb.LessonPage.page/1, %{assigns | step: 4})
