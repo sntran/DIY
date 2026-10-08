@@ -185,6 +185,7 @@
 .s-pv { stroke: var(--s-pv-line); stroke-width: 0.6 }
 .s-pole-l { fill: var(--s-pole-l) } .s-pole-r { fill: var(--s-pole-r) } .s-pole-t { fill: var(--s-pole-t) }
 .s-wire { fill: none; stroke: var(--s-wire); stroke-width: 1 }
+.s-leader { fill: none; stroke: var(--s-wire); stroke-width: 0.8; stroke-dasharray: 1.5 2 }
 .s-trunk-l { fill: var(--s-trunk-l) } .s-trunk-r { fill: var(--s-trunk-r) }
 .s-leaf-l { fill: var(--s-leaf-l) } .s-leaf-r { fill: var(--s-leaf-r) }
 .s-bush { fill: var(--s-bush) } .s-drive { fill: var(--s-drive) }

@@ -5,8 +5,9 @@ defmodule DIYWeb.Scene do
   `van/1` draws a camper van with its two budgets. `sample/1` draws the
   two houses of the first page.
 
-  A picture shows only what the house of today has (`DIY.Build.today/1`,
-  with no planned item). It shows the floors and a garage (a room outside
+  A picture of the house shows only what the house of today has
+  (`DIY.Build.today/1`, with no planned item). The picture of a van on the
+  page Van counts the planned items too, as the budgets of that page do. It shows the floors and a garage (a room outside
   that is not a yard). It shows the panels on the roof or in the yard, the
   stations, the AC, the pool, the car and the van. A flow shows only where
   the power goes in the model (`DIY.Power`).
@@ -898,6 +899,10 @@ defmodule DIYWeb.Scene do
     panels ++ fan
   end
 
+  # The label of the kWh of the stations: on the open ground at the front,
+  # clear of the van and of the car.
+  @kwh_chip {5.2, 12.8, 0.0}
+
   # The flows of the power (lines), and the labels (chips), as the model of
   # the power has them (`DIY.Power`):
   #
@@ -944,9 +949,12 @@ defmodule DIYWeb.Scene do
       [{:chip, Iso.add(pole, {0, 0, 0.9}), "Grid", "s-chip"}] ++
         if(roof > 0, do: [{:chip, {4.6, 5.6, h + 1.9}, kw(roof), "s-chip"}], else: []) ++
         if(yard_w > 0, do: [{:chip, yard_chip(yard_w), kw(yard_w), "s-chip"}], else: []) ++
-        if(stations, do: [{:chip, {6.7, @d + 2.8, 0.0}, kwh(parts.stations), "s-chip"}], else: [])
+        if(stations, do: [{:chip, @kwh_chip, kwh(parts.stations), "s-chip"}], else: [])
 
-    {lines, chips}
+    # A thin line goes from the label of the kWh to the stations.
+    leader = if stations, do: [{:line, [@kwh_chip, {6.6, @d + 0.7, 0.0}], "s-leader"}], else: []
+
+    {lines ++ leader, chips}
   end
 
   # The label of the panels in the yard: above the top of the back row.

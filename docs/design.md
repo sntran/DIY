@@ -770,8 +770,9 @@ the games (`DIYWeb.Scene`, with the math in `DIYWeb.Iso`). The front page
 and the page Power show the house on its lot. The page Van shows the van.
 The first page shows a house and a plan.
 
-- A picture shows only what the house of today has (with no planned
-  item). The house has its floors, and a garage when the build has a room
+- A picture of the house shows only what the house of today has (with no
+  planned item). The picture on the page Van counts the planned items of
+  the van too, as the budgets of that page do. The house has its floors, and a garage when the build has a room
   outside that is not a yard. The equipment shows in its place. The
   panels are on the roof or in the yard. The stations have their extra
   batteries. The picture also shows the switch of the panel, the meter,

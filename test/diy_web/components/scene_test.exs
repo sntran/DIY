@@ -215,6 +215,14 @@ defmodule DIYWeb.SceneTest do
         assert px >= x and px <= x + w and py >= y and py <= y + h
       end
 
+      # No label covers the van or the car.
+      for object <- ["s-van", "s-car"],
+          box = screen_box(html, object),
+          box != nil,
+          label <- Enum.chunk_every(chips(html), 4) do
+        refute overlap?(box, label), "a label covers #{object}"
+      end
+
       assert html =~ "kWh" == (parts.stations != [])
       assert html =~ "s-flow-battery" == parts.panel
 
@@ -249,6 +257,25 @@ defmodule DIYWeb.SceneTest do
         {dx, dy} <- [{rx, -8}, {rx + w, -8}, {rx, 7}, {rx + w, 7}],
         do: [x + dx * k, y + dy * k]
   end
+
+  # The box on the screen of the polygons of an object (by the start of
+  # their class), or nil.
+  defp screen_box(html, object) do
+    case for [_, list] <- Regex.scan(~r/points="([^"]+)" class="#{object}-/, html),
+             pair <- String.split(list),
+             do: pair |> String.split(",") |> Enum.map(&(&1 |> Float.parse() |> elem(0))) do
+      [] ->
+        nil
+
+      points ->
+        {xs, ys} = points |> Enum.map(&List.to_tuple/1) |> Enum.unzip()
+        {Enum.min_max(xs), Enum.min_max(ys)}
+    end
+  end
+
+  # True when the box of a label and the box of an object overlap.
+  defp overlap?({{x0, x1}, {y0, y1}}, [[a0, b0], _, _, [a1, b1]]),
+    do: a0 < x1 and a1 > x0 and b0 < y1 and b1 > y0
 
   # The points of the polygons.
   defp points(html) do
