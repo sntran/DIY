@@ -111,7 +111,9 @@ async function build(context, name) {
 
   await page.waitForSelector("#bill-average")
   assert.match(await page.textContent("#bill-average"), /\$\d+/)
-  assert.match(await page.textContent("#market"), /Oncor/)
+  // The market comes from Power to Choose after the bill: on the Worker,
+  // from the real service, so it can take some seconds.
+  await page.waitForSelector("#market:has-text('Oncor')", { timeout: 30000 })
   await check(page, `${name} front`)
 
   await page.click("#go-in")
