@@ -45,6 +45,34 @@ function snapped([selector, axis]) {
     : Math.abs(box.top - document.querySelector("#levels").getBoundingClientRect().top) < 2
 }
 
+// Waits until #levels and its rows do not scroll for 15 frames: the end of
+// a smooth scroll and of its snap. A step before that end can lose to it.
+async function still(page) {
+  await page.evaluate(() => new Promise((resolve) => {
+    const levels = document.querySelector("#levels")
+    const rows = [...levels.querySelectorAll(".snap-x")]
+    const now = () => [levels.scrollTop, ...rows.map((row) => row.scrollLeft)].join()
+    let last = now()
+    let frames = 0
+    const tick = () => {
+      const next = now()
+      if (next !== last) {
+        last = next
+        frames = 0
+      } else if (++frames >= 15) {
+        return resolve()
+      }
+      requestAnimationFrame(tick)
+    }
+    requestAnimationFrame(tick)
+  }))
+}
+
+// The place of #levels and of the hash, for the message of a fault.
+async function where(page) {
+  return page.evaluate(() => `scrollTop ${document.querySelector("#levels").scrollTop}, hash "${location.hash}"`)
+}
+
 async function connected(page) {
   await page.waitForSelector(".phx-connected")
 }
@@ -101,23 +129,27 @@ async function build(context, name) {
 
   // A swipe to the left goes to the next room: the row snaps to it. (A
   // swipe that is shorter than half of a room snaps back.)
+  await still(page)
   const rooms = await page.$$eval("#level-f1 article[id^=room-]", (els) => els.map((el) => `#${el.id}`))
   const first = await page.$eval(rooms[0], (el) => el.getBoundingClientRect())
   await page.mouse.move(first.x + first.width / 2, first.y + first.height / 2)
   await page.mouse.wheel(300, 0)
-  await page.waitForFunction(snapped, [rooms[1], "x"], { timeout: 3000 })
-    .catch(() => assert.fail(`${name}: a swipe to the left snaps to the next room`))
+  await page.waitForFunction(snapped, [rooms[1], "x"], { timeout: 5000 })
+    .catch(async () => assert.fail(`${name}: a swipe to the left snaps to the next room (${await where(page)})`))
+  await still(page)
 
   // A swipe up goes to the level below: #levels snaps to it.
   await page.mouse.wheel(0, 600)
-  await page.waitForFunction(snapped, ["#level-outside", "y"], { timeout: 3000 })
-    .catch(() => assert.fail(`${name}: a swipe up snaps to the level below`))
+  await page.waitForFunction(snapped, ["#level-outside", "y"], { timeout: 5000 })
+    .catch(async () => assert.fail(`${name}: a swipe up snaps to the level below (${await where(page)})`))
+  await still(page)
 
   // The links do the same for a keyboard.
   await page.focus('#level-outside a[aria-label="The level above"]')
   await page.keyboard.press("Enter")
-  await page.waitForFunction(snapped, ["#level-f1", "y"], { timeout: 3000 })
-    .catch(() => assert.fail(`${name}: the link goes to the level above`))
+  await page.waitForFunction(snapped, ["#level-f1", "y"], { timeout: 5000 })
+    .catch(async () => assert.fail(`${name}: the link goes to the level above (${await where(page)})`))
+  await still(page)
 
   await page.click('a[id^="item-"]:has-text("Fridge")')
   await page.waitForSelector("#item-sheet")
