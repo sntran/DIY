@@ -61,9 +61,13 @@ The build for Cloudflare Workers (`npm run build`) needs Node.js 26
 (`.node-version`) and npm. Test the build on this computer with
 `npx wrangler dev`.
 
-GitHub Actions runs the same checks for each push and each pull request
+GitHub Actions runs the same checks for each pull request
 (`.github/workflows/ci.yml`). A run fails also when `mix.com precommit`
-changes a file: format the code before the commit.
+changes a file: format the code before the commit. The minutes of Actions
+are few: run the checks on this computer first (the browser test and
+`scripts/tlc.sh` too), and push the changes of a pull request together.
+TLC runs only when a pull request changes the models or the code that
+they check.
 
 The last step of CI runs the browser test against `wrangler dev`, with
 the real answers of NASA POWER and Power to Choose. When one of these
