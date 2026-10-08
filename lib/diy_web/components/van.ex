@@ -415,6 +415,10 @@ defmodule DIYWeb.VanPage do
                                                                                  " · #{Format.int(Van.wh_day(@item, 1))} Wh in a day of January"}
       </p>
 
+      <p :if={not @van?} class="text-sm">
+        <span class="font-semibold">It counts in:</span> {Inside.features(@kind)}.
+      </p>
+
       <button
         :if={@item.type == "power_station" and @item.home}
         type="button"

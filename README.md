@@ -20,7 +20,7 @@ The build stays on the device of the user. The server keeps no copy. See
 | 2 | Real usage: the files of Smart Meter Texas and Green Button | Done. The check uses synthetic meter data; a check with real meter files is open ([`TODO.md`](TODO.md)) |
 | 3 | What-if equipment: power station, solar, interlock, transfer switch or subpanel, EV | Done (the check with the real system of the owner is open) |
 | 4 | The plan lesson: the EFL reader and the worksheet (Texas retail choice) | Done, except the check with a person |
-| 5 | Van builds: zones, power budget, weight budget | Not started |
+| 5 | Van builds: zones, power budget, weight budget | Done (the check with the real van of the owner is open) |
 
 ## Run on this computer
 

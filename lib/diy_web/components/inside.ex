@@ -399,7 +399,8 @@ defmodule DIYWeb.Inside do
 
   defp month_name(month), do: Enum.at(Estimate.month_names(), month - 1)
 
-  defp features(kind), do: Enum.map_join(kind.features, ", ", &feature/1)
+  @doc "The features that a kind of item turns on, in words."
+  def features(kind), do: Enum.map_join(kind.features, ", ", &feature/1)
 
   defp feature(:estimate), do: "the usage estimate"
   defp feature(:backup), do: "the hours of backup in an outage"

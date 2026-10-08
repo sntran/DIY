@@ -455,7 +455,7 @@ defmodule DIY.Catalog do
       name: "Power station",
       emoji: "🔋",
       places: [:indoor, :outdoor, :bay, :bed],
-      features: [:backup, :shift, :power_view],
+      features: [:backup, :shift, :power_view, :weight, :van_power],
       params: [
         float(
           "kwh",

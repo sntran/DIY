@@ -603,3 +603,98 @@ the lines do not keep.
   (a plan from a broker), gives its bill, and gets the worksheet with the
   two plans. Axe-core checks each screen. This is a script, not a person.
   A test with a person with no background in plans is open (`TODO.md`).
+
+## Van builds (phase 5)
+
+A camper van is a small house on wheels, so it uses the same builder. A
+van is an item of the house (in the driveway or in the garage), and it
+opens its own build: the page Van.
+
+### The zones
+
+A new van gets its zones: the cab, the galley, the living area, the bed,
+the electrical bay, the roof of the van, and the shell. A zone is a room
+of the build on the level `"van:ID"` (the id of the van). The zones are
+fixed: the user cannot add, rename or remove one. The removal of the van
+(or of its room) removes its zones and their items. The kinds of items of
+a van (`DIY.Catalog`) go only in the zones, each with its weight; a power
+station can go in a house or in a van.
+
+The house has its own numbers: the estimate, the power, the bill and the
+lesson use only the rooms and the items of the house
+(`DIY.Build.house_view/1`). The van has an estimate of 0 kWh in the
+house: its batteries and its power are its own.
+
+### The two budgets
+
+`DIY.Van` gives the two budgets of a van, and the page shows them as the
+user builds.
+
+- The weight budget: the payload is the weight rating of the van (GVWR)
+  less its empty weight. The items, the water (8.34 lb for each gallon,
+  USGS), the people (in the cab) and the gear (under the bed) take it.
+  Each zone has a typical place from the front axle (0) to the rear axle
+  (1): cab 0.1, galley 0.4, living area 0.55, roof and shell 0.5,
+  electrical bay 0.95, bed 1.0. The part of the weight of a zone on the
+  rear axle is its place (a lever); the rest is on the front axle. The
+  page shows the van in all, each axle against its rating (GAWR), and the
+  weight of each zone. The places are a simple model of the app: a truck
+  scale gives the real weight of each axle.
+- The power budget: for each month, the Wh that the items use in one day
+  (a fan in the warm months, a heater in the cold months, 90% for an item
+  on an outlet of 120 V through the inverter), the Wh of the sun (the
+  panels at 80%, with the sun of NASA POWER at the house), and the Wh of
+  the alternator charger (its amps at 12.8 V, for the hours of driving).
+  The batteries keep power: lithium (LiFePO4) 90% of its label, lead acid
+  or AGM 50%, a power station 95%. The days off the grid are the
+  batteries divided by the Wh that a day uses more than it gets; with
+  more sun and engine than use, there is no limit.
+
+The models of vans give typical numbers (`DIY.Catalog.van_models/0`, with
+their sources): the GVWR and the empty weight from Autopadre, the rating
+of each axle of the ProMaster from Auto123. The app does not know the
+axles of the other models: the page asks for the label in the door
+frame. The numbers of a new van are typical until the user checks them.
+
+### The safety notes
+
+`DIY.Van.warnings/2` gives a note where it applies: a fuse near the
+positive post of each battery (the ABYC standard E-11 for boats, which
+many van builders use: within 7 inches), a carbon monoxide alarm and
+fresh air for a stove or a heater that burns fuel, a propane alarm near
+the floor for a propane or butane stove, an inverter for an item on an
+outlet of 120 V, and a battery for items that use power.
+
+### A station of the house in the van
+
+A power station of the house can go to the electrical bay of a van for a
+trip (`DIY.Build.take_to_van/3`), and back (`bring_home/2`). In the van,
+it keeps its room of the house as its home, and the room shows it as
+away: the house loses its capacity while the van has it. The removal of
+the van sends the station home. The removal of its home room clears its
+home: it then goes to a room inside the house.
+
+`specs/Share.tla` is the model of the station, the rooms and the vans,
+with the steps in any order: the station is never in a place that is not
+there, and its home is always there (`Share.cfg`). When the removal of a
+room does not clear the home, TLC finds a home that is not there
+(`Share.home.cfg`).
+
+### The tests of phase 5
+
+- Property tests: the two axles carry the empty van and the load, and the
+  same weight more to the back puts more on the rear axle; more battery
+  or more panels never give fewer days off the grid.
+- The rules of the build (`test/diy/van_test.exs`): the zones, their
+  removal, the station that goes and comes back, the numbers of a model,
+  and a stored build with zones that are not right.
+- The pages: `test/diy_web/live/van_live_test.exs`.
+- The browser test adds a van in the driveway, items in its zones, takes
+  a station of the house to the van, and checks the page Van with
+  axe-core.
+
+The check of the plan for phase 5 is "the owner's van gives power and
+weight numbers that match the real van". It needs the numbers of the van
+of the owner: the label in the door frame, the weight of each axle on a
+truck scale, the items, and the Wh of a day from the app of the battery.
+The app takes them; the comparison is open.

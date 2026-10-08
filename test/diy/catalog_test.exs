@@ -34,6 +34,9 @@ defmodule DIY.CatalogTest do
              Param.choice("k", "K", [{"a", "A"}], "a")
 
     assert %{key: "season", default: "all"} = Param.season("all")
+    assert %{key: "weight", unit: "lb", default: 10} = Param.weight(10)
+    assert %{key: "weight", note: "A note."} = Param.weight(10, "A note.")
+    assert %{key: "minutes", default: 5} = Param.minutes(5)
     assert length(Param.seasons()) == 5
   end
 
