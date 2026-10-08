@@ -117,10 +117,17 @@ async function lesson(page, name) {
   await page.click("#example >> text=Next: your data")
   await page.waitForSelector("#with-help")
 
-  // The EFL of a plan, read in the browser.
-  await page.setInputFiles("#efl-file", "test/fixtures/efl/txu-smart-1000-select-12.pdf")
-  await page.waitForSelector("#efl-check")
+  // The EFL of a plan, read in the browser: an encrypted EFL too.
+  await page.setInputFiles("#efl-file", "test/fixtures/efl/discount-saver-18.pdf")
+  await page.waitForSelector("#efl-result:has-text('discount-saver-18')")
   assert.equal(await page.locator("#efl-check td:has-text('✓')").count(), 3)
+  await page.setInputFiles("#efl-file", "test/fixtures/efl/txu-smart-1000-select-12.pdf")
+  await page.waitForSelector("#efl-result:has-text('txu-smart-1000-select-12')")
+  assert.equal(await page.locator("#efl-check td:has-text('✓')").count(), 3)
+  // Each number links to its page of the PDF.
+  await page.waitForFunction(() =>
+    [...document.querySelectorAll("#efl-result a[data-efl-page]")].every((a) => a.href.startsWith("blob:")),
+  )
   await check(page, `${name} EFL`)
   await page.fill("#efl-add input[name=name]", "Plan with a credit")
   await page.click("#efl-add button")

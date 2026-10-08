@@ -4,7 +4,9 @@ import {test} from "node:test"
 import assert from "node:assert/strict"
 import {readFileSync, readdirSync} from "node:fs"
 import fc from "fast-check"
-import {clean, group, readLines, loadPdf, eflHook, MAX_LINES, MAX_PAGES} from "../../assets/js/efl.js"
+import {
+  clean, group, readLines, loadPdf, eflLines, eflHook, eflLinksHook, MAX_LINES, MAX_PAGES, MAX_BYTES, MAX_FILE,
+} from "../../assets/js/efl.js"
 
 const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs")
 const dir = new URL("../fixtures/efl/", import.meta.url)
@@ -59,7 +61,7 @@ test("the lines of a page keep each letter of its items", () => {
 
 test("the reader gives the lines of each test EFL", async () => {
   const files = readdirSync(dir).filter((f) => f.endsWith(".pdf"))
-  assert.equal(files.length, 12)
+  assert.equal(files.length, 13)
   for (const file of files) {
     const lines = await readLines(pdfjs, new Uint8Array(readFileSync(new URL(file, dir))))
     const expected = JSON.parse(readFileSync(new URL(file.replace(".pdf", ".json"), dir)))
@@ -91,19 +93,21 @@ function fakeDocument(behavior) {
         scripts.push(script.src)
         queueMicrotask(() => {
           if (behavior === "fail") return script.onerror()
-          win.DIYPdf = {name: "pdf.js"}
+          if (behavior === "ok") win.DIYPdf = {name: "pdf.js"}
           script.onload()
         })
       },
     },
-    querySelectorAll: () => [],
   }
   return {doc, win, scripts}
 }
 
 test("pdf.js loads one time, and again after a failure", async () => {
-  const failing = fakeDocument("fail")
-  await assert.rejects(loadPdf(failing.doc, "/pdf.js"))
+  const broken = fakeDocument("fail")
+  await assert.rejects(loadPdf(broken.doc, "/pdf.js"))
+  // A script that loads, but gives no pdf.js.
+  const empty = fakeDocument("empty")
+  await assert.rejects(loadPdf(empty.doc, "/pdf.js"))
   const {doc, scripts} = fakeDocument("ok")
   const [a, b] = await Promise.all([loadPdf(doc, "/pdf.js"), loadPdf(doc, "/pdf.js")])
   assert.equal(a.name, "pdf.js")
@@ -113,11 +117,42 @@ test("pdf.js loads one time, and again after a failure", async () => {
   assert.equal(await loadPdf(doc, "/pdf.js"), a)
 })
 
-function hook(file, behavior = "ok") {
-  const {doc, win} = fakeDocument(behavior)
-  win.DIYPdf = behavior === "ok" ? pdfjs : undefined
-  const links = [{dataset: {eflPage: "2"}}]
-  doc.querySelectorAll = (selector) => (assert.equal(selector, "a[data-efl-page]"), links)
+test("the file of pdf.js gives pdf.js to the page, with its worker in the page", async () => {
+  globalThis.window = {}
+  await import("../../assets/js/pdf.js")
+  assert.equal(typeof globalThis.window.DIYPdf.getDocument, "function")
+  assert.ok(globalThis.pdfjsWorker)
+  delete globalThis.window
+})
+
+test("the lines of an EFL: only a file with average prices, in the limits", () => {
+  assert.equal(eflLines([{page: 1, text: "A bill: account 123"}]), null)
+  const lines = [{page: 1, text: "Average Price per kWh 12.0¢ 11.0¢ 10.5¢"}]
+  assert.deepEqual(eflLines(lines), lines)
+  const many = Array.from({length: MAX_LINES + 5}, () => ({page: 1, text: "Average price"}))
+  assert.equal(eflLines(many).length, MAX_LINES)
+  const long = Array.from({length: 40}, () => ({page: 1, text: "average price " + "x".repeat(2000)}))
+  const kept = eflLines(long)
+  assert.ok(kept.reduce((sum, line) => sum + line.text.length, 0) <= MAX_BYTES)
+  assert.equal(kept.length, 32)
+})
+
+test("the reader ends the task of pdf.js after an error", async () => {
+  let destroyed = false
+  const fake = {getDocument: () => ({promise: Promise.reject(new Error("bad")), destroy: async () => (destroyed = true)})}
+  await assert.rejects(readLines(fake, new Uint8Array()))
+  assert.ok(destroyed)
+})
+
+// A fake pdf.js that gives the lines of one page.
+function fakePdf(texts) {
+  const doc = {numPages: 1, getPage: async () => ({getTextContent: async () => ({items: texts.map((t, i) => item(t, 0, 700 - i * 20))})})}
+  return {getDocument: () => ({promise: Promise.resolve(doc), destroy: async () => {}})}
+}
+
+function hook(file, pdf = pdfjs) {
+  const {doc, win} = fakeDocument("ok")
+  win.DIYPdf = pdf
   const events = []
   let listener = null
   const el = {
@@ -129,45 +164,81 @@ function hook(file, behavior = "ok") {
   }
   const h = Object.assign({el, pushEvent: (name, payload) => events.push([name, payload])}, eflHook)
   h.mounted()
-  return {h, el, events, links, change: () => listener()}
+  return {h, el, events, change: () => listener()}
 }
 
-test("the hook reads the file in the browser, and links the numbers to the PDF", async () => {
+// An element with links of the numbers, for the hook EflLinks.
+function result() {
+  const links = [{dataset: {eflPage: "2"}}]
+  const el = {querySelectorAll: (selector) => (assert.equal(selector, "a[data-efl-page]"), links)}
+  return {links, h: Object.assign({el}, eflLinksHook)}
+}
+
+const pdfFile = (name) => {
+  const data = readFileSync(new URL(name, dir))
+  return {name: "efl.html", size: data.byteLength, arrayBuffer: async () => data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength)}
+}
+
+test("the hook reads the file in the browser, and the result links the numbers to the PDF", async () => {
   const urls = []
+  const blobs = []
   const revoked = []
-  globalThis.URL.createObjectURL = () => (urls.push(`blob:${urls.length}`), urls.at(-1))
+  globalThis.URL.createObjectURL = (blob) => (blobs.push(blob), urls.push(`blob:${urls.length}`), urls.at(-1))
   globalThis.URL.revokeObjectURL = (url) => revoked.push(url)
 
-  const data = readFileSync(new URL("txu-smart-1000-select-12.pdf", dir))
-  const file = {name: "efl.pdf", arrayBuffer: async () => data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength)}
-  const {h, el, events, links} = hook(file)
+  // No PDF yet: the links stay with no href.
+  const before = result()
+  before.h.mounted()
+  assert.equal(before.links[0].href, undefined)
 
-  h.updated()
-  assert.equal(links[0].href, undefined)
+  const {h, el, events} = hook(pdfFile("txu-smart-1000-select-12.pdf"))
   await h.read()
   assert.equal(events[0][0], "efl")
-  assert.equal(events[0][1].name, "efl.pdf")
+  assert.equal(events[0][1].name, "efl.html")
   assert.equal(events[0][1].lines[0].text, "Electricity Facts Label (EFL)")
-  assert.ok(events[0][1].lines.length <= MAX_LINES)
   assert.equal(el.value, "")
-  h.updated()
-  assert.equal(links[0].href, "blob:0#page=2")
+  // The URL has the type of a PDF, also for a file with the name of a page.
+  assert.equal(blobs[0].type, "application/pdf")
+
+  // The result of the server: the hook sets the links, and again after a
+  // change of the result.
+  const after = result()
+  after.h.mounted()
+  assert.equal(after.links[0].href, "blob:0#page=2")
+  after.links[0].href = undefined
+  after.h.updated()
+  assert.equal(after.links[0].href, "blob:0#page=2")
 
   // A second file: the first URL goes away.
   await h.read()
   assert.deepEqual(revoked, ["blob:0"])
-  h.destroyed()
-  assert.deepEqual(revoked, ["blob:0", "blob:1"])
 })
 
-test("the hook sends an error for a file that is not a PDF, and nothing with no file", async () => {
-  const file = {name: "x.pdf", arrayBuffer: async () => new TextEncoder().encode("not a PDF").buffer}
-  const {h, events, change} = hook(file)
+test("an encrypted EFL: the reader gives its lines", async () => {
+  const {h, events} = hook(pdfFile("discount-saver-18.pdf"))
+  await h.read()
+  assert.equal(events[0][0], "efl")
+  assert.ok(events[0][1].lines.some((line) => /average/i.test(line.text)))
+})
+
+test("the hook sends an error for a file that is not an EFL, too large, or not a PDF", async () => {
+  // A PDF with no average prices (a bill): its text does not go to the server.
+  const bill = {name: "bill.pdf", size: 10, arrayBuffer: async () => new ArrayBuffer(8)}
+  const notEfl = hook(bill, fakePdf(["Your bill", "Account 123"]))
+  await notEfl.h.read()
+  assert.deepEqual(notEfl.events, [["efl_error", {}]])
+
+  const large = hook({name: "big.pdf", size: MAX_FILE + 1, arrayBuffer: async () => assert.fail("read")})
+  await large.h.read()
+  assert.deepEqual(large.events, [["efl_error", {}]])
+  assert.equal(large.el.value, "")
+
+  const file = {name: "x.pdf", size: 9, arrayBuffer: async () => new TextEncoder().encode("not a PDF").buffer}
+  const {events, change} = hook(file)
   await change()
   assert.deepEqual(events, [["efl_error", {}]])
 
   const none = hook(null)
   await none.h.read()
   assert.deepEqual(none.events, [])
-  none.h.destroyed()
 })

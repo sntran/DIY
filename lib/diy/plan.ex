@@ -44,9 +44,14 @@ defmodule DIY.Plan do
           averages: %{(500 | 1000 | 2000) => float()} | nil
         }
 
-  # The delivery charges of the utilities, as the EFLs of October 2026 give
-  # them, for an EFL that does not give them.
-  @tdus %{"oncor" => %{name: "Oncor", base: 4.06, cents: 6.8673}}
+  # The delivery charges of the utilities, for an EFL that does not give
+  # them: as the EFLs of October 2026 give them (Oncor: the EFLs of
+  # Discount Power and Reliant in test/fixtures/efl; CenterPoint: the EFL
+  # of Just Energy there).
+  @tdus %{
+    "oncor" => %{name: "Oncor", base: 4.06, cents: 6.8673},
+    "centerpoint" => %{name: "CenterPoint", base: 4.9, cents: 6.5333}
+  }
 
   @doc "The delivery charges of a utility (by its name in an EFL), or `nil`."
   def tdu(text) when is_binary(text) do

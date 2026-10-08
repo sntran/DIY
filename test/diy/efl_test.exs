@@ -103,6 +103,21 @@ defmodule DIY.EFLTest do
     end
   end
 
+  # An EFL of CenterPoint, with a minimum usage fee and a credit of 1,000
+  # kWh or more ("equal or greater than").
+  test "an EFL of CenterPoint with a minimum usage fee" do
+    %{plan: plan, check: check, sources: sources} = read("just-energy-smart-choice-12")
+    assert plan.base == 0.0
+    assert plan.energy == [{0, 15.4}]
+    assert {plan.tdu_base, plan.tdu_cents} == {4.9, 6.5333}
+    assert plan.credits == [%{dollars: 125.0, min_kwh: 1000, months: nil}]
+    assert plan.min_fee == %{dollars: 4.99, below_kwh: 400}
+    assert plan.averages == %{500 => 22.9, 1000 => 9.9, 2000 => 15.9}
+    assert check.ok
+    assert sources.min_fee.text =~ "A Minimum Usage Fee of $4.99"
+    assert sources.tdu_from == :efl
+  end
+
   test "each number has its line" do
     %{sources: sources} = read("txu-smart-1000-select-12")
     assert sources.averages.text =~ "Average Price per kWh"
@@ -255,7 +270,8 @@ defmodule DIY.EFLTest do
 
   test "the delivery charges of a utility" do
     assert Plan.tdu("Oncor Electric Delivery") == %{name: "Oncor", base: 4.06, cents: 6.8673}
-    assert Plan.tdu("CenterPoint") == nil
+    assert Plan.tdu("CenterPoint Energy") == %{name: "CenterPoint", base: 4.9, cents: 6.5333}
+    assert Plan.tdu("AEP Texas Central") == nil
   end
 
   # The lines of all the test EFLs.

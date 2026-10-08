@@ -400,7 +400,7 @@ defmodule DIY.EFL do
 
   defp min_kwh(text) do
     case Regex.run(
-           ~r/(?:>=|≥|at least|greater than or equal to)\s*(\d[\d,]*)\s*kWh|(\d[\d,]*)\s*kWh or more/i,
+           ~r/(?:>=|≥|at least|greater than or equal to|equal (?:to )?or greater than)\s*(\d[\d,]*)\s*kWh|(\d[\d,]*)\s*kWh or more/i,
            text
          ) do
       [_, kwh] -> round(number(kwh))

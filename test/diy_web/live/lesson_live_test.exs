@@ -244,7 +244,7 @@ defmodule DIYWeb.LessonLiveTest do
     assert build(view).lesson == 4
   end
 
-  test "step 4: the worksheet, with no ranking", %{conn: conn} do
+  test "step 4: the worksheet, in the order of the user", %{conn: conn} do
     {:ok, build, _id} =
       Build.add_plan(Build.set_lesson(house(), 4), %{Lesson.example_plan() | name: "First"})
 
@@ -425,7 +425,7 @@ defmodule DIYWeb.LessonLiveTest do
       open(
         conn,
         ~p"/plans?step=4",
-        Build.set_lesson(house(%{@market | utility: "CenterPoint"}), 4)
+        Build.set_lesson(house(%{@market | utility: "AEP Texas Central"}), 4)
       )
 
     assert has_element?(view, "#plan-form input[name='plan[tdu_base]'][required]")
