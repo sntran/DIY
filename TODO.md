@@ -26,6 +26,10 @@ The owner decides about each item.
   user gives the size of the lot.
 - The check of phase 2 with real files of meters (anonymized), in place of
   synthetic meter data from the model of the estimate.
+- A Green Button XML with more than one meter: the finest readings for each
+  UsagePoint, each flow and each day (today: for each flow and day). And
+  the first day of hourly readings after a meter change: keep the finer
+  readings only when they cover the full day.
 - The weather of the months of this year (NASA POWER has the months of
   last year and before): a file of the last 12 months then gets its fit.
 - Base Power next to a DIY station in the what-if (the plan: a battery of
