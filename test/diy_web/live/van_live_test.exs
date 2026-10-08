@@ -164,9 +164,13 @@ defmodule DIYWeb.VanLiveTest do
     assert has_element?(view, "#van-zones", "Power station")
     assert render(view) =~ "The batteries keep 1,900 Wh."
 
-    # The house shows it as away, in its room.
+    # The house shows it as away, in its room and on the page Power.
     render_patch(view, ~p"/inside")
     assert has_element?(view, "#away-#{station}", "In the van now")
+    render_patch(view, ~p"/power")
+    assert has_element?(view, "#power-away", "Power station (2 kWh) is in the van now")
+    view |> element("#power-away a", "Open the van") |> render_click()
+    assert_patch(view, ~p"/van?#{[id: van]}")
     render_patch(view, ~p"/van?#{[id: van, item: station]}")
     view |> element("#item-sheet button", "Bring it home") |> render_click()
     assert has_element?(view, "#van-stations", "at home")
@@ -179,6 +183,16 @@ defmodule DIYWeb.VanLiveTest do
     assert has_element?(view, "#van-stations", "in another van")
     view |> element("#van-stations button", "Bring it home") |> render_click()
     assert %{at_home: [_], away: []} = DIY.Van.stations(build(view))
+  end
+
+  test "the main panel of the house does not feed the van", %{conn: conn} do
+    build = house()
+    {:ok, build, _} = Build.add_item(build, room(build, "Roof"), "solar_panels")
+    feeds = &Regex.run(~r/The main panel feeds (\d+) items/, render(open(conn, ~p"/power", &1)))
+    {with_van, van} = with_van(build)
+    {with_van, _} = add(with_van, van, :galley, "van_fridge")
+    assert [_, n] = feeds.(build)
+    assert [_, ^n] = feeds.(with_van)
   end
 
   test "an item of a van does not open on the page of the rooms", %{conn: conn} do

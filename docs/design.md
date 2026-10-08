@@ -670,7 +670,9 @@ outlet of 120 V, and a battery for items that use power.
 A power station of the house can go to the electrical bay of a van for a
 trip (`DIY.Build.take_to_van/3`), and back (`bring_home/2`). In the van,
 it keeps its room of the house as its home, and the room shows it as
-away: the house loses its capacity while the van has it. The removal of
+away: the house loses its capacity while the van has it. The pages Bill
+and Power count the house with no van (`DIY.Build.house_view/1`), and the
+page Power tells which station is in a van. The removal of
 the van sends the station home. The removal of its home room clears its
 home: it then goes to a room inside the house.
 
