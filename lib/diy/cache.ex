@@ -5,8 +5,13 @@ defmodule DIY.Cache do
   (`DIY.Market`). The data has no person in it. The cache goes away when
   the VM stops, and that is not a problem: the next request gets the data
   again.
+
+  The cache keeps at most 1,000 values (the memory of a Durable Object is
+  small). When it is full, it starts again with no values.
   """
   use GenServer
+
+  @max 1_000
 
   @doc false
   def start_link(_opts), do: GenServer.start_link(__MODULE__, nil, name: __MODULE__)
@@ -28,9 +33,12 @@ defmodule DIY.Cache do
 
       [] ->
         with {:ok, value} <- fun.() do
+          if :ets.info(__MODULE__, :size) >= max(), do: :ets.delete_all_objects(__MODULE__)
           :ets.insert(__MODULE__, {key, value})
           {:ok, value}
         end
     end
   end
+
+  defp max, do: Application.get_env(:diy, __MODULE__, [])[:max] || @max
 end
