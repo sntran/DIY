@@ -28,6 +28,10 @@ defmodule DIYWeb.Format do
   def count(1, word), do: "1 " <> word
   def count(n, word) when is_integer(n), do: int(n) <> " " <> word <> "s"
 
+  @doc "The name of a month of a year: \"2025-08\" is \"August 2025\"."
+  def month(<<year::binary-size(4), "-", month::binary-size(2)>>),
+    do: Enum.at(DIY.Estimate.month_names(), String.to_integer(month) - 1) <> " " <> year
+
   @doc "The cost of kWh at a price in cents, in dollars."
   def cost(kwh, cents), do: kwh * cents / 100
 end

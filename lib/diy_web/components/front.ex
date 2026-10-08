@@ -36,6 +36,8 @@ defmodule DIYWeb.Front do
 
       <.bill estimate={@estimate} price={@price} weather={@weather} build={@build} />
 
+      <.real build={@build} price={@price} />
+
       <.market build={@build} market={@market} place={@place} />
 
       <.link patch={~p"/inside"} id="go-in" class="btn btn-primary btn-lg w-full">
@@ -212,6 +214,71 @@ defmodule DIYWeb.Front do
       </g>
     </svg>
     """
+  end
+
+  attr :build, :map, required: true
+  attr :price, :map, required: true
+
+  # The real usage from the meter, or the next step to get it.
+  defp real(assigns) do
+    meter = Enum.find(assigns.build.items, &(&1.type == "smart_meter"))
+    # A room for the meter: outside, else inside.
+    room =
+      Enum.find(assigns.build.rooms, &(&1.place == :outdoor)) ||
+        Enum.find(assigns.build.rooms, &(&1.place == :indoor))
+
+    year = assigns.build.usage && DIY.Usage.year(assigns.build.usage)
+    assigns = assign(assigns, meter: meter, room: room, year: year)
+
+    ~H"""
+    <div id="real" class="card card-border bg-base-100 p-4 space-y-1">
+      <%= cond do %>
+        <% @build.usage -> %>
+          <p class="text-sm opacity-70">
+            {cond do
+              @year ->
+                "From your meter, in an average month"
+
+              length(@build.usage.months) == 1 ->
+                "From your meter: the one month of the file"
+
+              true ->
+                "From your meter: the mean of the #{length(@build.usage.months)} months of the file"
+            end}
+          </p>
+          <p id="real-average" class="text-2xl font-bold">
+            {Format.money(Format.cost(DIYWeb.Front.average(@build.usage), @price.cents))}
+            <span class="text-base font-normal">· {Format.kwh(DIYWeb.Front.average(@build.usage))}</span>
+          </p>
+          <p class="text-sm">
+            {Format.count(length(@build.usage.months), "month")} of real usage.
+            <.link patch={~p"/estimate"} class="link">See them next to the estimate</.link>
+          </p>
+        <% @meter -> %>
+          <p class="text-sm">
+            Open the file of your smart meter: the app then shows your real usage.
+            <.link patch={~p"/inside?#{[item: @meter.id]}"} class="link">Open the meter</.link>
+          </p>
+        <% true -> %>
+          <p class="text-sm">
+            A next small step: add your smart meter (it is outside, on a wall), and open its file. The app then shows your real usage.
+            <.link :if={@room} patch={~p"/inside?#{[add: @room.id]}"} class="link">Add the meter</.link>
+          </p>
+      <% end %>
+    </div>
+    """
+  end
+
+  @doc """
+  The kWh of an average month from the meter: one year divided by 12, or
+  the mean of the full months of a file with fewer months (the page says
+  so).
+  """
+  def average(usage) do
+    case DIY.Usage.year(usage) do
+      nil -> usage.months |> Enum.map(&DIY.Usage.full/1) |> then(&(Enum.sum(&1) / length(&1)))
+      year -> year / 12
+    end
   end
 
   attr :build, :map, required: true

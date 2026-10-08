@@ -6,7 +6,7 @@ defmodule DIYWeb.Math do
   """
   use DIYWeb, :html
 
-  alias DIY.Catalog
+  alias DIY.{Catalog, Usage}
   alias DIYWeb.Format
 
   attr :build, :map, required: true
@@ -28,7 +28,7 @@ defmodule DIYWeb.Math do
         <p>
           The estimate comes from the weather of your place and the items of your house. It is a range, not one number:
           the weather changes from year to year, and the numbers of the items are not exact.
-          A meter file gives your real usage (a later step).
+          A file of your smart meter gives your real usage.
         </p>
 
         <div class="overflow-x-auto">
@@ -66,6 +66,8 @@ defmodule DIYWeb.Math do
             </tfoot>
           </table>
         </div>
+
+        <.real :if={@build.usage} build={@build} estimate={@estimate} weather={@weather} />
 
         <h2 class="text-lg font-bold">The parts of the year</h2>
         <ul id="parts" class="space-y-1">
@@ -108,6 +110,74 @@ defmodule DIYWeb.Math do
         </ul>
       <% end %>
     </section>
+    """
+  end
+
+  attr :build, :map, required: true
+  attr :estimate, :map, required: true
+  attr :weather, :map, required: true
+
+  # The real months of the meter next to the estimate, and the numbers of
+  # the house from the meter.
+  defp real(assigns) do
+    compare = Usage.compare(assigns.build.usage, assigns.estimate)
+    fit = assigns.weather.climate && Usage.fit(assigns.build.usage, assigns.weather.climate)
+    assigns = assign(assigns, compare: compare, fit: fit)
+
+    ~H"""
+    <h2 class="text-lg font-bold">Your real usage and the estimate</h2>
+    <p id="inside-count">
+      {@compare.inside} of {Format.count(length(@compare.rows), "real month")} in the range of the estimate.
+    </p>
+    <div class="overflow-x-auto">
+      <table class="table table-xs sm:table-sm" id="real-months">
+        <thead>
+          <tr>
+            <th>Month</th>
+            <th class="text-right">Real kWh</th>
+            <th class="text-right">Estimate</th>
+            <th class="text-right">Range</th>
+            <th>In it</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr :for={row <- @compare.rows}>
+            <td>{Format.month(row.from)}{if row.partial, do: " (part of the month)"}</td>
+            <td class="text-right">{Format.int(row.real)}</td>
+            <td class="text-right">{Format.int(row.estimate)}</td>
+            <td class="text-right">{Format.int(row.low)} to {Format.int(row.high)}</td>
+            <td>{if row.inside, do: "Yes", else: "No"}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p :if={Enum.any?(@compare.rows, & &1.partial)} class="text-xs opacity-80">
+      For a part of a month, the app gives the other days the mean of the days in the file.
+    </p>
+    <div :if={@fit} id="fit" class="text-sm space-y-1">
+      <p class="font-semibold">
+        Your house, from the meter and the weather of the same months ({@fit.months} months):
+      </p>
+      <ul class="list-disc pl-5">
+        <li>{Format.kwh(@fit.base)} in one day with no heat and no cooling.</li>
+        <li>{:erlang.float_to_binary(@fit.cool, decimals: 2)} kWh for each °F-day of cooling.</li>
+        <li>{:erlang.float_to_binary(@fit.heat, decimals: 2)} kWh for each °F-day of heat.</li>
+      </ul>
+      <p class="text-xs opacity-80">
+        The fit explains {round(@fit.r2 * 100)}% of the change from month to month.
+      </p>
+    </div>
+    <p :if={is_nil(@fit) and @weather.climate} id="no-fit" class="text-sm opacity-80">
+      To find the numbers of your house, the app needs 6 months of the file. Each month needs 20 days of data or more, and the weather of NASA POWER. The weather of the app ends with {@weather.climate.last}. A file with more months of {@weather.climate.last} or before gives the numbers of your house.
+    </p>
+    <button
+      type="button"
+      phx-click="clear_usage"
+      data-confirm="Remove the real usage? The file stays on your device."
+      class="btn btn-sm btn-ghost"
+    >
+      Remove the real usage
+    </button>
     """
   end
 

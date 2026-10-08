@@ -168,6 +168,27 @@ defmodule DIY.BuildTest do
     assert Build.delete_item(build, id) == {:error, :item}
   end
 
+  test "the real usage goes in the build, and out of it" do
+    {:ok, usage} =
+      DIY.Usage.read(%{
+        "source" => "smt",
+        "months" => [
+          %{"month" => "2025-07", "kwh" => 900, "export" => 0, "days" => 31}
+        ]
+      })
+
+    build = Build.set_usage(preset(), usage)
+    assert build.usage == usage
+    assert Build.from_json(Build.to_json(build)) == {:ok, build}
+    assert Build.set_usage(build, nil).usage == nil
+
+    # A new house with no smart meter keeps no real usage.
+    {house, rooms, items} =
+      House.preset(%{size: 1800, year: 2005, floors: 1, heat: "gas", lot: nil})
+
+    assert Build.put_house(build, house, rooms, items).usage == nil
+  end
+
   test "hints close one time" do
     assert {:ok, build} = Build.close_hint(Build.new(), "swipe")
     assert {:ok, %{hints: ["swipe"]}} = Build.close_hint(build, "swipe")
@@ -217,6 +238,7 @@ defmodule DIY.BuildTest do
              {:error, :items}
 
     assert bad.(%{"seq" => nil}) == {:error, :seq}
+    assert bad.(%{"usage" => %{"source" => "x"}}) == {:error, :usage}
 
     # A small seq gets the number of the last id, so that a new id is new.
     {:ok, build} = bad.(%{"seq" => 0})
@@ -296,7 +318,22 @@ defmodule DIY.BuildTest do
     end
   end
 
-  @bad [nil, [], %{}, [1], %{"a" => 1}, 10 ** 400, -(10 ** 400), 1.0e300, "2026-13-40", :delete]
+  @bad [
+    nil,
+    [],
+    %{},
+    [1],
+    %{"a" => 1},
+    10 ** 400,
+    -(10 ** 400),
+    1.0e300,
+    "2026-13-40",
+    "-2025-07",
+    "+2025-01",
+    "0000-01",
+    "2025-7",
+    :delete
+  ]
 
   test "from_json never raises for a build with a bad value at any place" do
     build = preset()
@@ -313,8 +350,28 @@ defmodule DIY.BuildTest do
           "date" => "2026-10-08",
           "source" => "ptc"
         },
-        "price" => 12.5
+        "price" => 12.5,
+        "usage" => %{
+          "source" => "smt",
+          "months" => [
+            %{"month" => "2025-07", "kwh" => 1500, "export" => 0, "days" => 31},
+            %{"month" => "2025-08", "kwh" => 1600.5, "export" => 2.5, "days" => 20}
+          ]
+        }
     }
+
+    assert {:ok, %{usage: %{months: [_, _]}}} = map |> Jason.encode!() |> Build.from_json()
+
+    # A month with more days than the month has.
+    february =
+      put_at(map, ["usage", "months", 1], %{
+        "month" => "2025-02",
+        "kwh" => 1,
+        "export" => 0,
+        "days" => 29
+      })
+
+    assert Build.from_json(Jason.encode!(february)) == {:error, :usage}
 
     for path <- paths(map, []), value <- @bad do
       text = map |> put_at(path, value) |> Jason.encode!()

@@ -17,7 +17,7 @@ The build stays on the device of the user. The server keeps no copy. See
 |---|---|---|
 | 0 | The project: Phoenix, the build on the device, the deploy to Cloudflare Workers | Done |
 | 1 | The house builder: two doors, presets, rooms, floors, appliances, the weather estimate | Done |
-| 2 | Real usage: the files of Smart Meter Texas and Green Button | Not started |
+| 2 | Real usage: the files of Smart Meter Texas and Green Button | Done. The check uses synthetic meter data; a check with real meter files is open ([`TODO.md`](TODO.md)) |
 | 3 | What-if equipment: power station, solar, subpanel, transfer switch, EV | Not started |
 | 4 | The plan lesson: the EFL reader and the worksheet (Texas retail choice) | Not started |
 | 5 | Van builds: zones, power budget, weight budget | Not started |

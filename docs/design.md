@@ -244,3 +244,82 @@ near 10,400 kWh in one year with gas heat, 16,900 with a heat pump, and
   first, and a reconnect restores the build. CI runs the same script
   against `wrangler dev` too: the VM in workerd, with the real answers of
   NASA POWER and Power to Choose through `fetch()`.
+
+## Real usage (phase 2)
+
+### The file stays on the device
+
+A smart meter is an item (outside or inside). Its sheet has an input for
+the file of the meter. The hook `UsageFile` (`assets/js/usage.js`) reads
+the file in the browser, and sends only the sums of each month to the
+LiveView. The file never goes to the server. The sums go into the build,
+and the build stays on the device (see above).
+
+The app reads these files:
+
+- Smart Meter Texas: the CSV of "Energy Data 15 Min Interval", or of the
+  daily readings. The columns: `USAGE_DATE`, `USAGE_KWH` and
+  `CONSUMPTION_SURPLUSGENERATION`.
+- Green Button: the XML (ESPI) of "Download My Data". Each IntervalBlock
+  gets the ReadingType of its own MeterReading (the links of the feed).
+  The app reads only electric energy in Wh (uom 72, with its power of
+  ten), as the change in each interval (not the totals of a register):
+  from the grid, to the grid, or net. The net counts only in a file with
+  no flow from the grid and no flow to the grid. The app refuses a file
+  of gas or of the demand (kW), and it skips the summaries. For each day,
+  it takes the finest readings: hourly and daily readings of the same day
+  count once. It uses the time zone and the daylight time of the file.
+- Green Button CSV, or a CSV with a date and the kWh: a column of the
+  kWh to the grid (export) goes to the grid, a net value under zero too,
+  and a row of gas or with units that are not kWh or Wh does not count.
+
+For each month (the last 24 months at most), the build keeps the kWh from
+the grid, the kWh to the grid, and the days with data. The page says so.
+`DIY.Usage.read/1` accepts only a usage that it can read in full: a month
+"YYYY-MM" of 2000 to 2099, with at most the days of that month. When a
+file has a month of the year two times (a file of 12 months from the 8th
+of a month), the app takes the one with the most days. The removal of
+the last smart meter (or of its room), or a new house with no meter,
+removes the real usage.
+
+### The real months and the estimate
+
+The Bill page puts each real month next to the estimate of the same month
+of the year, with its range (`DIY.Usage.compare/2`). A month with fewer
+days of data gets the mean of its days for the other days, and the page
+marks it. The front of the house shows the average month from the meter.
+
+`DIY.Usage.fit/2` finds the numbers of the house from the meter and the
+weather of the same months (NASA POWER), with least squares:
+
+    kWh of a month = base × days + cool × cooling degree days + heat × heating degree days
+
+No number is under zero: the fit tries each set of the three numbers,
+and keeps the best one with no number under zero. It needs 6 months with
+20 days of data or more, and with weather.
+
+### The tests of phase 2
+
+- The check of the plan: "the estimate falls inside its own range for
+  test houses with meter data". The test makes 24 houses: 4 sizes, 3
+  kinds of heat, 2 of each. Each test house is a preset with other numbers
+  (a heat loss up to 10% larger or smaller, an AC of one SEER2 more or
+  less, a furnace blower and other items up to 20% more or less, one
+  person more or less at the water heater). Its months come from the
+  weather of July 2024 to June 2025, with 5% noise. The estimate of the
+  preset does not know these numbers, and it uses the weather of 2016 to
+  2023 only. Each house has 10 of its 12 months in the range at least, and
+  all the houses 90% (in October 2026: 269 of 288 months, 93%).
+
+  This is a check of the app with itself, on synthetic meter data: the
+  test houses come from the same model as the estimate. It shows that the
+  range covers the numbers that the model does not know. It cannot find a
+  fault of the model itself: a house with 25% more heat loss than its
+  preset has fewer months in the range. A check with real files of meters
+  is open (TODO.md).
+- Property tests: random files of 15-minute reads give the sums of their
+  readings, any text gives a result or an error, a usage goes to JSON and
+  back with no change, and the fit finds the numbers of a house from its
+  months.
+- The browser test adds the meter from the front of the house, opens a
+  CSV of Smart Meter Texas, and checks the real months with axe-core.

@@ -295,12 +295,10 @@ defmodule DIYWeb.Inside do
       </div>
 
       <p class="text-sm">
-        <span class="font-semibold">It turns on:</span> {Enum.map_join(
-          @kind.features,
-          ", ",
-          &feature/1
-        )}.
+        <span class="font-semibold">It turns on:</span> {features(@kind)}.
       </p>
+
+      <.usage :if={:usage in @kind.features} usage={@build.usage} />
 
       <form :if={length(@rooms) > 1} id="move-form" phx-change="move_item">
         <input type="hidden" name="item_id" value={@item.id} />
@@ -319,7 +317,11 @@ defmodule DIYWeb.Inside do
         id="delete-item"
         phx-click="delete_item"
         phx-value-id={@item.id}
-        data-confirm="Remove this item?"
+        data-confirm={
+          if @item.type == "smart_meter" and @build.usage,
+            do: "Remove this item? With no smart meter, the real usage goes too.",
+            else: "Remove this item?"
+        }
         class="btn btn-sm btn-error btn-outline"
       >
         Remove the item
@@ -334,7 +336,52 @@ defmodule DIYWeb.Inside do
 
   defp month_name(month), do: Enum.at(Estimate.month_names(), month - 1)
 
+  defp features(kind), do: Enum.map_join(kind.features, ", ", &feature/1)
+
   defp feature(:estimate), do: "the usage estimate"
+  defp feature(:usage), do: "your real usage, from the file of the meter"
+
+  attr :usage, :map, default: nil
+
+  # The file of a meter. The browser reads it (the hook UsageFile), and
+  # sends only the sum of each month.
+  defp usage(assigns) do
+    ~H"""
+    <div id="usage" class="space-y-2 rounded-box bg-base-200 p-3">
+      <h3 class="font-semibold">Your real usage</h3>
+      <p :if={@usage} id="usage-months" class="text-sm">
+        {DIY.Usage.source_name(@usage.source)}: {Format.count(length(@usage.months), "month")}, from {Format.month(
+          hd(@usage.months).month
+        )} to {Format.month(List.last(@usage.months).month)}.
+        <button type="button" phx-click="clear_usage" class="link">Remove the real usage</button>
+      </p>
+      <label class="block text-sm">
+        <span class="font-semibold">Open the file of your meter</span>
+        <input
+          id="usage-file"
+          type="file"
+          accept=".csv,.xml,text/csv,application/xml,text/xml"
+          phx-hook="UsageFile"
+          class="file-input file-input-sm block w-full"
+        />
+      </label>
+      <p class="text-xs opacity-80">
+        The file stays on this device. The browser reads it. It sends only three numbers for each month: the kWh from the grid, the kWh to the grid, and the days with data.
+      </p>
+      <details class="text-xs">
+        <summary class="cursor-pointer">How to get the file</summary>
+        <ul class="list-disc pl-5 space-y-1 pt-1">
+          <li>
+            Texas: log in at smartmetertexas.com. Open "Energy Data 15 Min Interval". Choose the last 12 months. Export the CSV.
+          </li>
+          <li>
+            Other states: on the site of your utility, find "Green Button" or "Download My Data". Save the file. A .zip file has the file in it: open the .zip file first.
+          </li>
+        </ul>
+      </details>
+    </div>
+    """
+  end
 
   attr :param, :map, required: true
   attr :value, :any, required: true

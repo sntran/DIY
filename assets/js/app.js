@@ -7,6 +7,7 @@ import topbar from "../vendor/topbar"
 import {deviceHook, storeOf, CHANNEL} from "./device.js"
 import {scrollHook} from "./scroll.js"
 import {sheetHook} from "./sheet.js"
+import {usageHook} from "./usage.js"
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {
@@ -22,6 +23,8 @@ const liveSocket = new LiveSocket("/live", Socket, {
     ScrollStart: scrollHook,
     // A sheet over the page: the Escape key and the focus (assets/js/sheet.js).
     Sheet: sheetHook,
+    // A usage file of a meter, read on the device (assets/js/usage.js).
+    UsageFile: usageHook,
   },
 })
 
