@@ -25,11 +25,26 @@ defmodule DIYWeb.HomeLiveTest do
     render_hook(view, "device:restore", %{"text" => nil, "stamp" => ""})
 
     view |> element("#door-planning") |> render_click()
-    assert_push_event view, "device:save", %{text: text, base: "", epoch: 0}
+    assert_push_event view, "device:save", %{text: text, base: "", backup: false}
     assert {:ok, %Build{door: "planning", revision: 1, stamp: stamp}} = Build.from_json(text)
     assert render(view) =~ "The device does not have the last change yet"
 
     assert render_hook(view, "device:saved", %{"stamp" => stamp}) =~ "Saved on this device"
+  end
+
+  test "a click before the build of the device changes nothing", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/")
+    render_click(view, "door", %{"door" => "my_house"})
+    render_click(view, "restart", %{})
+    refute_push_event view, "device:save", _payload
+  end
+
+  test "an event that the page does not know changes nothing", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/")
+    render_hook(view, "device:restore", %{"text" => nil, "stamp" => ""})
+    render_click(view, "door", %{})
+    render_click(view, "garage", %{})
+    refute_push_event view, "device:save", _payload
   end
 
   test "a door that is not a door changes nothing", %{conn: conn} do

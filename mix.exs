@@ -15,7 +15,7 @@ defmodule DIY.MixProject do
       # mix test --cover: each line must run.
       test_coverage: [summary: [threshold: 100]],
       # RELEASE_ERTS=false: a release with no ERTS, for beam.com (see
-      # scripts/app-com.sh).
+      # scripts/edge-com.sh).
       releases: [diy: [include_erts: System.get_env("RELEASE_ERTS") != "false"]]
     ]
   end

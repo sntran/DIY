@@ -22,7 +22,7 @@ Then, in the directory of the project:
 
 ```sh
 mix.com setup                   # the deps and the assets
-npm install                     # Node.js 26: fast-check, beam.com, wrangler
+npm ci                          # Node.js 26: the packages of package-lock.json
 mix.com test --cover            # the coverage must be 100%
 npm test                        # the JavaScript of the page, 100% coverage
 mix.com precommit               # before each commit (also npm test)

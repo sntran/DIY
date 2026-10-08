@@ -1,7 +1,6 @@
-// The entry of the app on Cloudflare Workers: edge.com, the release of
-// app.com (npm run build), with the runtime of the npm package beam.com.
-// app.com has the native program too, which a Worker does not use, and
-// with it the upload can be more than the limit of 64 MiB.
+// The entry of the app on Cloudflare Workers: edge.com, the release of the
+// app for the WebAssembly runtime (npm run build, scripts/edge-com.sh), with
+// the runtime of the npm package beam.com.
 import app from './edge.com' with { type: 'bytes' };
 import { serve } from 'beam.com';
 

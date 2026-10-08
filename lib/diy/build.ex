@@ -99,7 +99,9 @@ defmodule DIY.Build do
     end
   end
 
-  defp from_map(%{"version" => version}) when is_integer(version), do: {:error, :version}
+  defp from_map(%{"version" => version}) when is_integer(version),
+    do: {:error, {:version, version}}
+
   defp from_map(_map), do: {:error, :not_a_build}
 
   defp revision(revision) when is_integer(revision) and revision >= 0, do: {:ok, revision}

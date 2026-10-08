@@ -11,9 +11,13 @@ defmodule DIYWeb.Endpoint do
     same_site: "Lax"
   ]
 
+  # Only the WebSocket, with a small frame: one VM serves all the users in
+  # the 128 MB of a Durable Object, and the largest message is a build (see
+  # DIYWeb.Device). The fallback of long polls is off: it reads a body of
+  # 8 MB at most.
   socket "/live", Phoenix.LiveView.Socket,
-    websocket: [connect_info: [session: @session_options]],
-    longpoll: [connect_info: [session: @session_options]]
+    websocket: [connect_info: [session: @session_options], max_frame_size: 1_048_576],
+    longpoll: false
 
   # Serve at "/" the static files from "priv/static" directory.
   #

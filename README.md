@@ -2,7 +2,7 @@
 
 Small Steps Home helps a beginner find the next small step to lower the
 power bill and make the home more ready. It does not sell one big
-solution. The name is a working name.
+solution. The name is not final.
 
 The user builds a model of the house. Each item that the user adds, and the
 place of the house, turn on the features that apply. A user never sees a
@@ -40,11 +40,12 @@ makes `SECRET_KEY_BASE` one time and keeps it in the storage of the
 Durable Object.
 
 ```sh
-npm install && npm run build      # app.com and edge.com (scripts/app-com.sh)
+npm ci && npm run build           # edge.com (scripts/edge-com.sh)
 npx wrangler dev                  # the Worker on this computer
 npx wrangler deploy               # deploy to Cloudflare
 ```
 
 Cloudflare Workers Builds can deploy each push to `main`: connect the
 repository in the Cloudflare dashboard, with the build command
-`npm run build` and the deploy command `npx wrangler deploy`.
+`npm run build` and the deploy command `npx wrangler deploy`. Workers
+Builds installs the packages of `package-lock.json`.

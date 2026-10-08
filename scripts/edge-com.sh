@@ -1,12 +1,12 @@
 #!/bin/sh
-# Builds app.com: the release of the app in one native file of beam.com
-# (https://github.com/sntran/BEAM.com), with its WebAssembly part, and
-# edge.com: the part of app.com that the Worker reads (the release, with no
-# native program, see scripts/edge-com.mjs). "npm run build" runs it, also
-# in the build of Cloudflare Workers Builds. Then worker.js serves edge.com
-# with the runtime of the npm package beam.com (see wrangler.jsonc).
+# Builds edge.com: the release of the app in one file for the WebAssembly
+# runtime of beam.com (https://github.com/sntran/BEAM.com), with no native
+# program (--target wasm32): a Worker can be at most 64 MiB. "npm run
+# build" runs it, also in the build of Cloudflare Workers Builds. Then
+# worker.js serves edge.com with the runtime of the npm package beam.com
+# (see wrangler.jsonc).
 #
-#   npm install && npm run build      (or: sh scripts/app-com.sh)
+#   npm install && npm run build      (or: sh scripts/edge-com.sh)
 #
 # Variables:
 # - BEAM_COM: the path of a beam.com, in place of the file of the npm
@@ -54,7 +54,4 @@ beam mix assets.deploy
 # mix release keeps the directories of old versions in lib/. Remove them.
 rm -rf _build/prod/rel/diy
 RELEASE_ERTS=false beam mix release --overwrite
-beam _build/prod/rel/diy -o app.com --cacerts "$CACERTS"
-# A Worker can be at most 64 MiB. The native program of app.com (about 25
-# MB) is not for the Worker: the upload has only the release.
-node scripts/edge-com.mjs app.com edge.com
+beam _build/prod/rel/diy -o edge.com --target wasm32 --cacerts "$CACERTS"

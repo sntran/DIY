@@ -3,8 +3,8 @@
 # - mix precommit: the format, the tests of the VM with 100% coverage, and
 #   the tests of the JavaScript of the page (npm test), with 100% coverage.
 # - scripts/tlc.sh: the TLA+ models of specs/, with TLC.
-# - The build for Cloudflare Workers (npm run build), and its size
-#   (wrangler deploy --dry-run).
+# - The build for Cloudflare Workers (npm run build), its size (wrangler
+#   deploy --dry-run), and a request to it in workerd (wrangler dev).
 #
 # This workflow deploys nothing: Workers Builds deploys main.
 name: CI
@@ -85,14 +85,8 @@ jobs:
           mix.com local.rebar --force
           mix.com deps.get
 
-      # npm test needs only fast-check. The other npm packages are large, and
-      # only the build needs them.
-      - name: Install fast-check
-        run: |
-          version=$(node -p "require('./package.json').devDependencies['fast-check']")
-          npm install --prefix "$RUNNER_TEMP/npm" --no-save --no-package-lock --ignore-scripts "fast-check@$version"
-          mkdir -p node_modules
-          ln -s "$RUNNER_TEMP/npm/node_modules/fast-check" node_modules/fast-check
+      - name: Install the npm packages
+        run: npm ci --no-audit --no-fund
 
       - name: mix precommit
         run: mix.com precommit
@@ -118,14 +112,30 @@ jobs:
       - name: Run APE programs with /bin/sh
         run: sudo sh -c 'echo ":APE:M::MZqFpD::/bin/sh:" > /proc/sys/fs/binfmt_misc/register' || true
 
-      # The same steps as Workers Builds: npm install, npm run build. npx
+      # The same steps as Workers Builds: npm ci, npm run build. npx
       # beam.com downloads the beam.com of the version of package.json, and
       # checks its SHA-256.
-      - name: npm install and npm run build
+      - name: npm ci and npm run build
         run: |
-          npm install --no-audit --no-fund
+          npm ci --no-audit --no-fund
           npm run build
 
-      # A Worker can be at most 64 MiB.
+      # A Worker can be at most 64 MiB (docs/WORKERS.md of BEAM.com).
       - name: The size of the Worker
-        run: npx wrangler deploy --dry-run --outdir "$RUNNER_TEMP/worker"
+        run: |
+          npx wrangler deploy --dry-run --outdir "$RUNNER_TEMP/worker" | tee "$RUNNER_TEMP/dry-run.txt"
+          kib=$(sed -n 's/^Total Upload: \([0-9.]*\) KiB.*/\1/p' "$RUNNER_TEMP/dry-run.txt")
+          echo "The Worker is $kib KiB."
+          awk -v kib="$kib" 'BEGIN { exit !(kib > 0 && kib < 65536) }'
+
+      # The Worker in workerd, as on Cloudflare: the VM boots in the Durable
+      # Object and answers the page.
+      - name: The Worker answers
+        run: |
+          npx wrangler dev --port 8787 --ip 127.0.0.1 > "$RUNNER_TEMP/wrangler.log" 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -fsS --compressed -o "$RUNNER_TEMP/page.html" http://127.0.0.1:8787/; then break; fi
+            sleep 2
+          done
+          cat "$RUNNER_TEMP/wrangler.log"
+          grep -q "Small Steps Home" "$RUNNER_TEMP/page.html"

@@ -17,19 +17,24 @@ the code.
 ## The server
 
 The app is a Phoenix LiveView app. `beam.com` makes one file of its
-release (`npm run build`, `scripts/app-com.sh`), and the npm package
-`beam.com` runs that file on Cloudflare Workers. One Durable Object runs
-one VM for all the requests, so that each page and its WebSocket go to the
-same VM. This is the setup of mkfifo.com, the first app on BEAM.com.
+release for the WebAssembly runtime (`npm run build`,
+`scripts/edge-com.sh`), and the npm package `beam.com` runs that file on
+Cloudflare Workers. One Durable Object runs one VM for all the requests,
+so that each page and its WebSocket go to the same VM. This is the setup
+of mkfifo.com, the first app on BEAM.com.
 
 The VM has no database. The app keeps no data of a user on the server.
+
+One VM in 128 MB serves all the users. So a WebSocket frame can be 1 MiB
+at most, a build from the device can be 512 KiB at most, and the
+fallback of long polls is off.
 
 ## The build on the device
 
 The build of a user (the house, its rooms and items, and later the vans)
-is a JSON text in the `localStorage` of the browser, under the key
-`diy.build`. The server keeps no copy. The LiveView of a page holds the
-build while the page is open, and sends each new build to the device.
+is a JSON text in IndexedDB, in the browser of the user. The server keeps
+no copy. The LiveView of a page holds the build while the page is open,
+and sends each new build to the device.
 
 Why on the device:
 
@@ -41,52 +46,79 @@ Why on the device:
 The cost: a build is on one browser only. A file export and import moves
 a build to a different device (phase 1).
 
+Why IndexedDB, not localStorage: the save is a compare and set, and it
+must be atomic for all the tabs of the browser. IndexedDB runs the
+transactions of all the tabs one at a time. localStorage does not give
+this: a browser can keep a copy of it in each process, and a Web Lock
+does not make these copies the same.
+
 ### The protocol
 
 `assets/js/device.js` (the hook `Device`) and `DIYWeb.Device` (the
 LiveView part) do the protocol. The TLA+ model `specs/Device.tla` checks
-it with two and three tabs of one browser.
+it with two and three tabs, with reconnects, reloads, a failed write and a
+cleared store.
 
-1. At the mount, the hook sends the stored text and its stamp
-   (`device:restore`). The LiveView shows that build, or a new build.
+1. At the mount and after each reconnect, the hook reads the store and
+   sends the text and its stamp (`device:restore`). The LiveView shows
+   that build, or a new build. It takes only the first restore.
 2. Each change makes a new build with a new random stamp and the next
    revision. The LiveView sends `device:save` with the text, the base (the
    stamp of the stored build that the change comes from) and its epoch.
    It does not wait for the answer: the new build is the base of the next
    save.
-3. The hook writes the text only if the stored stamp is the base (compare
-   and set, in a Web Lock for all the tabs). Then it sends `device:saved`.
-   Else a different tab wrote first: the hook sends `device:conflict` with
-   the stored text, its stamp and the epoch of the save.
-4. When a different tab writes, the browser gives a `storage` event, and
-   the hook sends `device:changed`. The LiveView shows that build if its
-   revision is larger.
+3. The hook takes the saves in order. For each one, it reads and writes
+   in one transaction: it writes only if the stored stamp is the base.
+   Then it sends `device:saved`, and tells the other tabs with a
+   BroadcastChannel. Else a different tab wrote first: the hook sends
+   `device:conflict` at once, in the transaction, with the stored text,
+   its stamp and the epoch of the save.
+4. A different tab sends `device:changed`. The LiveView shows that build
+   if its revision is larger.
+5. When a write fails (for example, the device has no space), the hook
+   sends `device:error` with the stored stamp.
 
-Three details come from the model. TLC found a fault in each simpler
-form:
+The hook sends what it sees of the store on one channel, in the order
+that it sees it. A conflict goes in the transaction, so it comes before
+the news of a later write of a different tab.
 
-- **The key is a stamp, not the revision.** The LiveView sends a save
-  before the hook answers the last one. With the revision as the key, two
-  saves of one tab can have the bases 1 and 2. The first one gets a
-  conflict, but the stored build of the other tab can have the revision 2:
-  then the second save writes over it, and an edit is lost
-  (`specs/Device.revision.cfg`).
-- **The LiveView keeps the newest stored build that it knows.** A conflict
-  and a `storage` event come by different paths, in either order. After a
-  conflict, the LiveView shows the newest stored build that it knows, not
-  the build of the conflict, which can be older.
-- **The epoch.** When a LiveView takes a build from outside, the saves
-  that it sent before come from a build that it does not show now. Their
-  conflicts are old news: a conflict of an old epoch changes no build.
-  Without this, a tab can show an old build at the end
-  (`specs/Device.epoch.cfg`).
+These details come from the model and from the tests. Each one has a
+configuration of the model with the fault, and TLC finds the fault:
 
-A text that is not a build of this version gives a new build, and the
-page tells the user. The next save writes over the text.
+- **The key is a stamp, not the revision** (`Device.revision.cfg`). The
+  LiveView sends a save before the hook answers the last one. With the
+  revision as the key, two saves of one tab can have the bases 1 and 2.
+  The first one gets a conflict. But the stored build of the other tab
+  can have the revision 2, and then the second save writes over it.
+- **The epoch** (`Device.epoch.cfg`). When a LiveView takes a build from
+  outside, the saves that it sent before come from a build that it does
+  not show now. Their answers are old news. A new LiveView has a new
+  epoch too. Without the epoch, a tab can show an old build at the end.
+- **A new read replaces the old reads** (`Device.reads.cfg`). After two
+  reconnects, an old read can come before a save of the queue, and its
+  build is old. The property test with real LiveViews found this fault:
+  TLC needs two restarts to show it.
+
+Other cases:
+
+- A failed write keeps the build of the page. The next save comes from
+  the stored build, and has all the build.
+- When the user removes the data of the site, a save gets a conflict with
+  no stored text. The LiveView saves its build again on the empty store.
+- A text that the page cannot read gives a new build. The next save keeps
+  a copy of the old text under the key `backup`, and the page tells the
+  user.
+- A build of a newer version of the app stops the saves, and the page
+  asks the user to load the page again.
+- A push of the hook while the socket is down goes nowhere. The restore
+  after the reconnect gives the build again. A change that the LiveView
+  made, but did not send before the socket went down, is lost.
 
 The tests:
 
-- `test/js/device.test.js`: the hook, with a fake storage, and a property
-  test (fast-check) of two tabs that send saves before the answers.
+- `test/js/device.test.js`: the hook and the transactions of IndexedDB
+  (fake-indexeddb), and a property test (fast-check) of two tabs that
+  send saves before the answers, with failed writes.
 - `test/diy_web/device_test.exs`: the LiveView part, and a property test
-  (StreamData) with two real LiveViews and a fake device, in random order.
+  (StreamData) with real LiveViews, a fake device and reconnects, in
+  random order.

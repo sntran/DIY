@@ -35,7 +35,7 @@ defmodule DIY.BuildTest do
     assert Build.from_json("{") == {:error, :not_json}
     assert Build.from_json("[1]") == {:error, :not_a_build}
     assert Build.from_json("{}") == {:error, :not_a_build}
-    assert Build.from_json(~s({"version": 2})) == {:error, :version}
+    assert Build.from_json(~s({"version": 2})) == {:error, {:version, 2}}
     assert Build.from_json(~s({"version": 1, "revision": -1, "stamp": ""})) == {:error, :revision}
     assert Build.from_json(~s({"version": 1, "revision": 1, "stamp": 5})) == {:error, :stamp}
 

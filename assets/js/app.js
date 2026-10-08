@@ -4,16 +4,18 @@ import {Socket} from "phoenix"
 import {LiveSocket} from "phoenix_live_view"
 import {hooks as colocatedHooks} from "phoenix-colocated/diy"
 import topbar from "../vendor/topbar"
-import {deviceHook, storageOf} from "./device.js"
+import {deviceHook, storeOf, CHANNEL} from "./device.js"
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {
-  longPollFallbackMs: 2500,
   params: {_csrf_token: csrfToken},
   hooks: {
     ...colocatedHooks,
     // The build on the device (assets/js/device.js).
-    Device: deviceHook({storage: storageOf(window), locks: navigator.locks, target: window}),
+    Device: deviceHook({
+      store: () => storeOf(window),
+      channel: () => typeof BroadcastChannel === "function" ? new BroadcastChannel(CHANNEL) : null,
+    }),
   },
 })
 

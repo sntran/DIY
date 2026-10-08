@@ -15,6 +15,9 @@ defmodule DIYWeb.HomeLive do
   end
 
   @impl true
+  # No change before the page has the build of the device.
+  def handle_event(_event, _params, %{assigns: %{build: nil}} = socket), do: {:noreply, socket}
+
   def handle_event("door", %{"door" => door}, socket) do
     case Build.choose_door(socket.assigns.build, door) do
       {:ok, build} -> {:noreply, Device.put_build(socket, build)}
@@ -25,6 +28,8 @@ defmodule DIYWeb.HomeLive do
   def handle_event("restart", _params, socket) do
     {:noreply, Device.put_build(socket, Build.restart(socket.assigns.build))}
   end
+
+  def handle_event(_event, _params, socket), do: {:noreply, socket}
 
   @impl true
   def render(assigns) do
