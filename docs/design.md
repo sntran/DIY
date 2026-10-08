@@ -726,13 +726,16 @@ The van part of a stored build must not stop the build from loading
   number. An item that cannot go in its zone goes to the electrical bay.
   An item of a van that the app cannot read goes away, and so does an
   item of a van with the id of an item before it.
-- An item in a room that is not there was in a zone that is lost: it
-  goes home, or goes away.
+- An item in a room that is not there goes home, or goes away. This is
+  true for an item of the house too: it can be an item of a zone that is
+  lost. An item of a kind that goes only in a van, in a room of the
+  house, goes the same way.
 - A home must be a room of the house where the kind can go: else the
   first such room.
 - A camper van with a number that is not valid gets the default number.
   A van in a room where it cannot go goes to the first room where it can
-  go, or goes away with its zones.
+  go, or goes away with its zones. A van with no id goes away with its
+  zones.
 
 The rest of the house stays strict: a room or an item of the house that
 is not valid gives an error, and the page starts a new build (the device

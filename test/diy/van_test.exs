@@ -313,10 +313,10 @@ defmodule DIY.VanTest do
       do: %{map | "rooms" => map["rooms"] -- [Enum.at(zones, i)]}
 
     defp change(map, {:zone_place, i, place}, zones, _items),
-      do: update(map, "rooms", Enum.at(zones, i)["id"], &%{&1 | "place" => place})
+      do: update(map, "rooms", Enum.at(zones, i)["id"], &Map.put(&1, "place", place))
 
     defp change(map, {:zone_name, i, name}, zones, _items),
-      do: update(map, "rooms", Enum.at(zones, i)["id"], &%{&1 | "name" => name})
+      do: update(map, "rooms", Enum.at(zones, i)["id"], &Map.put(&1, "name", name))
 
     defp change(map, {:copy_zone, i}, zones, _items) do
       copy = %{Enum.at(zones, i) | "id" => "r#{System.unique_integer([:positive]) + 900}"}
@@ -325,16 +325,52 @@ defmodule DIY.VanTest do
 
     defp change(map, {:item_room, j, i}, zones, items),
       do:
-        update(map, "items", Enum.at(items, j)["id"], &%{&1 | "room" => Enum.at(zones, i)["id"]})
+        update(
+          map,
+          "items",
+          Enum.at(items, j)["id"],
+          &Map.put(&1, "room", Enum.at(zones, i)["id"])
+        )
 
     defp change(map, {:item_type, j, type}, _zones, items),
-      do: update(map, "items", Enum.at(items, j)["id"], &%{&1 | "type" => type})
+      do:
+        update(map, "items", Enum.at(items, j)["id"], fn item ->
+          # An item in a room of the house is a part of the house.
+          if item["room"] == "r7", do: item, else: Map.put(item, "type", type)
+        end)
 
-    defp change(map, {:item_param, j, key, value}, _zones, items),
-      do: update(map, "items", Enum.at(items, j)["id"], &put_in(&1, ["params", key], value))
+    defp change(map, {:item_param, j, key, value}, _zones, items) do
+      update(map, "items", Enum.at(items, j)["id"], fn
+        %{"params" => %{} = params} = item -> %{item | "params" => Map.put(params, key, value)}
+        item -> item
+      end)
+    end
+
+    # An item of a kind that goes only in a van, in a room of the house.
+    defp change(map, {:house_room, j}, _zones, items) do
+      update(map, "items", Enum.at(items, j)["id"], fn item ->
+        if van_only?(item["type"]), do: Map.put(item, "room", "r7"), else: item
+      end)
+    end
+
+    defp change(map, {:no_key, j, key}, _zones, items) do
+      update(map, "items", Enum.at(items, j)["id"], fn item ->
+        if item["room"] == "r7", do: item, else: Map.delete(item, key)
+      end)
+    end
+
+    defp change(map, :van_no_id, _zones, [van | _items]),
+      do: update(map, "items", van["id"], &Map.delete(&1, "id"))
 
     defp change(map, {:home, j, home}, _zones, items),
       do: update(map, "items", Enum.at(items, j)["id"], &Map.put(&1, "home", home))
+
+    defp van_only?(type) do
+      case Catalog.kind(type) do
+        %{places: places} -> not Enum.any?(places, &(&1 in [:indoor, :outdoor, :roof]))
+        nil -> false
+      end
+    end
 
     defp update(map, key, id, fun),
       do: Map.update!(map, key, &Enum.map(&1, fn x -> if x["id"] == id, do: fun.(x), else: x end))
@@ -367,7 +403,12 @@ defmodule DIY.VanTest do
             tuple({constant(:item_room), j, z}),
             tuple({constant(:item_type), k, one_of([text, constant("fridge")])}),
             tuple({constant(:item_param), j, key, value}),
-            tuple({constant(:home), j, one_of([text, member_of(Enum.map(build.rooms, & &1.id))])})
+            tuple(
+              {constant(:home), j, one_of([text, member_of(Enum.map(build.rooms, & &1.id))])}
+            ),
+            tuple({constant(:house_room), k}),
+            tuple({constant(:no_key), k, member_of(~w(id type room params typical))}),
+            constant(:van_no_id)
           ]),
           min_length: 1,
           max_length: 5

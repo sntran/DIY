@@ -14,8 +14,8 @@ defmodule DIY.Build do
   an error, and the page starts a new build (the device keeps a copy). The
   van part must not stop the build from loading: the reader makes it whole
   (`repair_vans/1`), and a part of a van that it cannot read goes away. An
-  item in a room that is not there was in a zone that is lost: it goes
-  home, or goes away.
+  item in a room that is not there goes home, or goes away: also an item
+  of the house.
 
   ## The parts
 
@@ -968,15 +968,31 @@ defmodule DIY.Build do
 
   defp items(_items, _rooms), do: {:error, :items}
 
+  # An item of a kind that goes only in a van, in a room of the house, is
+  # an item of a van.
   defp read_item(%{} = item, by_id, house) do
     case Map.get(by_id, item["room"]) do
-      %{level: "van:" <> _} = zone -> van_item(item, zone, by_id, house)
-      %{} = room -> house_item(item, room, house)
-      nil -> van_item(item, nil, by_id, house)
+      %{level: "van:" <> _} = zone ->
+        van_item(item, zone, by_id, house)
+
+      %{} = room ->
+        if van_only?(item["type"]),
+          do: van_item(item, nil, by_id, house),
+          else: house_item(item, room, house)
+
+      nil ->
+        van_item(item, nil, by_id, house)
     end
   end
 
   defp read_item(_item, _by_id, _house), do: :error
+
+  defp van_only?(type) do
+    case Catalog.kind(type) do
+      %{places: places} -> not Enum.any?(places, &(&1 in @places))
+      nil -> false
+    end
+  end
 
   # A camper van: a van must not stop the build from loading. A number that
   # is not valid gets the default number. A van in a room where it cannot
@@ -1001,6 +1017,8 @@ defmodule DIY.Build do
          }},
       else: :skip
   end
+
+  defp house_item(%{"type" => "camper_van"}, _room, _house), do: :skip
 
   # An item of the house. An item of a build of an older version has no
   # `planned` and no `backup`: false. Only an item in a van has a home.
