@@ -216,7 +216,9 @@
 
 /* The icons of the items (DIYWeb.Icon): a material has a top (-t), a lit
    left face (-l) and a right face in the shade (-r). */
-.i-white-t { fill: #ffffff } .i-white-l { fill: #eef0f3 } .i-white-r { fill: #cfd4db }
+.i-face { stroke: rgb(31 35 40 / 0.35); stroke-width: 0.75; stroke-linejoin: round; vector-effect: non-scaling-stroke }
+.i-white-t { fill: #fbfbfc } .i-white-l { fill: #e9ecf0 } .i-white-r { fill: #c9ced6 }
+.i-shade-t { fill: #fff7d6 } .i-shade-l { fill: #fde68a } .i-shade-r { fill: #f2c94c }
 .i-steel-t { fill: #e5e7eb } .i-steel-l { fill: #c7ccd3 } .i-steel-r { fill: #9ca3af }
 .i-gray-t { fill: #9ca3af } .i-gray-l { fill: #7b828c } .i-gray-r { fill: #5f656e }
 .i-dark-t { fill: #50565f } .i-dark-l { fill: #3a3f47 } .i-dark-r { fill: #2a2e35 }

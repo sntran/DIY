@@ -75,13 +75,13 @@ defmodule DIYWeb.Inside do
                 href={"#level-#{Enum.at(@levels, l - 1)}"}
                 class="btn btn-sm btn-square btn-ghost"
                 aria-label="The level above"
-              >▲</a>
+              ><.icon name="hero-chevron-up" class="size-4" /></a>
               <a
                 :if={l < length(@levels) - 1}
                 href={"#level-#{Enum.at(@levels, l + 1)}"}
                 class="btn btn-sm btn-square btn-ghost"
                 aria-label="The level below"
-              >▼</a>
+              ><.icon name="hero-chevron-down" class="size-4" /></a>
             </span>
           </div>
           <.row build={@build} level={level} estimate={@estimate} price={@price} away={@away} />
@@ -165,7 +165,7 @@ defmodule DIYWeb.Inside do
               <span :if={item.typical} class="text-xs opacity-60">Typical</span>
               <span :if={item.planned} class="text-xs font-semibold">Plan</span>
               <span :if={item.backup and station?(@build)} class="text-xs">
-                <.icon name="hero-bolt" class="size-4" /> On the station
+                <.icon name="hero-battery-100" class="size-4" /> On the station
               </span>
             </.link>
           </li>
@@ -200,13 +200,13 @@ defmodule DIYWeb.Inside do
               href={"#room-#{Enum.at(@rooms, i - 1).id}"}
               class="btn btn-sm btn-square btn-ghost"
               aria-label="The room before"
-            >◀</a>
+            ><.icon name="hero-chevron-left" class="size-4" /></a>
             <a
               :if={i < length(@rooms) - 1}
               href={"#room-#{Enum.at(@rooms, i + 1).id}"}
               class="btn btn-sm btn-square btn-ghost"
               aria-label="The next room"
-            >▶</a>
+            ><.icon name="hero-chevron-right" class="size-4" /></a>
           </span>
           <details class="dropdown dropdown-end">
             <summary class="btn btn-sm btn-ghost">Change the room</summary>
@@ -542,7 +542,7 @@ defmodule DIYWeb.Inside do
             phx-click="add_item"
             phx-value-room={@room.id}
             phx-value-type={kind.type}
-            class="btn btn-block justify-start h-auto py-2"
+            class="btn btn-block justify-start h-auto py-2 text-left"
           >
             <Icon.item type={kind.type} class="size-8" /> {kind.name}
           </button>
@@ -582,7 +582,7 @@ defmodule DIYWeb.Inside do
             <Icon.item :if={@icon} type={@icon} class="size-8" />{@title}
           </h2>
           <.link patch={@close} class="btn btn-sm btn-ghost" aria-label="Close" data-close>
-            ✕
+            <.icon name="hero-x-mark" class="size-5" />
           </.link>
         </div>
         {render_slot(@inner_block)}

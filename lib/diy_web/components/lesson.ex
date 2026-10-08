@@ -261,10 +261,14 @@ defmodule DIYWeb.LessonPage do
     ~H"""
     <label class="block text-sm">
       <span class="font-semibold">{@name}</span>
-      <span :if={@check == :ok} class="font-semibold">✓ right</span>
-      <span :if={@check == :wrong} class="text-error">✗ check it</span>
+      <span :if={@check == :ok} class="font-semibold">
+        <.icon name="hero-check" class="size-4" /> right
+      </span>
+      <span :if={@check == :wrong} class="text-error">
+        <.icon name="hero-x-mark" class="size-4" /> check it
+      </span>
       <span :if={@check == :invalid} class="text-error">
-        ✗ give a number of dollars, for example 12.34
+        <.icon name="hero-x-mark" class="size-4" /> give a number of dollars, for example 12.34
       </span>
       <input
         name={"answer[#{@part}]"}
@@ -494,7 +498,7 @@ defmodule DIYWeb.LessonPage do
                   class="btn btn-xs btn-ghost"
                   aria-label={"Remove #{p.name}"}
                 >
-                  ✕
+                  <.icon name="hero-x-mark" class="size-4" />
                 </button>
               </td>
             </tr>
@@ -681,7 +685,8 @@ defmodule DIYWeb.LessonPage do
               <td class="text-right">{num(r.efl)}¢</td>
               <td class="text-right">{num(Float.round(r.app, 2))}¢</td>
               <td>
-                <span aria-hidden="true">{if r.ok, do: "✓", else: "✗"}</span>
+                <.icon :if={r.ok} name="hero-check" class="size-4" />
+                <.icon :if={not r.ok} name="hero-x-mark" class="size-4" />
                 <span class="sr-only">{if r.ok, do: "the same", else: "not the same"}</span>
               </td>
             </tr>

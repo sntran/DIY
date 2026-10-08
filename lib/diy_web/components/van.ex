@@ -499,7 +499,7 @@ defmodule DIYWeb.VanPage do
             phx-click="add_item"
             phx-value-room={@zone.id}
             phx-value-type={kind.type}
-            class="btn btn-block justify-start h-auto py-2"
+            class="btn btn-block justify-start h-auto py-2 text-left"
           >
             <Icon.item type={kind.type} class="size-8" /> {kind.name}
           </button>

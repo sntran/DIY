@@ -89,14 +89,15 @@ defmodule DIYWeb.Math do
 
         <h2 class="text-lg font-bold">Each item</h2>
         <ul id="items" class="space-y-1">
-          <li :for={item <- by_size(@build.items, @estimate)}>
-            <.link patch={~p"/inside?#{[item: item.id]}"} class="link">
-              <Icon.item type={item.type} class="inline size-5 align-text-bottom" /> {Catalog.name(
-                item
-              )}
-            </.link>
-            : {Format.kwh(@estimate.items[item.id].year)} in one year
-            <span :if={item.typical} class="opacity-60">(typical)</span>
+          <li :for={item <- by_size(@build.items, @estimate)} class="flex items-center gap-2">
+            <Icon.item type={item.type} class="size-7" />
+            <span>
+              <.link patch={~p"/inside?#{[item: item.id]}"} class="link">
+                {Catalog.name(item)}
+              </.link>
+              : {Format.kwh(@estimate.items[item.id].year)} in one year
+              <span :if={item.typical} class="opacity-60">(typical)</span>
+            </span>
           </li>
         </ul>
 
