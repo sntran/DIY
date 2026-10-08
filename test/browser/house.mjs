@@ -57,7 +57,12 @@ async function build(context, name) {
   await connected(page)
 
   await page.waitForSelector("#door-my-house")
+  // The bar at the top while a page loads: axe checks it too. (On a slow
+  // computer, it shows at each load.)
+  await page.evaluate(() => window.dispatchEvent(new Event("phx:page-loading-start")))
+  await page.waitForSelector("body > canvas", { state: "attached" })
   await check(page, `${name} doors`)
+  await page.evaluate(() => window.dispatchEvent(new Event("phx:page-loading-stop")))
   await page.click("#door-my-house")
 
   await page.waitForSelector("#zip-form")
