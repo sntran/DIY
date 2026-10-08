@@ -14,7 +14,10 @@ defmodule DIYWeb.Router do
     pipe_through :browser
 
     live_session :build, on_mount: DIYWeb.Device do
-      live "/", HomeLive
+      live "/", HomeLive, :front
+      live "/inside", HomeLive, :inside
+      live "/estimate", HomeLive, :estimate
+      live "/settings", HomeLive, :settings
     end
   end
 end

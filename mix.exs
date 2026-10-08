@@ -70,6 +70,10 @@ defmodule DIY.MixProject do
        compile: false,
        depth: 1},
       {:jason, "~> 1.2"},
+      # The HTTP client of the weather and of Power to Choose. On Cloudflare,
+      # the VM sends its HTTP through fetch() of the Worker. Do not add
+      # castore: the VM trusts only :public_key.cacerts_get/0.
+      {:req, "~> 0.5"},
       {:bandit, "~> 1.5"}
     ]
   end

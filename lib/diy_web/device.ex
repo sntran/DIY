@@ -23,7 +23,10 @@ defmodule DIYWeb.Device do
     - `newer`: the stored build comes from a newer version of the app. The
       page does not write over it.
 
-  A LiveView changes the build only with `put_build/2`.
+  A LiveView changes the build only with `put_build/2`. When a build comes
+  from the device (a restore, a conflict, or a different tab), the protocol
+  calls `build_changed(socket)` of the LiveView, if it has one, before the
+  next render.
   """
   import Phoenix.Component, only: [assign: 3]
 
@@ -194,7 +197,14 @@ defmodule DIYWeb.Device do
   # a copy of the text, and writes over it. A build of a newer version
   # stops the saves.
   defp take(socket, text, stamp, outside) do
-    send(self(), {__MODULE__, :build})
+    socket |> take_build(text, stamp, outside) |> changed()
+  end
+
+  defp changed(%{view: view} = socket) do
+    if function_exported?(view, :build_changed, 1), do: view.build_changed(socket), else: socket
+  end
+
+  defp take_build(socket, text, stamp, outside) do
     device = %{socket.assigns.device | base: stamp}
     device = if outside, do: %{device | epoch: new_epoch()}, else: device
     current = Build.version()

@@ -55,6 +55,9 @@
     },
     createCanvas = function () {
       canvas = document.createElement("canvas");
+      // DIY: the bar is only a picture of the progress. Screen readers skip
+      // it (axe-core: all content is in landmarks).
+      canvas.setAttribute("aria-hidden", "true");
       var style = canvas.style;
       style.position = "fixed";
       style.top = style.left = style.right = style.margin = style.padding = 0;

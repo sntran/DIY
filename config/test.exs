@@ -20,3 +20,14 @@ config :phoenix_live_view,
 # Sort query params output of verified routes for robust url comparisons
 config :phoenix,
   sort_verified_routes_query_params: true
+
+# The HTTP of the weather and of Power to Choose goes to the stubs of the
+# tests (Req.Test).
+config :diy, DIY.Weather, req: [plug: {Req.Test, DIY.Weather}, retry: false]
+config :diy, DIY.Market, req: [plug: {Req.Test, DIY.Market}, retry: false]
+
+# The browser tests (mix test --only browser) need a server: DIY_BROWSER=1
+# starts it on the port 4002.
+if System.get_env("DIY_BROWSER") do
+  config :diy, DIYWeb.Endpoint, server: true
+end

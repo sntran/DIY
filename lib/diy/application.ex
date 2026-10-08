@@ -9,6 +9,8 @@ defmodule DIY.Application do
   def start(_type, _args) do
     children = [
       {Phoenix.PubSub, name: DIY.PubSub},
+      # The data of the public services: the weather and the utility areas.
+      DIY.Cache,
       # Start to serve requests, typically the last entry
       DIYWeb.Endpoint
     ]

@@ -35,6 +35,18 @@ which `beam.com` has. A `_build` from a different Elixir installation has
 that NIF as a native library, which `beam.com` cannot load: delete
 `_build` before the first `mix.com test`.
 
+The browser test builds a house in Chromium, with axe-core on each
+screen. It needs the assets of the tests and a Chromium (`CHROMIUM`):
+
+```sh
+MIX_ENV=test mix.com assets.build
+CHROMIUM=/path/to/chrome DIY_BROWSER=1 mix.com test --only browser
+```
+
+The test server serves `PATH.gz` for a file that has one: after `npm run
+build`, run `mix.com phx.digest.clean --all`, else the test server gives
+the old script.
+
 `scripts/tlc.sh` needs Java 11 or later and `tla2tools.jar` v1.7.4
 (SHA-256 `936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88`)
 in `~/.tla/`, or in the variable `TLA2TOOLS_JAR`:
@@ -49,9 +61,18 @@ The build for Cloudflare Workers (`npm run build`) needs Node.js 26
 (`.node-version`) and npm. Test the build on this computer with
 `npx wrangler dev`.
 
-GitHub Actions runs the same checks for each push and each pull request
+GitHub Actions runs the same checks for each pull request
 (`.github/workflows/ci.yml`). A run fails also when `mix.com precommit`
-changes a file: format the code before the commit.
+changes a file: format the code before the commit. The minutes of Actions
+are few: run the checks on this computer first (the browser test and
+`scripts/tlc.sh` too), and push the changes of a pull request together.
+TLC runs only when a pull request changes the models or the code that
+they check.
+
+The last step of CI runs the browser test against `wrangler dev`, with
+the real answers of NASA POWER and Power to Choose. When one of these
+services is down, this step fails: the app cannot work then either.
+Check the service, and run the job again when it is up.
 
 ## Rules for a change
 
@@ -65,6 +86,8 @@ changes a file: format the code before the commit.
   the line `\* TLC must find: TEXT`: it shows that the property can fail.
 - Each number that the app shows tells where it comes from (honesty rule
   1 of the plan). Put the source of each constant next to it.
+- Each page works on a phone, with a keyboard and with a screen reader.
+  The browser test runs axe-core on each screen.
 - Keep each change small, and give it one purpose.
 - Make a branch from `main` for each change, with the type of the change
   as a prefix: `feat/`, `fix/`, `docs/`, `test/`, `refactor/`. Each push

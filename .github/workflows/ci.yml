@@ -1,20 +1,23 @@
-# The checks of each push and of each pull request:
+# The checks of each pull request:
 #
 # - mix precommit: the format, the tests of the VM with 100% coverage, and
 #   the tests of the JavaScript of the page (npm test), with 100% coverage.
-# - scripts/tlc.sh: the TLA+ models of specs/, with TLC.
+# - scripts/tlc.sh: the TLA+ models of specs/, with TLC, when the pull
+#   request changes the models or the code that they check.
+# - The browser test: a person builds a house in Chrome, with axe-core on
+#   each screen (mix test --only browser).
 # - The build for Cloudflare Workers (npm run build), its size (wrangler
 #   deploy --dry-run), and a request to it in workerd (wrangler dev).
 #
 # This workflow deploys nothing: Workers Builds deploys main.
 name: CI
 
-# A pull request runs the checks on its head, and a push to main runs them
-# again on the merge.
+# A pull request runs the checks on its merge with the base: the merge to
+# main needs no second run. The minutes of Actions are few: a person can
+# run the checks by hand (workflow_dispatch), for example on main.
 on:
-  push:
-    branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -36,7 +39,10 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
+      # Two commits: the merge of a pull request, and its base (HEAD^1).
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
 
       - uses: actions/setup-node@v4
         with:
@@ -99,8 +105,24 @@ jobs:
       - name: No change from mix precommit
         run: git diff --exit-code
 
+      # TLC takes some minutes. A pull request runs it only when it changes
+      # the models, the script, or the code that the models check.
       - name: The TLA+ models
-        run: scripts/tlc.sh
+        run: |
+          if [ "${{ github.event_name }}" = pull_request ] &&
+            git diff --quiet HEAD^1 HEAD -- specs scripts/tlc.sh assets/js/device.js \
+              lib/diy_web/device.ex lib/diy/power.ex; then
+            echo "No change in the models or in the code that they check."
+          else
+            scripts/tlc.sh
+          fi
+
+      # The Chrome of the runner, with the server of the tests.
+      - name: The browser test
+        run: |
+          MIX_ENV=test mix.com assets.setup
+          MIX_ENV=test mix.com assets.build
+          CHROMIUM=$(command -v google-chrome) DIY_BROWSER=1 mix.com test --only browser
 
   build:
     runs-on: ubuntu-24.04
@@ -142,3 +164,8 @@ jobs:
           done
           cat "$RUNNER_TEMP/wrangler.log"
           grep -q "Small Steps Home" "$RUNNER_TEMP/page.html"
+
+      # The browser test on the Worker: the VM gets the real answers of
+      # NASA POWER and Power to Choose through fetch() of the Worker.
+      - name: The browser test on the Worker
+        run: CHROMIUM=$(command -v google-chrome) node test/browser/house.mjs http://127.0.0.1:8787
