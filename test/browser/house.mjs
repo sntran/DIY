@@ -271,6 +271,39 @@ for (const colorScheme of ["light", "dark"]) {
     await page.click("nav >> text=House")
     assert.match(await page.textContent("#real-average"), /\$\d+/)
 
+    // The power: a station in the laundry runs the fridge, and the person
+    // plans panels on the roof.
+    await page.click("nav >> text=Rooms")
+    await page.waitForSelector("#inside")
+    await page.click('a[aria-label="Add an item to Laundry"]')
+    await page.click("#add-power_station")
+    await page.waitForSelector("#item-sheet:has-text('Power station')")
+    await page.click("#item-sheet .btn-ghost[aria-label=Close]")
+    await page.waitForSelector("#item-sheet", { state: "detached" })
+    await page.click('a[id^="item-"]:has-text("Fridge")')
+    await page.check("#flags-form input[name=backup][type=checkbox]")
+    await page.waitForSelector("#flags-form input[name=backup]:checked")
+    await page.click("#item-sheet .btn-ghost[aria-label=Close]")
+    await page.waitForSelector('a[id^="item-"]:has-text("On the station")')
+    await page.click('a[aria-label="Add an item to Roof"]')
+    await page.click("#add-solar_panels")
+    await page.waitForSelector("#item-sheet:has-text('Solar panels')")
+    await page.check("#flags-form input[name=planned][type=checkbox]")
+    await page.waitForSelector('#item-sheet:has-text("Solar panels")')
+    await page.waitForSelector("#flags-form input[name=planned]:checked")
+    await check(page, `${name} planned item`)
+    await page.click("#item-sheet .btn-ghost[aria-label=Close]")
+    await page.waitForSelector('a[id^="item-"]:has-text("Plan")')
+
+    await page.click("nav >> text=Power")
+    await page.waitForSelector("#plan")
+    await page.waitForSelector("#outage")
+    assert.match(await page.textContent("#payback"), /pays back|does not pay back/)
+    await check(page, `${name} power`)
+    await page.click("nav >> text=House")
+    await page.waitForSelector("#whatif-card")
+    await check(page, `${name} front with a plan`)
+
     await context.close()
   }
 }
