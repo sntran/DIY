@@ -135,6 +135,7 @@ defmodule DIYWeb.VanLiveTest do
     assert has_element?(view, "#weight-rear", "over")
     assert render(view) =~ "more than the van can take"
     assert render(view) =~ "The van has no battery yet."
+    refute render(view) =~ "keep 0 Wh"
 
     {build, _} = add(build, van, :bay, "van_battery", %{"ah" => "100", "fused" => "true"})
     view = open(conn, ~p"/van?#{[id: van]}", build)

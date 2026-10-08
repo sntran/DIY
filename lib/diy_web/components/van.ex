@@ -179,7 +179,9 @@ defmodule DIYWeb.VanPage do
       </p>
       <%= if @power do %>
         <p class="text-sm">
-          The batteries keep {Format.int(@power.storage)} Wh. {days_text(@power.months)}
+          {if @power.storage > 0, do: "The batteries keep #{Format.int(@power.storage)} Wh. "}{days_text(
+            @power.months
+          )}
         </p>
         <div class="overflow-x-auto" tabindex="0" role="region" aria-label="The power of each month">
           <table class="table table-xs" id="van-months">
