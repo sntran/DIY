@@ -153,15 +153,16 @@ defmodule DIYWeb.HomeLiveTest do
     assert_patch view, ~p"/inside"
 
     html = render(view)
-    assert html =~ "Swipe left or right"
-    assert has_element?(view, "#level-f1")
+    assert html =~ "Drag an item to move it"
+    assert has_element?(view, "#plan-svg[data-k]")
+    assert has_element?(view, "#list-f1")
     assert has_element?(view, "#pill")
     assert html =~ "Kitchen"
-    assert html =~ "Typical"
+    assert html =~ "typical"
 
-    view |> element("#swipe-hint button") |> render_click()
-    refute has_element?(view, "#swipe-hint")
-    assert build(view).hints == ["swipe"]
+    view |> element("#plan-hint button") |> render_click()
+    refute has_element?(view, "#plan-hint")
+    assert build(view).hints == ["plan"]
     render_click(view, "hint", %{"hint" => "other"})
   end
 
@@ -255,20 +256,30 @@ defmodule DIYWeb.HomeLiveTest do
     view = open(conn, ~p"/inside", house())
     settle(view)
 
+    view |> element("#add-room") |> render_click()
+    assert_patch view, ~p"/inside?sheet=new_room"
+
     view
-    |> form("#new-room-f2", %{"room" => %{"name" => "Office", "place" => "indoor"}})
+    |> form("#new-room", %{"room" => %{"name" => "Office", "level" => "f2", "place" => "indoor"}})
     |> render_submit()
 
     office = room(view, "Office")
     assert office.level == "f2"
+    # The new room is the chosen room: the person then moves it.
+    assert_patch view, ~p"/inside?room=#{office.id}"
+    assert has_element?(view, "#room-bar", "Office")
+
+    render_patch(view, ~p"/inside?sheet=new_room")
 
     html =
       view
-      |> form("#new-room-f2", %{"room" => %{"name" => " ", "place" => "indoor"}})
+      |> form("#new-room", %{"room" => %{"name" => " ", "level" => "f2", "place" => "indoor"}})
       |> render_submit()
 
     assert html =~ "Give the room a name"
 
+    render_patch(view, ~p"/inside?#{[room: office.id]}")
+    view |> element("#bar-change") |> render_click()
     view |> form("#rename-#{office.id}", %{"name" => "Studio"}) |> render_submit()
     assert room(view, "Studio")
 

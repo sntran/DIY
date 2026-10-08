@@ -17,7 +17,8 @@ defmodule DIY.Layout do
 
   The app makes a draft of the plan (`draft/2`): the floors of the house
   from its size, the rooms of a floor in rows, and the rooms outside around
-  the house. The user then moves the rooms and the items.
+  the house (a garage of 24 by 24 feet: a camper van fits in it). The user
+  then moves the rooms and the items.
 
   The rules (`fill/1` keeps them after each change; `specs/Plan.tla`
   checks them on a small grid):
@@ -26,7 +27,9 @@ defmodule DIY.Layout do
     ground (outside and floor 1), floor 2, floor 3, the attic and the roof
     (`layer/1`).
   - An item is in its room: `0 <= x <= w(room) - w(item)`, and the same
-    for `y`. An item that is larger than its room is at 0.
+    for `y`. An item that is larger than its room is at 0: it goes
+    through the walls of the room, and the picture can paint a wall over
+    it.
   """
 
   alias DIY.Catalog
@@ -197,15 +200,18 @@ defmodule DIY.Layout do
     drives = Map.get(groups, :drive, [])
     yards = Map.get(groups, :yard, [])
     {yard_rows, yard_per} = rows(length(yards))
+    # The yard is as wide as the house, or wider for many yards; the garage
+    # and the driveway are on the right of both.
+    yard_w = max(w, 90 * yard_per)
 
     plans =
       Enum.flat_map(groups, fn
         {{:strips, _layer}, list} -> strips(list, {0, 0, w, d})
         _other -> []
       end) ++
-        column(garages, w, 0, {264, 264}) ++
-        column(drives, w, 264 * length(garages), {264, 240}) ++
-        strips(yards, {0, d, max(w, 90 * yard_per), max(300, 90 * yard_rows)})
+        column(garages, yard_w, 0, {288, 288}) ++
+        column(drives, yard_w, 288 * length(garages), {288, 240}) ++
+        strips(yards, {0, d, yard_w, max(300, 90 * yard_rows)})
 
     by_index = Map.new(plans)
     Enum.map(indexed, fn {_room, i} -> Map.fetch!(by_index, i) end)

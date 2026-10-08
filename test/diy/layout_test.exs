@@ -34,8 +34,8 @@ defmodule DIY.LayoutTest do
 
     # The garage is on the right, the driveway in front of it, and the
     # yard in front of the house.
-    assert plan.("Garage") == %{x: 438, y: 0, w: 264, d: 264}
-    assert plan.("Driveway") == %{x: 438, y: 264, w: 264, d: 240}
+    assert plan.("Garage") == %{x: 438, y: 0, w: 288, d: 288}
+    assert plan.("Driveway") == %{x: 438, y: 288, w: 288, d: 240}
     assert plan.("Backyard") == %{x: 0, y: 294, w: 438, d: 300}
 
     # Each item is in its room: the first items of a room are along its
@@ -145,7 +145,7 @@ defmodule DIY.LayoutTest do
 
     # Outside, a new room goes on the right of the rooms of the ground.
     {:ok, build, _id} = Build.add_room(build, "Shed", "outside", :indoor)
-    assert room(build, "Shed").plan == %{x: 702, y: 0, w: 144, d: 144}
+    assert room(build, "Shed").plan == %{x: 726, y: 0, w: 144, d: 144}
   end
 
   test "a house with no room of a floor, and a first roof that covers the house" do

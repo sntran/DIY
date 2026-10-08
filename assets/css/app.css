@@ -239,3 +239,62 @@
 .i-led { fill: #34d399 } .i-hot { fill: #ef4444 } .i-flame { fill: #f59e0b } .i-bulb { fill: #fcd34d }
 .i-pv { fill: #1e3a8a; stroke: #6d8fd6; stroke-width: 1; vector-effect: non-scaling-stroke }
 .i-pv-line { fill: #6d8fd6 }
+
+/* The plan of the house at scale (DIYWeb.Cutaway): the lot, the slabs, the
+   walls (cut), the floors of the rooms, and the roof. */
+.cutaway {
+  --p-grass-t: #a7d37f; --p-grass-l: #b08463; --p-grass-r: #8e6649;
+  --p-slab-t: #ece8e1; --p-slab-l: #d6d0c5; --p-slab-r: #b9b2a6;
+  --p-wall-t: #fbf9f5; --p-wall-l: #f3eee6; --p-wall-r: #d9d2c5;
+  --p-wood: #e9c99d; --p-tile: #dde5ee; --p-carpet: #e8ddd0; --p-concrete: #cdd1d6;
+  --p-ply: #e7d1a6; --p-asphalt: #8a8e95; --p-deck: #cfa57a; --p-yard: #8fc56b;
+  --p-membrane: #a3abb5; --p-roof-f: #5b6675; --p-roof-b: #465060; --p-gable: #efe9df;
+  --p-pad: #dad6cf; --p-edge: rgb(31 35 40 / 0.28); --p-text: #1f2937; --p-halo: #ffffff;
+  --p-chosen: #2563eb; --p-sky: #eef5fc;
+  background: var(--p-sky);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme=light]) .cutaway {
+    --p-grass-t: #3f6b3a; --p-grass-l: #5f4635; --p-grass-r: #4a3628;
+    --p-slab-t: #6b6f76; --p-slab-l: #575b62; --p-slab-r: #464a50;
+    --p-wall-t: #c4beb3; --p-wall-l: #b0aa9f; --p-wall-r: #8a847a;
+    --p-wood: #8c6d4a; --p-tile: #6f7b88; --p-carpet: #7d7166; --p-concrete: #6b7078;
+    --p-ply: #8a7553; --p-asphalt: #3f4247; --p-deck: #7c5f42; --p-yard: #345c30;
+    --p-membrane: #5d646d; --p-roof-f: #3a4350; --p-roof-b: #2c333d; --p-gable: #a49e93;
+    --p-pad: #6b6a66; --p-edge: rgb(255 255 255 / 0.22); --p-text: #f3f4f6; --p-halo: #111827;
+    --p-chosen: #60a5fa; --p-sky: #0f172a;
+  }
+}
+[data-theme=dark] .cutaway {
+  --p-grass-t: #3f6b3a; --p-grass-l: #5f4635; --p-grass-r: #4a3628;
+  --p-slab-t: #6b6f76; --p-slab-l: #575b62; --p-slab-r: #464a50;
+  --p-wall-t: #c4beb3; --p-wall-l: #b0aa9f; --p-wall-r: #8a847a;
+  --p-wood: #8c6d4a; --p-tile: #6f7b88; --p-carpet: #7d7166; --p-concrete: #6b7078;
+  --p-ply: #8a7553; --p-asphalt: #3f4247; --p-deck: #7c5f42; --p-yard: #345c30;
+  --p-membrane: #5d646d; --p-roof-f: #3a4350; --p-roof-b: #2c333d; --p-gable: #a49e93;
+  --p-pad: #6b6a66; --p-edge: rgb(255 255 255 / 0.22); --p-text: #f3f4f6; --p-halo: #111827;
+  --p-chosen: #60a5fa; --p-sky: #0f172a;
+}
+.p-lot-t { fill: var(--p-grass-t) } .p-lot-l { fill: var(--p-grass-l) } .p-lot-r { fill: var(--p-grass-r) }
+.p-slab-t { fill: var(--p-slab-t) } .p-slab-l { fill: var(--p-slab-l) } .p-slab-r { fill: var(--p-slab-r) }
+.p-wall-t { fill: var(--p-wall-t) } .p-wall-l { fill: var(--p-wall-l) } .p-wall-r { fill: var(--p-wall-r) }
+.p-wall-t, .p-wall-l, .p-wall-r, .p-slab-l, .p-slab-r, .p-gable {
+  stroke: var(--p-edge); stroke-width: 0.6; stroke-linejoin: round; vector-effect: non-scaling-stroke
+}
+.p-floor { stroke: var(--p-edge); stroke-width: 0.8; stroke-linejoin: round; vector-effect: non-scaling-stroke }
+.p-wood { fill: var(--p-wood) } .p-tile { fill: var(--p-tile) } .p-carpet { fill: var(--p-carpet) }
+.p-concrete { fill: var(--p-concrete) } .p-ply { fill: var(--p-ply) } .p-asphalt { fill: var(--p-asphalt) }
+.p-deck { fill: var(--p-deck) } .p-grass { fill: var(--p-yard) } .p-membrane { fill: var(--p-membrane) }
+.p-roof-f { fill: var(--p-roof-f) } .p-roof-b { fill: var(--p-roof-b) } .p-gable { fill: var(--p-gable) }
+.p-pad { fill: var(--p-pad) }
+.p-chosen { stroke: var(--p-chosen); stroke-width: 2.5 }
+.p-item { cursor: grab }
+.p-planned { opacity: 0.55 }
+.p-dragging { cursor: grabbing; opacity: 0.85 }
+.p-label {
+  font: 600 var(--p-label, 4px) / 1 ui-sans-serif, system-ui, sans-serif; fill: var(--p-text);
+  stroke: var(--p-halo); stroke-width: 3px; paint-order: stroke; stroke-linejoin: round;
+  vector-effect: non-scaling-stroke; pointer-events: none
+}
+.p-outline { fill: none; stroke: var(--p-chosen); stroke-width: 2; stroke-dasharray: 6 4; vector-effect: non-scaling-stroke; pointer-events: none }
+.p-handle { r: var(--p-handle, 2px); fill: var(--p-halo); stroke: var(--p-chosen); stroke-width: 2.5; vector-effect: non-scaling-stroke; cursor: move }

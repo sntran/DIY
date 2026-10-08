@@ -66,7 +66,7 @@ defmodule DIYWeb.PowerLiveTest do
     assert html =~ "A power station runs it"
     view |> form("#flags-form", %{"backup" => "true", "planned" => "false"}) |> render_change()
     assert item(view, "fridge").backup
-    assert render_patch(view, ~p"/inside") =~ "On the station"
+    assert render_patch(view, ~p"/inside") =~ "on the station"
 
     # The station itself and the meter do not go on a station.
     station = item(view, "power_station")

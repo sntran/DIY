@@ -170,7 +170,7 @@ defmodule DIYWeb.VanLiveTest do
 
     # The house shows it as away, in its room and on the page Power.
     render_patch(view, ~p"/inside")
-    assert has_element?(view, "#away-#{station}", "In the van now")
+    assert has_element?(view, "#away-#{station}", "in the van now")
     render_patch(view, ~p"/power")
     assert has_element?(view, "#power-away", "Power station (2 kWh) is in the van now")
     view |> element("#power-away a", "Open the van") |> render_click()

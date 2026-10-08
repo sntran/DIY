@@ -5,7 +5,7 @@ import {LiveSocket} from "phoenix_live_view"
 import {hooks as colocatedHooks} from "phoenix-colocated/diy"
 import topbar from "../vendor/topbar"
 import {deviceHook, storeOf, CHANNEL} from "./device.js"
-import {scrollHook} from "./scroll.js"
+import {planHook} from "./plan.js"
 import {sheetHook} from "./sheet.js"
 import {usageHook} from "./usage.js"
 import {eflHook, eflLinksHook} from "./efl.js"
@@ -20,8 +20,8 @@ const liveSocket = new LiveSocket("/live", Socket, {
       store: () => storeOf(window),
       channel: () => typeof BroadcastChannel === "function" ? new BroadcastChannel(CHANNEL) : null,
     }),
-    // The rooms start at the first floor (assets/js/scroll.js).
-    ScrollStart: scrollHook,
+    // The plan of the house at scale: the drag and the zoom (assets/js/plan.js).
+    Plan: planHook,
     // A sheet over the page: the Escape key and the focus (assets/js/sheet.js).
     Sheet: sheetHook,
     // A usage file of a meter, read on the device (assets/js/usage.js).
