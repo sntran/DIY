@@ -129,9 +129,10 @@ defmodule DIY.Layout do
 
   def size(%{size: %{w: w, d: d, h: h}}), do: {w, d, h}
 
+  # A camper van: its space has the mirrors too (7 in on each side).
   def size(%{type: "camper_van", params: %{"model" => model}}) do
     van = Catalog.van_size(model)
-    {van.width, van.length, van.height}
+    {van.width + 14, van.length, van.height}
   end
 
   def size(%{type: type}), do: Catalog.size(type)

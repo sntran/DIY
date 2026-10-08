@@ -398,6 +398,10 @@ defmodule DIYWeb.Cutaway do
         {"solar_panels", roof} ->
           on_roof(item, roof, z)
 
+        {"camper_van", nil} ->
+          frame = %{at: {x * @m, y * @m, z}, size: size, turn: item.turn}
+          Shapes.placed_model(Shapes.van(item.params["model"]), frame)
+
         {type, nil} ->
           base = z + Catalog.lift(type) * @m
           Shapes.placed(type, %{at: {x * @m, y * @m, base}, size: size, turn: item.turn})
