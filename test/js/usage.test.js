@@ -18,8 +18,8 @@ function smt(lines) {
 }
 
 // The tags of a ReadingType (ESPI). A tag with null is not in the file.
-function typeTags({uom = 72, power = 0, direction = 1, commodity = 1, kind = 12, length = 3600} = {}) {
-  const tags = {commodity, flowDirection: direction, intervalLength: length, kind, powerOfTenMultiplier: power, uom}
+function typeTags({uom = 72, power = 0, direction = 1, commodity = 1, kind = 12, accumulation = 4, length = 3600} = {}) {
+  const tags = {accumulationBehaviour: accumulation, commodity, flowDirection: direction, intervalLength: length, kind, powerOfTenMultiplier: power, uom}
   return Object.entries(tags)
     .filter(([, value]) => value !== null)
     .map(([name, value]) => `<espi:${name}>${value}</espi:${name}>`)
@@ -38,7 +38,8 @@ const interval = ({start, value, duration = 3600}) =>
 // A Green Button XML (ESPI) as the utilities give it: an Atom feed with the
 // LocalTimeParameters, and for each MeterReading an entry with a link to its
 // ReadingType, an entry of the ReadingType, and the entries of its
-// IntervalBlocks (each with a link up to the MeterReading).
+// IntervalBlocks (each with a link up to the MeterReading, and the interval
+// of the full block).
 //
 // A meter is {type, blocks, related, up}: related false gives no link to the
 // ReadingType, up "none" or "empty" gives a block with no up link, or with no
@@ -66,7 +67,7 @@ function feed(meters, {tz = -21600, dst = 3600} = {}) {
       const link = up === "none" ? "" : up === "empty" ? '<link rel="up"/>' : `<link rel="up" href="${reading}/IntervalBlock"/>`
       entries.push(
         `<entry><link href="${site}"/><link rel="self" href="${reading}/IntervalBlock/${j + 1}"/>${link}` +
-        `<content><espi:IntervalBlock xmlns:espi="http://naesb.org/espi">${block.map(interval).join("")}</espi:IntervalBlock></content></entry>`,
+        `<content><espi:IntervalBlock xmlns:espi="http://naesb.org/espi"><espi:interval><espi:duration>86400</espi:duration><espi:start>${block.length ? block[0].start : 0}</espi:start></espi:interval>${block.map(interval).join("")}</espi:IntervalBlock></content></entry>`,
       )
     })
   })
@@ -137,9 +138,11 @@ test("a CSV of Green Button, with lines before the header, Wh, gas and short row
   assert.deepEqual(rows(usage), [["2025-01", 2, 1, 2]])
 })
 
-test("a CSV of Green Button of gas only has no electric usage", () => {
+test("a CSV of gas only has no electric usage", () => {
   const text = "TYPE,DATE,START TIME,END TIME,USAGE,UNITS,COST\nNatural gas usage,2025-01-05,,,3,therms,$4.00\n"
   assert.throws(() => readUsage(text), EMPTY)
+  assert.throws(() => readUsage("Date,Usage (therms)\n2025-01-05,3\n"), EMPTY)
+  assert.throws(() => readUsage("Date,Usage (CCF)\n2025-01-05,3\n"), EMPTY)
 })
 
 test("a CSV with the kWh from the grid and to the grid", () => {
@@ -213,8 +216,16 @@ test("a Green Button XML with hourly, daily and summary readings counts the days
   ]))
   assert.deepEqual(rows(usage), [["2025-07", 12, 0, 1]])
 
+  // No length in the ReadingType: the length of one reading, not the
+  // interval of the full block.
+  const noLength = readUsage(feed([
+    {type: {length: null}, blocks: [day(500)]},
+    {type: {length: null}, blocks: [[{start: Date.UTC(2025, 6, 1, 5) / 1000, value: 12000, duration: 86400}]]},
+  ]))
+  assert.deepEqual(rows(noLength), [["2025-07", 12, 0, 1]])
+
   // No length in the ReadingType, and none in the readings.
-  const unknown = readUsage(feed([{type: {length: null}, blocks: [[{start: Date.UTC(2025, 6, 1, 5) / 1000, value: 2000, duration: null}]]}]))
+  const unknown = readUsage(feed([{type: {length: null}, blocks: [[{start: Date.UTC(2025, 6, 1, 5) / 1000, value: 2000, duration: null}], []]}]))
   assert.deepEqual(rows(unknown), [["2025-07", 2, 0, 1]])
 })
 
@@ -229,8 +240,34 @@ test("a Green Button XML of net readings, and a reading with no value", () => {
 
 test("a ReadingType with no multiplier and no flow: Wh from the grid", () => {
   const start = Date.UTC(2025, 4, 10, 12) / 1000
-  const usage = readUsage(feed([{type: {power: null, direction: null}, blocks: [[{start, value: 1000}]]}]))
+  const usage = readUsage(feed([{type: {power: null, direction: null, accumulation: null}, blocks: [[{start, value: 1000}]]}]))
   assert.deepEqual(rows(usage), [["2025-05", 1, 0, 1]])
+})
+
+test("a Green Button XML with the net, and the flows from and to the grid: the net does not count", () => {
+  const usage = readUsage(feed([
+    {type: {direction: 1}, blocks: [day(1500)]},
+    {type: {direction: 19}, blocks: [day(500, 8)]},
+    {type: {direction: 4}, blocks: [day(1000)]},
+  ]))
+  assert.deepEqual(rows(usage), [["2025-07", 36, 4, 1]])
+})
+
+test("a meter that changes from daily to hourly readings loses no day, and two meters add up", () => {
+  const june = Date.UTC(2025, 5, 30, 5) / 1000
+  const usage = readUsage(feed([
+    {type: {length: 86400}, blocks: [[{start: june, value: 20000, duration: 86400}, {start: june + 86400, value: 99000, duration: 86400}]]},
+    {type: {length: 3600}, blocks: [day(500)]},
+    {type: {length: 3600}, blocks: [day(250)]},
+  ]))
+  assert.deepEqual(rows(usage), [["2025-06", 20, 0, 1], ["2025-07", 18, 0, 1]])
+})
+
+test("a Green Button XML with links in single quotes, or with no self links", () => {
+  const meters = [{type: {direction: 1}, blocks: [day(1500)]}, {type: {direction: 19}, blocks: [day(500, 8)]}]
+  assert.deepEqual(rows(readUsage(feed(meters).replace(/"/g, "'"))), [["2025-07", 36, 4, 1]])
+  // With no self links, the app cannot find the ReadingType of a block.
+  assert.throws(() => readUsage(feed(meters).replace(/<link rel="self" href="[^"]*"\/>/g, "")), EMPTY)
 })
 
 test("a Green Button XML of gas or of the demand has no electric usage", () => {
@@ -242,6 +279,8 @@ test("a Green Button XML of gas or of the demand has no electric usage", () => {
   // The demand in W, and the energy of a different kind.
   assert.throws(() => readUsage(feed([{type: {uom: 38, kind: 8}, blocks: [[{start, value: 3}]]}])), EMPTY)
   assert.throws(() => readUsage(feed([{type: {kind: 3}, blocks: [[{start, value: 3}]]}])), EMPTY)
+  // The totals of a register, not the change in each interval.
+  assert.throws(() => readUsage(feed([{type: {accumulation: 1}, blocks: [[{start, value: 3}]]}])), EMPTY)
   // A flow that the app does not know.
   assert.throws(() => readUsage(feed([{type: {direction: 2}, blocks: [[{start, value: 3}]]}])), EMPTY)
 })

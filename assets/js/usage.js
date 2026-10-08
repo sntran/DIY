@@ -5,7 +5,7 @@
 // The files:
 //
 // - Smart Meter Texas: the CSV of "Energy Data 15 Min Interval" (or of the
-//   daily reads), with the columns USAGE_DATE, USAGE_KWH and
+//   daily readings), with the columns USAGE_DATE, USAGE_KWH and
 //   CONSUMPTION_SURPLUSGENERATION.
 // - Green Button: the XML (ESPI) of "Download My Data", or its CSV with a
 //   type, a date, the usage and its units.
@@ -142,6 +142,8 @@ function readCsv(text) {
   const kind = find((f) => f === "CONSUMPTION_SURPLUSGENERATION" || f === "TYPE" || f === "DIRECTION")
   const units = find((f) => f === "UNITS" || f === "UNIT")
   if (date < 0 || usage < 0) throw new UsageError(UNREADABLE)
+  // A column of gas: "USAGE (THERMS)".
+  if (GAS.test(head[usage])) throw new UsageError(EMPTY)
 
   const sums = collector()
   for (const line of lines.slice(at + 1)) {
@@ -186,11 +188,16 @@ function tag(text, name) {
   return m ? +m[1] : null
 }
 
-// The links of an entry of an Atom feed: {rel, href}.
+// The links of an entry of an Atom feed: {rel, href}. An attribute can be
+// in double or single quotes.
 function links(entry) {
+  const attribute = (attributes, name) => {
+    const m = new RegExp(`\\b${name}=(?:"([^"]*)"|'([^']*)')`).exec(attributes)
+    return m ? m[1] ?? m[2] : undefined
+  }
   return [...entry.matchAll(/<(?:\w+:)?link\b([^>]*)>/g)].map(([, attributes]) => ({
-    rel: (/\brel="([^"]*)"/.exec(attributes) || [])[1],
-    href: (/\bhref="([^"]*)"/.exec(attributes) || [])[1] || "",
+    rel: attribute(attributes, "rel"),
+    href: attribute(attributes, "href") || "",
   }))
 }
 
@@ -201,7 +208,8 @@ function kindOf(entry) {
 }
 
 // A ReadingType (ESPI): the app reads only electric energy in Wh (uom 72),
-// from the grid (flow 1), to the grid (19) or net (4).
+// as the change in each interval (accumulationBehaviour 4, not the total of
+// a register), from the grid (flow 1), to the grid (19) or net (4).
 function readingType(text) {
   return {
     uom: tag(text, "uom"),
@@ -209,18 +217,22 @@ function readingType(text) {
     direction: tag(text, "flowDirection") ?? 1,
     commodity: tag(text, "commodity"),
     kind: tag(text, "kind"),
+    accumulation: tag(text, "accumulationBehaviour"),
     length: tag(text, "intervalLength"),
   }
 }
 
 function electric(type) {
   return type.uom === 72 && [null, 0, 1, 2].includes(type.commodity) &&
-    [null, 12].includes(type.kind) && [1, 4, 19].includes(type.direction)
+    [null, 12].includes(type.kind) && [null, 4].includes(type.accumulation) &&
+    [1, 4, 19].includes(type.direction)
 }
 
 // The path of a MeterReading from the link of one of its IntervalBlocks:
 // ".../MeterReading/01/IntervalBlock/01" or ".../MeterReading/01/IntervalBlock".
 const meterReading = (href) => href.replace(/\/IntervalBlock(\/[^/]*)?$/, "")
+
+const READING = /<(?:\w+:)?IntervalReading>[\s\S]*?<\/(?:\w+:)?IntervalReading>/g
 
 function readXml(text) {
   if (!/IntervalReading/.test(text)) throw new UsageError(UNREADABLE)
@@ -231,60 +243,79 @@ function readXml(text) {
   // The ReadingTypes, the ReadingType of each MeterReading, and the
   // IntervalBlocks with their MeterReading.
   const types = new Map()
+  const all = []
   const readingTypes = new Map()
   const blocks = []
   for (const entry of entries) {
-    const all = links(entry)
-    const self = (all.find((l) => l.rel === "self") || {href: ""}).href
+    const list = links(entry)
+    const self = (list.find((l) => l.rel === "self") || {href: ""}).href
     switch (kindOf(entry)) {
       case "ReadingType":
-        types.set(self, readingType(entry))
+        all.push(readingType(entry))
+        types.set(self, all.at(-1))
         break
       case "MeterReading": {
-        const related = all.find((l) => l.rel === "related" && /ReadingType/.test(l.href))
+        const related = list.find((l) => l.rel === "related" && /ReadingType/.test(l.href))
         if (related) readingTypes.set(self, related.href)
         break
       }
       case "IntervalBlock": {
-        const up = all.find((l) => l.rel === "up") || {href: self}
+        const up = list.find((l) => l.rel === "up") || {href: self}
         blocks.push({meterReading: meterReading(up.href || self), text: entry})
         break
       }
     }
   }
-  // A file with no feed: one ReadingType for its blocks.
+  // A file with no feed: its IntervalBlocks and ReadingTypes.
   if (entries.length === 0) {
-    const all = text.match(/<(?:\w+:)?ReadingType[\s>][\s\S]*?<\/(?:\w+:)?ReadingType>/g) || []
-    if (all.length === 1) types.set("", readingType(all[0]))
+    for (const type of text.match(/<(?:\w+:)?ReadingType[\s>][\s\S]*?<\/(?:\w+:)?ReadingType>/g) || []) {
+      all.push(readingType(type))
+    }
     blocks.push({meterReading: "", text})
   }
-  const only = types.size === 1 ? [...types.values()][0] : null
+  // With one ReadingType in the file, it is the type of each block.
+  const only = all.length === 1 ? all[0] : null
   const typeOf = (block) => types.get(readingTypes.get(block.meterReading)) || only
 
-  // The blocks of electric energy. For each direction, the finest readings:
-  // a file with hourly and daily readings of the same days counts them
-  // once.
-  const found = blocks.map((block) => ({block, type: typeOf(block)})).filter(({type}) => type && electric(type))
+  // The blocks of electric energy. The net (flow 4) counts only in a file
+  // with no flow from the grid (1) and no flow to the grid (19).
+  let found = blocks.map((block) => ({block, type: typeOf(block)})).filter(({type}) => type && electric(type))
+  if (found.some(({type}) => type.direction !== 4)) found = found.filter(({type}) => type.direction !== 4)
   if (found.length === 0) throw new UsageError(EMPTY)
-  const finest = new Map()
-  for (const {type, block} of found) {
-    const length = type.length ?? tag(block.text, "duration") ?? Infinity
-    if (!finest.has(type.direction) || length < finest.get(type.direction)) finest.set(type.direction, length)
-  }
 
-  const sums = collector()
+  // The kWh of each day, for each flow and each length of the readings
+  // (the length of the ReadingType, else the duration of a reading).
+  const days = new Map()
   for (const {block, type} of found) {
-    const length = type.length ?? tag(block.text, "duration") ?? Infinity
-    if (length !== finest.get(type.direction)) continue
+    const readings = block.text.match(READING) || []
+    const length = type.length ?? tag(readings[0] || "", "duration") ?? Infinity
     const toKwh = Math.pow(10, type.power) / 1000
-    for (const reading of block.text.match(/<(?:\w+:)?IntervalReading>[\s\S]*?<\/(?:\w+:)?IntervalReading>/g) || []) {
+    for (const reading of readings) {
       const start = tag(reading, "start")
       const value = tag(reading, "value")
       if (start === null || value === null) continue
       const local = localTime(start, offset, dst)
       const day = [local.getUTCFullYear(), local.getUTCMonth() + 1, local.getUTCDate()]
-      sums.add(day, value * toKwh, type.direction === 19)
+      const key = `${type.direction} ${day.join("-")}`
+      if (!days.has(key)) days.set(key, {day, lengths: new Map()})
+      const lengths = days.get(key).lengths
+      if (!lengths.has(length)) lengths.set(length, {kwh: 0, export: 0})
+      // A net reading under zero is power to the grid.
+      const kwh = value * toKwh
+      const sum = lengths.get(length)
+      if (type.direction === 19 || kwh < 0) sum.export += Math.abs(kwh)
+      else sum.kwh += kwh
     }
+  }
+
+  // For each flow and day, the finest readings: a file with hourly and
+  // daily readings of the same days counts them once, and a meter that
+  // changes from daily to hourly readings loses no day.
+  const sums = collector()
+  for (const {day, lengths} of days.values()) {
+    const finest = lengths.get(Math.min(...lengths.keys()))
+    sums.add(day, finest.kwh, false)
+    sums.add(day, finest.export, true)
   }
   return sums.result("green_button")
 }
