@@ -9,7 +9,7 @@ defmodule DIYWeb.LessonPage do
   """
   use DIYWeb, :html
 
-  alias DIY.{Lesson, Plan}
+  alias DIY.Lesson
   alias DIYWeb.Format
 
   @steps [
@@ -36,6 +36,7 @@ defmodule DIYWeb.LessonPage do
   attr :checks, :map, default: nil
   attr :hint, :boolean, default: false
   attr :shares, :map, default: %{}
+  attr :tdu, :map, default: nil, doc: "the delivery charges of the utility (DIY.Plan.tdu/1)"
 
   def page(assigns) do
     {months, source} = Lesson.months(assigns.build, assigns.bill)
@@ -77,28 +78,40 @@ defmodule DIYWeb.LessonPage do
         :if={@step == 3}
         build={@build}
         months={@months}
-        plan={second_plan(@build, @plan_id)}
+        plan={second_plan(@build)}
         checks={@checks}
         hint={@hint}
         efl={@efl}
         shares={@shares}
+        tdu={@tdu}
       />
-      <.worksheet :if={@step == 4} build={@build} months={@months} efl={@efl} shares={@shares} />
+      <.worksheet
+        :if={@step == 4}
+        build={@build}
+        months={@months}
+        source={@source}
+        efl={@efl}
+        shares={@shares}
+        tdu={@tdu}
+      />
     </section>
     """
   end
 
-  # The plan of step 2: the plan that the user chose, else the first plan of
-  # the worksheet, else the example plan.
+  # The plan of step 2: the plan that the user chose, else the plan that
+  # the user did, else the first plan of the worksheet, else the example
+  # plan.
   defp plan(build, id) do
-    Enum.find(build.plans, &(&1.id == id)) || List.first(build.plans) || Lesson.example_plan()
+    find = fn id -> Enum.find(build.plans, &(&1.id == id)) end
+
+    find.(id) || find.(build.lesson_plan) || List.first(build.plans) || Lesson.example_plan()
   end
 
   # The plan of step 3: the last plan of the worksheet that is not the plan
-  # of step 2, or nil.
-  defp second_plan(build, id) do
-    first = plan(build, id)
-    build.plans |> Enum.reverse() |> Enum.find(&(&1.id != first.id))
+  # that the user did in step 2, or nil.
+  defp second_plan(build) do
+    done = build.lesson_plan || plan(build, nil).id
+    build.plans |> Enum.reverse() |> Enum.find(&(&1.id != done))
   end
 
   defp shares(shares, plan), do: fn month -> shares[{plan.id, month}] end
@@ -175,14 +188,7 @@ defmodule DIYWeb.LessonPage do
 
   defp with_help(assigns) do
     month = Lesson.exercise_month(assigns.months)
-
-    bill =
-      Plan.bill(
-        assigns.plan,
-        month.kwh,
-        month.month,
-        assigns.shares[{assigns.plan.id, month.month}]
-      )
+    bill = Lesson.bill(assigns.plan, month, assigns.shares[{assigns.plan.id, month.month}])
 
     done = assigns.checks != nil and Lesson.done?(assigns.checks)
     assigns = assign(assigns, month: month, bill: bill, done: done)
@@ -194,17 +200,20 @@ defmodule DIYWeb.LessonPage do
 
       <div class="space-y-2">
         <h3 class="font-semibold">Your plan</h3>
-        <form :if={@build.plans != []} id="lesson-plan" phx-change="lesson_plan" class="space-y-1">
-          <label :for={p <- @build.plans} class="flex items-center gap-2 text-sm">
-            <input
-              type="radio"
-              name="plan"
-              value={p.id}
-              checked={p.id == @plan.id}
-              class="radio radio-sm"
-            />
-            {p.name}
-          </label>
+        <form :if={@build.plans != []} id="lesson-plan" phx-change="lesson_plan">
+          <fieldset class="space-y-1">
+            <legend class="sr-only">The plan of the exercise</legend>
+            <label :for={p <- @build.plans} class="flex items-center gap-2 text-sm">
+              <input
+                type="radio"
+                name="plan"
+                value={p.id}
+                checked={p.id == @plan.id}
+                class="radio radio-sm"
+              />
+              {p.name}
+            </label>
+          </fieldset>
         </form>
         <p :if={@build.plans == []} class="text-sm">
           The exercise uses the example plan. Open the EFL of a plan that you want to check: the exercise then uses it.
@@ -226,6 +235,7 @@ defmodule DIYWeb.LessonPage do
           hint={hint(part, @plan, @month, @bill)}
         />
         <button class="btn btn-sm">Check</button>
+        <.result checks={@checks} />
       </form>
 
       <div :if={@done} id="exercise-done" class="space-y-2">
@@ -253,12 +263,15 @@ defmodule DIYWeb.LessonPage do
       <span class="font-semibold">{@name}</span>
       <span :if={@check == :ok} class="font-semibold">✓ right</span>
       <span :if={@check == :wrong} class="text-error">✗ check it</span>
+      <span :if={@check == :invalid} class="text-error">
+        ✗ give a number of dollars, for example 12.34
+      </span>
       <input
         name={"answer[#{@part}]"}
         id={"answer-#{@part}"}
         inputmode="decimal"
         placeholder="$"
-        class={["input input-sm w-32 block", @check == :wrong && "input-error"]}
+        class={["input input-sm w-32 block", @check in [:wrong, :invalid] && "input-error"]}
       />
       <span :if={@hint} class="text-xs opacity-80">{@hint}</span>
     </label>
@@ -267,6 +280,19 @@ defmodule DIYWeb.LessonPage do
 
   defp part_name(part), do: Map.fetch!(@part_names, part)
 
+  attr :checks, :map, default: nil
+
+  # The result of a check, for a screen reader too.
+  defp result(assigns) do
+    ~H"""
+    <p role="status" class="text-sm">
+      {if @checks,
+        do:
+          "#{Enum.count(@checks, fn {_part, check} -> check == :ok end)} of #{map_size(@checks)} right."}
+    </p>
+    """
+  end
+
   # The help of each part, with the numbers of the plan and of the month.
   defp hint(:energy, %{night: nil, energy: [{0, cents}]}, month, _bill),
     do: "#{Format.int(month.kwh)} kWh × #{num(cents)}¢ ÷ 100"
@@ -274,9 +300,17 @@ defmodule DIYWeb.LessonPage do
   defp hint(:energy, %{night: nil}, _month, _bill),
     do: "Each part of the kWh at the price of its tier, ÷ 100."
 
-  defp hint(:energy, _plan, _month, _bill),
+  defp hint(:energy, %{night: night, energy: [{0, cents}]}, month, bill),
     do:
-      "The kWh of the day at the price of the day, and the kWh of the night at the price of the night, ÷ 100."
+      "Day: #{Format.int(month.kwh - bill.night_kwh)} kWh × #{num(cents)}¢ ÷ 100, and night: " <>
+        "#{Format.int(bill.night_kwh)} kWh × #{num(night.cents)}¢ ÷ 100. " <>
+        night_text(night, bill)
+
+  defp hint(:energy, %{night: night}, month, bill),
+    do:
+      "The price of the tiers for all #{Format.int(month.kwh)} kWh, for the #{Format.int(month.kwh - bill.night_kwh)} kWh of the day, and " <>
+        "#{Format.int(bill.night_kwh)} kWh × #{num(night.cents)}¢ ÷ 100 for the night. " <>
+        night_text(night, bill)
 
   defp hint(:base, plan, _month, _bill), do: "The base charge of the plan: #{money(plan.base)}."
 
@@ -297,6 +331,14 @@ defmodule DIYWeb.LessonPage do
   defp hint(:total, _plan, _month, _bill),
     do: "Energy + base + delivery − credits (+ the minimum usage fee)."
 
+  # Where the kWh at night come from.
+  defp night_text(night, %{night_from: :house}),
+    do:
+      "The kWh at night (#{night.from}:00 to #{night.to}:00) come from the day of your house (the page Power), not from the EFL."
+
+  defp night_text(night, %{night_from: :efl}),
+    do: "The kWh at night: #{round(night.share * 100)}% of the month, as the EFL says."
+
   defp credit_text(%{dollars: d, min_kwh: 0, months: nil}), do: "#{money(d)} each month"
 
   defp credit_text(%{dollars: d, min_kwh: kwh, months: nil}),
@@ -316,18 +358,14 @@ defmodule DIYWeb.LessonPage do
   attr :hint, :boolean, default: false
   attr :efl, :map, default: nil
   attr :shares, :map, required: true
+  attr :tdu, :map, default: nil
 
   defp fewer_hints(assigns) do
     month = Lesson.exercise_month(assigns.months)
 
     bill =
       assigns.plan &&
-        Plan.bill(
-          assigns.plan,
-          month.kwh,
-          month.month,
-          assigns.shares[{assigns.plan.id, month.month}]
-        )
+        Lesson.bill(assigns.plan, month, assigns.shares[{assigns.plan.id, month.month}])
 
     assigns = assign(assigns, month: month, bill: bill)
 
@@ -344,6 +382,7 @@ defmodule DIYWeb.LessonPage do
           </p>
           <.answer part={:total} check={@checks && @checks[:total]} />
           <button class="btn btn-sm">Check</button>
+          <.result checks={@checks} />
           <button :if={not @hint} type="button" phx-click="hint" class="btn btn-sm btn-ghost">
             Show a hint
           </button>
@@ -366,7 +405,7 @@ defmodule DIYWeb.LessonPage do
           Add a second plan: open its EFL, or give its numbers. A plan from a broker or a neighbor is good too.
         </p>
         <.efl_reader efl={@efl} />
-        <.plan_form />
+        <.plan_form tdu={@tdu} />
       <% end %>
     </div>
     """
@@ -376,8 +415,10 @@ defmodule DIYWeb.LessonPage do
 
   attr :build, :map, required: true
   attr :months, :list, required: true
+  attr :source, :atom, required: true
   attr :efl, :map, default: nil
   attr :shares, :map, required: true
+  attr :tdu, :map, default: nil
 
   defp worksheet(assigns) do
     years =
@@ -404,6 +445,7 @@ defmodule DIYWeb.LessonPage do
             <tr>
               <th>Month</th>
               <th class="text-right">kWh</th>
+              <th :if={@source == :estimate} class="text-right">Range</th>
               <th :for={{p, _year} <- @years} class="text-right">{p.name}</th>
             </tr>
           </thead>
@@ -411,6 +453,9 @@ defmodule DIYWeb.LessonPage do
             <tr :for={m <- @months}>
               <td>{m.name}</td>
               <td class="text-right">{Format.int(m.kwh)}</td>
+              <td :if={@source == :estimate} class="text-right">
+                {Format.int(m.low)} to {Format.int(m.high)}
+              </td>
               <td :for={{_p, year} <- @years} class="text-right">
                 {money(Enum.at(year.rows, m.month - 1).total)}
               </td>
@@ -420,16 +465,27 @@ defmodule DIYWeb.LessonPage do
             <tr>
               <th>Year</th>
               <th class="text-right">{Format.int(Enum.sum(Enum.map(@months, & &1.kwh)))}</th>
+              <td :if={@source == :estimate}></td>
               <th :for={{_p, year} <- @years} class="text-right">{Format.money(year.total)}</th>
+            </tr>
+            <tr :if={@source == :estimate}>
+              <th>Range of the year</th>
+              <td></td>
+              <td></td>
+              <td :for={{_p, year} <- @years} class="text-right">
+                {Format.money(year.total_low)} to {Format.money(year.total_high)}
+              </td>
             </tr>
             <tr>
               <th>For each kWh</th>
               <td></td>
-              <th :for={{_p, year} <- @years} class="text-right">{Format.cents(year.cents)}</th>
+              <td :if={@source == :estimate}></td>
+              <th :for={{_p, year} <- @years} class="text-right">{cents(year.cents)}</th>
             </tr>
             <tr>
               <th>Remove</th>
               <td></td>
+              <td :if={@source == :estimate}></td>
               <td :for={{p, _year} <- @years} class="text-right">
                 <button
                   type="button"
@@ -445,14 +501,34 @@ defmodule DIYWeb.LessonPage do
           </tfoot>
         </table>
       </div>
+      <p :if={@source == :estimate} class="text-xs opacity-80">
+        The range: the kWh of each month from the weather of 10 years and the limits of the model, and the least and the most bill in that range.
+      </p>
+      <p
+        :for={{p, year} <- @years}
+        :if={p.night}
+        id={"night-#{p.id}"}
+        class="text-xs opacity-80"
+      >
+        {p.name}: the kWh at night ({p.night.from}:00 to {p.night.to}:00) of each month: {Enum.map_join(
+          year.rows,
+          ", ",
+          &"#{String.slice(&1.name, 0, 3)} #{Format.int(&1.night_kwh)}"
+        )}. {night_source(hd(year.rows))}
+      </p>
       <p :if={@years == []} class="text-sm">
         No plan yet. Open an EFL, or give the numbers of a plan.
       </p>
       <.efl_reader efl={@efl} />
-      <.plan_form />
+      <.plan_form tdu={@tdu} />
     </div>
     """
   end
+
+  defp night_source(%{night_from: :house}),
+    do: "They come from the day of your house (the page Power), not from the EFL."
+
+  defp night_source(%{night_from: :efl}), do: "They come from the part that the EFL says."
 
   ## The parts of the steps
 
@@ -469,8 +545,13 @@ defmodule DIYWeb.LessonPage do
           else:
             "From the estimate of your house, with its range: a file of your meter gives the real months."}
       </p>
-      <ul class="grid grid-cols-4 gap-1 text-xs" id="your-months">
-        <li :for={m <- @months}>{String.slice(m.name, 0, 3)}: {Format.int(m.kwh)}</li>
+      <ul class="grid grid-cols-3 sm:grid-cols-4 gap-1 text-xs" id="your-months">
+        <li :for={m <- @months}>
+          {String.slice(m.name, 0, 3)}: {Format.int(m.kwh)}
+          <span :if={@source == :estimate} class="block opacity-70">
+            {Format.int(m.low)} to {Format.int(m.high)}
+          </span>
+        </li>
       </ul>
     </div>
     """
@@ -508,6 +589,12 @@ defmodule DIYWeb.LessonPage do
   attr :year, :map, required: true
 
   defp year_table(assigns) do
+    assigns =
+      assign(assigns,
+        night: Enum.any?(assigns.year.rows, & &1.night_kwh),
+        range: Enum.any?(assigns.year.rows, &(&1.total_low != &1.total_high))
+      )
+
     ~H"""
     <div class="overflow-x-auto" tabindex="0" role="region" aria-label="The bill of each month">
       <table class="table table-xs sm:table-sm">
@@ -515,11 +602,13 @@ defmodule DIYWeb.LessonPage do
           <tr>
             <th>Month</th>
             <th class="text-right">kWh</th>
+            <th :if={@night} class="text-right">At night</th>
             <th class="text-right">Energy</th>
             <th class="text-right">Base</th>
             <th class="text-right">Delivery</th>
             <th class="text-right">Credits</th>
             <th class="text-right">Bill</th>
+            <th :if={@range} class="text-right">Range</th>
             <th class="text-right">¢/kWh</th>
           </tr>
         </thead>
@@ -527,12 +616,16 @@ defmodule DIYWeb.LessonPage do
           <tr :for={r <- @year.rows}>
             <td>{r.name}</td>
             <td class="text-right">{Format.int(r.kwh)}</td>
+            <td :if={@night} class="text-right">{Format.int(r.night_kwh)}</td>
             <td class="text-right">{money(r.energy)}</td>
             <td class="text-right">{money(r.base)}</td>
             <td class="text-right">{money(r.tdu)}</td>
             <td class="text-right">{if r.credits > 0, do: "−" <> money(r.credits), else: "$0.00"}</td>
             <td class="text-right font-semibold">{money(r.total)}</td>
-            <td class="text-right">{num(Float.round(r.cents, 1))}</td>
+            <td :if={@range} class="text-right">
+              {money(r.total_low)} to {money(r.total_high)}
+            </td>
+            <td class="text-right">{if r.cents, do: num(Float.round(r.cents, 1)), else: "–"}</td>
           </tr>
         </tbody>
       </table>
@@ -559,9 +652,9 @@ defmodule DIYWeb.LessonPage do
         />
       </label>
       <p class="text-xs opacity-80">
-        Power to Choose (powertochoose.org) has the plans of your ZIP code, each with a link to its EFL.
+        Power to Choose (powertochoose.org) has the plans of your ZIP code, each with a link to its EFL. The browser reads the PDF. It sends only the text of an EFL to the app, and the PDF stays on this device.
       </p>
-      <div :if={@efl} id="efl-result" class="space-y-2 text-sm">
+      <div :if={@efl} id="efl-result" phx-hook="EflLinks" class="space-y-2 text-sm">
         <p class="font-semibold">The numbers of {@efl.name}</p>
         <ul class="space-y-1">
           <li :for={{label, value, line} <- efl_rows(@efl)}>
@@ -572,7 +665,7 @@ defmodule DIYWeb.LessonPage do
             </span>
           </li>
         </ul>
-        <table :if={@efl.check} class="table table-xs" id="efl-check">
+        <table class="table table-xs" id="efl-check">
           <thead>
             <tr>
               <th>kWh in one month</th>
@@ -586,10 +679,16 @@ defmodule DIYWeb.LessonPage do
               <td>{Format.int(r.kwh)}</td>
               <td class="text-right">{num(r.efl)}¢</td>
               <td class="text-right">{num(Float.round(r.app, 2))}¢</td>
-              <td>{if r.ok, do: "✓", else: "✗"}</td>
+              <td>
+                <span aria-hidden="true">{if r.ok, do: "✓", else: "✗"}</span>
+                <span class="sr-only">{if r.ok, do: "the same", else: "not the same"}</span>
+              </td>
             </tr>
           </tbody>
         </table>
+        <p :if={@efl.sources.tdu_from == :averages} class="text-xs">
+          The EFL gives no delivery charges: the app finds them from the averages at 500 and 2,000 kWh. So only the average at 1,000 kWh checks these numbers.
+        </p>
         <%= if @efl.check.ok do %>
           <form id="efl-add" phx-submit="add_efl_plan" class="flex gap-2 items-end">
             <label class="text-sm">
@@ -614,11 +713,16 @@ defmodule DIYWeb.LessonPage do
     [
       {"Average prices (500, 1,000 and 2,000 kWh)",
        Enum.map_join([500, 1000, 2000], ", ", &"#{num(plan.averages[&1])}¢"), sources.averages},
-      {"Base charge", money(plan.base) <> " each month", sources.base},
+      {"Base charge",
+       if(sources.base,
+         do: money(plan.base) <> " each month",
+         else: "the EFL gives no base charge: $0.00"
+       ), sources.base},
       {"Energy charge",
        Enum.map_join(plan.energy, ", ", fn {_from, cents} -> "#{num(cents)}¢" end), energy_line},
-      {"Delivery charges", "#{money(plan.tdu_base || 0)} and #{num(plan.tdu_cents || 0)}¢",
-       List.first(sources.tdu)}
+      {"Delivery charges",
+       "#{money(plan.tdu_base || 0)} and #{num(plan.tdu_cents || 0)}¢" <>
+         tdu_from(sources.tdu_from), List.first(sources.tdu)}
     ] ++
       for(
         {c, line} <- Enum.zip(plan.credits, sources.credits),
@@ -634,8 +738,18 @@ defmodule DIYWeb.LessonPage do
       )
   end
 
+  defp tdu_from({:table, name}),
+    do: " (the EFL gives no number: the table of the app, #{name}, October 2026)"
+
+  defp tdu_from(:averages), do: " (from the averages of the EFL)"
+  defp tdu_from(:none), do: " (the EFL gives no number)"
+  defp tdu_from(:efl), do: ""
+
+  attr :tdu, :map, default: nil
+
   # The form of a plan from its numbers: for a plan with no EFL, or an EFL
-  # that the app cannot read.
+  # that the app cannot read. The delivery charges of a utility that the
+  # app knows are in the form; for an other utility, the user gives them.
   defp plan_form(assigns) do
     ~H"""
     <form id="plan-form" phx-submit="add_plan" class="card card-border p-3 grid grid-cols-2 gap-2">
@@ -653,13 +767,20 @@ defmodule DIYWeb.LessonPage do
       </label>
       <label class="text-sm">
         Delivery ($ each month)
-        <input name="plan[tdu_base]" value="4.06" inputmode="decimal" class="input input-sm w-full" />
+        <input
+          name="plan[tdu_base]"
+          value={@tdu && @tdu.base}
+          required={is_nil(@tdu)}
+          inputmode="decimal"
+          class="input input-sm w-full"
+        />
       </label>
       <label class="text-sm">
         Delivery (¢ for each kWh)
         <input
           name="plan[tdu_cents]"
-          value="6.8673"
+          value={@tdu && @tdu.cents}
+          required={is_nil(@tdu)}
           inputmode="decimal"
           class="input input-sm w-full"
         />
@@ -680,7 +801,10 @@ defmodule DIYWeb.LessonPage do
         <input name="plan[fee_kwh]" inputmode="numeric" class="input input-sm w-full" />
       </label>
       <p class="col-span-2 text-xs opacity-70">
-        The delivery charges of Oncor in October 2026. A different utility has different charges: its EFL gives them.
+        {if @tdu,
+          do: "The delivery charges of #{@tdu.name} in October 2026.",
+          else:
+            "Give the delivery charges of your utility: the EFL of a plan of your area gives them."}
       </p>
       <button class="btn btn-sm col-span-2">Add the plan</button>
     </form>
@@ -688,6 +812,9 @@ defmodule DIYWeb.LessonPage do
   end
 
   defp money(dollars), do: "$" <> :erlang.float_to_binary(dollars / 1, decimals: 2)
+
+  defp cents(nil), do: "–"
+  defp cents(cents), do: Format.cents(cents)
 
   defp num(number) when is_float(number) and number == trunc(number),
     do: Integer.to_string(trunc(number))

@@ -112,7 +112,9 @@ defmodule DIY.EFLTest do
     assert sources.tdu_from == {:table, "Oncor"}
     assert [first, summer] = sources.credits
     assert first.text =~ "A bill credit of $100.00"
-    assert summer.text =~ "A bill credit of $100.00"
+    # The source of a credit is its full sentence, with its months.
+    assert summer.text =~ "A $25.00 summer bill credit"
+    assert summer.text =~ "July, August, and September"
 
     %{sources: sources} = read("chariot-bright-nights-8")
     assert [day] = sources.energy
@@ -145,7 +147,9 @@ defmodule DIY.EFLTest do
   test "the lines that are not an EFL" do
     assert EFL.read([%{"page" => 1, "text" => "A letter"}]) == {:error, :averages}
     assert EFL.read([%{"page" => 0, "text" => "x"}]) == {:error, :lines}
-    assert EFL.read([%{"page" => 1, "text" => String.duplicate("x", 2001)}]) == {:error, :lines}
+    # At most 64 KB of text in all.
+    long = List.duplicate(%{"page" => 1, "text" => String.duplicate("x", 2000)}, 33)
+    assert EFL.read(long) == {:error, :lines}
     assert EFL.read([]) == {:error, :lines}
     assert EFL.read("lines") == {:error, :lines}
   end
@@ -209,6 +213,39 @@ defmodule DIY.EFLTest do
              Map.take(elem(efl(["Oncor", "Average price per kWh 1.0¢ 1.0¢ 1.0¢"]), 1).sources, [
                :tdu_from
              ])
+  end
+
+  test "the months of a credit: names with a capital letter, and ranges" do
+    averages = "Average price per kWh 12.0¢ 11.0¢ 10.5¢"
+
+    credits = fn text ->
+      {:ok, %{plan: plan}} = efl([averages, text])
+      plan.credits
+    end
+
+    # "may" is not May.
+    assert [%{months: nil}] =
+             credits.(
+               "You may get a bill credit of $100.00 in each billing cycle with usage of 1,000 kWh or more."
+             )
+
+    assert [%{months: [6, 7, 8, 9]}] =
+             credits.("A bill credit of $30.00 applies from June through September.")
+
+    assert [%{months: [1, 2, 11, 12]}] =
+             credits.("A bill credit of $10.00 applies from November to February.")
+
+    # "marches" is not March.
+    assert [%{months: nil}] = credits.("A bill credit of $5.00 marches on each month.")
+  end
+
+  test "no fit of the delivery charges when the reader finds no energy charge" do
+    {:ok, %{plan: plan, sources: sources}} =
+      efl(["Average price per kWh 15.0¢ 14.5¢ 14.3¢", "Price per kWh: 10.0¢"])
+
+    assert plan.energy == [{0, 0.0}]
+    assert plan.tdu_base == nil and plan.tdu_cents == nil
+    assert sources.tdu_from == :none
   end
 
   test "a name with no number on its line, as the last line" do

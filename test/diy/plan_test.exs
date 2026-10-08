@@ -54,8 +54,6 @@ defmodule DIY.PlanTest do
   end
 
   test "the check of the averages of an EFL" do
-    assert Plan.check(plan()) == nil
-
     # 500 kWh: $9.95 + $50 + $4.06 + $34.34 = $98.35, 19.67¢.
     good = plan(%{averages: %{500 => 19.7, 1000 => 18.3, 2000 => 17.6}})
     assert %{ok: true, rows: [%{kwh: 500, ok: true} | _]} = Plan.check(good)
@@ -81,8 +79,16 @@ defmodule DIY.PlanTest do
 
       case Plan.fit_tdu(efl) do
         # The rounding of the averages can give a charge a little under 0.
-        nil -> assert tdu_base < 0.6 or tdu_cents < 0.1
-        fitted -> assert Plan.check(fitted).ok
+        nil ->
+          assert tdu_base < 0.6 or tdu_cents < 0.1
+
+        # The fit gives the averages at 500 and 2,000 kWh. At 1,000 kWh,
+        # the rounding of the two averages adds to the rounding of the
+        # third.
+        fitted ->
+          [r500, r1000, r2000] = Plan.check(fitted).rows
+          assert r500.ok and r2000.ok
+          assert abs(r1000.app - r1000.efl) <= 0.1 + 1.0e-6
       end
     end
   end

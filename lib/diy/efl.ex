@@ -22,7 +22,15 @@ defmodule DIY.EFL do
 
   @money ~r/\$\s*(\d[\d,]*(?:\.\d+)?)|(\d[\d,]*\.\d+)\s*\$/u
   @cents ~r/(\d+(?:\.\d+)?)\s*¢/u
-  @months ~w(january february march april may june july august september october november december)
+  @months ~w(January February March April May June July August September October November December)
+  @month ~r/\b(January|February|March|April|May|June|July|August|September|October|November|December)\b/
+  @range ~r/\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+(?:through|thru|to|-|–)\s+(January|February|March|April|May|June|July|August|September|October|November|December)\b/
+
+  # The most bytes of the text of the lines: an EFL has near 6,000.
+  @max_bytes 65_536
+
+  # The most bytes of one sentence over more than one line.
+  @max_sentence 600
 
   @doc """
   Reads the lines of an EFL (`%{"page" => n, "text" => text}` from the
@@ -36,8 +44,9 @@ defmodule DIY.EFL do
       energy = energy(lines)
       night = night(lines)
       {tdu, tdu_lines} = tdu(lines)
-      {credits, credit_lines} = credits(lines)
-      {min_fee, fee_line} = min_fee(lines)
+      sentences = sentences(lines)
+      {credits, credit_lines} = credits(sentences)
+      {min_fee, fee_line} = min_fee(sentences)
       {base, base_line} = base(lines)
 
       plan = %{
@@ -52,7 +61,7 @@ defmodule DIY.EFL do
           averages: averages
       }
 
-      {plan, tdu_source} = fill_tdu(plan, lines)
+      {plan, tdu_source} = fill_tdu(plan, lines, elem(energy, 1) != [])
 
       sources =
         %{
@@ -75,17 +84,19 @@ defmodule DIY.EFL do
 
   def read(_lines), do: {:error, :lines}
 
+  # The lines, with at most @max_bytes of text in all.
   defp lines(lines) do
-    Enum.reduce_while(lines, {:ok, []}, fn
-      %{"page" => page, "text" => text}, {:ok, acc}
-      when is_integer(page) and page > 0 and is_binary(text) and byte_size(text) <= 2000 ->
-        {:cont, {:ok, [%{page: page, text: text} | acc]}}
+    Enum.reduce_while(lines, {:ok, [], 0}, fn
+      %{"page" => page, "text" => text}, {:ok, acc, bytes}
+      when is_integer(page) and page > 0 and is_binary(text) and
+             bytes + byte_size(text) <= @max_bytes ->
+        {:cont, {:ok, [%{page: page, text: text} | acc], bytes + byte_size(text)}}
 
       _line, _acc ->
         {:halt, :error}
     end)
     |> then(fn
-      {:ok, acc} -> {:ok, Enum.reverse(acc)}
+      {:ok, acc, _bytes} -> {:ok, Enum.reverse(acc)}
       :error -> :error
     end)
   end
@@ -322,21 +333,22 @@ defmodule DIY.EFL do
   end
 
   # An EFL with no delivery charges: the charges of its utility, else the
-  # charges from its averages.
-  defp fill_tdu(%{tdu_base: base, tdu_cents: cents} = plan, _lines)
+  # charges from its averages. With no energy charge, the fit hides the
+  # charge that the reader did not find: no fit then.
+  defp fill_tdu(%{tdu_base: base, tdu_cents: cents} = plan, _lines, _energy?)
        when is_number(base) and is_number(cents),
-       do: {plan, %{}}
+       do: {plan, %{tdu_from: :efl}}
 
-  defp fill_tdu(plan, lines) do
+  defp fill_tdu(plan, lines, energy?) do
     case Enum.find_value(lines, &Plan.tdu(&1.text)) do
       %{base: base, cents: cents, name: name} ->
         {%{plan | tdu_base: plan.tdu_base || base, tdu_cents: plan.tdu_cents || cents},
          %{tdu_from: {:table, name}}}
 
       nil ->
-        case Plan.fit_tdu(plan) do
-          nil -> {plan, %{tdu_from: :none}}
-          fitted -> {fitted, %{tdu_from: :averages}}
+        case energy? && Plan.fit_tdu(plan) do
+          fitted when is_map(fitted) -> {fitted, %{tdu_from: :averages}}
+          _ -> {plan, %{tdu_from: :none}}
         end
     end
   end
@@ -345,16 +357,17 @@ defmodule DIY.EFL do
 
   # The sentences of the lines: a line can have more than one sentence,
   # and a sentence can go on in the next line (when the next line starts
-  # with a small letter).
+  # with a small letter, up to @max_sentence bytes). Each sentence comes
+  # with its first line.
   defp sentences(lines) do
     {done, open} =
       Enum.reduce(lines, {[], nil}, fn line, {done, open} ->
         {done, start, text} =
           case open do
             {start, open_text} ->
-              if line.text =~ ~r/^[a-z]/,
+              if line.text =~ ~r/^[a-z]/ and byte_size(open_text) <= @max_sentence,
                 do: {done, start, open_text <> " " <> line.text},
-                else: {done ++ [{start, open_text}], line, line.text}
+                else: {[{start, open_text} | done], line, line.text}
 
             nil ->
               {done, line, line.text}
@@ -364,20 +377,22 @@ defmodule DIY.EFL do
           ~r/(?<=[a-z0-9)%]\.)\s+(?=[A-Z$])/ |> Regex.split(text) |> Enum.split(-1)
 
         # After a split, the last part starts on this line.
-        {done ++ Enum.map(whole, &{start, &1}), {if(whole == [], do: start, else: line), last}}
+        {Enum.reverse(Enum.map(whole, &{start, &1})) ++ done,
+         {if(whole == [], do: start, else: line), last}}
       end)
 
-    done ++ [open]
+    Enum.reverse([open | done])
   end
 
-  defp credits(lines) do
+  # The credits, each with its sentence (on the page of its first line).
+  defp credits(sentences) do
     found =
-      for {line, text} <- sentences(lines),
+      for {line, text} <- sentences,
           text =~ ~r/credit/i,
           not (text =~ ~r/deposit|card|check|late|not be applied|fee of/i),
           dollars = money(text),
           dollars && dollars > 0 do
-        {%{dollars: dollars, min_kwh: min_kwh(text), months: months(text)}, line}
+        {%{dollars: dollars, min_kwh: min_kwh(text), months: months(text)}, %{line | text: text}}
       end
 
     {Enum.map(found, &elem(&1, 0)), Enum.map(found, &elem(&1, 1))}
@@ -394,19 +409,31 @@ defmodule DIY.EFL do
     end
   end
 
+  # The months of a credit: the names of the months (with a capital
+  # letter, so that "may" is not May), and ranges ("June through
+  # September").
   defp months(text) do
-    case for(
-           {name, i} <- Enum.with_index(@months, 1),
-           String.contains?(String.downcase(text), name),
-           do: i
+    number = fn name -> Enum.find_index(@months, &(&1 == name)) + 1 end
+
+    ranges =
+      for [_, from, to] <- Regex.scan(@range, text),
+          m <- range(number.(from), number.(to)),
+          do: m
+
+    case Enum.uniq(
+           Enum.sort(ranges ++ for([_, name] <- Regex.scan(@month, text), do: number.(name)))
          ) do
       [] -> nil
       months -> months
     end
   end
 
-  defp min_fee(lines) do
-    Enum.find_value(sentences(lines), {nil, nil}, fn {line, text} ->
+  # The months from one month to an other, over the end of the year too.
+  defp range(from, to) when from <= to, do: Enum.to_list(from..to)
+  defp range(from, to), do: Enum.to_list(from..12) ++ Enum.to_list(1..to)
+
+  defp min_fee(sentences) do
+    Enum.find_value(sentences, {nil, nil}, fn {line, text} ->
       with true <- text =~ ~r/minimum usage/i,
            dollars when is_number(dollars) and dollars > 0 <- money(text),
            [_, kwh] <- Regex.run(~r/(?:<|less than|below|under)\s*(\d[\d,]*)\s*kWh/i, text) do

@@ -37,6 +37,8 @@ defmodule DIY.Build do
   - `plans`: the plans of the worksheet of the plan lesson (`DIY.Plan`), at
     most 10.
   - `lesson`: the step of the plan lesson that the user reached (1 to 4).
+  - `lesson_plan`: the plan that the user did in step 2 of the lesson (the
+    id of a plan, or `"example"`), or `nil`. Step 3 uses a different plan.
   - `seq`: the number of the last id.
   - `hints`: the hints that the user closed.
   """
@@ -64,6 +66,7 @@ defmodule DIY.Build do
             power: DIY.Power.settings(),
             plans: [],
             lesson: 1,
+            lesson_plan: nil,
             seq: 0,
             hints: []
 
@@ -99,6 +102,7 @@ defmodule DIY.Build do
           power: DIY.Power.settings(),
           plans: [DIY.Plan.t()],
           lesson: 1..4,
+          lesson_plan: String.t() | nil,
           seq: non_neg_integer(),
           hints: [String.t()]
         }
@@ -383,6 +387,11 @@ defmodule DIY.Build do
   @spec set_lesson(t(), 1..4) :: t()
   def set_lesson(build, step) when step in 1..4, do: change(build, &%{&1 | lesson: step})
 
+  @doc "Keeps the plan that the user did in step 2 of the lesson."
+  @spec set_lesson_plan(t(), String.t()) :: t()
+  def set_lesson_plan(build, id) when is_binary(id) and byte_size(id) <= 20,
+    do: change(build, &%{&1 | lesson_plan: id})
+
   @doc """
   The build of today: the build with no planned item (the what-if of
   `DIY.Power`).
@@ -467,6 +476,7 @@ defmodule DIY.Build do
       "power" => DIY.Power.to_map(build.power),
       "plans" => Enum.map(build.plans, &DIY.Plan.to_map/1),
       "lesson" => build.lesson,
+      "lesson_plan" => build.lesson_plan,
       "seq" => build.seq,
       "hints" => build.hints
     })
@@ -501,6 +511,7 @@ defmodule DIY.Build do
          {:ok, power} <- power(map["power"]),
          {:ok, plans} <- plans(map["plans"]),
          {:ok, lesson} <- lesson(map["lesson"]),
+         {:ok, lesson_plan} <- lesson_plan(map["lesson_plan"]),
          {:ok, seq} <- count(map["seq"], :seq),
          seq = last_id(seq, rooms ++ items ++ plans),
          {:ok, hints} <- hints(map["hints"]) do
@@ -519,6 +530,7 @@ defmodule DIY.Build do
          power: power,
          plans: plans,
          lesson: lesson,
+         lesson_plan: lesson_plan,
          seq: seq,
          hints: hints
        }}
@@ -585,6 +597,10 @@ defmodule DIY.Build do
   defp lesson(nil), do: {:ok, 1}
   defp lesson(step) when step in 1..4, do: {:ok, step}
   defp lesson(_step), do: {:error, :lesson}
+
+  defp lesson_plan(nil), do: {:ok, nil}
+  defp lesson_plan(id) when is_binary(id) and byte_size(id) <= 20, do: {:ok, id}
+  defp lesson_plan(_id), do: {:error, :lesson_plan}
 
   # A build of an older version has no power: the default settings.
   defp power(nil), do: {:ok, DIY.Power.settings()}

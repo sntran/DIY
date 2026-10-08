@@ -313,14 +313,23 @@ defmodule DIYWeb.HomeLive do
 
   def handle_event("hint", _params, socket), do: {:noreply, assign(socket, :hint, true)}
 
-  def handle_event("exercise", %{"plan" => id} = params, socket) do
+  def handle_event("exercise", %{"plan" => id} = params, socket) when is_binary(id) do
     build = socket.assigns.build
     plan = Enum.find(build.plans, &(&1.id == id)) || Lesson.example_plan()
     {months, _source} = Lesson.months(build, socket.assigns.bill)
     month = Lesson.exercise_month(months)
-    bill = Plan.bill(plan, month.kwh, month.month, socket.assigns.shares[{plan.id, month.month}])
-    parts = if params["parts"] == "total", do: [:total], else: Lesson.parts(plan)
-    {:noreply, assign(socket, :checks, Lesson.check(bill, params["answer"] || %{}, parts))}
+    bill = Lesson.bill(plan, month, socket.assigns.shares[{plan.id, month.month}])
+    step2 = params["parts"] != "total"
+    parts = if step2, do: Lesson.parts(plan), else: [:total]
+    checks = Lesson.check(bill, answers(params["answer"]), parts)
+
+    # Step 3 uses a plan that is not the plan of step 2.
+    socket =
+      if step2 and Lesson.done?(checks),
+        do: put(socket, Build.set_lesson_plan(build, plan.id || "example")),
+        else: socket
+
+    {:noreply, assign(socket, :checks, checks)}
   end
 
   def handle_event("efl", %{"name" => name, "lines" => lines}, socket) when is_binary(name) do
@@ -329,9 +338,12 @@ defmodule DIYWeb.HomeLive do
         name = name |> Path.rootname() |> String.slice(0, 60)
         {:noreply, assign(socket, :efl, Map.put(result, :name, name))}
 
-      {:error, _reason} ->
+      {:error, :averages} ->
         {:noreply,
          put_flash(socket, :error, "The app cannot read this EFL: it has no average prices.")}
+
+      {:error, :lines} ->
+        {:noreply, put_flash(socket, :error, "The app cannot read the text of this file.")}
     end
   end
 
@@ -351,7 +363,7 @@ defmodule DIYWeb.HomeLive do
   end
 
   def handle_event("add_plan", %{"plan" => form}, socket) do
-    case Lesson.plan_from_form(form) do
+    case Lesson.plan_from_form(form, tdu(socket.assigns.build) == nil) do
       {:ok, plan} ->
         add_plan(socket, plan)
 
@@ -411,6 +423,12 @@ defmodule DIYWeb.HomeLive do
   end
 
   defp plan_error(:name), do: "Give the plan a name."
+
+  defp plan_error(field) when field in [:tdu_base, :tdu_cents],
+    do: "Give the delivery charges of your utility: its EFL gives them."
+
+  defp plan_error(:fee_kwh),
+    do: "Give the kWh of the minimum usage fee: the fee is for a month under that kWh."
 
   defp plan_error(_field),
     do: "Give each number of the plan in the limits: dollars, cents or kWh."
@@ -701,6 +719,7 @@ defmodule DIYWeb.HomeLive do
               bill={@bill}
               step={lesson_step(@lesson_step, @build)}
               plan_id={@plan_id}
+              tdu={tdu(@build)}
               efl={@efl}
               checks={@checks}
               hint={@hint}
@@ -745,6 +764,14 @@ defmodule DIYWeb.HomeLive do
   # The plan lesson is for an area of Texas with retail choice.
   defp plans?(%Build{market: %{choice: true}}), do: true
   defp plans?(_build), do: false
+
+  # The delivery charges of the utility of the house, when the app knows
+  # them (DIY.Plan.tdu/1).
+  defp tdu(%Build{market: %{utility: utility}}) when is_binary(utility), do: Plan.tdu(utility)
+  defp tdu(_build), do: nil
+
+  defp answers(%{} = answers), do: answers
+  defp answers(_answers), do: %{}
 
   # The step of the lesson: the step of the page, at most the step that the
   # user reached.

@@ -3,7 +3,7 @@ defmodule DIYWeb.LessonLiveTest do
 
   import Phoenix.LiveViewTest
 
-  alias DIY.{Build, House, Lesson, Plan, Stubs}
+  alias DIY.{Build, House, Lesson, Stubs, Usage}
 
   setup do
     Stubs.weather()
@@ -43,17 +43,24 @@ defmodule DIYWeb.LessonLiveTest do
 
   defp efl(name), do: "test/fixtures/efl/#{name}.json" |> File.read!() |> Jason.decode!()
 
-  # The right answers of the exercise: the bill of the month with the most
-  # use, with a plan.
+  # The answers of a user for the month with the most use: each part to
+  # the cent, and the total from the parts.
   defp answers(view, plan) do
     {months, _source} = Lesson.months(build(view), assigns(view).bill)
     month = Lesson.exercise_month(months)
-    bill = Plan.bill(plan, month.kwh, month.month, assigns(view).shares[{plan.id, month.month}])
+    bill = Lesson.bill(plan, month, assigns(view).shares[{plan.id, month.month}])
+    cent = &(Float.round(&1 * 100) / 100)
+    parts = Map.new(Lesson.parts(plan) -- [:total], &{&1, cent.(Map.fetch!(bill, &1))})
+    total = Enum.sum(for {part, v} <- parts, do: if(part == :credits, do: -v, else: v))
 
-    Map.new(Lesson.parts(plan), fn part ->
-      {Atom.to_string(part), :erlang.float_to_binary(Map.fetch!(bill, part) / 1, decimals: 2)}
+    parts
+    |> Map.put(:total, total)
+    |> Map.new(fn {part, v} ->
+      {Atom.to_string(part), :erlang.float_to_binary(v, decimals: 2)}
     end)
   end
+
+  defp number(text), do: text |> String.replace(",", "") |> Float.parse() |> elem(0)
 
   test "the lesson is only for an area of Texas with retail choice", %{conn: conn} do
     view = open(conn, ~p"/plans", house(nil, "10001"))
@@ -101,15 +108,32 @@ defmodule DIYWeb.LessonLiveTest do
     html = view |> form("#exercise", %{"answer" => wrong}) |> render_submit()
     assert html =~ "✗ check it"
     assert html =~ "✓ right"
+    assert html =~ "✗ give a number of dollars"
+    assert has_element?(view, "#exercise p[role=status]", "of 5 right.")
     refute has_element?(view, "#exercise-done")
+    # The months of the estimate show their range.
+    assert has_element?(view, "#your-months", " to ")
 
     right = answers(view, Lesson.example_plan())
     view |> form("#exercise", %{"answer" => right}) |> render_submit()
     assert has_element?(view, "#exercise-done")
 
+    assert build(view).lesson_plan == "example"
+
     view |> element("#exercise-done button", "Next: fewer hints") |> render_click()
     assert_patch(view, ~p"/plans?step=3")
     assert build(view).lesson == 3
+
+    # Step 3 with one plan: the plan of step 2 was the example plan, so the
+    # new plan is the plan of step 3.
+    assert render(view) =~ "Add a second plan"
+
+    view
+    |> form("#plan-form", %{"plan" => %{"name" => "Broker plan", "energy" => "9.5"}})
+    |> render_submit()
+
+    assert render(view) =~ "The bill of"
+    assert has_element?(view, "#exercise input[name=plan][value=#{hd(build(view).plans).id}]")
   end
 
   test "an EFL: its numbers with their lines, its check, and the worksheet", %{conn: conn} do
@@ -125,7 +149,11 @@ defmodule DIYWeb.LessonLiveTest do
     assert html =~ "The numbers of txu-smart-1000-select-12"
     assert html =~ "13.7¢"
     assert html =~ "data-efl-page=\"1\""
+    assert has_element?(view, "#efl-result[phx-hook=EflLinks]")
     assert has_element?(view, "#efl-check")
+    # The EFL gives no delivery charges: the page tells where they come from.
+    assert html =~ "the table of the app, Oncor, October 2026"
+    assert has_element?(view, "#efl-check .sr-only", "the same")
 
     view |> form("#efl-add", %{"name" => "TXU 1000"}) |> render_submit()
     assert [%{name: "TXU 1000", id: id}] = build(view).plans
@@ -147,6 +175,15 @@ defmodule DIYWeb.LessonLiveTest do
              "The app cannot read this EFL"
 
     assert render_hook(view, "efl_error", %{}) =~ "Open the PDF of an EFL"
+
+    long = List.duplicate(%{"page" => 1, "text" => String.duplicate("x", 2000)}, 33)
+
+    assert render_hook(view, "efl", %{"name" => "long.pdf", "lines" => long}) =~
+             "The app cannot read the text of this file."
+
+    # An EFL with no base charge.
+    render_hook(view, "efl", %{"name" => "g.pdf", "lines" => efl("gexa-eco-choice-3")})
+    assert render(view) =~ "the EFL gives no base charge"
 
     render_hook(view, "efl", %{"name" => "c.pdf", "lines" => efl("champion-champ-saver-24")})
     assert render(view) =~ "These numbers do not give the averages of the EFL"
@@ -234,6 +271,15 @@ defmodule DIYWeb.LessonLiveTest do
     assert view |> form("#plan-form", %{"plan" => %{"name" => ""}}) |> render_submit() =~
              "Give the plan a name."
 
+    assert view
+           |> form("#plan-form", %{"plan" => %{"name" => "Fee", "fee" => "9.95", "fee_kwh" => ""}})
+           |> render_submit() =~ "Give the kWh of the minimum usage fee"
+
+    # The range of the year, and the kWh at night of the plan of the EFL.
+    assert render(view) =~ "Range of the year"
+    [_first, chariot_plan] = build(view).plans
+    assert has_element?(view, "#night-#{chariot_plan.id}", "come from the day of your house")
+
     # The order of the table is the order of the worksheet.
     html = render(view)
     assert :binary.match(html, "First") < :binary.match(html, "The plan of the EFL")
@@ -272,12 +318,10 @@ defmodule DIYWeb.LessonLiveTest do
     end
 
     {:ok, fee} =
-      Lesson.plan_from_form(%{
-        "name" => "Fee plan",
-        "energy" => "10",
-        "fee" => "9.95",
-        "fee_kwh" => "1000"
-      })
+      Lesson.plan_from_form(
+        %{"name" => "Fee plan", "energy" => "10", "fee" => "9.95", "fee_kwh" => "1000"},
+        false
+      )
 
     build =
       Enum.reduce(
@@ -299,10 +343,47 @@ defmodule DIYWeb.LessonLiveTest do
     assert render(view) =~ "Each part of the kWh at the price of its tier"
     assert render(view) =~ "above 1,000 kWh"
 
+    # The plan of the night, from the text of the page: the user can do
+    # each step.
     render_change(view, "lesson_plan", %{"plan" => chariot.id})
     html = render(view)
-    assert html =~ "the kWh of the night at the price of the night"
     assert html =~ "At night (23:00 to 6:00)"
+    assert html =~ "come from the day of your house"
+
+    [_, day, day_cents, night, night_cents] =
+      Regex.run(
+        ~r/Day: ([\d,]+) kWh × ([\d.]+)¢ ÷ 100, and night: ([\d,]+) kWh × ([\d.]+)¢/,
+        html
+      )
+
+    [_, tdu_base, kwh, tdu_cents] =
+      Regex.run(~r/\$([\d.]+) \+ ([\d,]+) kWh × ([\d.]+)¢ ÷ 100/, html)
+
+    [_, base] = Regex.run(~r/The base charge of the plan: \$(\d+\.\d\d)/, html)
+    assert number(day) + number(night) == number(kwh)
+    cent = &(Float.round(&1 * 100) / 100)
+
+    energy =
+      cent.(number(day) * number(day_cents) / 100 + number(night) * number(night_cents) / 100)
+
+    tdu = cent.(number(tdu_base) + number(kwh) * number(tdu_cents) / 100)
+    total = energy + number(base) + tdu
+    money = &:erlang.float_to_binary(&1, decimals: 2)
+
+    view
+    |> form("#exercise", %{
+      "answer" => %{
+        "energy" => money.(energy),
+        "base" => base,
+        "tdu" => money.(tdu),
+        "credits" => "0",
+        "total" => money.(total)
+      }
+    })
+    |> render_submit()
+
+    assert has_element?(view, "#exercise-done")
+    assert has_element?(view, "#exercise-done th", "At night")
 
     render_change(view, "lesson_plan", %{"plan" => fee.id})
     html = render(view)
@@ -335,5 +416,120 @@ defmodule DIYWeb.LessonLiveTest do
   test "a worksheet with no plan", %{conn: conn} do
     view = open(conn, ~p"/plans?step=4", Build.set_lesson(house(), 4))
     assert render(view) =~ "No plan yet."
+  end
+
+  test "a utility that the app does not know: the user gives its delivery charges", %{
+    conn: conn
+  } do
+    view =
+      open(
+        conn,
+        ~p"/plans?step=4",
+        Build.set_lesson(house(%{@market | utility: "CenterPoint"}), 4)
+      )
+
+    assert has_element?(view, "#plan-form input[name='plan[tdu_base]'][required]")
+    assert render(view) =~ "Give the delivery charges of your utility"
+
+    assert view
+           |> form("#plan-form", %{"plan" => %{"name" => "A plan", "energy" => "10"}})
+           |> render_submit() =~ "Give the delivery charges of your utility: its EFL gives them."
+
+    view
+    |> form("#plan-form", %{
+      "plan" => %{
+        "name" => "A plan",
+        "energy" => "10",
+        "tdu_base" => "4.39",
+        "tdu_cents" => "5.6"
+      }
+    })
+    |> render_submit()
+
+    assert [%{tdu_base: 4.39, tdu_cents: 5.6}] = build(view).plans
+  end
+
+  test "a utility with no name, an exercise with no answer, and EFLs with no delivery charges", %{
+    conn: conn
+  } do
+    view = open(conn, ~p"/plans?step=2", Build.set_lesson(house(%{@market | utility: nil}), 2))
+
+    render_submit(view, "exercise", %{"plan" => "example"})
+    assert has_element?(view, "#exercise p[role=status]", "0 of 5 right.")
+
+    lines = fn texts -> Enum.map(texts, &%{"page" => 1, "text" => &1}) end
+
+    # No delivery charges, and no utility of the table: from the averages.
+    render_hook(view, "efl", %{
+      "name" => "a.pdf",
+      "lines" =>
+        lines.(["Average price per kWh 15.4¢ 15.0¢ 14.8¢", "Energy Charge 7.7174¢ per kWh"])
+    })
+
+    assert render(view) =~ "(from the averages of the EFL)"
+    assert render(view) =~ "only the average at 1,000 kWh checks these numbers"
+
+    # No energy charge either: no fit.
+    render_hook(view, "efl", %{
+      "name" => "b.pdf",
+      "lines" => lines.(["Average price per kWh 15.4¢ 15.0¢ 14.8¢"])
+    })
+
+    assert render(view) =~ "(the EFL gives no number)"
+  end
+
+  test "the kWh at night from the EFL, and a plan with tiers and a price at night" do
+    plan = %{
+      Lesson.example_plan()
+      | id: "p1",
+        name: "Tiers at night",
+        credits: [],
+        energy: [{0, 5.0}, {1000, 10.0}],
+        night: %{cents: 1.0, from: 22, to: 6, share: 0.3}
+    }
+
+    build = %{Build.set_lesson(house(), 4) | plans: [plan]}
+
+    bill = %{
+      months: for(m <- 1..12, do: %{month: m, kwh: 1200.0, low: 1100.0, high: 1300.0})
+    }
+
+    assigns = %{build: build, bill: bill, step: 2, plan_id: "p1", shares: %{}}
+    html = render_component(&DIYWeb.LessonPage.page/1, assigns)
+    assert html =~ "The price of the tiers for all 1,200 kWh"
+    assert html =~ "30% of the month, as the EFL says"
+
+    html = render_component(&DIYWeb.LessonPage.page/1, %{assigns | step: 4})
+    assert html =~ "They come from the part that the EFL says."
+  end
+
+  test "a meter file with a month of 0 kWh", %{conn: conn} do
+    months =
+      for m <- 1..12 do
+        name = "2025-#{String.pad_leading("#{m}", 2, "0")}"
+
+        %{
+          "month" => name,
+          "kwh" => if(m == 4, do: 0, else: 900),
+          "export" => 0,
+          "days" => Usage.days_in(name)
+        }
+      end
+
+    {:ok, usage} = Usage.read(%{"source" => "smt", "months" => months})
+
+    {:ok, build, _id} =
+      Build.add_plan(Build.set_lesson(house(), 4), %{Lesson.example_plan() | name: "First"})
+
+    view = open(conn, ~p"/plans?step=2", Build.set_usage(build, usage))
+    right = answers(view, Lesson.example_plan())
+    view |> form("#exercise", %{"answer" => right}) |> render_submit()
+    assert has_element?(view, "#exercise-done td", "–")
+
+    # A year of 0 kWh (an empty house): no price for each kWh.
+    zero = Enum.map(months, &%{&1 | "kwh" => 0})
+    {:ok, usage} = Usage.read(%{"source" => "smt", "months" => zero})
+    view = open(conn, ~p"/plans?step=4", Build.set_usage(build, usage))
+    assert has_element?(view, "#worksheet-table th", "–")
   end
 end

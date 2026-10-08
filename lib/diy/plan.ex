@@ -79,13 +79,15 @@ defmodule DIY.Plan do
     }
   end
 
-  # The energy charge: the tiers for the kWh of the day, and the price of
-  # the night for the kWh of the night.
+  # The energy charge: the price of the tiers, and with a price at night,
+  # that price for the kWh of the night. The tiers are for the kWh of the
+  # full month: the kWh of the day pay the mean price of the tiers for all
+  # the kWh.
   defp energy(%{night: nil} = plan, kwh, _share), do: tiers(plan.energy, kwh)
 
   defp energy(%{night: night} = plan, kwh, share) do
     share = share || night.share
-    tiers(plan.energy, kwh * (1 - share)) + kwh * share * night.cents / 100
+    tiers(plan.energy, kwh) * (1 - share) + kwh * share * night.cents / 100
   end
 
   defp tiers(tiers, kwh) do
@@ -117,20 +119,19 @@ defmodule DIY.Plan do
   @doc """
   The check of the numbers of a plan: the average prices of the plan at
   500, 1,000 and 2,000 kWh next to the averages of its EFL. An EFL rounds
-  its averages to 0.1¢. `ok` is true when each one is within 0.1¢.
+  its averages to 0.1¢. `ok` is true when each one is within 0.05¢ (the
+  rounding of the label).
   """
   def check(%{averages: averages} = plan) when is_map(averages) do
     rows =
       for kwh <- [500, 1000, 2000] do
         cents = bill(plan, kwh).cents
         efl = averages[kwh]
-        %{kwh: kwh, efl: efl, app: cents, ok: abs(cents - efl) <= 0.1 + 1.0e-9}
+        %{kwh: kwh, efl: efl, app: cents, ok: abs(cents - efl) <= 0.05 + 1.0e-6}
       end
 
     %{ok: Enum.all?(rows, & &1.ok), rows: rows}
   end
-
-  def check(_plan), do: nil
 
   @doc """
   The delivery charges of a plan whose EFL does not give them, from its
