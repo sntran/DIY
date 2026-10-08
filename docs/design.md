@@ -166,6 +166,10 @@ An element that a patch of LiveView moves loses the place of its scroll.
 So no element before `#levels` in its parent comes and goes: the hint is
 in a fixed element.
 
+An item opens in a sheet over the page (a modal dialog). The hook `Sheet`
+(`assets/js/sheet.js`) closes it with the Escape key, keeps the focus in
+it with the Tab key, and gives the focus back to the item when it closes.
+
 ### The data of a place
 
 | Data | Source | Where |
@@ -177,7 +181,11 @@ in a fixed element.
 
 The VM gets the weather and the plans with Req. On Cloudflare, the VM
 sends this HTTP through `fetch()` of the Worker. The cache of the VM
-(`DIY.Cache`) keeps the answers: they have no person in them.
+(`DIY.Cache`) keeps the answers: they have no person in them. It keeps at
+most 1,000 answers, because the memory of a Durable Object is small.
+
+In the data of NASA POWER, the sun of the last months comes later than
+the degree days. A month with no sun keeps its degree days.
 
 ### The estimate
 
@@ -185,17 +193,26 @@ sends this HTTP through `fetch()` of the Worker. The cache of the VM
 
 - The heat through the walls, the roof and the windows: `UA × degree days
   × 24 hours`. UA is the size × a factor for the age × a factor for the
-  floors. The factors are a simple model of the app, not a measurement,
+  floors. For heat, the app uses 60% of UA: the sun and the people help in
+  the cold. The factors are a simple model of the app, not a measurement,
   and the page says so.
-- An AC: `BTU ÷ (SEER2 × 1,000)`, at most 85% of the hours of a month at
-  its size. A heat pump: `BTU ÷ (HSPF2 × 1,000)`. Electric heat: `BTU ÷
-  3,412`. A gas furnace: only its blower.
+- An AC: `BTU ÷ (SEER2 × 1,000)`. A heat pump: `BTU ÷ (HSPF2 × 1,000)`.
+  Electric heat: `BTU ÷ 3,412`. Each one gives at most its size for 85% of
+  the hours of a month. The heat that the heat pumps cannot give goes to
+  the electric heat (heat strips), if the house has it. A gas furnace:
+  only its blower.
 - A water heater: 15 gallons for each person in one day, from the
   temperature of the ground to 120 °F.
 - The other items: power × hours, or the kWh in one year of the label.
-- The range: the weather (the mildest and the hardest of the 10 years)
-  and the model (15% for heat and cooling, 20% for a typical item, 10% for
-  a checked item), added as squares, because they are independent.
+- The range: the weather and the model (15% for heat and cooling, 20% for
+  a typical item, 10% for a checked item), added as squares, because they
+  are independent. The weather of a month: the same month of each of the
+  10 years, with the least and the most kWh. The weather of the year: the
+  year with the least and the year with the most kWh.
+
+Each item shows its math for one month (honesty rule 1): each step with
+its numbers, and the kWh of the month at the end. A test checks that the
+last number of each item is its kWh in each month.
 
 The price of one kWh: the price that the user gives, else the median of
 Power to Choose in a Texas area with retail choice, else the average of
@@ -208,7 +225,8 @@ near 10,400 kWh in one year with gas heat, 16,900 with a heat pump, and
 ### The tests of phase 1
 
 - Property tests: the JSON of a random build, `from_json` with random
-  text, the parameters of each kind, the ZIP codes of the file, the
+  text and with a bad value at a random place of a build (and a test of
+  each place with each bad value), the parameters of each kind, the ZIP codes of the file, the
   median, and the estimate (no item under zero, each month in its range,
   one more item never lowers the estimate, a better SEER2 never raises
   it, more degree days never lower it).
@@ -216,6 +234,9 @@ near 10,400 kWh in one year with gas heat, 16,900 with a heat pump, and
   answers of NASA POWER and Power to Choose as stubs.
 - The browser test (`test/browser/house.mjs`): a person builds a house in
   Chromium, in the light and the dark mode, on a phone and on a desk, and
-  axe-core checks each screen. A reload keeps the build, a second tab
-  follows the first, and a reconnect restores the build. The same script
-  runs against `wrangler dev`.
+  axe-core checks each screen. A swipe goes to the next room and to a
+  different floor, the sheet of an item keeps the focus and closes with
+  the Escape key, a reload keeps the build, a second tab follows the
+  first, and a reconnect restores the build. CI runs the same script
+  against `wrangler dev` too: the VM in workerd, with the real answers of
+  NASA POWER and Power to Choose through `fetch()`.
