@@ -2,12 +2,28 @@ defmodule DIY.BuildTest do
   use ExUnit.Case, async: true
   use ExUnitProperties
 
-  alias DIY.Build
+  alias DIY.{Build, Catalog, House}
+
+  defp house(overrides \\ %{}),
+    do: Map.merge(%{size: 1800, year: 2005, floors: 2, heat: "gas", lot: nil}, overrides)
+
+  # A build with the preset of a house.
+  defp preset(overrides \\ %{}) do
+    {house, rooms, items} = House.preset(house(overrides))
+    {:ok, build} = Build.choose_door(Build.new(), "my_house")
+    {:ok, build} = Build.set_zip(build, "75070")
+    Build.put_house(build, house, rooms, items)
+  end
+
+  defp room_named(build, name), do: Enum.find(build.rooms, &(&1.name == name))
 
   test "a new build has no revision, no stamp and no door" do
-    assert %Build{version: 1, revision: 0, stamp: "", door: nil} = Build.new()
+    assert %Build{version: 1, revision: 0, stamp: "", door: nil, rooms: [], items: []} =
+             Build.new()
+
     assert Build.version() == 1
     assert Build.doors() == ["my_house", "planning"]
+    assert Build.heats() == ["gas", "heat_pump", "electric"]
   end
 
   test "each change adds 1 to the revision and makes a new stamp" do
@@ -23,33 +39,227 @@ defmodule DIY.BuildTest do
   end
 
   test "a restart keeps the revision and clears the build" do
-    {:ok, build} = Build.choose_door(Build.new(), "my_house")
+    build = preset()
     restarted = Build.restart(build)
-    assert restarted.revision == 2
-    assert restarted.door == nil
-    assert restarted.stamp not in ["", build.stamp]
+    assert restarted.revision == build.revision + 1
+    assert %{door: nil, house: nil, rooms: [], items: []} = restarted
+  end
+
+  test "the levels of a house, from the roof to the ground" do
+    assert Build.levels(1) == ["roof", "f1", "outside"]
+    assert Build.levels(3) == ["roof", "f3", "f2", "f1", "outside"]
+    assert Build.level_name("roof") == "Roof and attic"
+    assert Build.level_name("f2") == "Floor 2"
+    assert Build.level_name("outside") == "Outside"
+  end
+
+  test "the ZIP code, the market and the price" do
+    {:ok, build} = Build.set_zip(Build.new(), " 75070 ")
+    assert build.zip == "75070"
+    assert Build.set_zip(build, "00000") == {:error, :zip}
+
+    market = %{
+      choice: true,
+      utility: "Oncor",
+      median: 13.4,
+      plans: 168,
+      date: "2026-10-08",
+      source: "ptc"
+    }
+
+    build = Build.set_market(build, market)
+    assert build.market == market
+    {:ok, other} = Build.set_zip(build, "78701")
+    assert other.market == nil
+
+    assert {:ok, %{price: 14.5}} = Build.set_price(build, 14.5)
+    assert {:ok, %{price: 14.0}} = Build.set_price(build, 14)
+    assert {:ok, %{price: nil}} = Build.set_price(build, nil)
+    assert Build.set_price(build, 0) == {:error, :price}
+    assert Build.set_price(build, 500) == {:error, :price}
+    assert Build.set_price(build, "14") == {:error, :price}
+  end
+
+  test "a preset gives the rooms and the typical items, with new ids" do
+    build = preset()
+    assert length(build.rooms) == 11
+    assert Enum.all?(build.items, & &1.typical)
+    ids = Enum.map(build.rooms, & &1.id) ++ Enum.map(build.items, & &1.id)
+    assert ids == Enum.uniq(ids)
+    assert build.seq == length(ids)
+    assert room_named(build, "Kitchen").level == "f1"
+    assert room_named(build, "Bedroom 1").level == "f2"
+
+    assert Build.rooms_on(build, "outside") |> Enum.map(& &1.name) == [
+             "Garage",
+             "Backyard",
+             "Driveway"
+           ]
+
+    assert [%{type: "ac"}] = Build.items_in(build, room_named(build, "Backyard").id)
+  end
+
+  test "the numbers of the house change, if the rooms fit the floors" do
+    build = preset()
+    assert {:ok, %{house: %{size: 2000}}} = Build.update_house(build, %{size: 2000})
+    assert {:ok, %{house: %{floors: 3}}} = Build.update_house(build, %{floors: 3})
+    assert Build.update_house(build, %{floors: 1}) == {:error, :floors}
+    assert Build.update_house(build, %{size: 10}) == {:error, :house}
+    assert Build.update_house(build, %{heat: "wood"}) == {:error, :house}
+  end
+
+  test "rooms: add, rename and remove" do
+    build = preset()
+    assert {:ok, build, id} = Build.add_room(build, "Office", "f2", :indoor)
+    assert {:ok, %{name: "Office", level: "f2", place: :indoor}} = Build.room(build, id)
+    assert Build.add_room(build, " ", "f2", :indoor) == {:error, :name}
+    assert Build.add_room(build, "Loft", "f3", :indoor) == {:error, :level}
+    assert Build.add_room(build, "Loft", "f2", :basement) == {:error, :place}
+
+    assert {:ok, build} = Build.rename_room(build, id, "Studio")
+    assert {:ok, %{name: "Studio"}} = Build.room(build, id)
+    assert Build.rename_room(build, "r999", "x") == {:error, :room}
+    assert Build.rename_room(build, id, nil) == {:error, :name}
+
+    kitchen = room_named(build, "Kitchen")
+    assert Build.items_in(build, kitchen.id) != []
+    assert {:ok, build} = Build.delete_room(build, kitchen.id)
+    assert Build.items_in(build, kitchen.id) == []
+    assert Build.delete_room(build, kitchen.id) == {:error, :room}
+  end
+
+  test "items: add, change, check, move and remove" do
+    build = preset()
+    kitchen = room_named(build, "Kitchen")
+    garage = room_named(build, "Garage")
+    backyard = room_named(build, "Backyard")
+
+    assert {:ok, build, id} = Build.add_item(build, kitchen.id, "freezer")
+    assert {:ok, %{typical: false, params: %{"kwh_year" => 400}}} = Build.item(build, id)
+    assert Build.add_item(build, kitchen.id, "rocket") == {:error, :type}
+    assert Build.add_item(build, kitchen.id, "pool_pump") == {:error, :place}
+    assert Build.add_item(build, "r999", "freezer") == {:error, :room}
+
+    assert {:ok, build} = Build.update_item(build, id, %{"kwh_year" => "350"})
+    assert {:ok, %{params: %{"kwh_year" => 350}}} = Build.item(build, id)
+    assert Build.update_item(build, id, %{"kwh_year" => "-1"}) == {:error, {:param, "kwh_year"}}
+    assert Build.update_item(build, "i999", %{}) == {:error, :item}
+
+    [fridge] = Enum.filter(build.items, &(&1.type == "fridge"))
+    assert fridge.typical
+    assert {:ok, build} = Build.check_item(build, fridge.id)
+    assert {:ok, %{typical: false}} = Build.item(build, fridge.id)
+    assert Build.check_item(build, "i999") == {:error, :item}
+
+    assert {:ok, build} = Build.move_item(build, id, garage.id)
+    assert {:ok, %{room: room}} = Build.item(build, id)
+    assert room == garage.id
+    assert Build.move_item(build, id, backyard.id) == {:error, :place}
+    assert Build.move_item(build, id, "r999") == {:error, :room}
+    assert Build.move_item(build, "i999", garage.id) == {:error, :item}
+
+    assert {:ok, build} = Build.delete_item(build, id)
+    assert Build.item(build, id) == {:error, :item}
+    assert Build.delete_item(build, id) == {:error, :item}
+  end
+
+  test "hints close one time" do
+    assert {:ok, build} = Build.close_hint(Build.new(), "swipe")
+    assert {:ok, %{hints: ["swipe"]}} = Build.close_hint(build, "swipe")
+    assert Build.close_hint(build, "other") == {:error, :hint}
+  end
+
+  test "an import puts the build of a file in the place of the build" do
+    build = preset()
+    other = Build.restart(build)
+    assert {:ok, imported} = Build.import(other, Build.export(build))
+    assert imported.revision == other.revision + 1
+    assert imported.items == build.items
+    assert imported.stamp not in ["", build.stamp]
+    assert Build.import(other, "not a build") == {:error, :not_json}
+    assert Jason.decode!(Build.export(build))["stamp"] == ""
   end
 
   test "from_json gives the reason for a text that is not a build" do
+    good = Jason.decode!(Build.to_json(preset()))
+    bad = fn changes -> Build.from_json(Jason.encode!(Map.merge(good, changes))) end
+
     assert Build.from_json(nil) == {:error, :not_json}
     assert Build.from_json("{") == {:error, :not_json}
     assert Build.from_json("[1]") == {:error, :not_a_build}
     assert Build.from_json("{}") == {:error, :not_a_build}
     assert Build.from_json(~s({"version": 2})) == {:error, {:version, 2}}
-    assert Build.from_json(~s({"version": 1, "revision": -1, "stamp": ""})) == {:error, :revision}
-    assert Build.from_json(~s({"version": 1, "revision": 1, "stamp": 5})) == {:error, :stamp}
+    assert bad.(%{"revision" => -1}) == {:error, :revision}
+    assert bad.(%{"stamp" => 5}) == {:error, :stamp}
+    assert bad.(%{"door" => "attic"}) == {:error, :door}
+    assert bad.(%{"zip" => "00000"}) == {:error, :zip}
+    assert bad.(%{"market" => %{"choice" => 1}}) == {:error, :market}
+    assert bad.(%{"price" => "cheap"}) == {:error, :price}
+    assert bad.(%{"house" => %{"size" => 5}}) == {:error, :house}
+    assert bad.(%{"house" => [1]}) == {:error, :house}
+    assert bad.(%{"rooms" => "kitchen"}) == {:error, :rooms}
+    assert bad.(%{"rooms" => [%{"id" => "r1"}]}) == {:error, :rooms}
+    assert bad.(%{"rooms" => good["rooms"] ++ [hd(good["rooms"])]}) == {:error, :rooms}
+    assert bad.(%{"rooms" => [Map.put(hd(good["rooms"]), "level", "f9")]}) == {:error, :rooms}
+    assert bad.(%{"rooms" => [Map.put(hd(good["rooms"]), "place", "moon")]}) == {:error, :rooms}
+    assert bad.(%{"items" => "fridge"}) == {:error, :items}
+    assert bad.(%{"items" => [%{"id" => "i1"}]}) == {:error, :items}
+    assert bad.(%{"items" => good["items"] ++ [hd(good["items"])]}) == {:error, :items}
+    assert bad.(%{"items" => [Map.put(hd(good["items"]), "room", "r999")]}) == {:error, :items}
+    assert bad.(%{"items" => [Map.put(hd(good["items"]), "type", "rocket")]}) == {:error, :items}
 
-    assert Build.from_json(~s({"version": 1, "revision": 1, "stamp": "a", "door": "attic"})) ==
-             {:error, :door}
+    assert bad.(%{"items" => [Map.put(hd(good["items"]), "params", %{"tons" => 99})]}) ==
+             {:error, :items}
+
+    assert bad.(%{"seq" => nil}) == {:error, :seq}
+    assert bad.(%{"hints" => ["x"]}) == {:error, :hints}
+    assert bad.(%{"hints" => "swipe"}) == {:error, :hints}
+    # An AC cannot be in a kitchen (inside).
+    kitchen = Enum.find(good["rooms"], &(&1["name"] == "Kitchen"))
+    ac = Enum.find(good["items"], &(&1["type"] == "ac"))
+    assert bad.(%{"items" => [Map.put(ac, "room", kitchen["id"])]}) == {:error, :items}
   end
 
+  # A random build: a preset of a random house, and random changes.
   defp build do
     gen all(
-          revision <- non_negative_integer(),
-          stamp <- string(:alphanumeric),
-          door <- member_of([nil | Build.doors()])
+          size <- member_of([1200, 1800, 2500, 3500]),
+          year <- integer(1950..2026),
+          floors <- integer(1..3),
+          heat <- member_of(Build.heats()),
+          lot <- one_of([constant(nil), integer(100..100_000)]),
+          price <- one_of([constant(nil), float(min: 1.0, max: 50.0)]),
+          market <-
+            one_of([
+              constant(nil),
+              fixed_map(%{
+                choice: boolean(),
+                utility: one_of([constant(nil), string(:alphanumeric, min_length: 1)]),
+                median: one_of([constant(nil), float(min: 1.0, max: 50.0)]),
+                plans: integer(0..300),
+                date: constant("2026-10-08"),
+                source: member_of(["ptc", "user"])
+              })
+            ]),
+          changes <- list_of({member_of(Catalog.types()), integer(0..20)}, max_length: 6)
         ) do
-      %Build{revision: revision, stamp: stamp, door: door}
+      {house, rooms, items} =
+        House.preset(%{size: size, year: year, floors: floors, heat: heat, lot: lot})
+
+      {:ok, build} = Build.choose_door(Build.new(), "my_house")
+      {:ok, build} = Build.set_zip(build, "75070")
+      {:ok, build} = Build.set_price(build, price)
+      build = if market, do: Build.set_market(build, market), else: build
+      build = Build.put_house(build, house, rooms, items)
+
+      Enum.reduce(changes, build, fn {type, index}, build ->
+        room = Enum.at(build.rooms, rem(index, length(build.rooms)))
+
+        case Build.add_item(build, room.id, type) do
+          {:ok, build, _id} -> build
+          {:error, _reason} -> build
+        end
+      end)
     end
   end
 
@@ -68,11 +278,24 @@ defmodule DIY.BuildTest do
 
   # A JSON text of a map with some of the keys of a build, and random values.
   defp json do
-    value = one_of([integer(), string(:printable), boolean(), constant(nil)])
-    keys = member_of(["version", "revision", "stamp", "door", "other"])
-    likely = member_of([1, "my_house", "planning"])
+    value =
+      one_of([
+        integer(),
+        string(:printable),
+        boolean(),
+        constant(nil),
+        constant([]),
+        constant(%{})
+      ])
 
-    gen all(pairs <- list_of({keys, one_of([value, likely])}, max_length: 6)) do
+    keys =
+      member_of(
+        ~w(version revision stamp door zip market price house rooms items seq hints other)
+      )
+
+    likely = member_of([1, "my_house", "planning", "75070"])
+
+    gen all(pairs <- list_of({keys, one_of([value, likely])}, max_length: 8)) do
       pairs |> Map.new() |> Jason.encode!()
     end
   end
