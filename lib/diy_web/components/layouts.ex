@@ -45,21 +45,21 @@ defmodule DIYWeb.Layouts do
         class={[@action == :front && "dock-active"]}
         aria-current={@action == :front && "page"}
       >
-        <span aria-hidden="true">🏠</span><span class="dock-label">House</span>
+        <.icon name="hero-home" class="size-5" /><span class="dock-label">House</span>
       </.link>
       <.link
         patch={~p"/inside"}
         class={[@action == :inside && "dock-active"]}
         aria-current={@action == :inside && "page"}
       >
-        <span aria-hidden="true">🚪</span><span class="dock-label">Rooms</span>
+        <.icon name="hero-squares-2x2" class="size-5" /><span class="dock-label">Rooms</span>
       </.link>
       <.link
         patch={~p"/estimate"}
         class={[@action == :estimate && "dock-active"]}
         aria-current={@action == :estimate && "page"}
       >
-        <span aria-hidden="true">📊</span><span class="dock-label">Bill</span>
+        <.icon name="hero-chart-bar" class="size-5" /><span class="dock-label">Bill</span>
       </.link>
       <.link
         :if={@power}
@@ -67,7 +67,7 @@ defmodule DIYWeb.Layouts do
         class={[@action == :power && "dock-active"]}
         aria-current={@action == :power && "page"}
       >
-        <span aria-hidden="true">🔋</span><span class="dock-label">Power</span>
+        <.icon name="hero-bolt" class="size-5" /><span class="dock-label">Power</span>
       </.link>
       <.link
         :if={@plans}
@@ -75,7 +75,7 @@ defmodule DIYWeb.Layouts do
         class={[@action == :plans && "dock-active"]}
         aria-current={@action == :plans && "page"}
       >
-        <span aria-hidden="true">📝</span><span class="dock-label">Plans</span>
+        <.icon name="hero-document-text" class="size-5" /><span class="dock-label">Plans</span>
       </.link>
       <.link
         :if={@van}
@@ -83,14 +83,14 @@ defmodule DIYWeb.Layouts do
         class={[@action == :van && "dock-active"]}
         aria-current={@action == :van && "page"}
       >
-        <span aria-hidden="true">🚐</span><span class="dock-label">Van</span>
+        <.icon name="hero-truck" class="size-5" /><span class="dock-label">Van</span>
       </.link>
       <.link
         patch={~p"/settings"}
         class={[@action == :settings && "dock-active"]}
         aria-current={@action == :settings && "page"}
       >
-        <span aria-hidden="true">⚙️</span><span class="dock-label">Settings</span>
+        <.icon name="hero-cog-6-tooth" class="size-5" /><span class="dock-label">Settings</span>
       </.link>
     </nav>
 

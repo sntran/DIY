@@ -103,3 +103,106 @@
 [data-phx-session], [data-phx-teleported-src] { display: contents }
 
 /* This file is for your main application CSS */
+
+/* The isometric pictures (DIYWeb.Scene): the colors of the day (light mode)
+   and of the night (dark mode). Each face of a box has a class for its top
+   (-t), its left (-l, in the light) and its right (-r, in the shade). */
+.scene {
+  --s-sky1: #cfe6fb; --s-sky2: #f4f8fc; --s-sun: #fcd34d;
+  --s-grass1: #9ccc72; --s-grass2: #6fae55; --s-turf-l: #5f9a48; --s-turf-r: #4d833b;
+  --s-dirt-l: #b08463; --s-dirt-r: #8e6649;
+  --s-wall-l: #f6f2ea; --s-wall-r: #d9d2c5; --s-base-l: #8b8f98; --s-base-r: #6f737c;
+  --s-band-l: #e3dccf; --s-band-r: #c5bdae;
+  --s-roof: #4a5563; --s-roof-b: #3b4451; --s-fascia-l: #f1ede6; --s-fascia-r: #c9c2b6;
+  --s-fascia-t: #fbf9f5; --s-ridge: #2f3742;
+  --s-frame: #ffffff; --s-frame-r: #e7e2d9; --s-glass1: #b9dcf4; --s-glass2: #5f97c4;
+  --s-door: #8a5a3c; --s-knob: #f5c76b; --s-step-l: #c9c4bb; --s-step-r: #aaa59c; --s-step-t: #dedad3;
+  --s-gdoor: #ebe6dd; --s-gline: #cbc4b8;
+  --s-pv1: #2d4f9e; --s-pv2: #172c63; --s-pv-line: #6d8fd6;
+  --s-pole-l: #8b6b4f; --s-pole-r: #6e533d; --s-pole-t: #a48365; --s-wire: #3b4451;
+  --s-trunk-l: #8b6b4f; --s-trunk-r: #6e533d; --s-leaf-l: #5fa152; --s-leaf-r: #3f7f3a;
+  --s-bush: #5a9b4c; --s-drive: #d6d3cc; --s-rim: #e9e4da; --s-water: #5fb6e0;
+  --s-meter-l: #b9bec6; --s-meter-r: #9aa0aa; --s-meter-t: #d3d7dd;
+  --s-ac-l: #d8dce2; --s-ac-r: #b7bdc6; --s-ac-t: #eceef2; --s-fan: #6b7280;
+  --s-station-l: #3a3f47; --s-station-r: #2a2e35; --s-station-t: #50565f; --s-screen: #34d399;
+  --s-shirt-l: #f97316; --s-shirt-r: #c2410c; --s-skin: #f2c39b;
+  --s-car-l: #e5484d; --s-car-r: #b8363a; --s-car-t: #f06a6e; --s-tire: #23262b; --s-hub: #9aa0aa;
+  --s-lamp: #fff3c4; --s-vglass: #8fb7d6;
+  --s-van-l: #f3f4f6; --s-van-r: #d4d7dc; --s-van-t: #ffffff; --s-van-trim: #6b7280; --s-van-door: #c4c8ce;
+  --s-shadow: rgb(30 41 59 / 0.28);
+  --s-chip: rgb(15 23 42 / 0.82); --s-chip-text: #ffffff;
+  --s-grid: #60a5fa; --s-sunflow: #f59e0b; --s-battery: #22c55e;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme=light]) .scene {
+    --s-sky1: #0b1224; --s-sky2: #1c2a44; --s-sun: #e5e7eb;
+    --s-grass1: #3f6b3a; --s-grass2: #2b4f2a; --s-turf-l: #2a4a28; --s-turf-r: #213c20;
+    --s-dirt-l: #5f4635; --s-dirt-r: #4a3628;
+    --s-wall-l: #b9b3a8; --s-wall-r: #8f897f; --s-band-l: #a49e93; --s-band-r: #7f796f;
+    --s-roof: #323a46; --s-roof-b: #262d37; --s-fascia-l: #b0aa9f; --s-fascia-r: #8a847a; --s-fascia-t: #c4beb3;
+    --s-frame: #cfc9be; --s-frame-r: #a49e93; --s-glass1: #fde68a; --s-glass2: #f59e0b;
+    --s-leaf-l: #3b6e35; --s-leaf-r: #2a5226; --s-bush: #335f2e; --s-drive: #6b6a66; --s-rim: #8a857c;
+    --s-water: #2f6f93; --s-gdoor: #a8a296; --s-gline: #8a847a;
+    --s-van-l: #b8bcc3; --s-van-r: #969aa2; --s-van-t: #c9ccd2; --s-vglass: #2b3a52;
+    --s-shadow: rgb(0 0 0 / 0.4);
+  }
+}
+[data-theme=dark] .scene {
+  --s-sky1: #0b1224; --s-sky2: #1c2a44; --s-sun: #e5e7eb;
+  --s-grass1: #3f6b3a; --s-grass2: #2b4f2a; --s-turf-l: #2a4a28; --s-turf-r: #213c20;
+  --s-dirt-l: #5f4635; --s-dirt-r: #4a3628;
+  --s-wall-l: #b9b3a8; --s-wall-r: #8f897f; --s-band-l: #a49e93; --s-band-r: #7f796f;
+  --s-roof: #323a46; --s-roof-b: #262d37; --s-fascia-l: #b0aa9f; --s-fascia-r: #8a847a; --s-fascia-t: #c4beb3;
+  --s-frame: #cfc9be; --s-frame-r: #a49e93; --s-glass1: #fde68a; --s-glass2: #f59e0b;
+  --s-leaf-l: #3b6e35; --s-leaf-r: #2a5226; --s-bush: #335f2e; --s-drive: #6b6a66; --s-rim: #8a857c;
+  --s-water: #2f6f93; --s-gdoor: #a8a296; --s-gline: #8a847a;
+  --s-van-l: #b8bcc3; --s-van-r: #969aa2; --s-van-t: #c9ccd2; --s-vglass: #2b3a52;
+  --s-shadow: rgb(0 0 0 / 0.4);
+}
+.s-sky1 { stop-color: var(--s-sky1) } .s-sky2 { stop-color: var(--s-sky2) }
+.s-grass1 { stop-color: var(--s-grass1) } .s-grass2 { stop-color: var(--s-grass2) }
+.s-glass1 { stop-color: var(--s-glass1) } .s-glass2 { stop-color: var(--s-glass2) }
+.s-pv1 { stop-color: var(--s-pv1) } .s-pv2 { stop-color: var(--s-pv2) }
+.s-sun { fill: var(--s-sun) }
+.s-turf-l { fill: var(--s-turf-l) } .s-turf-r { fill: var(--s-turf-r) }
+.s-dirt-l { fill: var(--s-dirt-l) } .s-dirt-r { fill: var(--s-dirt-r) }
+.s-wall-l { fill: var(--s-wall-l) } .s-wall-r { fill: var(--s-wall-r) }
+.s-base-l { fill: var(--s-base-l) } .s-base-r { fill: var(--s-base-r) }
+.s-band-l { fill: var(--s-band-l) } .s-band-r { fill: var(--s-band-r) }
+.s-roof { fill: var(--s-roof) } .s-roof-b { fill: var(--s-roof-b) }
+.s-fascia-l { fill: var(--s-fascia-l) } .s-fascia-r { fill: var(--s-fascia-r) } .s-fascia-t { fill: var(--s-fascia-t) }
+.s-ridge { fill: none; stroke: var(--s-ridge); stroke-width: 2; stroke-linecap: round }
+.s-frame { fill: var(--s-frame) } .s-frame-r { fill: var(--s-frame-r) }
+.s-door { fill: var(--s-door) } .s-knob { fill: var(--s-knob) }
+.s-step-l { fill: var(--s-step-l) } .s-step-r { fill: var(--s-step-r) } .s-step-t { fill: var(--s-step-t) }
+.s-gdoor { fill: var(--s-gdoor) } .s-gline { fill: var(--s-gline) }
+.s-pv { stroke: var(--s-pv-line); stroke-width: 0.6 }
+.s-pole-l { fill: var(--s-pole-l) } .s-pole-r { fill: var(--s-pole-r) } .s-pole-t { fill: var(--s-pole-t) }
+.s-wire { fill: none; stroke: var(--s-wire); stroke-width: 1 }
+.s-trunk-l { fill: var(--s-trunk-l) } .s-trunk-r { fill: var(--s-trunk-r) }
+.s-leaf-l { fill: var(--s-leaf-l) } .s-leaf-r { fill: var(--s-leaf-r) }
+.s-bush { fill: var(--s-bush) } .s-drive { fill: var(--s-drive) }
+.s-rim { fill: var(--s-rim) } .s-water { fill: var(--s-water) }
+.s-meter-l { fill: var(--s-meter-l) } .s-meter-r { fill: var(--s-meter-r) } .s-meter-t { fill: var(--s-meter-t) }
+.s-ac-l { fill: var(--s-ac-l) } .s-ac-r { fill: var(--s-ac-r) } .s-ac-t { fill: var(--s-ac-t) } .s-fan { fill: var(--s-fan) }
+.s-station-l { fill: var(--s-station-l) } .s-station-r { fill: var(--s-station-r) } .s-station-t { fill: var(--s-station-t) }
+.s-screen { fill: var(--s-screen) }
+.s-shirt-l { fill: var(--s-shirt-l) } .s-shirt-r { fill: var(--s-shirt-r) } .s-skin { fill: var(--s-skin) }
+.s-car-l { fill: var(--s-car-l) } .s-car-r { fill: var(--s-car-r) } .s-car-t { fill: var(--s-car-t) }
+.s-tire { fill: var(--s-tire) } .s-hub { fill: var(--s-hub) } .s-lamp { fill: var(--s-lamp) }
+.s-vglass { fill: var(--s-vglass) }
+.s-van-l { fill: var(--s-van-l) } .s-van-r { fill: var(--s-van-r) } .s-van-t { fill: var(--s-van-t) }
+.s-van-trim { fill: var(--s-van-trim) } .s-van-door { fill: var(--s-van-door) }
+.s-shadow { fill: var(--s-shadow) }
+.s-chip { fill: var(--s-chip) } .s-chip-bad { fill: #b91c1c } .s-chip-good { fill: #15803d }
+.s-chip-sun { fill: #b45309 }
+.s-chip-text { fill: var(--s-chip-text); font-size: 9px; font-weight: 600 }
+.s-flow { fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-dasharray: 2 6; animation: s-flow 0.9s linear infinite }
+.s-flow-grid { stroke: var(--s-grid) } .s-flow-sun { stroke: var(--s-sunflow) } .s-flow-battery { stroke: var(--s-battery) }
+@keyframes s-flow { to { stroke-dashoffset: -8 } }
+/* A plan on paper: white lines on blue, in the light and the dark mode
+   (the id in :not() puts this rule above the rules of the dark mode). */
+:root .scene.scene-plan:not(#none) { --s-sky1: #1d4f91; --s-sky2: #2563a8 }
+.s-plan { fill: #2563a8; stroke: #e0ecff; stroke-width: 0.8; stroke-linejoin: round }
+.s-plan-line { fill: none; stroke: #e0ecff; stroke-width: 0.8 }
+@media (prefers-reduced-motion: reduce) { .s-flow { animation: none } }

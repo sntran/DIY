@@ -6,7 +6,7 @@ defmodule DIYWeb.Front do
   use DIYWeb, :html
 
   alias DIY.Zip
-  alias DIYWeb.Format
+  alias DIYWeb.{Format, Scene}
 
   attr :build, :map, required: true
   attr :estimate, :map, required: true
@@ -53,59 +53,17 @@ defmodule DIYWeb.Front do
 
   attr :build, :map, required: true
 
-  # The picture of the house: one band for each floor, the roof, the door,
-  # and the items outside.
+  # The picture of the house, with its equipment (`DIYWeb.Scene`). The door
+  # goes in.
   defp house(assigns) do
-    floors = assigns.build.house.floors
-    types = MapSet.new(assigns.build.items, & &1.type)
-
-    assigns =
-      assigns
-      |> assign(:floors, floors)
-      |> assign(:top, 200 - floors * 46)
-      |> assign(:ac, MapSet.member?(types, "ac"))
-      |> assign(:pool, MapSet.member?(types, "pool_pump"))
-
     ~H"""
     <.link
       patch={~p"/inside"}
-      class="block"
-      aria-label={"Go in: a house with #{Format.count(@floors, "floor")}, and you in front of the door"}
+      id="house-picture"
+      class="block overflow-hidden rounded-box"
+      aria-label={"Go in. The picture: #{Scene.label(@build)}, and you in front of the door."}
     >
-      <svg
-        viewBox="0 0 360 230"
-        class="w-full rounded-box bg-sky-100 dark:bg-slate-800"
-        aria-hidden="true"
-      >
-        <rect x="0" y="200" width="360" height="30" class="fill-green-600/70" />
-        <polygon points={"80,#{@top} 180,#{@top - 50} 280,#{@top}"} class="fill-red-800/80" />
-        <rect x="95" y={@top} width="170" height={200 - @top} class="fill-amber-100 stroke-amber-900" />
-        <line
-          :for={floor <- 1..(@floors - 1)//1}
-          :if={@floors > 1}
-          x1="95"
-          x2="265"
-          y1={200 - floor * 46}
-          y2={200 - floor * 46}
-          class="stroke-amber-900/40"
-        />
-        <rect
-          :for={{floor, x} <- for(f <- 1..@floors, x <- [110, 225], do: {f, x})}
-          x={x}
-          y={200 - floor * 46 + 10}
-          width="25"
-          height="20"
-          class="fill-sky-300 stroke-amber-900/60"
-        />
-        <rect x="165" y="164" width="30" height="36" class="fill-amber-800" />
-        <circle cx="189" cy="183" r="2" class="fill-yellow-300" />
-        <text x="200" y="222" font-size="26" aria-hidden="true">🧍</text>
-        <g :if={@ac}>
-          <rect x="285" y="180" width="30" height="20" rx="2" class="fill-slate-300 stroke-slate-600" />
-          <circle cx="300" cy="190" r="7" class="fill-none stroke-slate-600" />
-        </g>
-        <rect :if={@pool} x="10" y="205" width="60" height="18" rx="6" class="fill-sky-400" />
-      </svg>
+      <Scene.house id="front" build={@build} />
     </.link>
     """
   end

@@ -13,13 +13,17 @@ defmodule DIYWeb.PowerPage do
   use DIYWeb, :html
 
   alias DIY.{Build, Catalog, Power}
-  alias DIYWeb.Format
+  alias DIYWeb.{Format, Scene}
 
   attr :build, :map, required: true
   attr :power, :map, default: nil
   attr :whatif, :map, default: nil
   attr :price, :map, default: nil
   attr :away, :list, default: [], doc: "the stations of the house in a van: {item, van}"
+
+  attr :picture, :map,
+    default: nil,
+    doc: "the build, for the picture of the house (`DIYWeb.Scene`)"
 
   def page(assigns) do
     ~H"""
@@ -50,6 +54,9 @@ defmodule DIYWeb.PowerPage do
             <.link patch={~p"/inside"} class="link">Go to the rooms</.link>
           </p>
         <% true -> %>
+          <div :if={@picture} id="power-picture" class="overflow-hidden rounded-box">
+            <Scene.house id="power-scene" build={@picture} />
+          </div>
           <.whatif :if={@whatif} whatif={@whatif} build={@build} />
           <.view build={Build.today(@build)} power={@power} />
           <.outage :if={@power.system.stations != []} power={@power} />

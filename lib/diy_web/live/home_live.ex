@@ -768,6 +768,7 @@ defmodule DIYWeb.HomeLive do
               whatif={@whatif}
               price={@price}
               away={Van.stations(@build).away}
+              picture={@build}
             />
           <% @live_action == :plans and plans?(@build) and @bill != nil -> %>
             <DIYWeb.LessonPage.page

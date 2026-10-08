@@ -762,3 +762,36 @@ weight numbers that match the real van". It needs the numbers of the van
 of the owner: the label in the door frame, the weight of each axle on a
 truck scale, the items, and the Wh of a day from the app of the battery.
 The app takes them; the comparison is open.
+
+## The pictures
+
+The app draws its pictures in SVG on the server, in the isometric view of
+the games (`DIYWeb.Scene`, with the math in `DIYWeb.Iso`): the house on
+its lot on the front page and on the page Power, the van on the page Van,
+and a house and a plan on the first page.
+
+- A picture shows only what the build has. The house has its floors, a
+  garage (a room outside that is not a yard), the panels on the roof or
+  in the yard, the stations with their extra batteries, the switch of
+  the panel, the meter and the pole of the grid, the AC, the pool, the
+  car, and the van with its panels and its fan.
+- The flows of the power move along their lines: the grid to the meter,
+  the panels to the stations (or into the house on a grid-tie inverter),
+  and the stations to the switch of the panel. Labels give the kW of the
+  panels and the kWh of the stations. With the reduced motion of the
+  system, the lines do not move. The panels of a station that is in a
+  van give no flow.
+- The van shows the weight on each axle (red when it is over the rating
+  of the axle), the Wh of its batteries, and the watts of its panels.
+- The colors are CSS variables (`assets/css/app.css`): a day in the light
+  mode, and a night with lit windows in the dark mode.
+- The pictures are for the eyes only (`aria-hidden`): the text of each
+  page gives the same facts. The picture of the front page is the link
+  into the house, with a label that tells what the picture shows.
+- The point of a box at x, y, z goes to the SVG at (x − y) × 8.66 to the
+  side and (x + y) × 5 − z × 10 down. A step of the same size on x, y and
+  z goes to the same point: the order of the paint is from the back to
+  the front. A property test checks this.
+
+The bar of the pages uses the icons of Heroicons (MIT), which Phoenix
+gives.
