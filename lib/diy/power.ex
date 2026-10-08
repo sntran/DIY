@@ -80,6 +80,9 @@ defmodule DIY.Power do
   # the panels). The app takes the low end.
   @life %{"power_station" => 8, "solar_panels" => 25}
 
+  # The planned items with a price in the app: the payback is for them.
+  @priced ~w(power_station solar_panels transfer_switch)
+
   @type settings :: %{
           mode: String.t(),
           night_cents: float() | nil,
@@ -362,10 +365,19 @@ defmodule DIY.Power do
 
   @doc false
   # An average day: it starts with the charge that it gives back at its
-  # end (`start`). `soc` has the charge at the end of each hour.
+  # end (`start`). `soc` has the charge at the end of each hour. The input
+  # has a list of 24 values for each part.
   def day(input, sys, settings) do
-    start = steady(&(elem(run_day(input, sys, settings, &1), 0) - &1), 0.0, sys.kwh * @usable)
+    input = Map.new(input, fn {key, hours} -> {key, List.to_tuple(hours)} end)
+    start = steady(&(end_charge(input, sys, settings, &1) - &1), 0.0, sys.kwh * @usable)
     input |> run_day(sys, settings, start) |> elem(1) |> Map.put(:start, start)
+  end
+
+  # The charge at the end of a day, for the bisection: no sums.
+  defp end_charge(input, sys, settings, start) do
+    Enum.reduce(Profile.hours(), start, fn h, soc ->
+      elem(hour(h, soc, input, sys, settings), 0)
+    end)
   end
 
   # The charge where the change of one day is zero. The change gets
@@ -375,7 +387,8 @@ defmodule DIY.Power do
     cond do
       change.(high) >= -1.0e-9 -> high
       change.(low) <= 1.0e-9 -> low
-      true -> bisect(change, low, high, 60)
+      # 40 steps: the largest battery (300 kWh) ÷ 2^40 is under 1e-9 kWh.
+      true -> bisect(change, low, high, 40)
     end
   end
 
@@ -404,10 +417,11 @@ defmodule DIY.Power do
              night: acc.night + if(night, do: hour.grid, else: 0.0),
              export: acc.export + hour.export,
              lost: acc.lost + hour.lost,
-             soc: acc.soc ++ [soc]
+             soc: [soc | acc.soc]
          }}
       end
     )
+    |> then(fn {soc, result} -> {soc, %{result | soc: Enum.reverse(result.soc)}} end)
   end
 
   # One hour: the sun, the battery and the grid (see the module doc).
@@ -415,8 +429,8 @@ defmodule DIY.Power do
     capacity = sys.kwh * @usable
     floor = if settings.mode == "backup", do: capacity, else: capacity * settings.reserve / 100
     output = sys.output_w / 1_000
-    need = Enum.at(input.need, h)
-    pv = Enum.at(input.pv_station, h)
+    need = elem(input.need, h)
+    pv = elem(input.pv_station, h)
 
     # 1. The sun to the items of the station, through its outlets.
     from_sun = Enum.min([need, pv * @discharge, output])
@@ -448,7 +462,7 @@ defmodule DIY.Power do
     soc = soc + grid_in * @charge
 
     # 5. The grid gives the rest, and the panels on the grid give first.
-    grid = Enum.at(input.other, h) + need + grid_in - Enum.at(input.pv_grid, h)
+    grid = elem(input.other, h) + need + grid_in - elem(input.pv_grid, h)
     {soc, %{grid: max(grid, 0.0), export: max(-grid, 0.0), lost: lost}}
   end
 
@@ -493,37 +507,43 @@ defmodule DIY.Power do
   @doc """
   The what-if of a build: the house of today (with no planned item) next
   to the house with the planned items, with the price of the day
-  (`cents`). `today_estimate` and `plan_estimate` are the estimates of the
-  two houses (`DIY.Estimate.run/2`). It is `nil` with no planned item, or
-  when a house has no estimate yet (for example, a house that I plan, with
-  a planned AC).
+  (`cents`). `today` is the power of the house of today (`run/4`), and
+  `today_estimate` and `plan_estimate` are the estimates of the two houses
+  (`DIY.Estimate.run/2`). It is `nil` with no planned item, or when a
+  house has no estimate yet (for example, a house that I plan, with a
+  planned AC).
 
   The result has the power and the bill (with its range, `DIY.Bill`) of
   each house, the planned items, and the warnings of the plan. The payback
-  is for the planned equipment with a price: its price, the savings of one
-  year (with their range), the years of the payback, and the years that
-  the equipment lasts. A planned car has no price in the app: its result
-  is its own (`car`), the cost of its charge and the gas that it saves.
+  is for the planned equipment with a price (`@priced`): its price, the
+  savings of one year (with their range), the years of the payback, and
+  the years that the equipment lasts. The other planned items (a car, a
+  freezer) have no price in the app: their result is their own
+  (`others`), the change of the bill and the gas that a car saves.
   """
-  def whatif(%Build{} = build, today_estimate, plan_estimate, climate, cents) do
+  def whatif(%Build{} = build, today, today_estimate, plan_estimate, climate, cents) do
     planned = Enum.filter(build.items, & &1.planned)
 
     with [_ | _] <- planned,
          %{ready: true} <- today_estimate,
          %{ready: true} <- plan_estimate do
-      today = run(Build.today(build), today_estimate, climate, cents)
       plan = run(build, plan_estimate, climate, cents)
-      {cars, equipment} = Enum.split_with(planned, &(&1.type == "ev"))
+      {equipment, others} = Enum.split_with(planned, &(&1.type in @priced))
 
-      # The house with the planned equipment and no planned car: the
-      # savings of the equipment.
+      # The house with the planned equipment and no other planned item:
+      # the savings of the equipment.
       {gear, gear_estimate} =
-        if cars == [] do
-          {plan, plan_estimate}
-        else
-          gear_build = %{build | items: build.items -- cars}
-          gear_estimate = Estimate.run(gear_build, climate)
-          {run(gear_build, gear_estimate, climate, cents), gear_estimate}
+        cond do
+          others == [] ->
+            {plan, plan_estimate}
+
+          equipment == [] ->
+            {today, today_estimate}
+
+          true ->
+            gear_build = %{build | items: build.items -- others}
+            gear_estimate = Estimate.run(gear_build, climate)
+            {run(gear_build, gear_estimate, climate, cents), gear_estimate}
         end
 
       today_bill = Bill.run(today_estimate, today)
@@ -535,6 +555,8 @@ defmodule DIY.Power do
         today_bill.cost_high - gear_bill.cost_high
       ]
 
+      price = equipment |> Enum.map(& &1.params["cost"]) |> Enum.sum()
+
       %{
         today: today,
         plan: plan,
@@ -542,17 +564,17 @@ defmodule DIY.Power do
         plan_bill: Bill.run(plan_estimate, plan),
         planned: planned,
         equipment: equipment,
-        price: equipment |> Enum.map(&(&1.params["cost"] || 0)) |> Enum.sum(),
+        price: price,
         savings: savings,
         savings_low: Enum.min(ends),
         savings_high: Enum.max(ends),
-        payback: payback(equipment, savings),
+        payback: if(equipment != [] and savings > 0, do: price / savings),
         life:
           equipment
           |> Enum.map(&@life[&1.type])
           |> Enum.reject(&is_nil/1)
           |> Enum.min(fn -> nil end),
-        car: car(cars, plan, gear),
+        others: others(others, plan, gear),
         warnings: warnings(plan)
       }
     else
@@ -560,22 +582,14 @@ defmodule DIY.Power do
     end
   end
 
-  defp payback([], _savings), do: nil
+  # The result of the other planned items: the change of the bill (the
+  # bill with them, less the bill without them), and the gas that a car
+  # saves.
+  defp others([], _plan, _gear), do: nil
 
-  defp payback(equipment, savings) when savings > 0,
-    do: (equipment |> Enum.map(&(&1.params["cost"] || 0)) |> Enum.sum()) / savings
-
-  defp payback(_equipment, _savings), do: nil
-
-  # The result of the planned cars: the cost of their home charge (the
-  # bill with the cars, less the bill without them), and the gas that they
-  # save.
-  defp car([], _plan, _gear), do: nil
-
-  defp car(cars, plan, gear) do
-    charge = plan.year.cost - gear.year.cost
-    gas = cars |> Enum.map(&gas_year/1) |> Enum.sum()
-    %{cars: cars, charge: charge, gas: gas, savings: gas - charge}
+  defp others(items, plan, gear) do
+    gas = items |> Enum.filter(&(&1.type == "ev")) |> Enum.map(&gas_year/1) |> Enum.sum()
+    %{items: items, change: plan.year.cost - gear.year.cost, gas: gas}
   end
 
   @doc "The dollars of gas that a car of the same miles uses in one year."

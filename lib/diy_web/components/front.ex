@@ -201,6 +201,12 @@ defmodule DIYWeb.Front do
           @whatif.plan_bill.cost_high / 12
         )}.
       </p>
+      <p
+        :if={Enum.any?(@whatif.warnings, &(&1 in [:backfeed, :overload]))}
+        class="text-sm font-semibold"
+      >
+        <span aria-hidden="true">⚠️</span> The plan has a problem of safety or of size: see the plan.
+      </p>
       <p class="text-sm">
         {Format.count(length(@whatif.planned), "planned item")}.
         <.link patch={~p"/power"} class="link">See the plan</.link>

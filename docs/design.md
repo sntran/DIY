@@ -396,14 +396,17 @@ the app, not a measurement (`DIY.Profile`).
 
 ### The what-if
 
-`DIY.Power.whatif/5` runs the house of today and the house with the
+`DIY.Power.whatif/6` runs the house of today and the house with the
 planned items: the cost of each month, and the bill of each house with
 its range (`DIY.Bill`, honesty rule 3). The payback is for the planned
 equipment with a price: its price, the savings of one year (with their
 range), and the years of the payback, next to the years that the
-equipment lasts. A payback after that time is not a payback. A planned
-car has no price in the app: the page shows the cost of its charge and
-the gas that it saves, out of the payback. The page says it when the
+equipment lasts. A payback after that time is not a payback. The other
+planned items (a car, a freezer) have no price in the app: the page shows
+the change of the bill that they give, and the gas that a car saves, out
+of the payback. The plan shows only the warnings that the house of today
+does not have, and the front of the house marks a plan with a danger or
+an overload. The page says it when the
 plan does not pay back on savings alone, and shows the hours of backup
 (the month with the fewest hours) as a different reason (honesty rule 2).
 With one price at all hours, the page says that a charge at night does

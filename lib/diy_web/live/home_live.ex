@@ -437,7 +437,7 @@ defmodule DIYWeb.HomeLive do
         power = Power.run(today, estimate, climate, price.cents)
 
         {power, Bill.run(estimate, power),
-         Power.whatif(build, estimate, full, climate, price.cents)}
+         Power.whatif(build, power, estimate, full, climate, price.cents)}
       else
         {nil, nil, nil}
       end

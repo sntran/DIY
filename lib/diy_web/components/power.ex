@@ -117,11 +117,18 @@ defmodule DIYWeb.PowerPage do
         With the plan, {Format.kwh(@whatif.plan.year.lost)} of sun is lost in one year: the battery is full, or the station takes less solar power than the panels give.
       </p>
 
-      <p :if={@whatif.car} id="plan-car" class="text-sm">
-        The planned car: its home charge adds {Format.money(@whatif.car.charge)} to the bill of one year, and it saves {Format.money(
-          @whatif.car.gas
-        )} of gas. {car_result(@whatif.car.savings)}
-      </p>
+      <div :if={@whatif.others} id="plan-others" class="text-sm space-y-1">
+        <p>
+          {Enum.map_join(@whatif.others.items, ", ", &Catalog.name/1)}: {change_text(
+            @whatif.others.change
+          )}
+        </p>
+        <p :if={@whatif.others.gas > 0}>
+          The planned car saves {Format.money(@whatif.others.gas)} of gas in one year. {gas_text(
+            @whatif.others.gas - @whatif.others.change
+          )}
+        </p>
+      </div>
 
       <div :if={@whatif.equipment != []} id="payback" class="space-y-1">
         <p class="font-semibold">{payback_text(@whatif)}</p>
@@ -149,16 +156,20 @@ defmodule DIYWeb.PowerPage do
           </p>
         <% true -> %>
       <% end %>
-      <.warnings id="plan" power={@whatif.plan} build={@build} />
+      <.warnings id="plan" power={@whatif.plan} build={@build} except={@whatif.today} />
       <button type="button" phx-click="plan_done" class="btn btn-sm">I have the planned items now</button>
     </div>
     """
   end
 
-  defp car_result(savings) when savings >= 0,
-    do: "The car saves #{Format.money(savings)} in one year."
+  defp change_text(change),
+    do: "they change the bill of one year by #{if change >= 0, do: "+"}#{Format.money(change)}."
 
-  defp car_result(savings), do: "The car costs #{Format.money(-savings)} more in one year."
+  defp gas_text(difference) when difference >= 0,
+    do: "The home charge costs #{Format.money(difference)} less than the gas."
+
+  defp gas_text(difference),
+    do: "The home charge costs #{Format.money(-difference)} more than the gas."
 
   defp payback_text(%{payback: nil, savings: savings}) when abs(savings) < 0.5,
     do: "On savings alone, the planned equipment saves no money."
@@ -267,6 +278,7 @@ defmodule DIYWeb.PowerPage do
           <ol class="list-decimal pl-5">
             <li :if={@sys.grid_panels_w > 0}>Turn off the breaker of the grid-tie inverter.</li>
             <li>Turn off the main breaker.</li>
+            <li>Connect the station to the inlet.</li>
             <li>Turn on the breaker of the inlet (the interlock lets it on now).</li>
             <li>Turn on the station.</li>
           </ol>
@@ -274,6 +286,7 @@ defmodule DIYWeb.PowerPage do
           <ol class="list-decimal pl-5">
             <li>Turn off the station.</li>
             <li>Turn off the breaker of the inlet.</li>
+            <li>Disconnect the station from the inlet.</li>
             <li>Turn on the main breaker.</li>
             <li :if={@sys.grid_panels_w > 0}>Turn on the breaker of the grid-tie inverter.</li>
           </ol>
@@ -309,15 +322,30 @@ defmodule DIYWeb.PowerPage do
   attr :id, :string, required: true
   attr :power, :map, required: true
   attr :build, :map, required: true
+  attr :except, :map, default: nil, doc: "the power of today: the plan shows only new warnings"
 
   # The warnings of a house (honesty rule 5, and the safety of the
-  # workers on the lines): for the house of today, or for the plan.
+  # workers on the lines): for the house of today, or for the plan. The
+  # plan shows only the warnings that the house of today does not have, so
+  # that a screen reader reads each danger one time.
   defp warnings(assigns) do
-    assigns =
-      assign(assigns,
-        warnings: Power.warnings(assigns.power),
-        permits: Power.permits(assigns.power.system)
-      )
+    permits = Power.permits(assigns.power.system)
+    warnings = Power.warnings(assigns.power)
+
+    warnings =
+      case assigns.except do
+        nil ->
+          warnings
+
+        today ->
+          new = warnings -- Power.warnings(today)
+          # The permit shows again when the plan adds work.
+          if :permit in warnings and permits -- Power.permits(today.system) != [],
+            do: Enum.uniq([:permit | new]),
+            else: new
+      end
+
+    assigns = assign(assigns, warnings: warnings, permits: permits)
 
     ~H"""
     <div class="space-y-2">

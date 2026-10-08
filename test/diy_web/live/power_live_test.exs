@@ -115,6 +115,7 @@ defmodule DIYWeb.PowerLiveTest do
     view = open(conn, ~p"/power", build)
     refute has_element?(view, "#today-backfeed")
     assert has_element?(view, "#outage-steps", "Turn off the main breaker")
+    assert has_element?(view, "#outage-steps", "Connect the station to the inlet")
     assert render(view) =~ "the interlock keeps them apart"
 
     switch = Enum.find(build.items, &(&1.type == "transfer_switch"))
@@ -150,7 +151,7 @@ defmodule DIYWeb.PowerLiveTest do
   } do
     {build, _id} = add(house(), "Laundry", "power_station")
     view = open(conn, ~p"/estimate", flag(build, "power_station", :planned))
-    assert has_element?(view, "#planned-note", "1 planned item are not in this bill")
+    assert has_element?(view, "#planned-note", "The planned items (1) are not in this bill")
     assert has_element?(view, "#items")
     refute has_element?(view, "#bill-math")
 
@@ -251,6 +252,24 @@ defmodule DIYWeb.PowerLiveTest do
     refute render(view) =~ "A different reason"
     # Today the house has no station: no warning of today.
     refute has_element?(view, "#today-backfeed")
+    # The front shows a mark of the problem.
+    assert render_patch(view, ~p"/") =~ "The plan has a problem of safety or of size"
+
+    # The same danger today and in the plan shows one time.
+    {build, _id} =
+      add(house(), "Garage", "power_station", %{"feeds" => "panel", "output_w" => "200"})
+
+    {build, _panels} = add(build, "Roof", "solar_panels")
+    view = open(conn, ~p"/power", flag(build, "solar_panels", :planned))
+    assert has_element?(view, "#today-backfeed")
+    refute has_element?(view, "#plan-backfeed")
+    refute has_element?(view, "#plan-permit")
+
+    # Planned panels on the grid add work: the permit of the plan shows.
+    {build, grid} = add(build, "Roof", "solar_panels", %{"to" => "grid"})
+    {:ok, build} = Build.flag_item(build, grid, :planned, true)
+    view = open(conn, ~p"/power", build)
+    assert has_element?(view, "#plan-permit", "the utility must approve them")
   end
 
   test "the modes and the reserve of the stations, and the price of the power to the grid", %{
@@ -318,15 +337,22 @@ defmodule DIYWeb.PowerLiveTest do
 
     view = open(conn, ~p"/power", flag(build, "ev", :planned))
     html = render(view)
-    assert html =~ "The planned car: its home charge adds"
-    assert html =~ "The car saves"
+
+    assert has_element?(
+             view,
+             "#plan-others",
+             "Electric car: they change the bill of one year by +$"
+           )
+
+    assert html =~ "The home charge costs"
+    assert html =~ "less than the gas"
     refute has_element?(view, "#payback")
 
     {build, _id} =
       add(house(), "Driveway", "ev", %{"miles" => "5", "mpg" => "50", "gas" => "0.5"})
 
     view = open(conn, ~p"/power", flag(build, "ev", :planned))
-    assert render(view) =~ "The car costs"
+    assert render(view) =~ "more than the gas"
   end
 
   test "the features of the panels and of a switch", %{conn: conn} do

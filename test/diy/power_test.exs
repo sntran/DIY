@@ -328,10 +328,13 @@ defmodule DIY.PowerTest do
   describe "the what-if" do
     defp whatif(build, cents \\ 15.0) do
       climate = climate()
+      today = Build.today(build)
+      today_estimate = Estimate.run(today, climate)
 
       Power.whatif(
         build,
-        Estimate.run(Build.today(build), climate),
+        today_estimate.ready && Power.run(today, today_estimate, climate, cents),
+        today_estimate,
         Estimate.run(build, climate),
         climate,
         cents
@@ -352,7 +355,7 @@ defmodule DIY.PowerTest do
       assert whatif.savings_low <= whatif.savings_high
       assert_in_delta whatif.payback, 800 / whatif.savings, 1.0e-9
       assert whatif.life == 25
-      assert whatif.car == nil
+      assert whatif.others == nil
       assert whatif.today.year.sun == 0
       assert whatif.plan.year.sun > 0
       assert whatif.plan_bill.cost_low <= whatif.plan.year.cost
@@ -374,9 +377,8 @@ defmodule DIY.PowerTest do
 
       build = flag(build, car, :planned)
       whatif = whatif(build)
-      assert_in_delta whatif.car.gas, 40 * 365 / 25 * 3, 1.0e-9
-      assert_in_delta whatif.car.charge, whatif.plan.year.cost - whatif.today.year.cost, 1.0e-6
-      assert_in_delta whatif.car.savings, whatif.car.gas - whatif.car.charge, 1.0e-9
+      assert_in_delta whatif.others.gas, 40 * 365 / 25 * 3, 1.0e-9
+      assert_in_delta whatif.others.change, whatif.plan.year.cost - whatif.today.year.cost, 1.0e-6
       assert whatif.plan.year.use > whatif.today.year.use
       assert whatif.equipment == [] and whatif.price == 0
       assert whatif.payback == nil and whatif.life == nil
@@ -386,8 +388,29 @@ defmodule DIY.PowerTest do
       {build, station} = station(build)
       whatif = whatif(flag(build, station, :planned))
       assert [%{type: "power_station"}] = whatif.equipment
-      assert whatif.car.gas > 0
+      assert whatif.others.gas > 0
       assert whatif.savings <= 0 and whatif.payback == nil
+    end
+
+    test "a planned freezer is out of the payback of the planned panels" do
+      {build, freezer} = add(house(), "Garage", "freezer")
+      {build, panels} = add(build, "Roof", "solar_panels", %{"to" => "grid", "cost" => "3000"})
+
+      panels_only =
+        whatif(
+          flag(build, panels, :planned)
+          |> Map.update!(:items, &List.delete(&1, of_type(build, "freezer")))
+        )
+
+      both = whatif(build |> flag(panels, :planned) |> flag(freezer, :planned))
+      assert [%{type: "solar_panels"}] = both.equipment
+      assert [%{type: "freezer"}] = both.others.items
+      assert both.others.change > 0 and both.others.gas == 0
+      assert_in_delta both.payback, panels_only.payback, 0.05
+
+      # A planned freezer alone: no equipment, no payback.
+      alone = whatif(flag(build, freezer, :planned))
+      assert alone.equipment == [] and alone.payback == nil
     end
 
     test "the warnings of the plan" do
@@ -500,8 +523,8 @@ defmodule DIY.PowerTest do
     end
   end
 
-  # The probes of a review: a large battery in the mode night, with a slow
-  # charge, takes from the grid near the use, not 3 to 11 times more.
+  # A large battery in the mode night, with a slow charge: the steady day
+  # takes from the grid near the use, not 3 to 11 times more.
   test "a large battery in the mode night finds its steady day" do
     need = List.duplicate(0.05, 24)
     zero = List.duplicate(0.0, 24)

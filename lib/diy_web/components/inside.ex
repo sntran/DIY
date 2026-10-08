@@ -158,7 +158,9 @@ defmodule DIYWeb.Inside do
               </span>
               <span :if={item.typical} class="text-xs opacity-60">Typical</span>
               <span :if={item.planned} class="text-xs font-semibold">Plan</span>
-              <span :if={item.backup and station?(@build)} class="text-xs">🔋 On the station</span>
+              <span :if={item.backup and station?(@build)} class="text-xs">
+                <span aria-hidden="true">🔋</span> On the station
+              </span>
             </.link>
           </li>
           <li>

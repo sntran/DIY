@@ -36,7 +36,7 @@ defmodule DIYWeb.Math do
           A file of your smart meter gives your real usage.
         </p>
         <p :if={@planned > 0} id="planned-note" class="text-sm">
-          The {Format.count(@planned, "planned item")} are not in this bill.
+          The planned items ({@planned}) are not in this bill.
           <.link patch={~p"/power"} class="link">The page Power shows the plan.</.link>
         </p>
 
