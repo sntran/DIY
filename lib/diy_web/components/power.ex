@@ -125,7 +125,7 @@ defmodule DIYWeb.PowerPage do
         </p>
         <p :if={@whatif.others.gas > 0}>
           The planned car saves {Format.money(@whatif.others.gas)} of gas in one year. {gas_text(
-            @whatif.others.gas - @whatif.others.change
+            @whatif.others.gas - @whatif.others.charge
           )}
         </p>
       </div>
@@ -338,7 +338,15 @@ defmodule DIYWeb.PowerPage do
           warnings
 
         today ->
+          # The overload of the plan shows again when its items need more
+          # watts than the items of today.
           new = warnings -- Power.warnings(today)
+
+          new =
+            if :overload in warnings and assigns.power.watts > today.watts,
+              do: Enum.uniq([:overload | new]),
+              else: new
+
           # The permit shows again when the plan adds work.
           if :permit in warnings and permits -- Power.permits(today.system) != [],
             do: Enum.uniq([:permit | new]),
