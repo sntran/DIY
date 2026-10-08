@@ -1,0 +1,17 @@
+{
+  "name": "diy",
+  "private": true,
+  "engines": {
+    "node": ">=26"
+  },
+  "scripts": {
+    "build": "sh scripts/app-com.sh",
+    "deploy": "wrangler deploy",
+    "test": "node --test --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-test-coverage --test-coverage-include='assets/js/**/*.js' --test-coverage-include='*.js' --test-coverage-exclude='assets/vendor/**' --test-coverage-exclude='test/**' --test-coverage-lines=100 --test-coverage-branches=100 --test-coverage-functions=100 'test/js/**/*.test.js'"
+  },
+  "devDependencies": {
+    "beam.com": "0.1.0-rc.5",
+    "fast-check": "4.10.2",
+    "wrangler": "4.142.0"
+  }
+}

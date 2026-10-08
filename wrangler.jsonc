@@ -1,0 +1,28 @@
+// Cloudflare Workers: npm run build, then npm run deploy. Workers Builds
+// runs both at each push to main. The Worker needs no secret: the VM makes
+// SECRET_KEY_BASE one time and keeps it in the storage of the Durable
+// Object, and PHX_HOST is the host of the first request.
+{
+  "name": "diy",
+  "main": "worker.js",
+  "compatibility_date": "2026-09-01",
+  // The VM of the Durable Object serves all its requests.
+  "compatibility_flags": ["no_handle_cross_request_promise_resolution"],
+  // edge.com goes into the Worker as bytes. Without this rule, the import
+  // of worker.js puts the bytes into the JavaScript.
+  "rules": [{ "type": "Data", "globs": ["**/*.com"], "fallthrough": true }],
+  // Stateful: the Durable Object Beam of worker.js. LiveView needs one VM
+  // for the page and its WebSocket.
+  "durable_objects": { "bindings": [{ "name": "BEAM", "class_name": "Beam" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Beam"] }],
+  // A new deploy makes a new snapshot of the VM.
+  "version_metadata": { "binding": "BEAM_VERSION" },
+  "vars": {
+    // No allocators of ERTS: a smaller VM (the 128 MB of an isolate).
+    "BEAM_ERL_FLAGS": "-Mea min"
+  },
+  // The logs of the Worker and of the VM stay on. The invocation logs of
+  // Cloudflare are off: they can keep the URL and the header fields of a
+  // request, and the app keeps no data of a house on the server.
+  "observability": { "enabled": true, "logs": { "invocation_logs": false } }
+}
