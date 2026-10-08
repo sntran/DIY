@@ -76,25 +76,36 @@ defmodule DIYWeb.Inside do
           >
             {level.name}
           </button>
-          <span class="grow"></span>
-          <button type="button" data-zoom="in" class="btn btn-sm btn-square" aria-label="Zoom in">
-            <.icon name="hero-plus" class="size-4" />
-          </button>
-          <button type="button" data-zoom="out" class="btn btn-sm btn-square" aria-label="Zoom out">
-            <.icon name="hero-minus" class="size-4" />
-          </button>
-          <button
-            type="button"
-            data-zoom="fit"
-            class="btn btn-sm btn-square"
-            aria-label="Show all the house"
-          >
-            <.icon name="hero-arrows-pointing-out" class="size-4" />
-          </button>
         </div>
 
         <div class="relative h-[calc(100dvh-14rem)] overflow-hidden rounded-box border border-base-300">
           <Cutaway.cutaway view={@view} selected={@chosen && @chosen.id} />
+          <div class="absolute top-2 right-2 flex flex-col gap-2">
+            <button
+              type="button"
+              data-zoom="in"
+              class="btn btn-sm btn-square shadow"
+              aria-label="Zoom in"
+            >
+              <.icon name="hero-plus" class="size-4" />
+            </button>
+            <button
+              type="button"
+              data-zoom="out"
+              class="btn btn-sm btn-square shadow"
+              aria-label="Zoom out"
+            >
+              <.icon name="hero-minus" class="size-4" />
+            </button>
+            <button
+              type="button"
+              data-zoom="fit"
+              class="btn btn-sm btn-square shadow"
+              aria-label="Show all the house"
+            >
+              <.icon name="hero-arrows-pointing-out" class="size-4" />
+            </button>
+          </div>
           <.room_bar :if={@chosen} room={@chosen} />
           <.link
             :if={!@chosen}
