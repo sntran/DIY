@@ -429,17 +429,20 @@ defmodule DIY.Estimate do
   # The last step: the kWh of the month.
   defp last(%{type: "ac", params: %{"heat_pump" => true}} = item, m) do
     %{cool: cool, heat: heat} = hvac_kwh(item, m)
-    "#{fmt(cool)} kWh of cooling + #{fmt(heat)} kWh of heat = #{total_text(item, m)}."
+
+    "#{number_text(cool)} kWh of cooling + #{number_text(heat)} kWh of heat = #{total_text(item, m)}."
   end
 
   defp last(%{type: "mini_split", params: %{"heat_pump" => true}} = item, m) do
     %{cool: cool, heat: heat} = hvac_kwh(item, m)
-    "#{fmt(cool)} kWh of cooling + #{fmt(heat)} kWh of heat = #{total_text(item, m)}."
+
+    "#{number_text(cool)} kWh of cooling + #{number_text(heat)} kWh of heat = #{total_text(item, m)}."
   end
 
   defp last(item, m), do: "In all: #{total_text(item, m)}."
 
-  defp total_text(item, m), do: "#{fmt(Map.fetch!(m.items, item.id).kwh)} kWh in #{m.name}"
+  defp total_text(item, m),
+    do: "#{number_text(Map.fetch!(m.items, item.id).kwh)} kWh in #{m.name}"
 
   # The kWh of cooling and of heat of an AC or a mini split.
   defp hvac_kwh(%{params: p} = item, m) do
@@ -461,13 +464,13 @@ defmodule DIY.Estimate do
     cooling(m, data, estimate, share(estimate.shares.cooling, item)) ++
       limit_steps(item, data.cool_btu, limit, m, "cooling") ++
       [
-        "#{fmt(given(data.cool_btu, limit))} BTU ÷ (#{num(p["seer2"])} SEER2 × 1,000) = #{fmt(given(data.cool_btu, limit) / (p["seer2"] * 1_000))} kWh of cooling."
+        "#{fmt(given(data.cool_btu, limit))} BTU ÷ (#{num(p["seer2"])} SEER2 × 1,000) = #{number_text(given(data.cool_btu, limit) / (p["seer2"] * 1_000))} kWh of cooling."
       ] ++
       if p["heat_pump"] do
         heating(m, data.heat_btu, estimate, share(estimate.shares.heating, item)) ++
           limit_steps(item, data.heat_btu, limit, m, "heat") ++
           [
-            "#{fmt(given(data.heat_btu, limit))} BTU ÷ (#{num(p["hspf2"])} HSPF2 × 1,000) = #{fmt(given(data.heat_btu, limit) / (p["hspf2"] * 1_000))} kWh of heat."
+            "#{fmt(given(data.heat_btu, limit))} BTU ÷ (#{num(p["hspf2"])} HSPF2 × 1,000) = #{number_text(given(data.heat_btu, limit) / (p["hspf2"] * 1_000))} kWh of heat."
           ]
       else
         []
@@ -478,12 +481,12 @@ defmodule DIY.Estimate do
     ["It cools #{fmt(p["area"])} sq ft of the house."] ++
       cooling(m, data, estimate, share(estimate.shares.cooling, item)) ++
       [
-        "#{fmt(data.cool_btu)} BTU ÷ (#{num(p["seer2"])} SEER2 × 1,000) = #{fmt(data.cool_btu / (p["seer2"] * 1_000))} kWh of cooling."
+        "#{fmt(data.cool_btu)} BTU ÷ (#{num(p["seer2"])} SEER2 × 1,000) = #{number_text(data.cool_btu / (p["seer2"] * 1_000))} kWh of cooling."
       ] ++
       if p["heat_pump"] do
         heating(m, data.heat_btu, estimate, share(estimate.shares.heating, item)) ++
           [
-            "#{fmt(data.heat_btu)} BTU ÷ (#{num(p["hspf2"])} HSPF2 × 1,000) = #{fmt(data.heat_btu / (p["hspf2"] * 1_000))} kWh of heat."
+            "#{fmt(data.heat_btu)} BTU ÷ (#{num(p["hspf2"])} HSPF2 × 1,000) = #{number_text(data.heat_btu / (p["hspf2"] * 1_000))} kWh of heat."
           ]
       else
         []
@@ -497,8 +500,8 @@ defmodule DIY.Estimate do
     ["The furnace burns gas for heat. Its blower uses #{fmt(p["blower"])} W while it runs."] ++
       heating(m, data.heat_btu, estimate, share(estimate.shares.heating, item)) ++
       [
-        "#{fmt(data.heat_btu)} BTU ÷ (30 BTU in one hour for each sq ft × #{fmt(size)} sq ft, a typical furnace) = #{num(Float.round(hours / 1, 1))} hours that it runs.",
-        "#{num(Float.round(hours / 1, 1))} hours × #{fmt(p["blower"])} W ÷ 1,000 = #{fmt(hours * p["blower"] / 1_000)} kWh."
+        "#{fmt(data.heat_btu)} BTU ÷ (30 BTU in one hour for each sq ft × #{fmt(size)} sq ft, a typical furnace) = #{number_text(hours)} hours that it runs.",
+        "#{number_text(hours)} hours × #{fmt(p["blower"])} W ÷ 1,000 = #{number_text(hours * p["blower"] / 1_000)} kWh."
       ]
   end
 
@@ -521,7 +524,7 @@ defmodule DIY.Estimate do
       ) ++
       limit_steps(item, data.heat_btu, limit, m, "heat") ++
       [
-        "#{fmt(given(data.heat_btu, limit))} BTU ÷ 3,412 BTU for each kWh = #{fmt(given(data.heat_btu, limit) / 3_412)} kWh."
+        "#{fmt(given(data.heat_btu, limit))} BTU ÷ 3,412 BTU for each kWh = #{number_text(given(data.heat_btu, limit) / 3_412)} kWh."
       ]
   end
 
@@ -530,17 +533,17 @@ defmodule DIY.Estimate do
     btu = p["people"] * 15 * 8.34 * max(120 - inlet, 0) * m.days
 
     [
-      "The water of #{m.name} comes in at #{fmt(inlet)} °F: near the ground, which follows the mean air of the year, and half of the change of the month.",
-      "#{p["people"]} people × 15 gallons in one day × 8.34 pounds for each gallon × (120 °F − #{fmt(inlet)} °F) × #{m.days} days = #{fmt(btu)} BTU.",
+      "The water of #{m.name} comes in at #{number_text(inlet)} °F: near the ground, which follows the mean air of the year, and half of the change of the month.",
+      "#{p["people"]} people × 15 gallons in one day × 8.34 pounds for each gallon × (120 °F − #{number_text(inlet)} °F) × #{m.days} days = #{fmt(btu)} BTU.",
       case p["fuel"] do
         "gas" ->
           "The water heater uses gas: no electricity."
 
         "electric" ->
-          "#{fmt(btu)} BTU ÷ 3,412 BTU for each kWh ÷ 0.93 (the efficiency of an electric water heater) = #{fmt(btu / 3_412 / 0.93)} kWh."
+          "#{fmt(btu)} BTU ÷ 3,412 BTU for each kWh ÷ 0.93 (the efficiency of an electric water heater) = #{number_text(btu / 3_412 / 0.93)} kWh."
 
         "heat_pump" ->
-          "#{fmt(btu)} BTU ÷ 3,412 BTU for each kWh ÷ 3.5 (a heat pump gives 3.5 times the heat of its electricity) = #{fmt(btu / 3_412 / 3.5)} kWh."
+          "#{fmt(btu)} BTU ÷ 3,412 BTU for each kWh ÷ 3.5 = #{number_text(btu / 3_412 / 3.5)} kWh: a heat pump gives 3.5 times the heat of its electricity."
       end
     ]
   end
@@ -618,8 +621,8 @@ defmodule DIY.Estimate do
 
     [
       "The house gains #{fmt(ua)} BTU in one hour for each °F hotter outside: #{fmt(size)} sq ft × #{age} for its age × #{floor} for its floors.",
-      "#{m.name} has #{fmt(m.cdd)} °F-days of cooling: the mean of #{estimate.climate.first} to #{estimate.climate.last} (NASA POWER).",
-      "#{fmt(ua)} × #{fmt(m.cdd)} × 24 hours#{share_text(share)} = #{fmt(data.cool_btu)} BTU of cooling."
+      "#{m.name} has #{number_text(m.cdd)} °F-days of cooling: the mean of #{estimate.climate.first} to #{estimate.climate.last} (NASA POWER).",
+      "#{fmt(ua)} × #{number_text(m.cdd)} × 24 hours#{share_text(share)} = #{fmt(data.cool_btu)} BTU of cooling."
     ]
   end
 
@@ -629,8 +632,8 @@ defmodule DIY.Estimate do
 
     [
       "In the cold, the house loses #{fmt(heat)} BTU in one hour for each °F colder outside: 60% of #{fmt(ua)}, because the sun and the people in the house help.",
-      "#{m.name} has #{fmt(m.hdd)} °F-days of heat: the mean of #{estimate.climate.first} to #{estimate.climate.last} (NASA POWER).",
-      "#{fmt(heat)} × #{fmt(m.hdd)} × 24 hours#{share_text(share)} = #{fmt(btu)} BTU of heat."
+      "#{m.name} has #{number_text(m.hdd)} °F-days of heat: the mean of #{estimate.climate.first} to #{estimate.climate.last} (NASA POWER).",
+      "#{fmt(heat)} × #{number_text(m.hdd)} × 24 hours#{share_text(share)} = #{fmt(btu)} BTU of heat."
     ]
   end
 
@@ -652,7 +655,7 @@ defmodule DIY.Estimate do
   defp limit_steps(_item, _btu, _limit, _m, _part), do: []
 
   defp share_text(share) when share >= 0.999, do: ""
-  defp share_text(share), do: " × #{round(share * 100)}% (its share of the house)"
+  defp share_text(share), do: " × #{number_text(share * 100)}% (its share of the house)"
 
   # A number of a parameter: no decimals for a whole number.
   defp num(number) when is_float(number) and number == trunc(number),
@@ -661,6 +664,15 @@ defmodule DIY.Estimate do
   defp num(number), do: to_string(number)
 
   defp season_text(%{"season" => season}), do: String.downcase(Catalog.season_label(season))
+
+  @doc """
+  A number of a step of the math (kWh, degree days, a share): one decimal
+  under 100, so that the step adds up on the page, else no decimals.
+  """
+  def number_text(number) when abs(number) < 99.95,
+    do: :erlang.float_to_binary(number / 1, decimals: 1)
+
+  def number_text(number), do: fmt(number)
 
   @doc "A number with a comma for thousands, and no decimals."
   def fmt(number) when is_number(number) do

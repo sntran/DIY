@@ -130,10 +130,160 @@ defmodule DIY.EstimateTest do
     refute Map.has_key?(heating, strips)
   end
 
-  # The last number of a text.
-  defp last_number(line) do
-    [number | _] = ~r/-?[\d,]*\.?\d+/ |> Regex.scan(line) |> List.flatten() |> Enum.reverse()
-    number
+  ## The arithmetic of a step of the math
+
+  # The page rounds its numbers. So the test reads each number as the range
+  # of the values that it can show: a number with a decimal is within half
+  # of its last decimal, an integer of 100 or more within 0.5, and a
+  # smaller integer is exact (24 hours, 31 days, 7 days). The arithmetic of
+  # these ranges gives the range of a step.
+  defp evaluate(text) do
+    tokens =
+      ~r/(?<![\p{L}\d.,])\d[\d,]*(?:\.\d+)?%?|[×÷+−()]/u
+      |> Regex.scan(text)
+      |> List.flatten()
+      |> Enum.map(&token/1)
+      |> drop_empty()
+
+    {range, rest} = sum(tokens)
+    assert rest == [], text
+    range
+  end
+
+  defp token(op) when op in ["×", "÷", "+", "−", "(", ")"], do: op
+
+  defp token(text) do
+    {low, high} = range(String.trim_trailing(text, "%"))
+    if String.ends_with?(text, "%"), do: {low / 100, high / 100}, else: {low, high}
+  end
+
+  # The values that a number of the page can be.
+  defp range(text) do
+    {value, ""} = text |> String.replace(",", "") |> Float.parse()
+
+    half =
+      case String.split(text, ".") do
+        [_, decimals] -> 0.5 / 10 ** String.length(decimals)
+        [_] when value >= 100 -> 0.5
+        [_] -> 0.0
+      end
+
+    {value - half, value + half}
+  end
+
+  defp drop_empty(tokens) do
+    case Enum.chunk_every(tokens, 2, 1) |> Enum.find_index(&(&1 == ["(", ")"])) do
+      nil -> tokens
+      i -> tokens |> List.delete_at(i) |> List.delete_at(i) |> drop_empty()
+    end
+  end
+
+  defp sum(tokens) do
+    {value, rest} = product(tokens)
+    sum_rest(value, rest)
+  end
+
+  defp sum_rest({a, b}, ["+" | rest]) do
+    {{c, d}, rest} = product(rest)
+    sum_rest({a + c, b + d}, rest)
+  end
+
+  defp sum_rest({a, b}, ["−" | rest]) do
+    {{c, d}, rest} = product(rest)
+    sum_rest({a - d, b - c}, rest)
+  end
+
+  defp sum_rest(value, rest), do: {value, rest}
+
+  defp product(tokens) do
+    {value, rest} = factor(tokens)
+    product_rest(value, rest)
+  end
+
+  defp product_rest({a, b}, ["×" | rest]) do
+    {{c, d}, rest} = factor(rest)
+    product_rest(Enum.min_max([a * c, a * d, b * c, b * d]), rest)
+  end
+
+  defp product_rest({a, b}, ["÷" | rest]) do
+    {{c, d}, rest} = factor(rest)
+    product_rest(Enum.min_max([a / c, a / d, b / c, b / d]), rest)
+  end
+
+  defp product_rest(value, rest), do: {value, rest}
+
+  defp factor(["(" | rest]) do
+    {value, [")" | rest]} = sum(rest)
+    {value, rest}
+  end
+
+  defp factor([{_low, _high} = range | rest]), do: {range, rest}
+  # A text with no number: 0 (for example, "The fans are off in January.").
+  defp factor([]), do: {{0.0, 0.0}, []}
+
+  # The range of the number after "=" in a step, and the word after it.
+  defp result(line) do
+    case Regex.run(~r/= ([\d,]+(?:\.\d+)?) (\p{L}+)/u, line) do
+      [_, number, unit] -> {range(number), unit}
+      nil -> nil
+    end
+  end
+
+  # Two ranges have a value in common. The left side can be 1% off: the
+  # page rounds the UA, which can be under 100.
+  defp meet?({a, b}, {c, d}), do: a * 0.99 <= d and c <= b * 1.01
+
+  # The checks of the math of one item in one month:
+  #
+  # - Each step with "=" gives a value of its left side.
+  # - The last step gives the kWh of the item.
+  # - The kWh of the last step come from the steps before it: the last kWh
+  #   that a step gives, or the kWh of cooling and of heat, or the value of
+  #   the step before it (an item with no "=").
+  defp check_math(lines, kwh, label) do
+    for line <- lines, String.contains?(line, "=") do
+      [left | _] = String.split(line, "=")
+      {right, _unit} = result(line)
+      assert meet?(evaluate(left), right), "#{label}: #{line}"
+    end
+
+    {steps, [last]} = Enum.split(lines, -1)
+    {final, "kWh"} = result(last) || {last_range(last), "kWh"}
+    assert meet?(final, {kwh, kwh}), "#{label}: #{last} (#{kwh})"
+
+    results = for line <- steps, r = result(line), r, do: r
+
+    cond do
+      String.contains?(last, "kWh of cooling +") ->
+        for [_, number] <- Regex.scan(~r/([\d,.]+) kWh of (?:cooling|heat)/, last) do
+          assert Enum.any?(results, fn {r, _} -> meet?(r, range(number)) end), label
+        end
+
+      Enum.any?(results, &(elem(&1, 1) == "kWh")) ->
+        {r, "kWh"} = results |> Enum.filter(&(elem(&1, 1) == "kWh")) |> List.last()
+        assert meet?(r, final), "#{label}: #{inspect(lines)}"
+
+      true ->
+        assert meet?(evaluate(List.last(steps)), final), "#{label}: #{inspect(lines)}"
+    end
+  end
+
+  defp last_range(line) do
+    [number | _] = ~r/[\d,]*\.?\d+/ |> Regex.scan(line) |> List.flatten() |> Enum.reverse()
+    range(number)
+  end
+
+  test "the arithmetic of the math of the tests" do
+    {low, high} = evaluate("2 × (12 °F − 6.4 °F) × 30 days ÷ 10 (May to September)")
+    assert_in_delta low, 33.3, 1.0e-9
+    assert_in_delta high, 33.9, 1.0e-9
+
+    assert evaluate("1 + 2 × 3 − 4 ÷ 2 × 45%") == {6.1, 6.1}
+    assert evaluate("90 ÷ (9.5 SEER2 × 10)") == {90 / 95.5, 90 / 94.5}
+    assert evaluate("2.5 × 2") == {4.9, 5.1}
+    assert evaluate("It is off in January.") == {0.0, 0.0}
+    assert result("a = 1,234.5 kWh of heat.") == {{1234.45, 1234.55}, "kWh"}
+    assert result("no result") == nil
   end
 
   test "the explanation of each item gives its kWh in each month" do
@@ -164,9 +314,9 @@ defmodule DIY.EstimateTest do
       lines = Estimate.explain(item, month, estimate)
       assert Enum.all?(lines, &is_binary/1)
       m = Enum.at(estimate.months, month - 1)
-      kwh = Estimate.fmt(m.items[item.id].kwh)
-      assert last_number(List.last(lines)) == kwh, "#{item.type} in #{m.name}: #{inspect(lines)}"
-      assert List.last(lines) =~ "#{kwh} kWh in #{m.name}."
+      kwh = m.items[item.id].kwh
+      assert List.last(lines) =~ "#{Estimate.number_text(kwh)} kWh in #{m.name}."
+      check_math(lines, kwh, "#{item.type} in #{m.name}")
     end
 
     ac = Enum.find(build.items, &(&1.type == "ac" and &1.params["heat_pump"]))
