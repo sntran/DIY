@@ -470,15 +470,19 @@ defmodule DIYWeb.Icon.Shapes do
     profile = [{0, 0.2}, {l, 0.2}, {l, 0.65}, {2.3, 0.72}, {2.1, 1.12}, {2.0, h}, {0, h}]
     across = fn {y1, z1}, {y2, z2} -> [{0, y1, z1}, {w, y1, z1}, {w, y2, z2}, {0, y2, z2}] end
 
-    # The two sides have the profile; the far side shows after a turn.
+    # The two sides have the profile, and the back has its doors: they
+    # show after a turn. A slope of the cab looks to the front and up. The
+    # hood is low: when the front looks away, the body is in front of it,
+    # so it shows only with the front.
     [
       face(Enum.map(profile, fn {y, z} -> {0, y, z} end), {-1, 0, 0}, "i-white-~ i-face"),
       far_side({0, 0.75, 0.6}, {0.6, 0.35}, "i-glass-dark"),
+      face(across.({0, 0.2}, {0, h}), {0, -1, 0}, "i-white-~ i-face"),
       face(Enum.map(profile, fn {y, z} -> {w, y, z} end), {1, 0, 0}, "i-white-~ i-face"),
       face(across.({0, h}, {2.0, h}), {0, 0, 1}, "i-white-t i-face"),
-      face(across.({2.0, h}, {2.1, 1.12}), nil, "i-white-t i-face"),
-      face(across.({2.3, 0.72}, {2.1, 1.12}), nil, "i-glass-dark"),
-      face(across.({l, 0.65}, {2.3, 0.72}), nil, "i-white-t i-face"),
+      face(across.({2.0, h}, {2.1, 1.12}), {0, 0.79, 0.61}, "i-white-t i-face"),
+      face(across.({2.3, 0.72}, {2.1, 1.12}), {0, 0.89, 0.45}, "i-glass-dark"),
+      face(across.({l, 0.65}, {2.3, 0.72}), {0, 1, 0.5}, "i-white-t i-face"),
       front({0, l, 0.2}, {w, 0.45}, "i-white-~ i-face"),
       side({w, 0.75, 0.6}, {0.6, 0.35}, "i-glass-dark"),
       side({w, 1.45, 0.2}, {0.55, 0.85}, "i-steel-l")
