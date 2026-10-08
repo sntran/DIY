@@ -131,7 +131,7 @@ defmodule DIY.Van do
   """
   def power(build, van, climate) do
     items = items(build, van.id)
-    storage = items |> Enum.map(fn {_zone, item} -> storage(item) end) |> Enum.sum()
+    storage = storage(build, van)
     panels = sum(items, "van_solar", "watts")
     drive = sum(items, "dc_charger", "amps") * volts(items) * van.params["drive_hours"]
 
@@ -172,6 +172,10 @@ defmodule DIY.Van do
   defp days(storage, _net) when storage <= 0, do: nil
   defp days(_storage, net) when net <= 0, do: :unlimited
   defp days(storage, net), do: storage / net
+
+  @doc "The Wh that the batteries and the stations of a van give."
+  def storage(build, van),
+    do: build |> items(van.id) |> Enum.map(fn {_zone, item} -> storage(item) end) |> Enum.sum()
 
   # The Wh that a battery or a station gives.
   defp storage(%{type: "van_battery", params: p}),

@@ -40,7 +40,7 @@ defmodule DIYWeb.HomeLive do
     Weather
   }
 
-  alias DIYWeb.{Device, Format}
+  alias DIYWeb.{Device, Format, Scene}
 
   @impl true
   def mount(_params, _session, socket) do
@@ -64,6 +64,8 @@ defmodule DIYWeb.HomeLive do
      |> assign(:item, nil)
      |> assign(:add, nil)
      |> assign(:van_id, nil)
+     |> assign(:scene, nil)
+     |> assign(:van_scene, nil)
      |> allow_upload(:build_file,
        accept: ~w(.json),
        max_entries: 1,
@@ -85,6 +87,7 @@ defmodule DIYWeb.HomeLive do
      |> assign(:item, item)
      |> assign(:add, if(sheets?, do: params["add"]))
      |> assign(:van_id, params["id"])
+     |> pictures()
      |> assign(:lesson_step, parse_int(params["step"]))
      |> assign(:checks, nil)
      |> assign(:hint, false)}
@@ -585,7 +588,23 @@ defmodule DIYWeb.HomeLive do
     |> load_weather()
     |> load_market()
     |> estimate()
+    |> pictures()
   end
+
+  # The parts of the pictures (DIYWeb.Scene): an assign keeps a value that
+  # does not change, so the page sends a picture again only when its parts
+  # change.
+  defp pictures(%{assigns: %{build: %Build{house: house} = build}} = socket)
+       when is_map(house) do
+    vans = Van.vans(build)
+    van = Enum.find(vans, &(&1.id == socket.assigns.van_id)) || List.first(vans)
+
+    socket
+    |> assign(:scene, Scene.parts(build))
+    |> assign(:van_scene, van && Scene.van_parts(build, van))
+  end
+
+  defp pictures(socket), do: socket
 
   defp load_weather(%{assigns: %{build: %{zip: nil}}} = socket), do: socket
 
@@ -768,6 +787,7 @@ defmodule DIYWeb.HomeLive do
               whatif={@whatif}
               price={@price}
               away={Van.stations(@build).away}
+              scene={@scene}
             />
           <% @live_action == :plans and plans?(@build) and @bill != nil -> %>
             <DIYWeb.LessonPage.page
@@ -793,6 +813,7 @@ defmodule DIYWeb.HomeLive do
               add={@add}
               climate={@weather.climate}
               item_error={assigns[:item_error]}
+              scene={@van_scene}
             />
           <% @live_action == :settings -> %>
             <DIYWeb.Settings.settings
@@ -810,6 +831,7 @@ defmodule DIYWeb.HomeLive do
               price={@price}
               weather={@weather}
               market={@market}
+              scene={@scene}
             />
         <% end %>
       <% end %>

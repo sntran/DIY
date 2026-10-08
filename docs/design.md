@@ -762,3 +762,49 @@ weight numbers that match the real van". It needs the numbers of the van
 of the owner: the label in the door frame, the weight of each axle on a
 truck scale, the items, and the Wh of a day from the app of the battery.
 The app takes them; the comparison is open.
+
+## The pictures
+
+The app draws its pictures in SVG on the server, in the isometric view of
+the games (`DIYWeb.Scene`, with the math in `DIYWeb.Iso`). The front page
+and the page Power show the house on its lot. The page Van shows the van.
+The first page shows a house and a plan.
+
+- A picture of the house shows only what the house of today has (with no
+  planned item). The picture on the page Van counts the planned items of
+  the van too, as the budgets of that page do. The house has its floors,
+  and a garage when the build has a room outside that is not a yard. The
+  equipment shows in its place. The panels are on the roof or in the yard.
+  The stations have their extra batteries. The picture also shows the
+  switch of the panel, the meter, the pole of the grid, the AC, the pool,
+  the car, and the van with its panels and its fan.
+- A flow shows only where the power goes in the model (`DIY.Power`). The
+  grid goes to the meter. The panels go to the stations, or to the house
+  or the meter on a grid-tie inverter. The stations go to the switch of
+  the panel only when a station powers the circuits of the house. The
+  panels of a station that is in a van give no flow.
+- The lines of the flows move. With the reduced motion of the system,
+  they do not move. Labels give the kW of the panels of each place and
+  the kWh of the stations.
+- The van shows the weight on each axle (red when it is over the rating
+  of the axle), the Wh of its batteries, and the watts of its panels.
+- The colors are CSS variables (`assets/css/app.css`): a day in the light
+  mode, and a night with lit windows in the dark mode.
+- The pictures are for the eyes only (`aria-hidden`): the text of each
+  page gives the same facts. The picture of the front page is the link
+  into the house, with a label that tells what the picture shows.
+- The LiveView keeps the parts of each picture as an assign
+  (`DIYWeb.Scene.parts/1`, `van_parts/2`). An assign with the same value
+  does not change, so the page sends a picture again only when its parts
+  change.
+- The point of a box at x, y, z goes to the SVG at (x − y) × 8.66 to the
+  side and (x + y) × 5 − z × 10 down. A step of the same size on x, y and
+  z goes to the same point (a property test checks the math). The code
+  paints each object from the back to the front, in an order that it
+  sets by hand. The lines of the flows go behind the bushes, the person
+  and the cars, and the labels go last.
+- A property test makes random parts of a house: each point of the
+  picture is in its box, and each flow and label has its equipment.
+
+The bar of the pages uses the icons of Heroicons (MIT), which Phoenix
+gives.

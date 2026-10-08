@@ -7,6 +7,7 @@ defmodule DIYWeb.Start do
   use DIYWeb, :html
 
   alias DIY.{Build, House}
+  alias DIYWeb.Scene
 
   @doc "The two doors of the first screen."
   def doors(assigns) do
@@ -22,22 +23,22 @@ defmodule DIYWeb.Start do
           type="button"
           phx-click="door"
           phx-value-door="my_house"
-          class="card card-border bg-base-200 p-6 text-left hover:bg-base-300"
+          class="card card-border bg-base-200 overflow-hidden text-left hover:bg-base-300"
         >
-          <span class="text-4xl" aria-hidden="true">🏠</span>
-          <span class="text-lg font-semibold">My house</span>
-          <span class="text-sm opacity-80">I live in the house now.</span>
+          <Scene.sample id="door-house" />
+          <span class="px-6 pt-4 text-lg font-semibold">My house</span>
+          <span class="px-6 pb-5 text-sm opacity-80">I live in the house now.</span>
         </button>
         <button
           id="door-planning"
           type="button"
           phx-click="door"
           phx-value-door="planning"
-          class="card card-border bg-base-200 p-6 text-left hover:bg-base-300"
+          class="card card-border bg-base-200 overflow-hidden text-left hover:bg-base-300"
         >
-          <span class="text-4xl" aria-hidden="true">📐</span>
-          <span class="text-lg font-semibold">A house I'm planning</span>
-          <span class="text-sm opacity-80">I look at a lot or a new build.</span>
+          <Scene.sample id="door-plan" plan />
+          <span class="px-6 pt-4 text-lg font-semibold">A house I'm planning</span>
+          <span class="px-6 pb-5 text-sm opacity-80">I look at a lot or a new build.</span>
         </button>
       </div>
       <p class="text-sm opacity-80">Your build stays on this device. The server keeps no copy.</p>

@@ -12,7 +12,7 @@ defmodule DIYWeb.VanPage do
   use DIYWeb, :html
 
   alias DIY.{Build, Catalog, Van}
-  alias DIYWeb.{Format, Inside}
+  alias DIYWeb.{Format, Inside, Scene}
 
   attr :build, :map, required: true
   attr :van_id, :string, default: nil
@@ -20,11 +20,19 @@ defmodule DIYWeb.VanPage do
   attr :add, :string, default: nil
   attr :climate, :map, default: nil
   attr :item_error, :string, default: nil
+  attr :scene, :map, required: true, doc: "the parts of the picture (`DIYWeb.Scene.van_parts/2`)"
 
   def page(assigns) do
     vans = Van.vans(assigns.build)
     van = Enum.find(vans, &(&1.id == assigns.van_id)) || List.first(vans)
-    assigns = assign(assigns, vans: vans, van: van)
+
+    assigns =
+      assign(assigns,
+        vans: vans,
+        van: van,
+        weight: van && Van.weight(assigns.build, van),
+        power: van && Van.power(assigns.build, van, assigns.climate)
+      )
 
     ~H"""
     <section id="van" class="space-y-4">
@@ -65,8 +73,12 @@ defmodule DIYWeb.VanPage do
           The numbers of the model: {source(@van)}
         </p>
 
-        <.weight weight={Van.weight(@build, @van)} />
-        <.power power={Van.power(@build, @van, @climate)} />
+        <div id="van-picture" class="overflow-hidden rounded-box">
+          <Scene.van id="van-scene" parts={@scene} />
+        </div>
+
+        <.weight weight={@weight} />
+        <.power power={@power} />
         <.notes warnings={Van.warnings(@build, @van)} />
         <.zones build={@build} van={@van} />
         <.stations build={@build} van={@van} />
