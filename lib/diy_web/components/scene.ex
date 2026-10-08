@@ -7,7 +7,8 @@ defmodule DIYWeb.Scene do
 
   A picture of the house shows only what the house of today has
   (`DIY.Build.today/1`, with no planned item). The picture of a van on the
-  page Van counts the planned items too, as the budgets of that page do. It shows the floors and a garage (a room outside
+  page Van counts the planned items too, as the budgets of that page do.
+  The picture of the house shows the floors and a garage (a room outside
   that is not a yard). It shows the panels on the roof or in the yard, the
   stations, the AC, the pool, the car and the van. A flow shows only where
   the power goes in the model (`DIY.Power`).
