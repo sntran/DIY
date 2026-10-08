@@ -168,6 +168,21 @@ defmodule DIY.BuildTest do
     assert Build.delete_item(build, id) == {:error, :item}
   end
 
+  test "the real usage goes in the build, and out of it" do
+    {:ok, usage} =
+      DIY.Usage.read(%{
+        "source" => "smt",
+        "months" => [
+          %{"month" => "2025-07", "kwh" => 900, "export" => 0, "days" => 31, "hours" => nil}
+        ]
+      })
+
+    build = Build.set_usage(preset(), usage)
+    assert build.usage == usage
+    assert Build.from_json(Build.to_json(build)) == {:ok, build}
+    assert Build.set_usage(build, nil).usage == nil
+  end
+
   test "hints close one time" do
     assert {:ok, build} = Build.close_hint(Build.new(), "swipe")
     assert {:ok, %{hints: ["swipe"]}} = Build.close_hint(build, "swipe")
@@ -217,6 +232,7 @@ defmodule DIY.BuildTest do
              {:error, :items}
 
     assert bad.(%{"seq" => nil}) == {:error, :seq}
+    assert bad.(%{"usage" => %{"source" => "x"}}) == {:error, :usage}
 
     # A small seq gets the number of the last id, so that a new id is new.
     {:ok, build} = bad.(%{"seq" => 0})

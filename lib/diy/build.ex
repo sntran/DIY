@@ -29,6 +29,7 @@ defmodule DIY.Build do
   - `items`: each item has an `id`, a `type` (`DIY.Catalog`), a `room`,
     `typical` (true for an item of a preset that the user did not check)
     and its `params`.
+  - `usage`: the real usage of the meter file (`DIY.Usage`), or `nil`.
   - `seq`: the number of the last id.
   - `hints`: the hints that the user closed.
   """
@@ -52,6 +53,7 @@ defmodule DIY.Build do
             house: nil,
             rooms: [],
             items: [],
+            usage: nil,
             seq: 0,
             hints: []
 
@@ -81,6 +83,7 @@ defmodule DIY.Build do
           house: house() | nil,
           rooms: [room()],
           items: [item()],
+          usage: DIY.Usage.t() | nil,
           seq: non_neg_integer(),
           hints: [String.t()]
         }
@@ -337,6 +340,10 @@ defmodule DIY.Build do
     end
   end
 
+  @doc "Puts the real usage of a meter file, or removes it with `nil`."
+  @spec set_usage(t(), DIY.Usage.t() | nil) :: t()
+  def set_usage(build, usage), do: change(build, &%{&1 | usage: usage})
+
   @doc "Closes a hint, so that it does not show again."
   @spec close_hint(t(), String.t()) :: {:ok, t()} | {:error, :hint}
   def close_hint(build, hint) when hint in @hints,
@@ -366,6 +373,7 @@ defmodule DIY.Build do
       "house" => build.house,
       "rooms" => Enum.map(build.rooms, &%{&1 | place: Atom.to_string(&1.place)}),
       "items" => build.items,
+      "usage" => build.usage && DIY.Usage.to_map(build.usage),
       "seq" => build.seq,
       "hints" => build.hints
     })
@@ -396,6 +404,7 @@ defmodule DIY.Build do
          {:ok, house} <- house(map["house"]),
          {:ok, rooms} <- rooms(map["rooms"], house),
          {:ok, items} <- items(map["items"], rooms),
+         {:ok, usage} <- usage(map["usage"]),
          {:ok, seq} <- count(map["seq"], :seq),
          seq = last_id(seq, rooms ++ items),
          {:ok, hints} <- hints(map["hints"]) do
@@ -410,6 +419,7 @@ defmodule DIY.Build do
          house: house,
          rooms: rooms,
          items: items,
+         usage: usage,
          seq: seq,
          hints: hints
        }}
@@ -458,6 +468,15 @@ defmodule DIY.Build do
     case DIY.Market.from_map(market) do
       {:ok, market} -> {:ok, market}
       :error -> {:error, :market}
+    end
+  end
+
+  defp usage(nil), do: {:ok, nil}
+
+  defp usage(usage) do
+    case DIY.Usage.read(usage) do
+      {:ok, usage} -> {:ok, usage}
+      :error -> {:error, :usage}
     end
   end
 
