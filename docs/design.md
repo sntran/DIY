@@ -323,3 +323,115 @@ and keeps the best one with no number under zero. It needs 6 months with
   months.
 - The browser test adds the meter from the front of the house, opens a
   CSV of Smart Meter Texas, and checks the real months with axe-core.
+
+## What-if equipment (phase 3)
+
+### The items and their flags
+
+Phase 3 adds four kinds of items (`DIY.Catalog`):
+
+- A power station: its battery and its extra batteries (kWh), its output,
+  its charge from the wall and its solar input (W), what it powers (items
+  by plug, or circuits of the house through an inlet), and its price.
+- Solar panels: their watts, their direction, what they connect to (a
+  power station, or the house and the grid), and their price.
+- An interlock or a transfer switch, and its price.
+- An electric car: its miles in one day, its miles for each kWh, its
+  charger, when it charges, and the gas car that it replaces.
+
+Each item of a build has two flags:
+
+- `planned`: the user does not have it yet. The house of today has no
+  planned item (`DIY.Build.today/1`). The bill of the house comes from the
+  house of today, and the what-if shows the house with the planned items
+  next to it.
+- `backup`: a power station runs the item (by plug, or on a backup
+  circuit). The sheet of an item shows this flag only when the house has a
+  station, and only for an item that uses power.
+
+The build also has the settings of its power (`DIY.Power.settings/0`):
+the mode of the stations, the price and the hours of the night, the price
+that the plan pays for the power to the grid, and the part of the
+batteries that the stations keep for an outage.
+
+### The day of a month
+
+`DIY.Profile` spreads the kWh of each item of the estimate over the 24
+hours of an average day (cooling in the afternoon, heat before the
+sunrise, lights in the evening, a car at the power of its charger), and
+the sun from the sunrise to the sunset of the latitude. `DIY.Power` runs
+that day hour by hour: the sun, the battery and the grid (see its module
+doc), until the battery has the same charge at the end of the day as at
+the start. The result of each month: the use, the power from the grid in
+the day and at night, the power to the grid, the sun, the sun that is
+lost, the cost, and the hours of an outage.
+
+`DIY.Bill` gives the bill from the power of the grid, at the price of the
+day and of the night, with the range of the estimate of the use. With no
+equipment and one price, the bill is the same as the estimate times the
+price.
+
+The numbers of the model:
+
+| Number | Value |
+|---|---|
+| The power that goes into a battery and stays in it | 92% |
+| The power of a battery that comes out of the outlets | 92% |
+| The part of the battery that a station uses | 95% |
+| The power of panels in full sun, for each watt on their labels | 80% |
+| Direction of the panels (for the sun of NASA POWER on a flat surface) | south 110%, south-east or south-west 105%, east or west 90%, up 100% |
+| The part of the power of a charger that goes into a car | Level 1: 85%, Level 2: 90% |
+| A battery lasts | near 10 years |
+| A panel lasts | near 25 years |
+
+### The what-if
+
+`DIY.Power.whatif/3` runs the house of today and the house with the
+planned items: the cost of each month, the price of the planned items,
+the savings of one year (with the gas that a planned car saves), and the
+payback. The page says it when the plan does not pay back on savings
+alone, and shows the hours of backup as a different reason (honesty rule
+2). With one price at all hours, the page says that a charge at night
+does not save money: the station loses near 15% of the power.
+
+### The power view and the safety
+
+The page Power shows what feeds what: the grid, the main panel and its
+interlock or transfer switch, the panels, the stations, and the items
+that the stations run. `DIY.Power.warnings/1` gives:
+
+- `:backfeed`: a station that powers circuits of the house with no
+  interlock and no transfer switch. The page shows a danger: its power
+  can go to the lines of the utility, and kill a worker there.
+- `:permit`: work on the panel needs a permit in most cities (honesty
+  rule 5), with the rules of Dallas and New Braunfels as examples.
+- `:overload`: the items on the stations need more watts than their
+  outputs, when they all run at the same time.
+- `:surge`: a motor needs more power to start.
+
+`specs/Backfeed.tla` is the model of the main breaker, the inlet breaker,
+the station and the grid. With an interlock or a transfer switch, the
+station never sends power to the grid, also when the person turns any
+breaker on or off at any time (`Backfeed.cfg`, `Backfeed.transfer.cfg`).
+With the steps of the page in an outage, the house gets the backup, and
+the grid when it comes back (`Backfeed.steps.cfg`). With no device, TLC
+finds the backfeed (`Backfeed.none.cfg`). A person who stops before the
+end of the steps does not get the backup (`Backfeed.stop.cfg`).
+
+### The tests of phase 3
+
+- Property tests: an average day keeps the power in balance (the charge
+  of the battery stays in its limits, and the grid gives at least the use
+  less the sun that is not lost), and more battery never gives fewer hours
+  in an outage.
+- A check with the numbers of a label: a station of 2,048 Wh runs a
+  fridge of 400 kWh in one year for 39 hours, as the math by hand gives.
+- The pages: `test/diy_web/live/power_live_test.exs`.
+- The browser test adds a station that runs the fridge, plans panels on
+  the roof, and checks the page Power and the plan with axe-core.
+
+The check of the plan for phase 3 is "the owner's own house gives numbers
+that match the real system". It needs the numbers of the real system of
+the owner (the stations, the panels, and the kWh of a day from the app of
+the station). The app takes them as items; the comparison is open.
+
