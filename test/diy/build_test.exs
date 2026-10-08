@@ -189,6 +189,21 @@ defmodule DIY.BuildTest do
     assert Build.put_house(build, house, rooms, items).usage == nil
   end
 
+  test "the flags of an item, the power, and the build of today" do
+    build = preset()
+    fridge = Enum.find(build.items, &(&1.type == "fridge"))
+    assert {:ok, build} = Build.flag_item(build, fridge.id, :backup, true)
+    assert {:ok, %{backup: true, planned: false}} = Build.item(build, fridge.id)
+    assert {:ok, build} = Build.flag_item(build, fridge.id, :planned, true)
+    assert Build.flag_item(build, "i999", :planned, true) == {:error, :item}
+    refute Enum.any?(Build.today(build).items, &(&1.id == fridge.id))
+    assert length(Build.today(build).items) == length(build.items) - 1
+
+    power = %{DIY.Power.settings() | mode: "night", night_cents: 3.5}
+    build = Build.set_power(build, power)
+    assert {:ok, %{power: ^power}} = Build.from_json(Build.to_json(build))
+  end
+
   test "hints close one time" do
     assert {:ok, build} = Build.close_hint(Build.new(), "swipe")
     assert {:ok, %{hints: ["swipe"]}} = Build.close_hint(build, "swipe")
@@ -239,6 +254,16 @@ defmodule DIY.BuildTest do
 
     assert bad.(%{"seq" => nil}) == {:error, :seq}
     assert bad.(%{"usage" => %{"source" => "x"}}) == {:error, :usage}
+    assert bad.(%{"power" => %{"mode" => "turbo"}}) == {:error, :power}
+    assert bad.(%{"items" => [Map.put(hd(good["items"]), "planned", "yes")]}) == {:error, :items}
+    assert bad.(%{"items" => [Map.put(hd(good["items"]), "backup", 1)]}) == {:error, :items}
+
+    # A build of an older version has no power, and its items have no
+    # planned and no backup.
+    old = %{good | "items" => Enum.map(good["items"], &Map.drop(&1, ["planned", "backup"]))}
+    assert {:ok, build} = Build.from_json(Jason.encode!(Map.delete(old, "power")))
+    assert build.power == DIY.Power.settings()
+    assert Enum.all?(build.items, &(&1.planned == false and &1.backup == false))
 
     # A small seq gets the number of the last id, so that a new id is new.
     {:ok, build} = bad.(%{"seq" => 0})

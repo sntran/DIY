@@ -27,9 +27,13 @@ defmodule DIY.Build do
   - `rooms`: each room has an `id`, a `name`, a `level` (see `levels/1`)
     and a `place` (`:indoor`, `:outdoor` or `:roof`).
   - `items`: each item has an `id`, a `type` (`DIY.Catalog`), a `room`,
-    `typical` (true for an item of a preset that the user did not check)
-    and its `params`.
+    `typical` (true for an item of a preset that the user did not check),
+    `planned` (true for an item that the user does not have yet: the
+    what-if of `DIY.Power`), `backup` (true for an item that a power
+    station runs) and its `params`.
   - `usage`: the real usage of the meter file (`DIY.Usage`), or `nil`.
+  - `power`: how the house uses its power stations, and the prices of the
+    night and of the power to the grid (`DIY.Power.settings/0`).
   - `seq`: the number of the last id.
   - `hints`: the hints that the user closed.
   """
@@ -54,6 +58,7 @@ defmodule DIY.Build do
             rooms: [],
             items: [],
             usage: nil,
+            power: DIY.Power.settings(),
             seq: 0,
             hints: []
 
@@ -63,6 +68,8 @@ defmodule DIY.Build do
           type: String.t(),
           room: String.t(),
           typical: boolean(),
+          planned: boolean(),
+          backup: boolean(),
           params: map()
         }
   @type house :: %{
@@ -84,6 +91,7 @@ defmodule DIY.Build do
           rooms: [room()],
           items: [item()],
           usage: DIY.Usage.t() | nil,
+          power: DIY.Power.settings(),
           seq: non_neg_integer(),
           hints: [String.t()]
         }
@@ -204,7 +212,7 @@ defmodule DIY.Build do
       |> Enum.reduce(build, fn item, build ->
         {id, build} = next_id(build, "i")
         room = Map.fetch!(ids, item.room)
-        item = %{id: id, type: item.type, room: room, typical: true, params: item.params}
+        item = new_item(id, item.type, room, item.params) |> Map.put(:typical, true)
         %{build | items: build.items ++ [item]}
       end)
       |> no_meter_no_usage()
@@ -295,7 +303,7 @@ defmodule DIY.Build do
          %{} = kind <- Catalog.kind(type) || {:error, :type},
          true <- room.place in kind.places || {:error, :place} do
       {id, build} = next_id(build, "i")
-      item = %{id: id, type: type, room: room_id, typical: false, params: Catalog.defaults(type)}
+      item = new_item(id, type, room_id, Catalog.defaults(type))
       {:ok, change(build, &%{&1 | items: &1.items ++ [item]}), id}
     end
   end
@@ -311,6 +319,38 @@ defmodule DIY.Build do
       {:ok, replace_item(build, %{item | params: params, typical: false})}
     end
   end
+
+  defp new_item(id, type, room, params),
+    do: %{
+      id: id,
+      type: type,
+      room: room,
+      typical: false,
+      planned: false,
+      backup: false,
+      params: params
+    }
+
+  @doc """
+  Sets a flag of an item: `:planned` (the user does not have it yet) or
+  `:backup` (a power station runs it).
+  """
+  @spec flag_item(t(), String.t(), :planned | :backup, boolean()) :: {:ok, t()} | {:error, :item}
+  def flag_item(build, id, flag, value) when flag in [:planned, :backup] and is_boolean(value) do
+    with {:ok, item} <- item(build, id),
+         do: {:ok, replace_item(build, Map.put(item, flag, value))}
+  end
+
+  @doc "Sets how the house uses its power (`DIY.Power.settings/0`)."
+  @spec set_power(t(), DIY.Power.settings()) :: t()
+  def set_power(build, power), do: change(build, &%{&1 | power: power})
+
+  @doc """
+  The build of today: the build with no planned item (the what-if of
+  `DIY.Power`).
+  """
+  @spec today(t()) :: t()
+  def today(build), do: %{build | items: Enum.reject(build.items, & &1.planned)}
 
   @doc "Marks an item as checked by the user, with no change of its numbers."
   @spec check_item(t(), String.t()) :: {:ok, t()} | {:error, :item}
@@ -386,6 +426,7 @@ defmodule DIY.Build do
       "rooms" => Enum.map(build.rooms, &%{&1 | place: Atom.to_string(&1.place)}),
       "items" => build.items,
       "usage" => build.usage && DIY.Usage.to_map(build.usage),
+      "power" => DIY.Power.to_map(build.power),
       "seq" => build.seq,
       "hints" => build.hints
     })
@@ -417,6 +458,7 @@ defmodule DIY.Build do
          {:ok, rooms} <- rooms(map["rooms"], house),
          {:ok, items} <- items(map["items"], rooms),
          {:ok, usage} <- usage(map["usage"]),
+         {:ok, power} <- power(map["power"]),
          {:ok, seq} <- count(map["seq"], :seq),
          seq = last_id(seq, rooms ++ items),
          {:ok, hints} <- hints(map["hints"]) do
@@ -432,6 +474,7 @@ defmodule DIY.Build do
          rooms: rooms,
          items: items,
          usage: usage,
+         power: power,
          seq: seq,
          hints: hints
        }}
@@ -480,6 +523,16 @@ defmodule DIY.Build do
     case DIY.Market.from_map(market) do
       {:ok, market} -> {:ok, market}
       :error -> {:error, :market}
+    end
+  end
+
+  # A build of an older version has no power: the default settings.
+  defp power(nil), do: {:ok, DIY.Power.settings()}
+
+  defp power(power) do
+    case DIY.Power.read(power) do
+      {:ok, power} -> {:ok, power}
+      :error -> {:error, :power}
     end
   end
 
@@ -585,16 +638,30 @@ defmodule DIY.Build do
 
   defp items(_items, _rooms), do: {:error, :items}
 
+  # An item of a build of an older version has no `planned` and no
+  # `backup`: they are false.
   defp read_item(
-         %{"id" => id, "type" => type, "room" => room, "typical" => typical, "params" => params},
+         %{"id" => id, "type" => type, "room" => room, "typical" => typical, "params" => params} =
+           item,
          places
        )
        when is_binary(id) and is_boolean(typical) do
     with %{} = kind <- Catalog.kind(type),
          {:ok, place} <- Map.fetch(places, room),
          true <- place in kind.places,
+         planned when is_boolean(planned) <- Map.get(item, "planned", false),
+         backup when is_boolean(backup) <- Map.get(item, "backup", false),
          {:ok, params} <- Catalog.params(type, params) do
-      {:ok, %{id: id, type: type, room: room, typical: typical, params: params}}
+      {:ok,
+       %{
+         id: id,
+         type: type,
+         room: room,
+         typical: typical,
+         planned: planned,
+         backup: backup,
+         params: params
+       }}
     else
       _ -> :error
     end
