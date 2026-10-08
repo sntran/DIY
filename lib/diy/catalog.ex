@@ -974,6 +974,72 @@ defmodule DIY.Catalog do
 
   @by_type Map.new(@kinds, &{&1.type, &1})
 
+  # The typical size of an item of each kind, in inches: its width (from
+  # its left to its right), its depth (from its back to its front) and its
+  # height. The front is the side that a person uses. For solar panels, it
+  # is one panel (`DIY.Layout.size/1` gives the size of the array).
+  @sizes %{
+    "ac" => {30, 30, 32},
+    "mini_split" => {32, 9, 12},
+    "furnace" => {21, 29, 40},
+    "heat_strips" => {48, 24, 24},
+    "smart_meter" => {10, 6, 14},
+    "water_heater" => {22, 22, 60},
+    "fridge" => {36, 30, 70},
+    "freezer" => {48, 28, 34},
+    "range" => {30, 28, 47},
+    "microwave" => {24, 16, 14},
+    "dishwasher" => {24, 24, 34},
+    "washer" => {27, 30, 38},
+    "dryer" => {27, 30, 38},
+    "lights" => {16, 16, 60},
+    "tv" => {49, 10, 31},
+    "computer" => {24, 16, 20},
+    "ceiling_fan" => {52, 52, 12},
+    "always_on" => {18, 6, 3},
+    "pool_pump" => {30, 14, 18},
+    "space_heater" => {10, 7, 25},
+    "power_station" => {25, 16, 20},
+    "solar_panels" => {41, 69, 2},
+    "transfer_switch" => {16, 5, 22},
+    "ev" => {73, 185, 57},
+    "camper_van" => {80, 274, 110},
+    "swivel_seat" => {26, 26, 40},
+    "dc_charger" => {8, 6, 3},
+    "van_fridge" => {24, 15, 20},
+    "stove" => {22, 16, 4},
+    "sink" => {24, 18, 36},
+    "water_tank" => {24, 15, 14},
+    "water_pump" => {10, 6, 6},
+    "counter" => {48, 22, 36},
+    "bench" => {40, 20, 32},
+    "van_table" => {28, 20, 28},
+    "van_fan" => {14, 14, 4},
+    "window" => {36, 2, 24},
+    "van_lights" => {12, 4, 1},
+    "devices" => {14, 10, 10},
+    "diesel_heater" => {15, 6, 6},
+    "co_alarm" => {5, 5, 2},
+    "bed_platform" => {60, 75, 24},
+    "storage" => {36, 24, 24},
+    "van_battery" => {13, 7, 9},
+    "inverter" => {16, 9, 6},
+    "shore_power" => {6, 3, 6},
+    "van_solar" => {41, 69, 2},
+    "insulation" => {48, 24, 6},
+    "walls" => {48, 2, 36},
+    "van_floor" => {48, 48, 1},
+    "other" => {24, 24, 24}
+  }
+
+  for %{type: type} <- @kinds,
+      not Map.has_key?(@sizes, type),
+      do: raise("the kind #{type} has no size")
+
+  # The height of the bottom of an item on a wall or on a ceiling, in
+  # inches. Another item stands on the floor.
+  @lifts %{"mini_split" => 84, "smart_meter" => 48, "transfer_switch" => 40, "ceiling_fan" => 84}
+
   @doc "All the kinds, in the order of the list of a new item."
   def kinds, do: @kinds
 
@@ -982,6 +1048,12 @@ defmodule DIY.Catalog do
 
   @doc "The types of all the kinds."
   def types, do: Map.keys(@by_type)
+
+  @doc "The typical size of an item of a type, in inches: `{w, d, h}`."
+  def size(type), do: Map.fetch!(@sizes, type)
+
+  @doc "The height of the bottom of an item of a type above its floor, in inches."
+  def lift(type), do: Map.get(@lifts, type, 0)
 
   @doc "The places of a room: inside, outside, or on the roof."
   def places, do: @places

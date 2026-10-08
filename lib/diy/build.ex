@@ -33,13 +33,17 @@ defmodule DIY.Build do
     item) has its own rooms: its zones (`DIY.Catalog.zones/0`), on the level
     `"van:ID"` (the id of the van). They are fixed: the user cannot add,
     rename or remove a zone. The house and its numbers have only the rooms
-    of the house (`house_view/1`).
+    of the house (`house_view/1`). A room of the house has a `plan`: its
+    place and its size at scale, in inches (`DIY.Layout`). A zone has no
+    plan.
   - `items`: each item has an `id`, a `type` (`DIY.Catalog`), a `room`,
     `typical` (true for an item of a preset that the user did not check),
     `planned` (true for an item that the user does not have yet: the
     what-if of `DIY.Power`), `backup` (true for an item that a power
     station runs), `home` (for a power station in a van: the room of the
-    house where it goes back, or `nil`) and its `params`.
+    house where it goes back, or `nil`) and its `params`. An item in a room
+    of the house has `at` (its place in the room), `turn` and `size`
+    (`DIY.Layout`). An item in a van has no `at`.
   - `usage`: the real usage of the meter file (`DIY.Usage`), or `nil`.
   - `power`: how the house uses its power stations, and the prices of the
     night and of the power to the grid (`DIY.Power.settings/0`).
@@ -50,14 +54,18 @@ defmodule DIY.Build do
     id of a plan, or `"example"`), or `nil`. Step 3 uses a different plan.
   - `seq`: the number of the last id.
   - `hints`: the hints that the user closed.
+
+  After each change, the plan of the house is whole again
+  (`DIY.Layout.fill/1`): each room of the house has a plan, and each item
+  of the house is in its room.
   """
 
-  alias DIY.Catalog
+  alias DIY.{Catalog, Layout}
 
   @version 1
   @doors ~w(my_house planning)
   @heats ~w(gas heat_pump electric)
-  @hints ~w(swipe)
+  @hints ~w(swipe plan)
   @places Catalog.places()
 
   @enforce_keys [:revision]
@@ -79,7 +87,14 @@ defmodule DIY.Build do
             seq: 0,
             hints: []
 
-  @type room :: %{id: String.t(), name: String.t(), level: String.t(), place: atom()}
+  @type plan :: %{x: integer(), y: integer(), w: pos_integer(), d: pos_integer()}
+  @type room :: %{
+          id: String.t(),
+          name: String.t(),
+          level: String.t(),
+          place: atom(),
+          plan: plan() | nil
+        }
   @type item :: %{
           id: String.t(),
           type: String.t(),
@@ -88,7 +103,10 @@ defmodule DIY.Build do
           planned: boolean(),
           backup: boolean(),
           home: String.t() | nil,
-          params: map()
+          params: map(),
+          at: %{x: integer(), y: integer()} | nil,
+          turn: 0..3,
+          size: %{w: pos_integer(), d: pos_integer(), h: pos_integer()} | nil
         }
   @type house :: %{
           size: pos_integer(),
@@ -144,11 +162,12 @@ defmodule DIY.Build do
 
   @doc """
   Applies a change to the build, adds 1 to its revision, and gives it a new
-  stamp.
+  stamp. The plan of the house is then whole (`DIY.Layout.fill/1`).
   """
   @spec change(t(), (t() -> t())) :: t()
   def change(%__MODULE__{revision: revision} = build, fun) do
     %__MODULE__{} = changed = fun.(build)
+    %__MODULE__{} = changed = Layout.fill(changed)
     %__MODULE__{changed | revision: revision + 1, stamp: new_stamp()}
   end
 
@@ -225,7 +244,7 @@ defmodule DIY.Build do
       {build, ids} =
         Enum.reduce(rooms, {build, %{}}, fn room, {build, ids} ->
           {id, build} = next_id(build, "r")
-          new = %{id: id, name: room.name, level: room.level, place: room.place}
+          new = %{id: id, name: room.name, level: room.level, place: room.place, plan: nil}
           {%{build | rooms: build.rooms ++ [new]}, Map.put(ids, room.key, id)}
         end)
 
@@ -264,7 +283,10 @@ defmodule DIY.Build do
       else: {:error, :floors}
   end
 
-  @doc "Adds a room on a level."
+  @doc """
+  Adds a room on a level. It goes to a free place (`DIY.Layout.fill/1`):
+  the user then moves it.
+  """
   @spec add_room(t(), String.t(), String.t(), atom()) ::
           {:ok, t(), String.t()} | {:error, atom()}
   def add_room(%__MODULE__{house: %{floors: floors}} = build, name, level, place) do
@@ -272,7 +294,7 @@ defmodule DIY.Build do
          true <- level in levels(floors) || {:error, :level},
          true <- place in @places || {:error, :place} do
       {id, build} = next_id(build, "r")
-      room = %{id: id, name: name, level: level, place: place}
+      room = %{id: id, name: name, level: level, place: place, plan: nil}
       {:ok, change(build, &%{&1 | rooms: &1.rooms ++ [room]}), id}
     end
   end
@@ -370,7 +392,7 @@ defmodule DIY.Build do
           not MapSet.member?(gone, item.room) or MapSet.member?(homes, item.home || ""),
           do:
             if(MapSet.member?(gone, item.room),
-              do: %{item | room: item.home, home: nil},
+              do: %{item | room: item.home, home: nil, at: nil},
               else: item
             )
 
@@ -388,7 +410,7 @@ defmodule DIY.Build do
          {:ok, _room} <- house_room(build, item.room),
          true <- item.type == "power_station" || {:error, :item},
          %{} = bay <- zone(build, van_id, :bay) || {:error, :van} do
-      {:ok, replace_item(build, %{item | room: bay.id, home: item.room})}
+      {:ok, replace_item(build, %{item | room: bay.id, home: item.room, at: nil})}
     end
   end
 
@@ -403,7 +425,7 @@ defmodule DIY.Build do
          true <-
            (item.type == "power_station" and van_level?(room.level) and item.home != nil) ||
              {:error, :item} do
-      {:ok, replace_item(build, %{item | room: item.home, home: nil})}
+      {:ok, replace_item(build, %{item | room: item.home, home: nil, at: nil})}
     end
   end
 
@@ -444,7 +466,9 @@ defmodule DIY.Build do
 
       %{
         build
-        | rooms: build.rooms ++ [%{id: id, name: name, level: van_level(van.id), place: place}]
+        | rooms:
+            build.rooms ++
+              [%{id: id, name: name, level: van_level(van.id), place: place, plan: nil}]
       }
     end)
   end
@@ -505,7 +529,10 @@ defmodule DIY.Build do
       planned: false,
       backup: false,
       home: nil,
-      params: params
+      params: params,
+      at: nil,
+      turn: 0,
+      size: nil
     }
 
   @doc """
@@ -574,7 +601,8 @@ defmodule DIY.Build do
   @doc """
   Moves an item to a different room, where its kind can go. An item does
   not go between the house and a van: a station goes with
-  `take_to_van/3` and `bring_home/2`.
+  `take_to_van/3` and `bring_home/2`. The item goes to a free place in
+  the room (`DIY.Layout.fill/1`).
   """
   @spec move_item(t(), String.t(), String.t()) :: {:ok, t()} | {:error, atom()}
   def move_item(build, id, room_id) do
@@ -583,8 +611,99 @@ defmodule DIY.Build do
          {:ok, room} <- room(build, room_id),
          true <- room.place in Catalog.kind(item.type).places || {:error, :place},
          true <- van_level?(from.level) == van_level?(room.level) || {:error, :place} do
-      {:ok, replace_item(build, %{item | room: room_id})}
+      {:ok, replace_item(build, %{item | room: room_id, at: nil})}
     end
+  end
+
+  @doc """
+  Moves a room of the house: `x` and `y` are its new back corner, in
+  inches. Its items go with it. The room must not overlap a room of its
+  layer (`DIY.Layout.layer/1`).
+  """
+  @spec move_room(t(), String.t(), integer(), integer()) :: {:ok, t()} | {:error, atom()}
+  def move_room(build, id, x, y) when is_integer(x) and is_integer(y) do
+    with {:ok, room} <- house_room(build, id),
+         do: put_room_plan(build, room, %{room.plan | x: x, y: y}, {0, 0})
+  end
+
+  @doc """
+  Gives a room of the house a new plan: the user moves a wall. The items
+  keep their place in the house, and stay in the room. The room must not
+  overlap a room of its layer.
+  """
+  @spec size_room(t(), String.t(), plan()) :: {:ok, t()} | {:error, atom()}
+  def size_room(build, id, %{x: x, y: y} = plan) do
+    with {:ok, room} <- house_room(build, id),
+         do: put_room_plan(build, room, plan, {x - room.plan.x, y - room.plan.y})
+  end
+
+  defp put_room_plan(build, room, plan, {dx, dy}) do
+    cond do
+      not Layout.valid_plan?(plan) ->
+        {:error, :plan}
+
+      not Layout.free?(build, room, plan) ->
+        {:error, :overlap}
+
+      true ->
+        {:ok,
+         change(build, fn build ->
+           %{
+             build
+             | rooms:
+                 Enum.map(build.rooms, &if(&1.id == room.id, do: %{&1 | plan: plan}, else: &1)),
+               items:
+                 Enum.map(build.items, fn
+                   %{room: id, at: %{x: x, y: y}} = item when id == room.id ->
+                     %{item | at: %{x: x - dx, y: y - dy}}
+
+                   item ->
+                     item
+                 end)
+           }
+         end)}
+    end
+  end
+
+  @doc """
+  Puts an item of the house at a place in a room of the house: its room,
+  or a different room where its kind can go. `at` is the back corner of
+  the item in the room, in inches. The item stays in the room.
+  """
+  @spec place_item(t(), String.t(), String.t(), %{x: integer(), y: integer()}) ::
+          {:ok, t()} | {:error, atom()}
+  def place_item(build, id, room_id, %{x: x, y: y}) when is_integer(x) and is_integer(y) do
+    with {:ok, item} <- item(build, id),
+         {:ok, _from} <- house_room(build, item.room),
+         {:ok, room} <- house_room(build, room_id),
+         true <- room.place in Catalog.kind(item.type).places || {:error, :place} do
+      at = Layout.clamp(%{x: x, y: y}, item, room.plan)
+      {:ok, replace_item(build, %{item | room: room.id, at: at})}
+    end
+  end
+
+  @doc "Turns an item of the house a quarter turn, around its center."
+  @spec turn_item(t(), String.t()) :: {:ok, t()} | {:error, atom()}
+  def turn_item(build, id) do
+    with {:ok, item} <- item(build, id),
+         {:ok, _room} <- house_room(build, item.room) do
+      {w, d} = Layout.extent(item)
+      turned = %{item | turn: rem(item.turn + 1, 4)}
+      {tw, td} = Layout.extent(turned)
+      at = %{x: item.at.x + div(w - tw, 2), y: item.at.y + div(d - td, 2)}
+      {:ok, replace_item(build, %{turned | at: at})}
+    end
+  end
+
+  @doc """
+  Gives an item a size in inches (`%{w, d, h}`), or its typical size again
+  with `nil`. The item stays in its room.
+  """
+  @spec size_item(t(), String.t(), map() | nil) :: {:ok, t()} | {:error, atom()}
+  def size_item(build, id, size) do
+    with {:ok, item} <- item(build, id),
+         true <- (size == nil or Layout.valid_size?(size)) || {:error, :size},
+         do: {:ok, replace_item(build, %{item | size: size})}
   end
 
   defp replace_item(build, item) do
@@ -708,7 +827,8 @@ defmodule DIY.Build do
          seq: seq,
          hints: hints
        }
-       |> repair_vans()}
+       |> repair_vans()
+       |> Layout.fill()}
     end
   end
 
@@ -864,7 +984,8 @@ defmodule DIY.Build do
           reduce: build do
         build ->
           {id, build} = next_id(build, "r")
-          %{build | rooms: build.rooms ++ [%{id: id, name: name, level: level, place: place}]}
+          room = %{id: id, name: name, level: level, place: place, plan: nil}
+          %{build | rooms: build.rooms ++ [room]}
       end
     end)
   end
@@ -915,18 +1036,18 @@ defmodule DIY.Build do
           {:error, :name} -> Keyword.fetch!(Catalog.zones(), place)
         end
 
-      {:van, %{id: id, name: name, level: level, place: place}}
+      {:van, %{id: id, name: name, level: level, place: place, plan: nil}}
     else
       _ -> :lost
     end
   end
 
-  defp read_room(%{"id" => id, "name" => name, "level" => level, "place" => place}, levels)
+  defp read_room(%{"id" => id, "name" => name, "level" => level, "place" => place} = room, levels)
        when is_binary(id) and is_binary(level) do
     with {:ok, name} <- name(name),
          true <- level in levels,
          {:ok, place} <- Map.fetch(@place_names, place) do
-      {:house, %{id: id, name: name, level: level, place: place}}
+      {:house, %{id: id, name: name, level: level, place: place, plan: read_plan(room["plan"])}}
     else
       _ -> :error
     end
@@ -1014,7 +1135,8 @@ defmodule DIY.Build do
            backup: false,
            home: nil,
            params: Catalog.loose_params("camper_van", Map.get(item, "params"))
-         }},
+         }
+         |> Map.merge(read_spot(item))},
       else: :skip
   end
 
@@ -1034,16 +1156,19 @@ defmodule DIY.Build do
          backup when is_boolean(backup) <- Map.get(item, "backup", false),
          {:ok, params} <- Catalog.params(type, params) do
       {:house,
-       %{
-         id: id,
-         type: type,
-         room: room.id,
-         typical: typical,
-         planned: planned,
-         backup: backup,
-         home: nil,
-         params: params
-       }}
+       Map.merge(
+         %{
+           id: id,
+           type: type,
+           room: room.id,
+           typical: typical,
+           planned: planned,
+           backup: backup,
+           home: nil,
+           params: params
+         },
+         read_spot(item)
+       )}
     else
       _ -> :error
     end
@@ -1069,16 +1194,20 @@ defmodule DIY.Build do
             true -> nil
           end
 
-        item = %{
-          id: id,
-          type: type,
-          room: room || home,
-          typical: Map.get(item, "typical") == true,
-          planned: Map.get(item, "planned") == true,
-          backup: false,
-          home: if(room, do: home),
-          params: Catalog.loose_params(type, Map.get(item, "params"))
-        }
+        item =
+          Map.merge(
+            %{
+              id: id,
+              type: type,
+              room: room || home,
+              typical: Map.get(item, "typical") == true,
+              planned: Map.get(item, "planned") == true,
+              backup: false,
+              home: if(room, do: home),
+              params: Catalog.loose_params(type, Map.get(item, "params"))
+            },
+            read_spot(item)
+          )
 
         if item.room, do: {:van, item}, else: :skip
 
@@ -1095,6 +1224,35 @@ defmodule DIY.Build do
     rooms = Enum.filter(house, &(&1.place in kind.places))
     Enum.find_value(rooms, &(&1.id == home && home)) || Enum.find_value(rooms, & &1.id)
   end
+
+  # The place of an item in its room, its turn and its size. A part that
+  # is not valid goes away: the item goes to a free place
+  # (`DIY.Layout.fill/1`), with no turn, or with its typical size.
+  defp read_spot(item) do
+    %{at: read_at(item["at"]), turn: item_turn(item), size: read_size(item["size"])}
+  end
+
+  defp read_at(%{"x" => x, "y" => y}) when is_integer(x) and is_integer(y),
+    do: if(abs(x) <= Layout.max_at() and abs(y) <= Layout.max_at(), do: %{x: x, y: y})
+
+  defp read_at(_at), do: nil
+
+  defp item_turn(%{"turn" => turn}) when turn in 0..3, do: turn
+  defp item_turn(_item), do: 0
+
+  defp read_size(%{"w" => w, "d" => d, "h" => h}) do
+    size = %{w: w, d: d, h: h}
+    if Layout.valid_size?(size), do: size
+  end
+
+  defp read_size(_size), do: nil
+
+  defp read_plan(%{"x" => x, "y" => y, "w" => w, "d" => d}) do
+    plan = %{x: x, y: y, w: w, d: d}
+    if Layout.valid_plan?(plan), do: plan
+  end
+
+  defp read_plan(_plan), do: nil
 
   defp hints(hints) when is_list(hints) do
     if Enum.all?(hints, &(&1 in @hints)), do: {:ok, Enum.uniq(hints)}, else: {:error, :hints}

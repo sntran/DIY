@@ -131,4 +131,14 @@ defmodule DIY.CatalogTest do
       end
     end
   end
+
+  test "each kind has a typical size, and some are on a wall or a ceiling" do
+    for type <- Catalog.types() do
+      {w, d, h} = Catalog.size(type)
+      assert Enum.all?([w, d, h], &(is_integer(&1) and &1 > 0))
+    end
+
+    assert Catalog.lift("ceiling_fan") == 84
+    assert Catalog.lift("fridge") == 0
+  end
 end
