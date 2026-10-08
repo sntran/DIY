@@ -135,7 +135,6 @@ defmodule DIY.Catalog do
     %{
       type: "ac",
       name: "Central AC",
-      emoji: "❄️",
       places: [:outdoor, :roof],
       features: [:estimate],
       params: [
@@ -179,7 +178,6 @@ defmodule DIY.Catalog do
     %{
       type: "mini_split",
       name: "Mini split or window AC",
-      emoji: "🌬️",
       places: [:indoor],
       features: [:estimate],
       params: [
@@ -207,7 +205,6 @@ defmodule DIY.Catalog do
     %{
       type: "furnace",
       name: "Gas furnace",
-      emoji: "🔥",
       places: [:indoor],
       features: [:estimate],
       params: [
@@ -225,7 +222,6 @@ defmodule DIY.Catalog do
     %{
       type: "heat_strips",
       name: "Electric heat",
-      emoji: "♨️",
       places: [:indoor],
       features: [:estimate],
       params: [
@@ -243,7 +239,6 @@ defmodule DIY.Catalog do
     %{
       type: "smart_meter",
       name: "Smart meter",
-      emoji: "📟",
       places: [:outdoor, :indoor],
       features: [:usage],
       params: []
@@ -251,7 +246,6 @@ defmodule DIY.Catalog do
     %{
       type: "water_heater",
       name: "Water heater",
-      emoji: "🚿",
       places: [:indoor, :outdoor],
       features: [:estimate],
       params: [
@@ -267,7 +261,6 @@ defmodule DIY.Catalog do
     %{
       type: "fridge",
       name: "Fridge",
-      emoji: "🧊",
       places: [:indoor],
       features: [:estimate],
       params: [
@@ -285,7 +278,6 @@ defmodule DIY.Catalog do
     %{
       type: "freezer",
       name: "Freezer",
-      emoji: "🧊",
       places: [:indoor],
       features: [:estimate],
       params: [
@@ -303,7 +295,6 @@ defmodule DIY.Catalog do
     %{
       type: "range",
       name: "Stove and oven",
-      emoji: "🍳",
       places: [:indoor],
       features: [:estimate],
       params: [choice("fuel", "Fuel", @fuels, "electric")]
@@ -311,7 +302,6 @@ defmodule DIY.Catalog do
     %{
       type: "microwave",
       name: "Microwave",
-      emoji: "🍲",
       places: [:indoor],
       features: [:estimate],
       params: [
@@ -322,7 +312,6 @@ defmodule DIY.Catalog do
     %{
       type: "dishwasher",
       name: "Dishwasher",
-      emoji: "🍽️",
       places: [:indoor],
       features: [:estimate],
       params: [int("loads", "Loads in one week", nil, 4, 0, 21)]
@@ -330,7 +319,6 @@ defmodule DIY.Catalog do
     %{
       type: "washer",
       name: "Clothes washer",
-      emoji: "🧺",
       places: [:indoor],
       features: [:estimate],
       params: [int("loads", "Loads in one week", nil, 5, 0, 30)]
@@ -338,7 +326,6 @@ defmodule DIY.Catalog do
     %{
       type: "dryer",
       name: "Clothes dryer",
-      emoji: "🌀",
       places: [:indoor],
       features: [:estimate],
       params: [
@@ -349,7 +336,6 @@ defmodule DIY.Catalog do
     %{
       type: "lights",
       name: "Lights",
-      emoji: "💡",
       places: [:indoor, :outdoor],
       features: [:estimate],
       params: [
@@ -369,7 +355,6 @@ defmodule DIY.Catalog do
     %{
       type: "tv",
       name: "TV",
-      emoji: "📺",
       places: [:indoor],
       features: [:estimate],
       params: [
@@ -380,7 +365,6 @@ defmodule DIY.Catalog do
     %{
       type: "computer",
       name: "Computer",
-      emoji: "💻",
       places: [:indoor],
       features: [:estimate],
       params: [
@@ -391,7 +375,6 @@ defmodule DIY.Catalog do
     %{
       type: "ceiling_fan",
       name: "Ceiling fans",
-      emoji: "🪭",
       places: [:indoor, :outdoor],
       features: [:estimate],
       params: [
@@ -404,7 +387,6 @@ defmodule DIY.Catalog do
     %{
       type: "always_on",
       name: "Always-on devices",
-      emoji: "🔌",
       places: [:indoor],
       features: [:estimate],
       params: [
@@ -422,7 +404,6 @@ defmodule DIY.Catalog do
     %{
       type: "pool_pump",
       name: "Pool pump",
-      emoji: "🏊",
       places: [:outdoor],
       features: [:estimate],
       params: [
@@ -434,7 +415,6 @@ defmodule DIY.Catalog do
     %{
       type: "space_heater",
       name: "Space heater",
-      emoji: "🌡️",
       places: [:indoor],
       features: [:estimate],
       params: [
@@ -446,7 +426,6 @@ defmodule DIY.Catalog do
     %{
       type: "power_station",
       name: "Power station",
-      emoji: "🔋",
       places: [:indoor, :outdoor, :bay, :bed],
       features: [:backup, :shift, :power_view, :weight, :van_power],
       params: [
@@ -511,7 +490,6 @@ defmodule DIY.Catalog do
     %{
       type: "solar_panels",
       name: "Solar panels",
-      emoji: "☀️",
       places: [:roof, :outdoor],
       features: [:solar],
       params: [
@@ -558,7 +536,6 @@ defmodule DIY.Catalog do
     %{
       type: "transfer_switch",
       name: "Interlock, transfer switch or subpanel",
-      emoji: "🔀",
       places: [:indoor, :outdoor],
       features: [:power_view],
       params: [
@@ -586,7 +563,6 @@ defmodule DIY.Catalog do
     %{
       type: "ev",
       name: "Electric car",
-      emoji: "🚗",
       places: [:outdoor, :indoor],
       features: [:ev],
       params: [
@@ -619,7 +595,6 @@ defmodule DIY.Catalog do
     %{
       type: "camper_van",
       name: "Camper van",
-      emoji: "🚐",
       places: [:outdoor, :indoor],
       features: [:van],
       params: [
@@ -691,7 +666,6 @@ defmodule DIY.Catalog do
     %{
       type: "swivel_seat",
       name: "Swivel seat base",
-      emoji: "💺",
       places: [:cab],
       features: [:weight],
       params: [weight(35)]
@@ -699,7 +673,6 @@ defmodule DIY.Catalog do
     %{
       type: "dc_charger",
       name: "Alternator charger (DC-DC)",
-      emoji: "🔌",
       places: [:cab, :bay],
       features: [:weight, :van_power],
       params: [int("amps", "Charge", "A", 30, 1, 200, "The label gives its amps."), weight(5)]
@@ -707,7 +680,6 @@ defmodule DIY.Catalog do
     %{
       type: "van_fridge",
       name: "12 V fridge",
-      emoji: "🧊",
       places: [:galley, :living],
       features: [:weight, :van_power],
       params: [
@@ -726,7 +698,6 @@ defmodule DIY.Catalog do
     %{
       type: "stove",
       name: "Stove",
-      emoji: "🍳",
       places: [:galley],
       features: [:weight, :van_power, :safety],
       params: [
@@ -749,7 +720,6 @@ defmodule DIY.Catalog do
     %{
       type: "sink",
       name: "Sink and faucet",
-      emoji: "🚰",
       places: [:galley],
       features: [:weight],
       params: [weight(15)]
@@ -757,7 +727,6 @@ defmodule DIY.Catalog do
     %{
       type: "water_tank",
       name: "Water tank",
-      emoji: "💧",
       places: [:galley, :bed, :bay, :living],
       features: [:weight],
       params: [
@@ -777,7 +746,6 @@ defmodule DIY.Catalog do
     %{
       type: "water_pump",
       name: "Water pump",
-      emoji: "🚿",
       places: [:galley, :bed, :bay],
       features: [:weight, :van_power],
       params: [int("watts", "Power", "W", 60, 0, 1000, nil), minutes(10), weight(3)]
@@ -785,7 +753,6 @@ defmodule DIY.Catalog do
     %{
       type: "counter",
       name: "Counter and cabinets",
-      emoji: "🗄️",
       places: [:galley, :living],
       features: [:weight],
       params: [weight(80)]
@@ -793,7 +760,6 @@ defmodule DIY.Catalog do
     %{
       type: "bench",
       name: "Bench or seat",
-      emoji: "🛋️",
       places: [:living],
       features: [:weight],
       params: [weight(50)]
@@ -801,7 +767,6 @@ defmodule DIY.Catalog do
     %{
       type: "van_table",
       name: "Table",
-      emoji: "🪑",
       places: [:living],
       features: [:weight],
       params: [weight(20)]
@@ -809,7 +774,6 @@ defmodule DIY.Catalog do
     %{
       type: "van_fan",
       name: "Roof fan",
-      emoji: "🌀",
       places: [:van_roof, :living],
       features: [:weight, :van_power],
       params: [
@@ -822,7 +786,6 @@ defmodule DIY.Catalog do
     %{
       type: "window",
       name: "Window",
-      emoji: "🪟",
       places: [:living, :galley, :bed],
       features: [:weight],
       params: [weight(20)]
@@ -830,7 +793,6 @@ defmodule DIY.Catalog do
     %{
       type: "van_lights",
       name: "Lights",
-      emoji: "💡",
       places: [:living, :galley, :bed],
       features: [:weight, :van_power],
       params: [
@@ -842,7 +804,6 @@ defmodule DIY.Catalog do
     %{
       type: "devices",
       name: "Phones and a laptop",
-      emoji: "💻",
       places: [:living, :bed, :cab],
       features: [:weight, :van_power],
       params: [
@@ -860,7 +821,6 @@ defmodule DIY.Catalog do
     %{
       type: "diesel_heater",
       name: "Diesel heater",
-      emoji: "🔥",
       places: [:bay, :living, :bed],
       features: [:weight, :van_power, :safety],
       params: [
@@ -873,7 +833,6 @@ defmodule DIY.Catalog do
     %{
       type: "co_alarm",
       name: "Carbon monoxide and propane alarm",
-      emoji: "🚨",
       places: [:living, :galley, :bed],
       features: [:weight, :safety],
       params: [weight(1)]
@@ -881,7 +840,6 @@ defmodule DIY.Catalog do
     %{
       type: "bed_platform",
       name: "Bed and mattress",
-      emoji: "🛏️",
       places: [:bed],
       features: [:weight],
       params: [weight(120)]
@@ -889,7 +847,6 @@ defmodule DIY.Catalog do
     %{
       type: "storage",
       name: "Storage",
-      emoji: "📦",
       places: [:bed, :living, :galley, :cab],
       features: [:weight],
       params: [weight(40, "The cabinets or the boxes, with no gear in them.")]
@@ -897,7 +854,6 @@ defmodule DIY.Catalog do
     %{
       type: "van_battery",
       name: "Battery bank",
-      emoji: "🔋",
       places: [:bay, :bed],
       features: [:weight, :van_power, :safety],
       params: [
@@ -931,7 +887,6 @@ defmodule DIY.Catalog do
     %{
       type: "inverter",
       name: "Inverter",
-      emoji: "🔁",
       places: [:bay],
       features: [:weight, :van_power],
       params: [
@@ -960,7 +915,6 @@ defmodule DIY.Catalog do
     %{
       type: "shore_power",
       name: "Shore power inlet and charger",
-      emoji: "🔌",
       places: [:bay],
       features: [:weight],
       params: [weight(10)]
@@ -968,7 +922,6 @@ defmodule DIY.Catalog do
     %{
       type: "van_solar",
       name: "Solar panels",
-      emoji: "☀️",
       places: [:van_roof],
       features: [:weight, :van_power],
       params: [
@@ -987,7 +940,6 @@ defmodule DIY.Catalog do
     %{
       type: "insulation",
       name: "Insulation",
-      emoji: "🧱",
       places: [:shell],
       features: [:weight],
       params: [weight(40)]
@@ -995,7 +947,6 @@ defmodule DIY.Catalog do
     %{
       type: "walls",
       name: "Walls and ceiling",
-      emoji: "🪵",
       places: [:shell],
       features: [:weight],
       params: [weight(150)]
@@ -1003,7 +954,6 @@ defmodule DIY.Catalog do
     %{
       type: "van_floor",
       name: "Floor",
-      emoji: "🟫",
       places: [:shell],
       features: [:weight],
       params: [weight(100)]
@@ -1011,7 +961,6 @@ defmodule DIY.Catalog do
     %{
       type: "other",
       name: "Other",
-      emoji: "⚙️",
       places: @places,
       features: [:estimate],
       params: [

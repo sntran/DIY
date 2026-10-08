@@ -105,9 +105,9 @@ defmodule DIYWeb.LessonLiveTest do
 
     wrong = %{"energy" => "1", "base" => "9.95", "tdu" => "", "credits" => "100", "total" => "x"}
     html = view |> form("#exercise", %{"answer" => wrong}) |> render_submit()
-    assert html =~ "✗ check it"
-    assert html =~ "✓ right"
-    assert html =~ "✗ give a number of dollars"
+    assert html =~ ~r/hero-x-mark[^<]*<\/span>\s*check it/
+    assert html =~ ~r/hero-check[^<]*<\/span>\s*right/
+    assert html =~ "give a number of dollars"
     assert has_element?(view, "#exercise p[role=status]", "of 5 right.")
     refute has_element?(view, "#exercise-done")
     # The months of the estimate show their range.

@@ -120,10 +120,10 @@ async function lesson(page, name) {
   // The EFL of a plan, read in the browser: an encrypted EFL too.
   await page.setInputFiles("#efl-file", "test/fixtures/efl/discount-saver-18.pdf")
   await page.waitForSelector("#efl-result:has-text('discount-saver-18')")
-  assert.equal(await page.locator("#efl-check td:has-text('✓')").count(), 3)
+  assert.equal(await page.locator("#efl-check td .hero-check").count(), 3)
   await page.setInputFiles("#efl-file", "test/fixtures/efl/txu-smart-1000-select-12.pdf")
   await page.waitForSelector("#efl-result:has-text('txu-smart-1000-select-12')")
-  assert.equal(await page.locator("#efl-check td:has-text('✓')").count(), 3)
+  assert.equal(await page.locator("#efl-check td .hero-check").count(), 3)
   // Each number links to its page of the PDF.
   await page.waitForFunction(() =>
     [...document.querySelectorAll("#efl-result a[data-efl-page]")].every((a) => a.href.startsWith("blob:")),

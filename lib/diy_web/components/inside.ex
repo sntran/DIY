@@ -13,7 +13,7 @@ defmodule DIYWeb.Inside do
   use DIYWeb, :html
 
   alias DIY.{Build, Catalog, Estimate}
-  alias DIYWeb.Format
+  alias DIYWeb.{Format, Icon}
 
   @place_names %{indoor: "Inside", outdoor: "Outside", roof: "On the roof"}
 
@@ -49,7 +49,7 @@ defmodule DIYWeb.Inside do
       <%!-- The hint is in a fixed element: #levels must not move (assets/js/scroll.js). --%>
       <div id="hints">
         <div :if={"swipe" not in @build.hints} id="swipe-hint" class="alert alert-info">
-          <span aria-hidden="true">👆</span>
+          <.icon name="hero-arrows-right-left" class="size-6" />
           <span>Swipe left or right for the next room. Swipe up or down for a different floor.</span>
           <button type="button" phx-click="hint" phx-value-hint="swipe" class="btn btn-sm">OK</button>
         </div>
@@ -75,13 +75,13 @@ defmodule DIYWeb.Inside do
                 href={"#level-#{Enum.at(@levels, l - 1)}"}
                 class="btn btn-sm btn-square btn-ghost"
                 aria-label="The level above"
-              >▲</a>
+              ><.icon name="hero-chevron-up" class="size-4" /></a>
               <a
                 :if={l < length(@levels) - 1}
                 href={"#level-#{Enum.at(@levels, l + 1)}"}
                 class="btn btn-sm btn-square btn-ghost"
                 aria-label="The level below"
-              >▼</a>
+              ><.icon name="hero-chevron-down" class="size-4" /></a>
             </span>
           </div>
           <.row build={@build} level={level} estimate={@estimate} price={@price} away={@away} />
@@ -155,7 +155,7 @@ defmodule DIYWeb.Inside do
                 end
               ]}
             >
-              <span class="text-2xl" aria-hidden="true">{Catalog.kind(item.type).emoji}</span>
+              <Icon.item type={item.type} />
               <span class="text-sm font-semibold leading-tight">{Catalog.name(item)}</span>
               <span :if={@estimate.ready} class="text-xs opacity-80">
                 {Format.kwh(@estimate.items[item.id].year / 12)} · {Format.money(
@@ -165,7 +165,7 @@ defmodule DIYWeb.Inside do
               <span :if={item.typical} class="text-xs opacity-60">Typical</span>
               <span :if={item.planned} class="text-xs font-semibold">Plan</span>
               <span :if={item.backup and station?(@build)} class="text-xs">
-                <span aria-hidden="true">🔋</span> On the station
+                <.icon name="hero-battery-100" class="size-4" /> On the station
               </span>
             </.link>
           </li>
@@ -175,7 +175,7 @@ defmodule DIYWeb.Inside do
               id={"away-#{item.id}"}
               class="card border border-dashed border-base-300 p-2 h-full hover:bg-base-200"
             >
-              <span class="text-2xl" aria-hidden="true">{Catalog.kind(item.type).emoji}</span>
+              <Icon.item type={item.type} />
               <span class="text-sm font-semibold leading-tight">{Catalog.name(item)}</span>
               <span class="text-xs">In the van now</span>
             </.link>
@@ -187,7 +187,7 @@ defmodule DIYWeb.Inside do
               class="card card-border border-dashed p-2 h-full items-center justify-center hover:bg-base-200"
               aria-label={"Add an item to #{room.name}"}
             >
-              <span class="text-2xl" aria-hidden="true">＋</span>
+              <.icon name="hero-plus" class="size-6" />
               <span class="text-sm">Add</span>
             </.link>
           </li>
@@ -200,13 +200,13 @@ defmodule DIYWeb.Inside do
               href={"#room-#{Enum.at(@rooms, i - 1).id}"}
               class="btn btn-sm btn-square btn-ghost"
               aria-label="The room before"
-            >◀</a>
+            ><.icon name="hero-chevron-left" class="size-4" /></a>
             <a
               :if={i < length(@rooms) - 1}
               href={"#room-#{Enum.at(@rooms, i + 1).id}"}
               class="btn btn-sm btn-square btn-ghost"
               aria-label="The next room"
-            >▶</a>
+            ><.icon name="hero-chevron-right" class="size-4" /></a>
           </span>
           <details class="dropdown dropdown-end">
             <summary class="btn btn-sm btn-ghost">Change the room</summary>
@@ -292,7 +292,7 @@ defmodule DIYWeb.Inside do
     assigns = assign(assigns, kind: kind, room: room, rooms: rooms, van: van, features: features)
 
     ~H"""
-    <.sheet id="item-sheet" title={"#{@kind.emoji} #{Catalog.name(@item)}"}>
+    <.sheet id="item-sheet" title={Catalog.name(@item)} icon={@item.type}>
       <p class="text-sm opacity-80">In {@room.name} ({Build.level_name(@room.level)})</p>
 
       <div :if={@item.typical} class="alert alert-warning text-sm">
@@ -542,9 +542,9 @@ defmodule DIYWeb.Inside do
             phx-click="add_item"
             phx-value-room={@room.id}
             phx-value-type={kind.type}
-            class="btn btn-block justify-start h-auto py-2"
+            class="btn btn-block justify-start h-auto py-2 text-left"
           >
-            <span aria-hidden="true">{kind.emoji}</span> {kind.name}
+            <Icon.item type={kind.type} class="size-8" /> {kind.name}
           </button>
         </li>
       </ul>
@@ -554,6 +554,7 @@ defmodule DIYWeb.Inside do
 
   attr :id, :string, required: true
   attr :title, :string, required: true
+  attr :icon, :string, default: nil, doc: "the kind of an item, for its icon"
   attr :close, :string, default: "/inside", doc: "the page of the close link"
   slot :inner_block, required: true
 
@@ -577,9 +578,11 @@ defmodule DIYWeb.Inside do
         phx-mounted={JS.focus_first()}
       >
         <div class="flex items-center justify-between">
-          <h2 id={"#{@id}-title"} class="text-lg font-bold">{@title}</h2>
+          <h2 id={"#{@id}-title"} class="flex items-center gap-2 text-lg font-bold">
+            <Icon.item :if={@icon} type={@icon} class="size-8" />{@title}
+          </h2>
           <.link patch={@close} class="btn btn-sm btn-ghost" aria-label="Close" data-close>
-            ✕
+            <.icon name="hero-x-mark" class="size-5" />
           </.link>
         </div>
         {render_slot(@inner_block)}
