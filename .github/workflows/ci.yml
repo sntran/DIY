@@ -1,0 +1,144 @@
+# The checks of each push and of each pull request:
+#
+# - mix precommit: the format, the tests of the VM with 100% coverage, and
+#   the tests of the JavaScript of the page (npm test), with 100% coverage.
+# - scripts/tlc.sh: the TLA+ models of specs/, with TLC.
+# - The build for Cloudflare Workers (npm run build), its size (wrangler
+#   deploy --dry-run), and a request to it in workerd (wrangler dev).
+#
+# This workflow deploys nothing: Workers Builds deploys main.
+name: CI
+
+# A pull request runs the checks on its head, and a push to main runs them
+# again on the merge.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+# A new push to a branch stops the old run of that branch.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  LANG: C.UTF-8
+  BEAM_COM_VERSION: 0.1.0-rc.5
+  BEAM_COM_SHA256: ac36bab20b0cf8a6bcd9b9e02bae1e9d356855a75f4664ac65c58ff6fed8c024
+  TLA2TOOLS_VERSION: 1.7.4
+  TLA2TOOLS_SHA256: 936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      # beam.com is an Actually Portable Executable: its first lines are a
+      # shell script. The runner can give a program that starts with MZ to
+      # WINE. This rule gives it to /bin/sh.
+      - name: Run APE programs with /bin/sh
+        run: sudo sh -c 'echo ":APE:M::MZqFpD::/bin/sh:" > /proc/sys/fs/binfmt_misc/register' || true
+
+      - name: Install beam.com
+        run: |
+          mkdir -p "$HOME/bin"
+          cd "$HOME/bin"
+          curl -fsSLO "https://github.com/sntran/BEAM.com/releases/download/v$BEAM_COM_VERSION/beam.com"
+          echo "$BEAM_COM_SHA256  beam.com" | sha256sum -c -
+          chmod +x beam.com
+          for tool in mix.com iex.com; do ln -s beam.com "$tool"; done
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+
+      - name: Install tla2tools.jar
+        run: |
+          mkdir -p "$HOME/.tla"
+          curl -fsSL -o "$HOME/.tla/tla2tools.jar" \
+            "https://github.com/tlaplus/tlaplus/releases/download/v$TLA2TOOLS_VERSION/tla2tools.jar"
+          echo "$TLA2TOOLS_SHA256  $HOME/.tla/tla2tools.jar" | sha256sum -c -
+
+      # _build must come from beam.com only, so the key has the version of
+      # beam.com.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            deps
+            _build
+            ~/.mix
+            ~/.hex
+          key: mix-${{ runner.os }}-beam.com-${{ env.BEAM_COM_VERSION }}-${{ hashFiles('mix.lock') }}
+          restore-keys: mix-${{ runner.os }}-beam.com-${{ env.BEAM_COM_VERSION }}-
+
+      - name: Install Hex, rebar3 and the deps
+        run: |
+          mix.com local.hex --force
+          mix.com local.rebar --force
+          mix.com deps.get
+
+      - name: Install the npm packages
+        run: npm ci --no-audit --no-fund
+
+      - name: mix precommit
+        run: mix.com precommit
+
+      # mix precommit formats the code and removes the unused deps of
+      # mix.lock. A change here means that the commit did not have them.
+      - name: No change from mix precommit
+        run: git diff --exit-code
+
+      - name: The TLA+ models
+        run: scripts/tlc.sh
+
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+
+      - name: Run APE programs with /bin/sh
+        run: sudo sh -c 'echo ":APE:M::MZqFpD::/bin/sh:" > /proc/sys/fs/binfmt_misc/register' || true
+
+      # The same steps as Workers Builds: npm ci, npm run build. npx
+      # beam.com downloads the beam.com of the version of package.json, and
+      # checks its SHA-256.
+      - name: npm ci and npm run build
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+
+      # A Worker can be at most 64 MiB (docs/WORKERS.md of BEAM.com).
+      - name: The size of the Worker
+        run: |
+          npx wrangler deploy --dry-run --outdir "$RUNNER_TEMP/worker" | tee "$RUNNER_TEMP/dry-run.txt"
+          kib=$(sed -n 's/^Total Upload: \([0-9.]*\) KiB.*/\1/p' "$RUNNER_TEMP/dry-run.txt")
+          echo "The Worker is $kib KiB."
+          awk -v kib="$kib" 'BEGIN { exit !(kib > 0 && kib < 65536) }'
+
+      # The Worker in workerd, as on Cloudflare: the VM boots in the Durable
+      # Object and answers the page.
+      - name: The Worker answers
+        run: |
+          npx wrangler dev --port 8787 --ip 127.0.0.1 > "$RUNNER_TEMP/wrangler.log" 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -fsS --compressed -o "$RUNNER_TEMP/page.html" http://127.0.0.1:8787/; then break; fi
+            sleep 2
+          done
+          cat "$RUNNER_TEMP/wrangler.log"
+          grep -q "Small Steps Home" "$RUNNER_TEMP/page.html"

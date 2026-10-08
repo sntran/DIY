@@ -1,0 +1,3 @@
+# All robots can read all the pages.
+User-agent: *
+Disallow:
