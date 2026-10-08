@@ -13,13 +13,23 @@ defmodule DIYWeb.DeviceTest do
     build
   end
 
+  defp mount(conn), do: elem(live_isolated(conn, DIYWeb.DeviceLive), 1)
+
   defp open(conn, payload) do
-    {:ok, view, _html} = live(conn, ~p"/")
+    view = mount(conn)
     render_hook(view, "device:restore", payload)
     view
   end
 
   defp empty, do: %{"text" => nil, "stamp" => ""}
+
+  defp edit(view), do: render_click(view, "edit", %{})
+
+  # The build and the state of the protocol of a LiveView.
+  defp build(view), do: :sys.get_state(view.pid).socket.assigns.build
+  defp device(view), do: :sys.get_state(view.pid).socket.assigns.device
+
+  defp flash(view, kind), do: view |> element("#flash-#{kind}") |> render()
 
   # The save that the LiveView pushed last.
   defp save(view) do
@@ -27,38 +37,62 @@ defmodule DIYWeb.DeviceTest do
     save
   end
 
+  test "the page waits for the restore, and a click before it changes nothing", %{conn: conn} do
+    view = mount(conn)
+    assert render(view) =~ "waiting"
+    edit(view)
+    refute_push_event view, "device:save", _save
+  end
+
+  test "a restore shows the stored build, and the next save comes from it", %{conn: conn} do
+    first = door("planning")
+    view = open(conn, stored(first))
+    assert build(view) == first
+    assert DIYWeb.Device.saved?(%{build: build(view), device: device(view)})
+
+    edit(view)
+    assert %{base: base, backup: false, text: text} = save(view)
+    assert base == first.stamp
+    {:ok, next} = Build.from_json(text)
+    assert next.revision == 2
+    refute DIYWeb.Device.saved?(%{build: build(view), device: device(view)})
+
+    render_hook(view, "device:saved", %{"stamp" => next.stamp})
+    assert DIYWeb.Device.saved?(%{build: build(view), device: device(view)})
+  end
+
   test "a text that is not a build gives a new build, and the next save keeps a copy", %{
     conn: conn
   } do
     view = open(conn, %{"text" => "not a build", "stamp" => "x"})
-    assert render(view) =~ "keeps a copy of the old one"
-    assert has_element?(view, "#door-my-house")
+    assert flash(view, :info) =~ "keeps a copy of the old one"
+    assert build(view).revision == 0
 
-    view |> element("#door-my-house") |> render_click()
+    edit(view)
     assert %{base: "x", backup: true} = save(view)
 
-    view |> element("#restart") |> render_click()
+    edit(view)
     assert %{backup: false} = save(view)
   end
 
   test "a failed save on an unreadable text asks for the copy again", %{conn: conn} do
     view = open(conn, %{"text" => "not a build", "stamp" => "x"})
-    view |> element("#door-my-house") |> render_click()
+    edit(view)
     assert %{backup: true, epoch: epoch} = save(view)
 
     render_hook(view, "device:error", %{"error" => "full", "stamp" => "x", "epoch" => epoch})
-    view |> element("#restart") |> render_click()
+    edit(view)
     assert %{backup: true, base: "x", epoch: epoch} = save(view)
 
     # A failed save on a different stored build does not ask for a copy.
     render_hook(view, "device:error", %{"error" => "full", "stamp" => "y", "epoch" => epoch})
-    view |> element("#door-planning") |> render_click()
+    edit(view)
     assert %{backup: false, base: "y", epoch: epoch} = save(view)
 
     # After a save, the store has no unreadable text.
     render_hook(view, "device:saved", %{"stamp" => "z"})
     render_hook(view, "device:error", %{"error" => "full", "stamp" => "x", "epoch" => epoch})
-    view |> element("#restart") |> render_click()
+    edit(view)
     assert %{backup: false} = save(view)
   end
 
@@ -67,32 +101,34 @@ defmodule DIYWeb.DeviceTest do
   } do
     for text <- [%{"version" => 1}, String.duplicate("x", 512 * 1024 + 1)] do
       view = open(conn, %{"text" => text, "stamp" => "x"})
-      assert render(view) =~ "keeps a copy of the old one"
-      view |> element("#door-my-house") |> render_click()
+      assert flash(view, :info) =~ "keeps a copy of the old one"
+      edit(view)
       assert %{base: "x", backup: true} = save(view)
 
-      # A second one changes nothing.
-      refute render_hook(view, "device:restore", %{"text" => 5, "stamp" => "y"}) =~
-               "door-my-house"
+      # A second restore changes nothing.
+      before = build(view)
+      render_hook(view, "device:restore", %{"text" => 5, "stamp" => "y"})
+      render_hook(view, "device:restore", stored(door("my_house")))
+      assert build(view) == before
     end
   end
 
   test "a build of an old version is a text that the page cannot read", %{conn: conn} do
     view = open(conn, %{"text" => ~s({"version": 0}), "stamp" => "x"})
-    assert render(view) =~ "keeps a copy of the old one"
+    assert flash(view, :info) =~ "keeps a copy of the old one"
   end
 
   test "a build of a newer version stops the saves, until a build of this version", %{
     conn: conn
   } do
     view = open(conn, %{"text" => ~s({"version": 2}), "stamp" => "x"})
-    assert render(view) =~ "comes from a newer version"
+    assert flash(view, :error) =~ "comes from a newer version"
 
-    view |> element("#door-my-house") |> render_click()
+    edit(view)
     refute_push_event view, "device:save", _save
 
     render_hook(view, "device:changed", stored(door("planning")))
-    view |> element("#restart") |> render_click()
+    edit(view)
     assert %{text: _} = save(view)
   end
 
@@ -112,23 +148,17 @@ defmodule DIYWeb.DeviceTest do
     assert socket.assigns.flash["error"] =~ "too large"
   end
 
-  test "a second restore changes nothing", %{conn: conn} do
-    view = open(conn, empty())
-    html = render_hook(view, "device:restore", stored(door("planning")))
-    assert html =~ "door-my-house"
-  end
-
   test "a conflict of the epoch shows the stored build, in a new epoch", %{conn: conn} do
     view = open(conn, empty())
-    view |> element("#door-my-house") |> render_click()
+    edit(view)
     %{epoch: epoch} = save(view)
 
     other = door("planning")
-    html = render_hook(view, "device:conflict", Map.put(stored(other), "epoch", epoch))
-    assert html =~ "A different tab changed this build"
-    assert html =~ "A house I&#39;m planning"
+    render_hook(view, "device:conflict", Map.put(stored(other), "epoch", epoch))
+    assert flash(view, :info) =~ "A different tab changed this build"
+    assert build(view) == other
 
-    view |> element("#restart") |> render_click()
+    edit(view)
     assert %{base: base, epoch: new_epoch} = save(view)
     assert base == other.stamp
     assert new_epoch != epoch
@@ -136,52 +166,53 @@ defmodule DIYWeb.DeviceTest do
 
   test "a conflict of an old epoch changes no build", %{conn: conn} do
     view = open(conn, empty())
-    view |> element("#door-my-house") |> render_click()
+    edit(view)
     %{epoch: epoch} = save(view)
-
-    html =
-      render_hook(view, "device:conflict", Map.put(stored(door("planning")), "epoch", epoch + 1))
-
-    refute html =~ "A different tab changed this build"
-    assert html =~ "My house"
+    mine = build(view)
+    render_hook(view, "device:conflict", Map.put(stored(door("planning")), "epoch", epoch + 1))
+    refute flash(view, :info) =~ "A different tab changed this build"
+    assert build(view) == mine
   end
 
   test "a conflict with an empty store saves the build again on it", %{conn: conn} do
     view = open(conn, empty())
-    view |> element("#door-my-house") |> render_click()
+    edit(view)
     %{text: text, epoch: epoch} = save(view)
 
-    html = render_hook(view, "device:conflict", %{"text" => nil, "stamp" => "", "epoch" => epoch})
-    assert html =~ "My house"
+    render_hook(view, "device:conflict", %{"text" => nil, "stamp" => "", "epoch" => epoch})
     assert %{text: ^text, base: "", epoch: new_epoch} = save(view)
     assert new_epoch != epoch
   end
 
-  test "a conflict before the restore changes nothing", %{conn: conn} do
-    {:ok, view, _html} = live(conn, ~p"/")
-    html = render_hook(view, "device:conflict", Map.put(stored(door("planning")), "epoch", 1))
-    assert html =~ "reads your build"
+  test "a conflict or an error before the restore changes nothing", %{conn: conn} do
+    view = mount(conn)
+    render_hook(view, "device:conflict", Map.put(stored(door("planning")), "epoch", 1))
+    render_hook(view, "device:error", %{"error" => "x", "stamp" => "", "epoch" => 1})
+    assert build(view) == nil
   end
 
   test "a newer build of a different tab shows at once", %{conn: conn} do
     view = open(conn, empty())
+    other = door("planning")
+    render_hook(view, "device:changed", stored(other))
+    assert build(view) == other
 
-    assert render_hook(view, "device:changed", stored(door("planning"))) =~
-             "A house I&#39;m planning"
-
-    view |> element("#restart") |> render_click()
+    edit(view)
     assert %{base: base} = save(view)
-    assert base != ""
+    assert base == other.stamp
   end
 
   test "an older build, a text that is not a build, or a write before the restore changes nothing",
        %{conn: conn} do
-    view = open(conn, stored(Build.change(door("my_house"), & &1)))
-    assert render_hook(view, "device:changed", stored(door("planning"))) =~ "My house"
-    assert render_hook(view, "device:changed", %{"text" => "x", "stamp" => ""}) =~ "My house"
+    mine = Build.change(door("my_house"), & &1)
+    view = open(conn, stored(mine))
+    render_hook(view, "device:changed", stored(door("planning")))
+    render_hook(view, "device:changed", %{"text" => "x", "stamp" => ""})
+    assert build(view) == mine
 
-    {:ok, waiting, _html} = live(conn, ~p"/")
-    assert render_hook(waiting, "device:changed", stored(door("my_house"))) =~ "reads your build"
+    waiting = mount(conn)
+    render_hook(waiting, "device:changed", stored(door("my_house")))
+    assert build(waiting) == nil
   end
 
   test "a failed write keeps the build, and the next save comes from the stored build", %{
@@ -189,20 +220,20 @@ defmodule DIYWeb.DeviceTest do
   } do
     first = door("my_house")
     view = open(conn, stored(first))
-    view |> element("#restart") |> render_click()
+    edit(view)
     %{epoch: epoch} = save(view)
+    mine = build(view)
 
-    html =
-      render_hook(view, "device:error", %{
-        "error" => "full",
-        "stamp" => first.stamp,
-        "epoch" => epoch
-      })
+    render_hook(view, "device:error", %{
+      "error" => "full",
+      "stamp" => first.stamp,
+      "epoch" => epoch
+    })
 
-    assert html =~ "This device did not save the build: full"
-    assert html =~ "door-my-house"
+    assert flash(view, :error) =~ "This device did not save the build: full"
+    assert build(view) == mine
 
-    view |> element("#door-planning") |> render_click()
+    edit(view)
     assert %{base: base, epoch: new_epoch} = save(view)
     assert base == first.stamp
     assert new_epoch != epoch
@@ -210,23 +241,21 @@ defmodule DIYWeb.DeviceTest do
 
   test "an error of an old epoch only shows", %{conn: conn} do
     view = open(conn, empty())
-    view |> element("#door-my-house") |> render_click()
-    %{text: text, epoch: epoch} = save(view)
-    {:ok, build} = Build.from_json(text)
+    edit(view)
+    %{epoch: epoch} = save(view)
+    mine = build(view)
 
-    html =
-      render_hook(view, "device:error", %{"error" => "full", "stamp" => "", "epoch" => epoch + 1})
+    render_hook(view, "device:error", %{"error" => "full", "stamp" => "", "epoch" => epoch + 1})
+    assert flash(view, :error) =~ "This device did not save the build"
 
-    assert html =~ "This device did not save the build"
-
-    view |> element("#restart") |> render_click()
+    edit(view)
     assert %{base: base} = save(view)
-    assert base == build.stamp
+    assert base == mine.stamp
   end
 
   test "an event with bad parameters, or a large text, changes nothing", %{conn: conn} do
     view = open(conn, empty())
-    before = render_hook(view, "device:other", %{})
+    before = {build(view), device(view)}
     large = String.duplicate("x", 512 * 1024 + 1)
 
     for {event, params} <- [
@@ -236,9 +265,11 @@ defmodule DIYWeb.DeviceTest do
           {"device:conflict", %{"text" => large, "stamp" => "", "epoch" => 1}},
           {"device:changed", %{}},
           {"device:changed", %{"text" => large, "stamp" => ""}},
-          {"device:error", %{"error" => nil}}
+          {"device:error", %{"error" => nil}},
+          {"device:other", %{}}
         ] do
-      assert render_hook(view, event, params) == before
+      render_hook(view, event, params)
+      assert {build(view), device(view)} == before
     end
   end
 
@@ -250,10 +281,10 @@ defmodule DIYWeb.DeviceTest do
   # the compare and set of assets/js/device.js. The test is the hook of each
   # tab: it takes the saves in order, keeps its queue on a conflict, and
   # sends what it sees of the store on one channel, in order. A write puts a
-  # read of the store in the queue of the other tab. A restart of a
-  # tab is a reconnect (a new LiveView, the same hook and queue). After
-  # random steps, the test gives all the messages: then each tab shows the
-  # stored build (the same stamp), and its next save comes from it.
+  # read of the store in the queue of the other tab. A restart of a tab is a
+  # reconnect (a new LiveView, the same hook and queue). After random steps,
+  # the test gives all the messages: then each tab shows the stored build
+  # (the same stamp), and its next save comes from it.
   property "two tabs show the stored build in the end", %{conn: conn} do
     check all(
             steps <-
@@ -270,29 +301,18 @@ defmodule DIYWeb.DeviceTest do
       for t <- 0..1 do
         view = state.tabs[t].view
         stamp = if state.store, do: state.store["stamp"], else: ""
-        build = :sys.get_state(view.pid).socket.assigns.build
-        assert build.stamp == stamp
+        assert build(view).stamp == stamp
 
-        click(view)
+        edit(view)
         assert %{base: ^stamp} = save(view)
       end
     end
   end
 
-  defp tab(conn) do
-    {:ok, view, _html} = live(conn, ~p"/")
-    %{view: view, queue: [:read], inbox: []}
-  end
-
-  defp click(view) do
-    if has_element?(view, "#restart"),
-      do: view |> element("#restart") |> render_click(),
-      else: view |> element("#door-planning") |> render_click()
-  end
+  defp tab(conn), do: %{view: mount(conn), queue: [:read], inbox: []}
 
   defp step({t, :edit}, state, _conn) do
-    view = state.tabs[t].view
-    if :sys.get_state(view.pid).socket.assigns.build, do: click(view)
+    edit(state.tabs[t].view)
     collect(state, t)
   end
 
@@ -342,7 +362,7 @@ defmodule DIYWeb.DeviceTest do
   # A reconnect: a new LiveView, with the hook and its queue. The new read
   # replaces the old reads of the queue.
   defp step({t, :restart}, state, conn) do
-    {:ok, view, _html} = live(conn, ~p"/")
+    view = mount(conn)
 
     update_in(state, [:tabs, t], fn tab ->
       %{tab | view: view, queue: Enum.reject(tab.queue, &(&1 == :read)) ++ [:read], inbox: []}

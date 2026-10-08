@@ -5,6 +5,7 @@ import {LiveSocket} from "phoenix_live_view"
 import {hooks as colocatedHooks} from "phoenix-colocated/diy"
 import topbar from "../vendor/topbar"
 import {deviceHook, storeOf, CHANNEL} from "./device.js"
+import {scrollHook} from "./scroll.js"
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {
@@ -16,6 +17,8 @@ const liveSocket = new LiveSocket("/live", Socket, {
       store: () => storeOf(window),
       channel: () => typeof BroadcastChannel === "function" ? new BroadcastChannel(CHANNEL) : null,
     }),
+    // The rooms start at the first floor (assets/js/scroll.js).
+    ScrollStart: scrollHook,
   },
 })
 

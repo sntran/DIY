@@ -1,21 +1,57 @@
 defmodule DIYWeb.HomeLive do
   @moduledoc """
-  The first page. The build comes from the device (`DIYWeb.Device`). A new
-  build starts at the two doors: "My house" for a person who lives in the
-  house now, and "A house I'm planning" for a lot or a new build.
+  The pages of a build. The build comes from the device (`DIYWeb.Device`).
+
+  - `/` (`:front`): the two doors, the ZIP code and the preset of a new
+    build. Then the front of the house, with the bill estimate.
+  - `/inside` (`:inside`): the rooms, one at a time. A swipe goes to the
+    next room of a floor, or to a different floor. `?item=ID` opens an
+    item, and `?add=ROOM` the list of the items for a room.
+  - `/estimate` (`:estimate`): the math of the estimate, month by month.
+  - `/settings` (`:settings`): the place, the price, the numbers of the
+    house, and the file of the build.
+
+  The weather of the ZIP code (`DIY.Weather`) and the utility area of a
+  Texas ZIP code (`DIY.Market`) come in the background.
   """
   use DIYWeb, :live_view
 
-  alias DIY.Build
+  alias DIY.{Build, Catalog, Estimate, House, Market, Prices, Weather}
   alias DIYWeb.Device
 
   @impl true
   def mount(_params, _session, socket) do
-    {:ok, assign(socket, :page_title, "Small Steps Home")}
+    {:ok,
+     socket
+     |> assign(:page_title, "Small Steps Home")
+     |> assign(:weather, %{zip: nil, status: :none, climate: nil})
+     |> assign(:market, %{zip: nil, status: :none})
+     |> assign(:estimate, %{ready: false, missing: []})
+     |> assign(:price, nil)
+     |> assign(:item, nil)
+     |> assign(:add, nil)
+     |> allow_upload(:build_file,
+       accept: ~w(.json),
+       max_entries: 1,
+       max_file_size: 512 * 1024,
+       auto_upload: true,
+       progress: &handle_progress/3
+     )}
   end
 
   @impl true
-  def handle_info({Device, :build}, socket), do: {:noreply, socket}
+  def handle_params(params, _uri, socket) do
+    {:noreply,
+     socket
+     |> assign(:item, if(socket.assigns.live_action == :inside, do: params["item"]))
+     |> assign(:add, if(socket.assigns.live_action == :inside, do: params["add"]))}
+  end
+
+  @doc false
+  # A build from the device (DIYWeb.Device): update the data of the pages.
+  def build_changed(socket), do: refresh(socket)
+
+  ## The events
 
   @impl true
   # No change before the page has the build of the device.
@@ -23,21 +59,331 @@ defmodule DIYWeb.HomeLive do
 
   def handle_event("door", %{"door" => door}, socket) do
     case Build.choose_door(socket.assigns.build, door) do
-      {:ok, build} -> {:noreply, Device.put_build(socket, build)}
+      {:ok, build} -> {:noreply, put(socket, build)}
       {:error, :door} -> {:noreply, socket}
     end
   end
 
-  def handle_event("restart", _params, socket) do
-    {:noreply, Device.put_build(socket, Build.restart(socket.assigns.build))}
+  def handle_event("zip", %{"zip" => zip}, socket) when is_binary(zip) do
+    case Build.set_zip(socket.assigns.build, zip) do
+      {:ok, build} ->
+        {:noreply, socket |> assign(:zip_error, nil) |> put(build)}
+
+      {:error, :zip} ->
+        {:noreply,
+         assign(
+           socket,
+           :zip_error,
+           "The app does not know this ZIP code. Give 5 digits, for example 75070."
+         )}
+    end
   end
 
+  def handle_event("preset", %{"preset" => preset}, socket) when is_map(preset) do
+    case preset(preset, socket.assigns.build.door) do
+      {:ok, {house, rooms, items}} ->
+        build = Build.put_house(socket.assigns.build, house, rooms, items)
+        {:noreply, put(socket, build)}
+
+      :error ->
+        {:noreply,
+         put_flash(
+           socket,
+           :error,
+           "Choose one of each: the size, the age, the floors and the heat."
+         )}
+    end
+  end
+
+  def handle_event("hint", %{"hint" => hint}, socket) do
+    case Build.close_hint(socket.assigns.build, hint) do
+      {:ok, build} -> {:noreply, put(socket, build)}
+      {:error, :hint} -> {:noreply, socket}
+    end
+  end
+
+  def handle_event("add_item", %{"room" => room, "type" => type}, socket) do
+    case Build.add_item(socket.assigns.build, room, type) do
+      {:ok, build, id} ->
+        {:noreply, socket |> put(build) |> push_patch(to: ~p"/inside?#{[item: id]}")}
+
+      {:error, _reason} ->
+        {:noreply, socket}
+    end
+  end
+
+  def handle_event("item", %{"item_id" => id, "item" => values}, socket) when is_map(values) do
+    case Build.update_item(socket.assigns.build, id, values) do
+      {:ok, build} -> {:noreply, socket |> assign(:item_error, nil) |> put(build)}
+      {:error, {:param, key}} -> {:noreply, assign(socket, :item_error, key)}
+      {:error, _reason} -> {:noreply, socket}
+    end
+  end
+
+  def handle_event("check_item", %{"id" => id}, socket) do
+    with_build(socket, Build.check_item(socket.assigns.build, id))
+  end
+
+  def handle_event("move_item", %{"item_id" => id, "room" => room}, socket) do
+    with_build(socket, Build.move_item(socket.assigns.build, id, room))
+  end
+
+  def handle_event("delete_item", %{"id" => id}, socket) do
+    case Build.delete_item(socket.assigns.build, id) do
+      {:ok, build} -> {:noreply, socket |> put(build) |> push_patch(to: ~p"/inside")}
+      {:error, _reason} -> {:noreply, socket}
+    end
+  end
+
+  def handle_event(
+        "add_room",
+        %{"room" => %{"name" => name, "level" => level, "place" => place}},
+        socket
+      ) do
+    place = Enum.find(Catalog.places(), &(Atom.to_string(&1) == place))
+
+    case Build.add_room(socket.assigns.build, name, level, place) do
+      {:ok, build, _id} -> {:noreply, put(socket, build)}
+      {:error, _reason} -> {:noreply, put_flash(socket, :error, "Give the room a name.")}
+    end
+  end
+
+  def handle_event("rename_room", %{"room_id" => id, "name" => name}, socket) do
+    with_build(socket, Build.rename_room(socket.assigns.build, id, name))
+  end
+
+  def handle_event("delete_room", %{"id" => id}, socket) do
+    with_build(socket, Build.delete_room(socket.assigns.build, id))
+  end
+
+  def handle_event("price", %{"price" => price}, socket) when is_binary(price) do
+    result =
+      case Float.parse(String.trim(price)) do
+        _ when price == "" -> Build.set_price(socket.assigns.build, nil)
+        {cents, ""} -> Build.set_price(socket.assigns.build, cents)
+        _ -> {:error, :price}
+      end
+
+    case result do
+      {:ok, build} ->
+        {:noreply, put(socket, build)}
+
+      {:error, :price} ->
+        {:noreply,
+         put_flash(socket, :error, "Give the price in cents for one kWh, for example 14.5.")}
+    end
+  end
+
+  def handle_event("house", %{"house" => values}, socket) when is_map(values) do
+    changes =
+      for {key, value} <- values, key in ~w(size year floors), into: %{} do
+        {String.to_existing_atom(key), parse_int(value)}
+      end
+
+    changes = if values["heat"], do: Map.put(changes, :heat, values["heat"]), else: changes
+
+    case Build.update_house(socket.assigns.build, changes) do
+      {:ok, build} ->
+        {:noreply, put(socket, build)}
+
+      {:error, :floors} ->
+        {:noreply, put_flash(socket, :error, "Remove the rooms of the top floor first.")}
+
+      {:error, _reason} ->
+        {:noreply, put_flash(socket, :error, "Give numbers in the limits of each field.")}
+    end
+  end
+
+  def handle_event("utility", %{"choice" => choice}, socket) do
+    market = Market.by_user(socket.assigns.build.market, choice == "true")
+    {:noreply, put(socket, Build.set_market(socket.assigns.build, market))}
+  end
+
+  def handle_event("retry", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(:weather, %{zip: nil, status: :none, climate: nil})
+     |> assign(:market, %{zip: nil, status: :none})
+     |> refresh()}
+  end
+
+  def handle_event("restart", _params, socket) do
+    {:noreply, socket |> put(Build.restart(socket.assigns.build)) |> push_patch(to: ~p"/")}
+  end
+
+  def handle_event("upload", _params, socket), do: {:noreply, socket}
+
   def handle_event(_event, _params, socket), do: {:noreply, socket}
+
+  defp with_build(socket, {:ok, build}), do: {:noreply, put(socket, build)}
+  defp with_build(socket, {:error, _reason}), do: {:noreply, socket}
+
+  defp parse_int(value) when is_binary(value) do
+    case Integer.parse(String.trim(value)) do
+      {int, ""} -> int
+      _ -> nil
+    end
+  end
+
+  defp parse_int(_value), do: nil
+
+  # A build from a file (an export of the app).
+  defp handle_progress(:build_file, entry, socket) do
+    if entry.done? do
+      [text] =
+        consume_uploaded_entries(socket, :build_file, fn %{path: path}, _entry ->
+          {:ok, File.read!(path)}
+        end)
+
+      case Build.import(socket.assigns.build, text) do
+        {:ok, build} ->
+          {:noreply,
+           socket |> put(build) |> put_flash(:info, "The page shows the build of the file now.")}
+
+        {:error, _reason} ->
+          {:noreply, put_flash(socket, :error, "The file is not a build of this app.")}
+      end
+    else
+      {:noreply, socket}
+    end
+  end
+
+  # The house of a preset form.
+  defp preset(preset, door) do
+    size = lookup(House.sizes(), preset["size"]) || parse_int(preset["size_sqft"])
+
+    year =
+      if door == "planning", do: Date.utc_today().year, else: lookup(House.ages(), preset["age"])
+
+    floors = parse_int(preset["floors"])
+    heat = preset["heat"]
+    lot = parse_int(preset["lot"])
+
+    house = %{
+      size: size,
+      year: year,
+      floors: floors,
+      heat: heat,
+      lot: if(lot && lot > 0, do: lot)
+    }
+
+    with true <- is_integer(size) and size in 200..20_000,
+         true <- is_integer(year),
+         true <- floors in 1..3,
+         true <- heat in Build.heats(),
+         true <- is_nil(house.lot) or house.lot in 100..100_000_000 do
+      {:ok, if(preset["start"] == "scratch", do: House.scratch(house), else: House.preset(house))}
+    else
+      _ -> :error
+    end
+  end
+
+  defp lookup(options, key) do
+    Enum.find_value(options, fn {k, _label, value} -> if k == key, do: value end)
+  end
+
+  ## The build and its data
+
+  # Changes the build, and updates the data of the pages.
+  defp put(socket, build), do: socket |> Device.put_build(build) |> refresh()
+
+  defp refresh(socket) do
+    socket
+    |> load_weather()
+    |> load_market()
+    |> estimate()
+  end
+
+  defp load_weather(%{assigns: %{build: %{zip: nil}}} = socket), do: socket
+
+  defp load_weather(%{assigns: %{build: %{zip: zip}, weather: %{zip: zip}}} = socket), do: socket
+
+  defp load_weather(%{assigns: %{build: %{zip: zip}}} = socket) do
+    {:ok, place} = DIY.Zip.lookup(zip)
+
+    socket
+    |> assign(:weather, %{zip: zip, status: :loading, climate: nil})
+    |> start_async({:weather, zip}, fn -> Weather.climate(place.lat, place.lon) end)
+  end
+
+  defp load_market(
+         %{assigns: %{build: %{zip: zip, market: nil}, market: %{zip: loaded}}} = socket
+       )
+       when is_binary(zip) and zip != loaded do
+    case DIY.Zip.lookup(zip) do
+      {:ok, %{state: "TX"}} ->
+        socket
+        |> assign(:market, %{zip: zip, status: :loading})
+        |> start_async({:market, zip}, fn -> Market.fetch(zip) end)
+
+      _other ->
+        socket
+    end
+  end
+
+  defp load_market(socket), do: socket
+
+  defp estimate(socket) do
+    build = socket.assigns.build
+    climate = socket.assigns.weather.climate
+
+    socket
+    |> assign(:estimate, Estimate.run(build, climate))
+    |> assign(:price, if(build.zip, do: Prices.price(build)))
+  end
+
+  @impl true
+  def handle_async({:weather, zip}, result, socket) do
+    weather =
+      case result do
+        {:ok, {:ok, climate}} ->
+          %{zip: zip, status: :ok, climate: climate}
+
+        {:ok, {:error, message}} ->
+          %{zip: zip, status: {:error, message}, climate: nil}
+
+        {:exit, _reason} ->
+          %{zip: zip, status: {:error, "The weather service did not answer."}, climate: nil}
+      end
+
+    if socket.assigns.weather.zip == zip,
+      do: {:noreply, socket |> assign(:weather, weather) |> estimate()},
+      else: {:noreply, socket}
+  end
+
+  def handle_async({:market, zip}, result, socket) do
+    build = socket.assigns.build
+
+    case result do
+      {:ok, {:ok, market}} when build.zip == zip and build.market == nil ->
+        {:noreply,
+         socket
+         |> assign(:market, %{zip: zip, status: :ok})
+         |> put(Build.set_market(build, market))}
+
+      {:ok, {:error, message}} ->
+        {:noreply, assign(socket, :market, %{zip: zip, status: {:error, message}})}
+
+      {:exit, _reason} ->
+        {:noreply,
+         assign(socket, :market, %{zip: zip, status: {:error, "Power to Choose did not answer."}})}
+
+      {:ok, {:ok, _market}} ->
+        {:noreply, socket}
+    end
+  end
+
+  ## The pages
 
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash}>
+    <Layouts.app
+      flash={@flash}
+      nav={nav?(@build)}
+      action={@live_action}
+      saved={Device.saved?(assigns)}
+    >
       <div id="device" phx-hook="Device" class="hidden"></div>
       <noscript>
         <p class="alert alert-warning">
@@ -49,52 +395,51 @@ defmodule DIYWeb.HomeLive do
         The page reads your build from this device.
       </p>
 
-      <section :if={@build && is_nil(@build.door)} class="space-y-4">
-        <h1 class="text-2xl font-bold">Find your next small step</h1>
-        <p>
-          Build a model of your house. See your power bill at once, and then see what each change does.
-        </p>
-        <div class="grid gap-4 sm:grid-cols-2">
-          <button
-            id="door-my-house"
-            type="button"
-            phx-click="door"
-            phx-value-door="my_house"
-            class="card card-border bg-base-200 p-6 text-left hover:bg-base-300"
-          >
-            <span class="text-4xl" aria-hidden="true">🏠</span>
-            <span class="text-lg font-semibold">My house</span>
-            <span class="text-sm opacity-80">I live in the house now.</span>
-          </button>
-          <button
-            id="door-planning"
-            type="button"
-            phx-click="door"
-            phx-value-door="planning"
-            class="card card-border bg-base-200 p-6 text-left hover:bg-base-300"
-          >
-            <span class="text-4xl" aria-hidden="true">📐</span>
-            <span class="text-lg font-semibold">A house I'm planning</span>
-            <span class="text-sm opacity-80">I look at a lot or a new build.</span>
-          </button>
-        </div>
-        <p class="text-sm opacity-80">Your build stays on this device. The server keeps no copy.</p>
-      </section>
-
-      <section :if={@build && @build.door} class="space-y-4">
-        <h1 class="text-2xl font-bold">
-          {if @build.door == "my_house", do: "My house", else: "A house I'm planning"}
-        </h1>
-        <p id="device-status" class="text-sm opacity-80">
-          {if Device.saved?(assigns),
-            do: "Saved on this device.",
-            else: "The device does not have the last change yet."}
-        </p>
-        <button id="restart" type="button" phx-click="restart" class="btn btn-ghost btn-sm">
-          Start again
-        </button>
-      </section>
+      <%= if @build do %>
+        <%= cond do %>
+          <% is_nil(@build.door) -> %>
+            <DIYWeb.Start.doors />
+          <% is_nil(@build.zip) -> %>
+            <DIYWeb.Start.zip build={@build} error={assigns[:zip_error]} />
+          <% is_nil(@build.house) -> %>
+            <DIYWeb.Start.preset build={@build} />
+          <% @live_action == :inside -> %>
+            <DIYWeb.Inside.inside
+              build={@build}
+              estimate={@estimate}
+              price={@price}
+              item={@item}
+              add={@add}
+              item_error={assigns[:item_error]}
+            />
+          <% @live_action == :estimate -> %>
+            <DIYWeb.Math.estimate
+              build={@build}
+              estimate={@estimate}
+              price={@price}
+              weather={@weather}
+            />
+          <% @live_action == :settings -> %>
+            <DIYWeb.Settings.settings
+              build={@build}
+              price={@price}
+              market={@market}
+              uploads={@uploads}
+            />
+          <% true -> %>
+            <DIYWeb.Front.front
+              build={@build}
+              estimate={@estimate}
+              price={@price}
+              weather={@weather}
+              market={@market}
+            />
+        <% end %>
+      <% end %>
     </Layouts.app>
     """
   end
+
+  defp nav?(%Build{house: house}) when is_map(house), do: true
+  defp nav?(_build), do: false
 end
