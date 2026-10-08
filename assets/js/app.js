@@ -8,6 +8,7 @@ import {deviceHook, storeOf, CHANNEL} from "./device.js"
 import {scrollHook} from "./scroll.js"
 import {sheetHook} from "./sheet.js"
 import {usageHook} from "./usage.js"
+import {eflHook} from "./efl.js"
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {
@@ -25,6 +26,8 @@ const liveSocket = new LiveSocket("/live", Socket, {
     Sheet: sheetHook,
     // A usage file of a meter, read on the device (assets/js/usage.js).
     UsageFile: usageHook,
+    // The EFL of a plan, read on the device (assets/js/efl.js).
+    EflFile: eflHook,
   },
 })
 
