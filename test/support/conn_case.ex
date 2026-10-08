@@ -34,4 +34,21 @@ defmodule DIYWeb.ConnCase do
   setup _tags do
     {:ok, conn: Phoenix.ConnTest.build_conn()}
   end
+
+  @doc """
+  Waits until the page has the answers of the weather and of the market
+  (no request is open), for 2 seconds at most. A fixed sleep fails when
+  the computer is slow.
+  """
+  def settle(view, tries \\ 100) do
+    assigns = :sys.get_state(view.pid).socket.assigns
+
+    if tries > 0 and :loading in [assigns.weather.status, assigns.market.status] do
+      Process.sleep(20)
+      settle(view, tries - 1)
+    else
+      Process.sleep(5)
+      Phoenix.LiveViewTest.render(view)
+    end
+  end
 end

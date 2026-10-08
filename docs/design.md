@@ -215,7 +215,7 @@ Each item shows its math for one month (honesty rule 1): each step with
 its numbers, and the kWh of the month at the end. A number under 100 has
 one decimal, so that a step adds up on the page. For each item in each
 month, a test reads the math as the page shows it: each step gives the
-value of its numbers (with the rounding of the page), the result of a
+value of its numbers (as the page rounds them), the result of a
 step goes into the next one, and the last step gives the kWh of the item.
 
 The price of one kWh: the price that the user gives, else the median of
@@ -478,3 +478,128 @@ that match the real system". It needs the numbers of the real system of
 the owner (the stations, the panels, and the kWh of a day from the app of
 the station). The app takes them as items; the comparison is open.
 
+
+## The plan lesson (phase 4)
+
+The page Plans shows only for a house in Texas in an area with retail
+choice (`DIY.Market`). The app does not pick a plan, and it does not rank
+plans (honesty rule 4). It teaches the math of a bill, and it gets the
+data fast.
+
+### The steps
+
+`DIY.Lesson` has four steps. The build keeps the step that the user
+reached, the plan that the user did in step 2 (step 3 uses a different
+plan), and the plans of the worksheet (10 at most).
+
+The kWh of each month are whole numbers, as the page shows them: the user
+does the math with the numbers of the page, and the check accepts it.
+When the months come from the estimate, the page shows the range of each
+month, and the worksheet shows the least and the most bill of the year in
+that range. A credit or a fee changes the bill at its limit of kWh, so
+the app checks the ends of the range and each limit in it.
+
+1. A worked example: one sample house, the plan of a real EFL, and 12
+   months. The page shows each part of each bill.
+2. Your data, with help: the 12 months of the user (from the meter file
+   when it has each month of the year, else from the estimate), and one
+   plan from its EFL. The user gives each part of the bill of the month
+   with the most use. A hint for each part shows the math. The app checks
+   each part (right within 5 cents; a credit with its sign or with no
+   sign), and tells how many parts are right.
+3. Fewer hints: a second plan (from its EFL, or from its numbers). The
+   user gives only the total of the bill, and can ask for the hints.
+4. On your own: the worksheet. Each plan has the bill of each of the 12
+   months, and the cost of the year, in the order that the user added the
+   plans.
+
+### The bill of a month
+
+`DIY.Plan` gives the parts of a bill:
+
+    base + energy + TDU base + TDU cents × kWh − credits + minimum usage fee
+
+The energy charge can have tiers (a price from some kWh up), and a
+different price at night. For a plan with a price at night, the kWh of a
+month at night (a whole number) come from the day of that month of the
+house (`DIY.Power`, phase 3), with the hours of the night of the plan.
+The page shows them, and tells that they do not come from the EFL. The
+tiers are for the kWh of the full month: the kWh of the day pay the mean
+price of the tiers for all the kWh.
+A credit can have a minimum of kWh, and some months of the year. An
+average month of an EFL spreads a credit of some months over the year.
+
+### The EFL reader
+
+The browser reads the PDF of an EFL (`assets/js/efl.js`) with pdf.js. The
+page loads pdf.js (`assets/js/pdf.js`, a file of its own, the legacy
+build: the modern build needs functions that some browsers do not have)
+only when the user opens the first EFL. The reader makes the lines of
+each page from the place of each part of the text. It sends the lines to
+the server only for an EFL (a line with "average price"), at most 64 KB
+of text: the text of a bill that the user opens in error stays on the
+device. The PDF stays on the device. The page says so. The links of the
+numbers open the PDF with the type of a PDF, whatever the name of the
+file.
+
+`DIY.EFL` finds the numbers of the plan in the lines: the base charge,
+the energy charge and its tiers, the price at night and its hours, the
+delivery charges of the utility (TDU), the credits, the minimum usage
+fee, and the averages at 500, 1,000 and 2,000 kWh. The page shows each
+number with the line where it came from, and a link opens the PDF at its
+page. When the EFL does not give the delivery charges, the reader takes
+them from the table of the utility (`DIY.Plan.tdu/1`: Oncor and
+CenterPoint, from the EFLs of October 2026), or finds them from the
+averages at 500 and 2,000 kWh (only when it found the energy charge). The
+page tells where they come from; with a fit, only the average at 1,000
+kWh checks the numbers. The form of a plan gives the delivery charges
+only of a utility of the table; for another utility, the user gives them.
+
+The reader joins at most 600 bytes of lines into one sentence, and reads
+at most 64 KB of text, so that a crafted message cannot make it slow. The
+names of the months of a credit need a capital letter ("may" is not May),
+and the reader reads a range ("June through September").
+
+The check of an EFL: the bill of the plan at 500, 1,000 and 2,000 kWh must
+give the averages of the label, within 0.05¢ (a label rounds to 0.1¢).
+The user can add the plan of an EFL to the worksheet only when the check
+passes. When it does not pass, the page shows which average does not
+agree, and the user can give the numbers of the plan in a form. A
+minimum usage fee under 500 kWh is not in the averages: the page says
+that the check does not include it. The build keeps only a plan that it can
+read again (`DIY.Plan.read/1`): a number out of range gives an error, not
+a build that does not load.
+
+The forms of the EFLs of the providers are not all the same. Of 34 EFLs
+of October 2026 (Oncor), the check of 29 passes (counted with the reader
+of this version and a check within 0.05¢). The other forms put the
+numbers in columns under their names, or give the charges in a table that
+the lines do not keep.
+
+### The tests of phase 4
+
+- The check of the plan for phase 4, part 1: the reader gets the numbers
+  of 10 test EFLs of October 2026 (`test/fixtures/efl`), as a person reads
+  them on each label: the base charge, the energy charge, the delivery
+  charges, the credits, the minimum usage fee, the price at night, and the
+  averages (`test/diy/efl_test.exs`). Three more test EFLs: one of
+  CenterPoint with a minimum usage fee, one with a font that lost its
+  letters, and one of a form that the reader does not know (its check
+  fails).
+- Property tests: an answer from the numbers of the page is right, and an
+  answer 6 cents off is wrong; the parts of a bill give its total, more
+  kWh never cost less energy, and an average month has the mean credit of
+  the 12 months;
+  the delivery charges from the averages give the averages back; a plan
+  to JSON and back; the EFL reader never raises for lines from parts of
+  the test EFLs with other numbers and other text, and a build with its
+  plan loads again; the lines of a page keep each letter of the text of
+  the PDF.
+- The pages: `test/diy_web/live/lesson_live_test.exs`.
+- The check of the plan for phase 4, part 2: the browser test is a test
+  user that does the four steps. It opens an encrypted EFL and the EFL of
+  a plan with a credit (the links of the numbers open the PDF), gives each
+  part of a bill, adds a second plan from its numbers
+  (a plan from a broker), gives its bill, and gets the worksheet with the
+  two plans. Axe-core checks each screen. This is a script, not a person.
+  A test with a person with no background in plans is open (`TODO.md`).

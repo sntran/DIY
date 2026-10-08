@@ -408,6 +408,14 @@ defmodule DIY.PowerTest do
       assert both.others.change > 0 and both.others.gas == 0
       assert_in_delta both.payback, panels_only.payback, 0.05
 
+      # A planned car and a planned freezer: the charge of the car is its
+      # own.
+      {build, car} = add(build, "Driveway", "ev")
+      mixed = whatif(build |> flag(car, :planned) |> flag(freezer, :planned))
+      {:ok, ev} = Build.item(build, car)
+      assert_in_delta mixed.others.charge, Power.charge_year(ev, build.power, 15.0).cost, 1.0e-9
+      assert mixed.others.change > mixed.others.charge
+
       # A planned freezer alone: no equipment, no payback.
       alone = whatif(flag(build, freezer, :planned))
       assert alone.equipment == [] and alone.payback == nil

@@ -14,8 +14,7 @@ defmodule DIYWeb.PowerLiveTest do
   defp open(conn, path, build) do
     {:ok, view, _html} = live(conn, path)
     render_hook(view, "device:restore", %{"text" => Build.to_json(build), "stamp" => build.stamp})
-    _ = :sys.get_state(view.pid)
-    Process.sleep(20)
+    settle(view)
     view
   end
 
@@ -264,6 +263,17 @@ defmodule DIYWeb.PowerLiveTest do
     assert has_element?(view, "#today-backfeed")
     refute has_element?(view, "#plan-backfeed")
     refute has_element?(view, "#plan-permit")
+
+    # Today the station is too small, and the plan adds more on it: the
+    # overload of the plan shows with its watts.
+    {build, _id} = add(house(), "Laundry", "power_station", %{"output_w" => "100"})
+    {build, heater} = add(build, "Laundry", "space_heater")
+    build = build |> flag("fridge", :backup)
+    {:ok, build} = Build.flag_item(build, heater, :backup, true)
+    {:ok, build} = Build.flag_item(build, heater, :planned, true)
+    view = open(conn, ~p"/power", build)
+    assert has_element?(view, "#today-overload")
+    assert has_element?(view, "#plan-overload")
 
     # Planned panels on the grid add work: the permit of the plan shows.
     {build, grid} = add(build, "Roof", "solar_panels", %{"to" => "grid"})

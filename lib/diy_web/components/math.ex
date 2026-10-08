@@ -40,7 +40,7 @@ defmodule DIYWeb.Math do
           <.link patch={~p"/power"} class="link">The page Power shows the plan.</.link>
         </p>
 
-        <div class="overflow-x-auto">
+        <div class="overflow-x-auto" tabindex="0" role="region" aria-label="The months">
           <table class="table table-xs sm:table-sm" id="months">
             <thead>
               <tr>
@@ -213,7 +213,7 @@ defmodule DIYWeb.Math do
     <p id="inside-count">
       {@compare.inside} of {Format.count(length(@compare.rows), "real month")} in the range of the estimate.
     </p>
-    <div class="overflow-x-auto">
+    <div class="overflow-x-auto" tabindex="0" role="region" aria-label="The real months">
       <table class="table table-xs sm:table-sm" id="real-months">
         <thead>
           <tr>

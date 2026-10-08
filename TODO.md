@@ -26,6 +26,10 @@ The owner decides about each item.
   user gives the size of the lot.
 - The check of phase 2 with real files of meters (anonymized), in place of
   synthetic meter data from the model of the estimate.
+- A Green Button XML with more than one meter: the finest readings for each
+  UsagePoint, each flow and each day (today: for each flow and day). And
+  the first day of hourly readings after a meter change: keep the finer
+  readings only when they cover the full day.
 - The weather of the months of this year (NASA POWER has the months of
   last year and before): a file of the last 12 months then gets its fit.
 - Base Power next to a DIY station in the what-if (the plan: a battery of
@@ -43,3 +47,9 @@ The owner decides about each item.
   until the AC is not planned.
 - The circuits of a subpanel by name, in place of the items that a
   station runs.
+- The check of phase 4 with a real person with no background in plans:
+  the person compares 2 plans with the worksheet.
+- The EFL forms that the reader does not know yet: numbers in columns
+  under their names, and charges in a table.
+- The delivery charges of the other utilities (AEP Texas, TNMP) in the
+  table of `DIY.Plan.tdu/1`.

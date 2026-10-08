@@ -574,7 +574,7 @@ defmodule DIY.Power do
           |> Enum.map(&@life[&1.type])
           |> Enum.reject(&is_nil/1)
           |> Enum.min(fn -> nil end),
-        others: others(others, plan, gear),
+        others: others(others, plan, gear, build.power, cents),
         warnings: warnings(plan)
       }
     else
@@ -583,13 +583,19 @@ defmodule DIY.Power do
   end
 
   # The result of the other planned items: the change of the bill (the
-  # bill with them, less the bill without them), and the gas that a car
-  # saves.
-  defp others([], _plan, _gear), do: nil
+  # bill with them, less the bill without them), and for the cars, the
+  # cost of their home charge (`charge_year/3`) and the gas that they save.
+  defp others([], _plan, _gear, _settings, _cents), do: nil
 
-  defp others(items, plan, gear) do
-    gas = items |> Enum.filter(&(&1.type == "ev")) |> Enum.map(&gas_year/1) |> Enum.sum()
-    %{items: items, change: plan.year.cost - gear.year.cost, gas: gas}
+  defp others(items, plan, gear, settings, cents) do
+    cars = Enum.filter(items, &(&1.type == "ev"))
+
+    %{
+      items: items,
+      change: plan.year.cost - gear.year.cost,
+      gas: cars |> Enum.map(&gas_year/1) |> Enum.sum(),
+      charge: cars |> Enum.map(&charge_year(&1, settings, cents).cost) |> Enum.sum()
+    }
   end
 
   @doc "The dollars of gas that a car of the same miles uses in one year."

@@ -76,7 +76,7 @@ defmodule DIYWeb.PowerPage do
           The planned equipment costs {Format.money(@whatif.price)}.
         </span>
       </p>
-      <div class="overflow-x-auto">
+      <div class="overflow-x-auto" tabindex="0" role="region" aria-label="Today and the plan">
         <table class="table table-xs sm:table-sm" id="plan-months">
           <thead>
             <tr>
@@ -125,7 +125,7 @@ defmodule DIYWeb.PowerPage do
         </p>
         <p :if={@whatif.others.gas > 0}>
           The planned car saves {Format.money(@whatif.others.gas)} of gas in one year. {gas_text(
-            @whatif.others.gas - @whatif.others.change
+            @whatif.others.gas - @whatif.others.charge
           )}
         </p>
       </div>
@@ -338,7 +338,15 @@ defmodule DIYWeb.PowerPage do
           warnings
 
         today ->
+          # The overload of the plan shows again when its items need more
+          # watts than the items of today.
           new = warnings -- Power.warnings(today)
+
+          new =
+            if :overload in warnings and assigns.power.watts > today.watts,
+              do: Enum.uniq([:overload | new]),
+              else: new
+
           # The permit shows again when the plan adds work.
           if :permit in warnings and permits -- Power.permits(today.system) != [],
             do: Enum.uniq([:permit | new]),
@@ -457,7 +465,7 @@ defmodule DIYWeb.PowerPage do
     ~H"""
     <div class="space-y-1">
       <h2 class="text-lg font-bold">The power of each month</h2>
-      <div class="overflow-x-auto">
+      <div class="overflow-x-auto" tabindex="0" role="region" aria-label="The power of each month">
         <table class="table table-xs sm:table-sm" id="power-months">
           <thead>
             <tr>
