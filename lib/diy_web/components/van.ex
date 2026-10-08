@@ -20,7 +20,7 @@ defmodule DIYWeb.VanPage do
   attr :add, :string, default: nil
   attr :climate, :map, default: nil
   attr :item_error, :string, default: nil
-  attr :scene, :map, default: nil, doc: "the parts of the picture (`DIYWeb.Scene.van_parts/2`)"
+  attr :scene, :map, required: true, doc: "the parts of the picture (`DIYWeb.Scene.van_parts/2`)"
 
   def page(assigns) do
     vans = Van.vans(assigns.build)

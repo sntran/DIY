@@ -124,7 +124,7 @@ defmodule DIYWeb.Scene do
 
   # What a van shows from the outside: the watts of its panels, and a fan.
   defp van_look(build, van) do
-    items = Enum.map(Van.items(build, van.id), &elem(&1, 1))
+    items = for {_zone, item} <- Van.items(build, van.id), not item.planned, do: item
 
     %{
       solar: watts(Enum.filter(items, &(&1.type == "van_solar"))),
@@ -465,11 +465,12 @@ defmodule DIYWeb.Scene do
         ac(parts) ++
         stations(parts)
 
+    # The van is behind the car, on its left.
     front =
       bushes() ++
         person() ++
-        car(parts) ++
         if(parts.van, do: van_body({van_x(parts), 7.3}, parts.van), else: []) ++
+        car(parts) ++
         tree({-2.1, 12.4}, 0.8)
 
     {back, front}
@@ -713,15 +714,20 @@ defmodule DIYWeb.Scene do
   end
 
   # The meter on the wall at the right, and the switch of the panel on the
-  # front wall, next to the stations.
+  # front wall, next to the stations. A station that powers the circuits of
+  # the house with no switch has its inlet there.
   defp meter(parts) do
     {x, y} = meter_at(parts)
     glass = Iso.circle({x + 0.19, y + 0.25, 1.75}, {0, 1, 0}, {0, 0, 1}, 0.15)
-    switch = Iso.box({8.85, @d, 1.15}, {0.7, 0.15, 0.85})
 
-    faces(Iso.box({x, y, 1.3}, {0.18, 0.5, 0.7}), "s-meter") ++
-      [{:poly, glass, "s-glass"}] ++
-      if(parts.switch, do: faces(switch, "s-meter"), else: [])
+    box =
+      cond do
+        parts.switch -> faces(Iso.box({8.85, @d, 1.15}, {0.7, 0.15, 0.85}), "s-meter")
+        parts.panel -> faces(Iso.box({8.85, @d, 1.35}, {0.3, 0.12, 0.4}), "s-meter")
+        true -> []
+      end
+
+    faces(Iso.box({x, y, 1.3}, {0.18, 0.5, 0.7}), "s-meter") ++ [{:poly, glass, "s-glass"}] ++ box
   end
 
   defp meter_at(%{garage: true}), do: {@w + 5.2, 3.4}
@@ -910,7 +916,8 @@ defmodule DIYWeb.Scene do
     stations = parts.stations != []
     to_station = {7.2, @d + 0.4, 0.6}
     corner = [{9.8, @d + @eave, h - 0.2}, {9.8, @d + 0.2, 0.6}]
-    yard = [{16.1, 3.7, 0.45}, {16.1, @d + 0.3, 0.05}]
+    # The flow from the yard goes on the right of the AC.
+    yard = [{16.9, 3.7, 0.45}, {16.9, @d + 0.3, 0.05}]
 
     lines =
       [{:wire, pole, meter, "s-wire"}, {:wire, pole, meter, "s-flow s-flow-grid"}] ++
@@ -934,8 +941,8 @@ defmodule DIYWeb.Scene do
     chips =
       [{:chip, Iso.add(pole, {0, 0, 0.9}), "Grid", "s-chip"}] ++
         if(roof > 0, do: [{:chip, {4.6, 5.6, h + 1.9}, kw(roof), "s-chip"}], else: []) ++
-        if(yard_w > 0, do: [{:chip, {17.4, 1.2, 2.2}, kw(yard_w), "s-chip"}], else: []) ++
-        if(stations, do: [{:chip, {7.0, @d + 2.6, 0.0}, kwh(parts.stations), "s-chip"}], else: [])
+        if(yard_w > 0, do: [{:chip, {19.2, 1.0, 0.3}, kw(yard_w), "s-chip"}], else: []) ++
+        if(stations, do: [{:chip, {5.2, 12.8, 0.0}, kwh(parts.stations), "s-chip"}], else: [])
 
     {lines, chips}
   end

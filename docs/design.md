@@ -772,10 +772,11 @@ The first page shows a house and a plan.
 
 - A picture shows only what the house of today has (with no planned
   item). The house has its floors, and a garage when the build has a room
-  outside that is not a yard. The equipment shows in its place: the
-  panels on the roof or in the yard, the stations with their extra
-  batteries, the switch of the panel, the meter and the pole of the grid,
-  the AC, the pool, the car, and the van with its panels and its fan.
+  outside that is not a yard. The equipment shows in its place. The
+  panels are on the roof or in the yard. The stations have their extra
+  batteries. The picture also shows the switch of the panel, the meter,
+  the pole of the grid, the AC, the pool, the car, and the van with its
+  panels and its fan.
 - A flow shows only where the power goes in the model (`DIY.Power`). The
   grid goes to the meter. The panels go to the stations, or to the house
   or the meter on a grid-tie inverter. The stations go to the switch of

@@ -197,7 +197,7 @@ defmodule DIYWeb.SceneTest do
       html = render_component(&Scene.house/1, id: "p", parts: parts)
       [x, y, w, h] = box(html)
 
-      for [px, py] <- points(html) do
+      for [px, py] <- points(html) ++ chips(html) do
         assert px >= x and px <= x + w and py >= y and py <= y + h
       end
 
@@ -222,6 +222,12 @@ defmodule DIYWeb.SceneTest do
   defp box(html) do
     [_, box] = Regex.run(~r/viewBox="([^"]+)"/, html)
     box |> String.split() |> Enum.map(&(&1 |> Float.parse() |> elem(0)))
+  end
+
+  # The points of the labels.
+  defp chips(html) do
+    for [_, x, y] <- Regex.scan(~r/translate\((-?[\d.]+) (-?[\d.]+)\)/, html),
+        do: Enum.map([x, y], &(&1 |> Float.parse() |> elem(0)))
   end
 
   # The points of the polygons.
