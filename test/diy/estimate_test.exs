@@ -75,7 +75,8 @@ defmodule DIY.EstimateTest do
                     estimate.kwh,
                     0.01
 
-    assert estimate.climate == %{first: 2016, last: 2025, lat: 33.25, lon: -96.75}
+    assert %{first: 2016, last: 2025, lat: 33.25, lon: -96.75, t_year: t_year} = estimate.climate
+    assert t_year > 60
     assert estimate.notes == []
   end
 
@@ -129,7 +130,13 @@ defmodule DIY.EstimateTest do
     refute Map.has_key?(heating, strips)
   end
 
-  test "the explanation of each kind of item" do
+  # The last number of a text.
+  defp last_number(line) do
+    [number | _] = ~r/-?[\d,]*\.?\d+/ |> Regex.scan(line) |> List.flatten() |> Enum.reverse()
+    number
+  end
+
+  test "the explanation of each item gives its kWh in each month" do
     build =
       Enum.reduce(Catalog.kinds(), build(), fn kind, build ->
         room = Enum.find(build.rooms, &(&1.place in kind.places))
@@ -140,19 +147,81 @@ defmodule DIY.EstimateTest do
     {build, _id} = add(build, "Garage", "water_heater", %{"fuel" => "heat_pump"})
     {build, _id} = add(build, "Garage", "water_heater", %{"fuel" => "electric"})
     {build, _id} = add(build, "Kitchen", "range", %{"fuel" => "gas"})
+    {build, _id} = add(build, "Kitchen", "range", %{"fuel" => "electric"})
     {build, _id} = add(build, "Laundry", "dryer", %{"fuel" => "gas"})
-    {build, _id} = add(build, "Backyard", "ac", %{"heat_pump" => "true"})
-    {build, _id} = add(build, "Bedroom 2", "mini_split", %{"area" => "100"})
+    {build, _id} = add(build, "Laundry", "dryer", %{"fuel" => "electric"})
+    {build, _id} = add(build, "Backyard", "ac", %{"heat_pump" => "true", "tons" => "1"})
+
+    {build, _id} =
+      add(build, "Bedroom 2", "mini_split", %{"area" => "100", "heat_pump" => "true"})
+
+    {build, _id} = add(build, "Backyard", "pool_pump", %{"season" => "summer"})
+    {build, _id} = add(build, "Living room", "ceiling_fan", %{"season" => "summer"})
+    {build, _id} = add(build, "Living room", "ceiling_fan", %{"season" => "all"})
     estimate = Estimate.run(build, climate())
 
-    for item <- build.items, month <- [1, 7] do
+    for item <- build.items, month <- 1..12 do
       lines = Estimate.explain(item, month, estimate)
-      assert [_ | _] = lines
       assert Enum.all?(lines, &is_binary/1)
+      m = Enum.at(estimate.months, month - 1)
+      kwh = Estimate.fmt(m.items[item.id].kwh)
+      assert last_number(List.last(lines)) == kwh, "#{item.type} in #{m.name}: #{inspect(lines)}"
+      assert List.last(lines) =~ "#{kwh} kWh in #{m.name}."
     end
 
     ac = Enum.find(build.items, &(&1.type == "ac" and &1.params["heat_pump"]))
     assert Enum.any?(Estimate.explain(ac, 7, estimate), &(&1 =~ "% (its share of the house)"))
+    assert Enum.any?(Estimate.explain(ac, 1, estimate), &(&1 =~ "60% of"))
+    fan = Enum.find(build.items, &(&1.type == "ceiling_fan" and &1.params["season"] == "summer"))
+    assert Enum.any?(Estimate.explain(fan, 1, estimate), &(&1 =~ "The fans are off in January"))
+    pump = Enum.find(build.items, &(&1.type == "pool_pump"))
+    assert Enum.any?(Estimate.explain(pump, 1, estimate), &(&1 =~ "It is off in January"))
+    strips = Enum.find(build.items, &(&1.type == "heat_strips"))
+    assert Enum.any?(Estimate.explain(strips, 7, estimate), &(&1 =~ "The house has other heat"))
+  end
+
+  test "a heat pump gives at most its size, and the heat strips give the rest" do
+    {house, rooms, items} =
+      House.preset(%{size: 3500, year: 1970, floors: 1, heat: "heat_pump", lot: nil})
+
+    {:ok, build} = Build.set_zip(Build.new(), "75070")
+    build = Build.put_house(build, house, rooms, items)
+    ac = Enum.find(build.items, &(&1.type == "ac"))
+    {:ok, build} = Build.update_item(build, ac.id, %{"tons" => "1"})
+    ac = Enum.find(build.items, &(&1.id == ac.id))
+    alone = Estimate.run(build, climate())
+    data = hd(alone.months).items[ac.id]
+    limit = Estimate.capacity(ac, 31)
+
+    # Alone, it runs all the time, and the house is cold.
+    assert data.heat_btu > limit
+    assert_in_delta data.kwh, limit / (ac.params["hspf2"] * 1_000), 0.01
+    assert Enum.any?(alone.notes, &match?({_, "Central AC is small" <> _}, &1))
+    assert Enum.any?(Estimate.explain(ac, 1, alone), &(&1 =~ "the most heat that it gives"))
+
+    # With heat strips, the strips give the rest.
+    {build, strips} = add(build, "Attic", "heat_strips", %{"kw" => "30"})
+    both = Estimate.run(build, climate())
+    rest = hd(both.months).items[strips]
+    assert_in_delta rest.heat_btu, data.heat_btu - limit, 1
+    assert_in_delta rest.kwh, (data.heat_btu - limit) / 3_412, 0.01
+    strips = Enum.find(build.items, &(&1.id == strips))
+    assert Enum.any?(Estimate.explain(strips, 1, both), &(&1 =~ "The heat pump cannot give"))
+
+    # Small heat strips give at most their size.
+    {:ok, build} = Build.update_item(build, strips.id, %{"kw" => "1"})
+    strips = Enum.find(build.items, &(&1.id == strips.id))
+    small = Estimate.run(build, climate())
+    assert Enum.any?(Estimate.explain(strips, 1, small), &(&1 =~ "1 kW × 3,412"))
+  end
+
+  test "an AC that is too small for July gives at most its size" do
+    build = build(%{size: 4000, year: 1970, floors: 1})
+    ac = Enum.find(build.items, &(&1.type == "ac"))
+    {:ok, build} = Build.update_item(build, ac.id, %{"tons" => "1"})
+    ac = Enum.find(build.items, &(&1.id == ac.id))
+    estimate = Estimate.run(build, climate())
+    assert Enum.any?(Estimate.explain(ac, 7, estimate), &(&1 =~ "the most cooling that it gives"))
   end
 
   test "the format of a number" do

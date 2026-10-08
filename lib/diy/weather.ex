@@ -20,18 +20,7 @@ defmodule DIY.Weather do
   @params "CDD18_3,HDD18_3,T2M,ALLSKY_SFC_SW_DWN"
   @years 10
 
-  @type month :: %{
-          cdd: float(),
-          cdd_min: float(),
-          cdd_max: float(),
-          hdd: float(),
-          hdd_min: float(),
-          hdd_max: float(),
-          t: float(),
-          sun: float(),
-          sun_min: float(),
-          sun_max: float()
-        }
+  @type month :: %{cdd: float(), hdd: float(), t: float(), sun: float() | nil}
   @type t :: %{
           lat: float(),
           lon: float(),
@@ -119,8 +108,9 @@ defmodule DIY.Weather do
   def parse(_body, _lat, _lon, _first, _last),
     do: {:error, "The weather service gave an answer that the app cannot read."}
 
-  # The values of one month of one year, in °F, or nil when a value is
-  # missing (the fill value of POWER is -999).
+  # The values of one month of one year, in °F, or nil with no degree days
+  # or no temperature (the fill value of POWER is -999). The sun comes
+  # later than the rest in the data: a month with no sun has `sun: nil`.
   defp value(parameter, key) do
     values =
       for name <- ~w(CDD18_3 HDD18_3 T2M ALLSKY_SFC_SW_DWN) do
@@ -131,9 +121,8 @@ defmodule DIY.Weather do
       end
 
     case values do
-      [cdd, hdd, t, sun]
-      when is_number(cdd) and is_number(hdd) and is_number(t) and is_number(sun) ->
-        %{cdd: cdd * 1.8, hdd: hdd * 1.8, t: t * 1.8 + 32, sun: sun / 1}
+      [cdd, hdd, t, sun] when is_number(cdd) and is_number(hdd) and is_number(t) ->
+        %{cdd: cdd * 1.8, hdd: hdd * 1.8, t: t * 1.8 + 32, sun: sun && sun / 1}
 
       _ ->
         nil
@@ -146,24 +135,15 @@ defmodule DIY.Weather do
     if values == [] do
       nil
     else
-      cdd = Enum.map(values, & &1.cdd)
-      hdd = Enum.map(values, & &1.hdd)
-      sun = Enum.map(values, & &1.sun)
-
       %{
-        cdd: mean(cdd),
-        cdd_min: Enum.min(cdd),
-        cdd_max: Enum.max(cdd),
-        hdd: mean(hdd),
-        hdd_min: Enum.min(hdd),
-        hdd_max: Enum.max(hdd),
+        cdd: mean(Enum.map(values, & &1.cdd)),
+        hdd: mean(Enum.map(values, & &1.hdd)),
         t: mean(Enum.map(values, & &1.t)),
-        sun: mean(sun),
-        sun_min: Enum.min(sun),
-        sun_max: Enum.max(sun)
+        sun: values |> Enum.map(& &1.sun) |> Enum.reject(&is_nil/1) |> mean()
       }
     end
   end
 
+  defp mean([]), do: nil
   defp mean(values), do: Enum.sum(values) / length(values)
 end

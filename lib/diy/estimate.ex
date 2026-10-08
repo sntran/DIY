@@ -22,6 +22,9 @@ defmodule DIY.Estimate do
 
   - An AC uses `BTU ÷ (SEER2 × 1,000)` kWh. A heat pump uses
     `BTU ÷ (HSPF2 × 1,000)` kWh. Electric heat uses `BTU ÷ 3,412` kWh.
+  - An AC, a heat pump and electric heat give at most their size for 85%
+    of the hours of a month. The heat that the heat pumps cannot give goes
+    to the electric heat (the heat strips), if the house has it.
   - A gas furnace uses gas for heat. Only its blower uses electricity, for
     the hours that it runs.
   - A water heater heats the water of the people: 15 gallons for each
@@ -35,9 +38,9 @@ defmodule DIY.Estimate do
   The range has two parts, and they are independent, so the range adds
   them as squares (`√(weather² + model²)`):
 
-  - The weather. For a month: the low end uses the mildest month of that
-    name in the 10 years, and the high end the hottest or the coldest one.
-    For the year: the year with the least and the year with the most kWh.
+  - The weather. For a month: the same month of each of the 10 years,
+    with the least and the most kWh. For the year: the year with the least
+    and the year with the most kWh.
   - The model: 15% for the heat and the cooling, 20% for a typical item (a
     guess of the preset), and 10% for an item that the user checked. The
     model is wrong in the same direction in each month, so the model part
@@ -68,12 +71,13 @@ defmodule DIY.Estimate do
 
   @doc """
   The UA of a house (BTU in one hour, for each °F) for cooling, with the
-  factors that give it.
+  factors that give it, and the UA for heat (60% of it).
   """
   def ua(%{size: size, year: year, floors: floors}) do
     age = Enum.find_value(@ua, @ua_new, fn {before, factor} -> if year < before, do: factor end)
     floor = Map.fetch!(@floors, floors)
-    %{ua: size * age * floor, age: age, floor: floor}
+    ua = size * age * floor
+    %{ua: ua, size: size, age: age, floor: floor, heat: ua * @heating}
   end
 
   @doc """
@@ -110,14 +114,26 @@ defmodule DIY.Estimate do
       items_kwh(build, ua, cdd, hdd, weather.t, climate.t_year, days, month)
     end
 
+    # The kWh of each month of each year of the history.
+    history =
+      Map.new(climate.series, fn {{year, month}, value} ->
+        weather = Map.fetch!(climate.months, month)
+        days = Enum.at(@days, month - 1)
+        {{year, month}, total(run.(value.cdd, value.hdd, weather, days, month))}
+      end)
+
     months =
       for {month, index} <- Enum.with_index(1..12) do
         weather = Map.fetch!(climate.months, month)
         days = Enum.at(@days, index)
         mean = run.(weather.cdd, weather.hdd, weather, days, month)
         kwh = total(mean)
-        mild = total(run.(weather.cdd_min, weather.hdd_min, weather, days, month))
-        hard = total(run.(weather.cdd_max, weather.hdd_max, weather, days, month))
+        # The same month of each year: the least and the most kWh.
+        {mild, hard} =
+          Enum.min_max([
+            kwh | for(year <- climate.first..climate.last, v = history[{year, month}], v, do: v)
+          ])
+
         model = model(build, mean)
 
         %{
@@ -126,6 +142,7 @@ defmodule DIY.Estimate do
           days: days,
           cdd: weather.cdd,
           hdd: weather.hdd,
+          t: weather.t,
           items: mean,
           kwh: kwh,
           model: model,
@@ -138,7 +155,7 @@ defmodule DIY.Estimate do
       end
 
     kwh = Enum.sum(Enum.map(months, & &1.kwh))
-    years = years(build, climate, run)
+    years = years(build, climate, history)
     model = Enum.sum(Enum.map(months, & &1.model))
 
     %{
@@ -155,23 +172,24 @@ defmodule DIY.Estimate do
         heating: heating_split(build.items, build.house.size)
       },
       notes: notes(build, months),
-      climate: %{first: climate.first, last: climate.last, lat: climate.lat, lon: climate.lon}
+      climate: %{
+        first: climate.first,
+        last: climate.last,
+        lat: climate.lat,
+        lon: climate.lon,
+        t_year: climate.t_year
+      }
     }
   end
 
   defp hypot(a, b), do: :math.sqrt(a * a + b * b)
 
   # The kWh of each full year of the weather history.
-  defp years(build, climate, run) do
+  defp years(build, climate, history) do
     for year <- climate.first..climate.last,
-        months = for(m <- 1..12, value = climate.series[{year, m}], do: {m, value}),
+        months = for(m <- 1..12, value = history[{year, m}], value, do: value),
         length(months) == 12 do
-      months
-      |> Enum.map(fn {m, value} ->
-        weather = Map.fetch!(climate.months, m)
-        total(run.(value.cdd, value.hdd, weather, Enum.at(@days, m - 1), m))
-      end)
-      |> Enum.sum()
+      Enum.sum(months)
     end
     |> then(fn years -> if build.items == [], do: [], else: years end)
   end
@@ -227,27 +245,51 @@ defmodule DIY.Estimate do
 
   ## The items of one month
 
-  # The kWh of each item in a month: %{id => %{kwh, part, full}}.
+  # The kWh of each item in a month: %{id => %{kwh, part, full, cool_btu,
+  # heat_btu}}, with the BTU of cooling and of heat that the item must give.
   defp items_kwh(build, ua, cdd, hdd, t, t_year, days, month) do
     house = build.house
     cooling = cooling_split(build.items, house.size)
     heating = heating_split(build.items, house.size)
     cool_btu = ua * cdd * 24
     heat_btu = ua * @heating * hdd * 24
+    backup = backup(build.items, heating, heat_btu, days)
 
     Map.new(build.items, fn item ->
-      {item.id,
-       kwh(item, %{
-         days: days,
-         month: month,
-         t: t,
-         t_year: t_year,
-         cool_btu: cool_btu * Map.get(cooling, item.id, 0),
-         heat_btu: heat_btu * Map.get(heating, item.id, 0),
-         size: house.size
-       })}
+      ctx = %{
+        days: days,
+        month: month,
+        t: t,
+        t_year: t_year,
+        cool_btu: cool_btu * Map.get(cooling, item.id, 0),
+        heat_btu: heat_btu * Map.get(heating, item.id, 0) + Map.get(backup, item.id, 0),
+        size: house.size
+      }
+
+      {item.id, item |> kwh(ctx) |> Map.merge(Map.take(ctx, [:cool_btu, :heat_btu]))}
     end)
   end
+
+  # The heat that the heat pumps cannot give in a month: the electric heat
+  # (the heat strips) shares it equally, if the house has it.
+  defp backup(items, heating, heat_btu, days) do
+    strips = Enum.filter(items, &(&1.type == "heat_strips"))
+
+    unmet =
+      items
+      |> Enum.filter(&(&1.type == "ac" and &1.params["heat_pump"]))
+      |> Enum.map(&max(heat_btu * Map.get(heating, &1.id, 0) - capacity(&1, days), 0))
+      |> Enum.sum()
+
+    Map.new(strips, &{&1.id, unmet / length(strips)})
+  end
+
+  @doc """
+  The most BTU that an AC, a heat pump or electric heat gives in a month:
+  its size for 85% of the hours.
+  """
+  def capacity(%{type: "heat_strips", params: p}, days), do: p["kw"] * 3_412 * 24 * days * @duty
+  def capacity(%{params: p}, days), do: p["tons"] * 12_000 * 24 * days * @duty
 
   @doc """
   The share of the cooling of each item. A mini split cools its area. The
@@ -298,15 +340,15 @@ defmodule DIY.Estimate do
   temperature, the BTU of cooling and heating of the item, and the size of
   the house.
   """
-  def kwh(%{type: "ac", params: p}, ctx) do
-    capacity = p["tons"] * 12_000 * 24 * ctx.days * @duty
+  def kwh(%{type: "ac", params: p} = item, ctx) do
+    capacity = capacity(item, ctx.days)
     cool = min(ctx.cool_btu, capacity)
-    heat = if p["heat_pump"], do: ctx.heat_btu / (p["hspf2"] * 1_000), else: 0.0
+    heat = if p["heat_pump"], do: min(ctx.heat_btu, capacity), else: 0.0
 
     %{
-      kwh: cool / (p["seer2"] * 1_000) + heat,
+      kwh: cool / (p["seer2"] * 1_000) + heat / (p["hspf2"] * 1_000),
       part: hvac_part(ctx),
-      full: ctx.cool_btu > capacity
+      full: ctx.cool_btu > capacity or (p["heat_pump"] and ctx.heat_btu > capacity)
     }
   end
 
@@ -321,8 +363,8 @@ defmodule DIY.Estimate do
     %{kwh: hours * p["blower"] / 1_000, part: :heating, full: false}
   end
 
-  def kwh(%{type: "heat_strips", params: p}, ctx) do
-    capacity = p["kw"] * 3_412 * 24 * ctx.days * @duty
+  def kwh(%{type: "heat_strips"} = item, ctx) do
+    capacity = capacity(item, ctx.days)
     %{kwh: min(ctx.heat_btu, capacity) / 3_412, part: :heating, full: ctx.heat_btu > capacity}
   end
 
@@ -376,73 +418,155 @@ defmodule DIY.Estimate do
 
   @doc """
   The steps of the calculation of an item in one month, as text (honesty
-  rule 1: show the math).
+  rule 1: show the math). Each step shows its numbers, and the last step
+  gives the kWh of the item in the month.
   """
-  def explain(%{type: "ac", params: p} = item, month, estimate) do
+  def explain(item, month, estimate) do
     m = Enum.at(estimate.months, month - 1)
-    %{ua: ua, age: age, floor: floor} = estimate.ua
-    share = Map.get(estimate.shares.cooling, item.id, 0)
-    btu = ua * m.cdd * 24 * share
-    capacity = p["tons"] * 12_000 * 24 * m.days * @duty
-
-    [
-      "The house gains #{fmt(ua)} BTU in one hour for each °F hotter outside: #{fmt(ua / age / floor)} sq ft × #{age} for its age × #{floor} for its floors.",
-      "#{m.name} has #{fmt(m.cdd)} °F-days of cooling: the mean of #{estimate.climate.first} to #{estimate.climate.last} (NASA POWER).",
-      "#{fmt(ua)} × #{fmt(m.cdd)} × 24 hours#{share_text(share)} = #{fmt(btu)} BTU.",
-      "÷ (#{p["seer2"]} SEER2 × 1,000) = #{fmt(min(btu, capacity) / (p["seer2"] * 1_000))} kWh for cooling in #{m.name}."
-    ] ++
-      if(p["heat_pump"],
-        do: ["It heats too: the heat of a cold month ÷ (#{p["hspf2"]} HSPF2 × 1,000)."],
-        else: []
-      )
+    steps(item, m, Map.fetch!(m.items, item.id), estimate) ++ [last(item, m)]
   end
 
-  def explain(%{type: "water_heater", params: p}, month, estimate) do
-    m = Enum.at(estimate.months, month - 1)
+  # The last step: the kWh of the month.
+  defp last(%{type: "ac", params: %{"heat_pump" => true}} = item, m) do
+    %{cool: cool, heat: heat} = hvac_kwh(item, m)
+    "#{fmt(cool)} kWh of cooling + #{fmt(heat)} kWh of heat = #{total_text(item, m)}."
+  end
+
+  defp last(%{type: "mini_split", params: %{"heat_pump" => true}} = item, m) do
+    %{cool: cool, heat: heat} = hvac_kwh(item, m)
+    "#{fmt(cool)} kWh of cooling + #{fmt(heat)} kWh of heat = #{total_text(item, m)}."
+  end
+
+  defp last(item, m), do: "In all: #{total_text(item, m)}."
+
+  defp total_text(item, m), do: "#{fmt(Map.fetch!(m.items, item.id).kwh)} kWh in #{m.name}"
+
+  # The kWh of cooling and of heat of an AC or a mini split.
+  defp hvac_kwh(%{params: p} = item, m) do
+    %{cool_btu: cool, heat_btu: heat} = Map.fetch!(m.items, item.id)
+    limit = if item.type == "ac", do: capacity(item, m.days), else: nil
+
+    %{
+      cool: given(cool, limit) / (p["seer2"] * 1_000),
+      heat: given(heat, limit) / (p["hspf2"] * 1_000)
+    }
+  end
+
+  defp given(btu, nil), do: btu
+  defp given(btu, limit), do: min(btu, limit)
+
+  defp steps(%{type: "ac", params: p} = item, m, data, estimate) do
+    limit = capacity(item, m.days)
+
+    cooling(m, data, estimate, share(estimate.shares.cooling, item)) ++
+      limit_steps(item, data.cool_btu, limit, m, "cooling") ++
+      [
+        "#{fmt(given(data.cool_btu, limit))} BTU ÷ (#{num(p["seer2"])} SEER2 × 1,000) = #{fmt(given(data.cool_btu, limit) / (p["seer2"] * 1_000))} kWh of cooling."
+      ] ++
+      if p["heat_pump"] do
+        heating(m, data.heat_btu, estimate, share(estimate.shares.heating, item)) ++
+          limit_steps(item, data.heat_btu, limit, m, "heat") ++
+          [
+            "#{fmt(given(data.heat_btu, limit))} BTU ÷ (#{num(p["hspf2"])} HSPF2 × 1,000) = #{fmt(given(data.heat_btu, limit) / (p["hspf2"] * 1_000))} kWh of heat."
+          ]
+      else
+        []
+      end
+  end
+
+  defp steps(%{type: "mini_split", params: p} = item, m, data, estimate) do
+    ["It cools #{fmt(p["area"])} sq ft of the house."] ++
+      cooling(m, data, estimate, share(estimate.shares.cooling, item)) ++
+      [
+        "#{fmt(data.cool_btu)} BTU ÷ (#{num(p["seer2"])} SEER2 × 1,000) = #{fmt(data.cool_btu / (p["seer2"] * 1_000))} kWh of cooling."
+      ] ++
+      if p["heat_pump"] do
+        heating(m, data.heat_btu, estimate, share(estimate.shares.heating, item)) ++
+          [
+            "#{fmt(data.heat_btu)} BTU ÷ (#{num(p["hspf2"])} HSPF2 × 1,000) = #{fmt(data.heat_btu / (p["hspf2"] * 1_000))} kWh of heat."
+          ]
+      else
+        []
+      end
+  end
+
+  defp steps(%{type: "furnace", params: p} = item, m, data, estimate) do
+    size = estimate.ua.size
+    hours = data.heat_btu / (30 * size)
+
+    ["The furnace burns gas for heat. Its blower uses #{fmt(p["blower"])} W while it runs."] ++
+      heating(m, data.heat_btu, estimate, share(estimate.shares.heating, item)) ++
+      [
+        "#{fmt(data.heat_btu)} BTU ÷ (30 BTU in one hour for each sq ft × #{fmt(size)} sq ft, a typical furnace) = #{num(Float.round(hours / 1, 1))} hours that it runs.",
+        "#{num(Float.round(hours / 1, 1))} hours × #{fmt(p["blower"])} W ÷ 1,000 = #{fmt(hours * p["blower"] / 1_000)} kWh."
+      ]
+  end
+
+  defp steps(%{type: "heat_strips"} = item, m, data, estimate) do
+    share = share(estimate.shares.heating, item)
+    own = estimate.ua.heat * m.hdd * 24 * share
+    backup = data.heat_btu - own
+    limit = capacity(item, m.days)
+
+    if(share > 0, do: heating(m, own, estimate, share), else: []) ++
+      if(backup > 0.5,
+        do: [
+          "The heat pump cannot give #{fmt(backup)} BTU of the heat of #{m.name}: the heat strips give it."
+        ],
+        else: []
+      ) ++
+      if(share == 0 and backup <= 0.5,
+        do: ["The house has other heat: the heat strips give no heat in #{m.name}."],
+        else: []
+      ) ++
+      limit_steps(item, data.heat_btu, limit, m, "heat") ++
+      [
+        "#{fmt(given(data.heat_btu, limit))} BTU ÷ 3,412 BTU for each kWh = #{fmt(given(data.heat_btu, limit) / 3_412)} kWh."
+      ]
+  end
+
+  defp steps(%{type: "water_heater", params: p}, m, _data, estimate) do
+    inlet = inlet(%{t: m.t, t_year: estimate.climate.t_year})
+    btu = p["people"] * 15 * 8.34 * max(120 - inlet, 0) * m.days
 
     [
-      "#{p["people"]} people × 15 gallons in one day × 8.34 pounds for each gallon × (120 °F − the water from the ground).",
-      "The water of #{m.name} comes in near the temperature of the ground: the mean air of the year, and half of the change of the month.",
+      "The water of #{m.name} comes in at #{fmt(inlet)} °F: near the ground, which follows the mean air of the year, and half of the change of the month.",
+      "#{p["people"]} people × 15 gallons in one day × 8.34 pounds for each gallon × (120 °F − #{fmt(inlet)} °F) × #{m.days} days = #{fmt(btu)} BTU.",
       case p["fuel"] do
         "gas" ->
           "The water heater uses gas: no electricity."
 
         "electric" ->
-          "÷ 3,412 BTU for each kWh ÷ 0.93 (the efficiency of an electric water heater)."
+          "#{fmt(btu)} BTU ÷ 3,412 BTU for each kWh ÷ 0.93 (the efficiency of an electric water heater) = #{fmt(btu / 3_412 / 0.93)} kWh."
 
         "heat_pump" ->
-          "÷ 3,412 BTU for each kWh ÷ 3.5 (a heat pump gives 3.5 times the heat of its electricity)."
+          "#{fmt(btu)} BTU ÷ 3,412 BTU for each kWh ÷ 3.5 (a heat pump gives 3.5 times the heat of its electricity) = #{fmt(btu / 3_412 / 3.5)} kWh."
       end
     ]
   end
 
-  def explain(%{type: type, params: p}, _month, _estimate) when type in ["fridge", "freezer"],
-    do: ["#{fmt(p["kwh_year"])} kWh in one year ÷ 365 days × the days of the month."]
+  defp steps(%{type: type, params: p}, m, _data, _estimate) when type in ["fridge", "freezer"],
+    do: ["#{fmt(p["kwh_year"])} kWh in one year ÷ 365 days × #{m.days} days."]
 
-  def explain(%{type: "furnace", params: p}, _month, _estimate),
+  defp steps(%{type: "range", params: p}, m, _data, _estimate) do
+    case p["fuel"] do
+      "electric" ->
+        ["An electric stove and oven: 1 kWh in one day × #{m.days} days."]
+
+      "gas" ->
+        [
+          "A gas stove and oven: 0.05 kWh in one day (the igniter and the clock) × #{m.days} days."
+        ]
+    end
+  end
+
+  defp steps(%{type: "microwave", params: p}, m, _data, _estimate),
     do: [
-      "The furnace burns gas for heat. Its blower uses #{p["blower"]} W while it runs.",
-      "The hours: the heat of the month ÷ 30 BTU in one hour for each square foot (a typical furnace)."
+      "#{fmt(p["watts"])} W × #{num(p["minutes"])} minutes in one day ÷ 60 × #{m.days} days ÷ 1,000."
     ]
 
-  def explain(%{type: "heat_strips", params: p}, _month, _estimate),
-    do: ["The heat of the month ÷ 3,412 BTU for each kWh. At most #{p["kw"]} kW all the time."]
-
-  def explain(%{type: "mini_split", params: p}, _month, _estimate),
-    do: [
-      "It cools #{p["area"]} sq ft of the house: that share of the heat ÷ (#{p["seer2"]} SEER2 × 1,000)."
-    ]
-
-  def explain(%{type: "range", params: p}, _month, _estimate),
-    do: [
-      "A #{p["fuel"]} stove and oven: #{if p["fuel"] == "electric", do: "1 kWh", else: "0.05 kWh (the igniter and the clock)"} in one day."
-    ]
-
-  def explain(%{type: "microwave", params: p}, _month, _estimate),
-    do: ["#{p["watts"]} W × #{p["minutes"]} minutes in one day × the days of the month."]
-
-  def explain(%{type: type, params: p}, _month, _estimate)
-      when type in ["dishwasher", "washer", "dryer"] do
+  defp steps(%{type: type, params: p}, m, _data, _estimate)
+       when type in ["dishwasher", "washer", "dryer"] do
     per_load =
       case {type, p["fuel"]} do
         {"dishwasher", _} -> "1 kWh"
@@ -451,29 +575,90 @@ defmodule DIY.Estimate do
         {"dryer", "gas"} -> "0.2 kWh (the drum and the fan; the heat is gas)"
       end
 
-    ["#{p["loads"]} loads in one week × #{per_load} for each load."]
+    ["#{num(p["loads"])} loads in one week × #{m.days} days ÷ 7 × #{per_load} for each load."]
   end
 
-  def explain(%{type: "lights", params: p}, _month, _estimate),
+  defp steps(%{type: "lights", params: p}, m, _data, _estimate),
     do: [
-      "#{p["bulbs"]} bulbs × #{p["watts"]} W × #{p["hours"]} hours in one day × the days of the month."
+      "#{fmt(p["bulbs"])} bulbs × #{num(p["watts"])} W × #{num(p["hours"])} hours in one day × #{m.days} days ÷ 1,000."
     ]
 
-  def explain(%{type: "ceiling_fan", params: p}, _month, _estimate),
+  defp steps(%{type: "ceiling_fan", params: p} = item, m, _data, _estimate) do
+    if in_season(item, %{month: m.month}) == 1,
+      do: [
+        "#{num(p["count"])} fans × #{num(p["watts"])} W × #{num(p["hours"])} hours in one day × #{m.days} days ÷ 1,000 (#{season_text(p)})."
+      ],
+      else: ["The fans are off in #{m.name} (#{season_text(p)})."]
+  end
+
+  defp steps(%{type: "always_on", params: p}, m, _data, _estimate),
+    do: ["#{num(p["watts"])} W × 24 hours × #{m.days} days ÷ 1,000."]
+
+  defp steps(%{params: p} = item, m, _data, _estimate) do
+    cond do
+      in_season(item, %{month: m.month}) == 0 ->
+        ["It is off in #{m.name} (#{season_text(p)})."]
+
+      p["season"] ->
+        [
+          "#{num(p["watts"])} W × #{num(p["hours"])} hours in one day × #{m.days} days ÷ 1,000 (#{season_text(p)})."
+        ]
+
+      true ->
+        ["#{num(p["watts"])} W × #{num(p["hours"])} hours in one day × #{m.days} days ÷ 1,000."]
+    end
+  end
+
+  # The share of an item in the cooling or the heat of the house.
+  defp share(shares, item), do: Map.get(shares, item.id, 0)
+
+  # The steps of the cooling of the house for an item.
+  defp cooling(m, data, estimate, share) do
+    %{ua: ua, size: size, age: age, floor: floor} = estimate.ua
+
+    [
+      "The house gains #{fmt(ua)} BTU in one hour for each °F hotter outside: #{fmt(size)} sq ft × #{age} for its age × #{floor} for its floors.",
+      "#{m.name} has #{fmt(m.cdd)} °F-days of cooling: the mean of #{estimate.climate.first} to #{estimate.climate.last} (NASA POWER).",
+      "#{fmt(ua)} × #{fmt(m.cdd)} × 24 hours#{share_text(share)} = #{fmt(data.cool_btu)} BTU of cooling."
+    ]
+  end
+
+  # The steps of the heat of the house for an item.
+  defp heating(m, btu, estimate, share) do
+    %{ua: ua, heat: heat} = estimate.ua
+
+    [
+      "In the cold, the house loses #{fmt(heat)} BTU in one hour for each °F colder outside: 60% of #{fmt(ua)}, because the sun and the people in the house help.",
+      "#{m.name} has #{fmt(m.hdd)} °F-days of heat: the mean of #{estimate.climate.first} to #{estimate.climate.last} (NASA POWER).",
+      "#{fmt(heat)} × #{fmt(m.hdd)} × 24 hours#{share_text(share)} = #{fmt(btu)} BTU of heat."
+    ]
+  end
+
+  # A step when the item is too small for the month.
+  defp limit_steps(%{type: "heat_strips", params: p}, btu, limit, m, _part) when btu > limit,
     do: [
-      "#{p["count"]} fans × #{p["watts"]} W × #{p["hours"]} hours in one day, #{season_text(p)}."
+      "#{num(p["kw"])} kW × 3,412 × 24 hours × #{m.days} days × 85% = #{fmt(limit)} BTU: the most that it gives in #{m.name}. It gives that."
     ]
 
-  def explain(%{type: "always_on", params: p}, _month, _estimate),
-    do: ["#{p["watts"]} W × 24 hours × the days of the month."]
+  defp limit_steps(%{params: p}, btu, limit, m, part) when btu > limit do
+    rest =
+      if part == "heat", do: " The heat strips give the rest, if the house has them.", else: ""
 
-  def explain(%{params: p}, _month, _estimate),
-    do: [
-      "#{p["watts"]} W × #{p["hours"]} hours in one day × the days of the month#{if p["season"], do: ", #{season_text(p)}", else: ""}."
+    [
+      "#{num(p["tons"])} tons × 12,000 BTU × 24 hours × #{m.days} days × 85% = #{fmt(limit)} BTU: the most #{part} that it gives in #{m.name}. It gives that.#{rest}"
     ]
+  end
+
+  defp limit_steps(_item, _btu, _limit, _m, _part), do: []
 
   defp share_text(share) when share >= 0.999, do: ""
   defp share_text(share), do: " × #{round(share * 100)}% (its share of the house)"
+
+  # A number of a parameter: no decimals for a whole number.
+  defp num(number) when is_float(number) and number == trunc(number),
+    do: Integer.to_string(trunc(number))
+
+  defp num(number), do: to_string(number)
 
   defp season_text(%{"season" => season}), do: String.downcase(Catalog.season_label(season))
 

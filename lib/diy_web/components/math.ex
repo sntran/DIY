@@ -93,14 +93,17 @@ defmodule DIYWeb.Math do
             below (heating) 65 °F for one day.
           </li>
           <li>
-            The house: it gains or loses {Format.int(@estimate.ua.ua)} BTU in one hour for each °F of difference
+            The house: it gains {Format.int(@estimate.ua.ua)} BTU in one hour for each °F hotter outside
             ({Format.int(@build.house.size)} sq ft × {@estimate.ua.age} for its age × {@estimate.ua.floor} for its
-            floors). These factors are a simple model of the app, not a measurement.
+            floors). In the cold, it loses {Format.int(@estimate.ua.heat)} BTU in one hour for each °F colder
+            outside: 60%, because the sun and the people in the house help. These factors are a simple model of
+            the app, not a measurement.
           </li>
           <li>The price: {Format.cents(@price.cents)} for each kWh, {@price.source}.</li>
           <li>
-            The range: the mildest and the hardest year of the 10, and 15% for the heat and the cooling, 20% for a
-            typical item, 10% for an item that you checked.
+            The range: for a month, the same month of each of the 10 years, with the least and the most kWh; for
+            the year, the year with the least and the year with the most kWh. And the limits of the model: 15% for
+            the heat and the cooling, 20% for a typical item, 10% for an item that you checked.
           </li>
         </ul>
       <% end %>

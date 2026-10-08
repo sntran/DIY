@@ -14,7 +14,6 @@ defmodule DIY.WeatherTest do
     assert {climate.lat, climate.lon} == {10.0, -10.0}
     july = climate.months[7]
     assert july.cdd > 500 and july.cdd < 800
-    assert july.cdd_min <= july.cdd and july.cdd <= july.cdd_max
     assert climate.months[1].hdd > 400
     assert july.sun > 5
     assert climate.t_year > 60 and climate.t_year < 75
@@ -60,7 +59,25 @@ defmodule DIY.WeatherTest do
              {:error, "The weather service has no data for this place."}
   end
 
-  test "a month with a missing value is not in the series" do
+  test "a month with no sun keeps its degree days" do
+    # The sun comes later than the rest in the data of POWER.
+    body =
+      update_in(Stubs.power(), ["properties", "parameter", "ALLSKY_SFC_SW_DWN"], fn sun ->
+        Map.new(sun, fn {key, value} ->
+          {key, if(key == "202507" or String.ends_with?(key, "12"), do: -999.0, else: value)}
+        end)
+      end)
+
+    Stubs.weather(body)
+    assert {:ok, climate} = Weather.climate(17.0, -17.0, @today)
+    assert %{sun: nil, cdd: cdd} = climate.series[{2025, 7}]
+    assert cdd > 0
+    assert map_size(climate.series) == 120
+    assert climate.months[12].sun == nil
+    assert climate.months[7].sun > 5
+  end
+
+  test "a month with no temperature is not in the series" do
     body = update_in(Stubs.power(), ["properties", "parameter", "T2M", "201601"], fn _ -> nil end)
     Stubs.weather(body)
     assert {:ok, climate} = Weather.climate(16.0, -16.0, @today)
