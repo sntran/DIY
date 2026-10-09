@@ -75,6 +75,35 @@ The owner decides about each item.
 - The therms of each month on the math page (today: the year of each
   item).
 
+## The second play test
+
+A second play test (October 2026) found these faults. The fixes of the
+other faults are in the next pull requests.
+
+- The bill: the kWh of the last bill is not in the estimate, and the
+  page does not ask its month. The estimate of a summer month can be far
+  from the bill.
+- "Plan" has two meanings: a planned item (the page Power) and a plan of
+  a retail provider (the tab Plans).
+- A sheet did not scroll from a swipe at the bottom of the screen (with
+  touch emulation). A second check with touch events did not show it:
+  check it on a real phone.
+- A new station or new panels are items that the user has: the user
+  must tick "it is a plan".
+- No CPAP in the list of the items, and no note for a medical device.
+- The permit notes name Dallas and New Braunfels, not the city of the
+  user.
+- The bar chart of the bill gives no dollars, and a tap does nothing.
+- The labels of the rooms in the picture. Some rooms have no name in the
+  view of all the house. The tab of the floor is not marked.
+- The handles of a zone of the van cover its name.
+- Words that a person with no skill does not know: GVWR, GAWR, LRA,
+  DC-DC, LiFePO4, ABYC E-11, degree day, "Ctrl and the mouse wheel".
+- The page Bill is the math of the model, not the parts of a real bill.
+  The exercise of the lesson wants an EFL file on the phone.
+- In the picture of the rooms, the van can cover the garage and the name
+  of the driveway. Also, 6,000 W of panels look like a thin strip.
+
 ## Ideas of the play test
 
 A play test in the role of a neighbor with no skill in power (October

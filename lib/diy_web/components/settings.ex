@@ -66,7 +66,7 @@ defmodule DIYWeb.Settings do
             <span class="text-sm">Your price, in cents for one kWh (the total of the bill ÷ the kWh of the bill)</span>
             <input
               name="price"
-              value={@build.price && Format.value(@build.price)}
+              value={@build.price && Format.value(Float.round(@build.price, 2))}
               inputmode="decimal"
               placeholder="14.5"
               class="input input-sm w-28 block"

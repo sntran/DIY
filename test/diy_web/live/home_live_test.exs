@@ -692,6 +692,81 @@ defmodule DIYWeb.HomeLiveTest do
     refute has_element?(view, "#gas-bill")
   end
 
+  test "the equipment, the meter and a van: a note on the sheet, and no kWh on the sheet or the lists",
+       %{conn: conn} do
+    build = house()
+    place = &Enum.find(build.rooms, fn r -> r.name == &1 end).id
+
+    {build, ids} =
+      Enum.reduce(
+        [
+          {"Laundry", "power_station", "A power station keeps power for later."},
+          {"Roof", "solar_panels", "The panels make power."},
+          {"Laundry", "transfer_switch", "It uses no power."},
+          {"Garage", "smart_meter", "The meter measures the power of the house."},
+          {"Driveway", "camper_van", "A camper van has its own build"}
+        ],
+        {build, []},
+        fn {room, type, note}, {build, ids} ->
+          {:ok, build, id} = Build.add_item(build, place.(room), type)
+          {build, [{id, type, note} | ids]}
+        end
+      )
+
+    view = open(conn, ~p"/inside", build)
+    settle(view)
+
+    for {id, type, note} <- ids do
+      render_patch(view, ~p"/inside?#{[item: id]}")
+      assert has_element?(view, "#item-math", note), type
+      refute has_element?(view, "#item-math", "In one year"), type
+      refute has_element?(view, "#item-math", " kWh"), type
+
+      # The list for a screen reader, and the page Bill: no kWh either.
+      assert has_element?(view, "#plan-list a[href*='#{id}']")
+      refute has_element?(view, "#plan-list a[href*='#{id}']", " kWh"), type
+    end
+
+    render_patch(view, ~p"/estimate")
+
+    for {id, type, _note} <- ids,
+        do: refute(has_element?(view, "#items a[href*='#{id}']"), type)
+
+    # A fridge has its kWh and its math.
+    fridge = Enum.find(build.items, &(&1.type == "fridge"))
+    render_patch(view, ~p"/inside?#{[item: fridge.id]}")
+    assert has_element?(view, "#item-math", "In one year")
+  end
+
+  test "a house with a van: the front gives a link to the build of each van", %{conn: conn} do
+    build = house()
+    view = open(conn, ~p"/", build)
+    settle(view)
+    refute has_element?(view, "#vans-card")
+    view |> element("#add-van") |> render_click()
+    [van] = DIY.Van.vans(build(view))
+    render_patch(view, ~p"/")
+    refute has_element?(view, "#van-card")
+
+    assert has_element?(view, "#vans-card p", ~r/^\s*Your camper van\s*$/)
+
+    view
+    |> element("#open-van-#{van.id}", "Ram ProMaster 2500, 159 in, high roof")
+    |> render_click()
+
+    assert_patch(view, ~p"/van?#{[id: van.id]}")
+
+    # Two vans, and a model that the app does not know.
+    {:ok, build} = Build.update_item(build(view), van.id, %{"model" => "other"})
+    driveway = Enum.find(build.rooms, &(&1.name == "Driveway"))
+    {:ok, build, _second} = Build.add_item(build, driveway.id, "camper_van")
+    view = open(conn, ~p"/", build)
+    settle(view)
+    assert has_element?(view, "#vans-card", "Your camper vans")
+    assert has_element?(view, "#vans-card a", "Van 1: Another van")
+    assert has_element?(view, "#vans-card a", "Van 2: Ram ProMaster")
+  end
+
   test "the math of a house with no items", %{conn: conn} do
     {house, rooms, _items} =
       House.preset(%{size: 1800, year: 2005, floors: 1, heat: "gas", lot: nil})
@@ -830,6 +905,13 @@ defmodule DIYWeb.HomeLiveTest do
     view |> form("#settings-price", %{"price" => "12.5"}) |> render_submit()
     assert build(view).price == 12.5
     assert render(view) =~ "the price that you gave"
+
+    # The price of a bill ($168 for 1,150 kWh) shows with 2 decimals.
+    view = open(conn, ~p"/settings", %{house() | price: 168 / 1150 * 100})
+    settle(view)
+    assert has_element?(view, ~s(#settings-price input[name="price"][value="14.61"]))
+    view = open(conn, ~p"/settings", house())
+    settle(view)
 
     assert view |> form("#settings-price", %{"price" => "cheap"}) |> render_submit() =~
              "Give the price in cents"

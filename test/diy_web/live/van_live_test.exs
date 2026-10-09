@@ -87,8 +87,11 @@ defmodule DIYWeb.VanLiveTest do
     assert render(view) =~ "These numbers are typical of the model"
     assert has_element?(view, "#weight-total", "of 8,900 lb")
 
-    # The van does not change the bill of the house.
-    assert render_patch(view, ~p"/estimate") =~ "Camper van"
+    # The van does not change the bill of the house: the list of the
+    # items of the bill does not have it.
+    render_patch(view, ~p"/estimate")
+    assert has_element?(view, "#items")
+    refute has_element?(view, "#items", "Camper van")
   end
 
   test "the items of the zones, their numbers, and the safety notes", %{conn: conn} do
@@ -188,7 +191,7 @@ defmodule DIYWeb.VanLiveTest do
     {lit, _} = add(lit, van, :living, "van_lights")
 
     assert render(open(conn, ~p"/van?#{[id: van]}", lit)) =~
-             ~r/Off the grid: \d+\.\d days in each month\./
+             ~r/Off the grid: \d+\.\d days, in any month of the year\./
 
     # The person drives 1 hour in one day, but the van has no alternator
     # charger: the page tells why the engine gives no power. With a

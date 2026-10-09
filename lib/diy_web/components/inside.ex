@@ -306,7 +306,7 @@ defmodule DIYWeb.Inside do
   # gas item has its gas.
   defp item_note(item, estimate, price, gas) do
     usage =
-      if estimate.ready do
+      if estimate.ready and item.type not in Estimate.no_use() do
         %{year: kwh, therms: therms} = estimate.items[item.id]
         gas_text = if therms / 12 >= 0.5, do: " and #{Format.therms(therms / 12)}", else: ""
         cost = Format.cost(kwh / 12, price.cents) + therms / 12 * gas.dollars
@@ -459,6 +459,7 @@ defmodule DIYWeb.Inside do
 
     assigns =
       assign(assigns,
+        no_use: Estimate.no_use(),
         kind: kind,
         room: room,
         rooms: rooms,
@@ -537,7 +538,15 @@ defmodule DIYWeb.Inside do
         <.link patch={~p"/power"} class="link">Open the page Power</.link>
       </p>
 
-      <div :if={@estimate.ready} id="item-math" class="space-y-1 text-sm">
+      <p :if={@estimate.ready and @item.type in @no_use} id="item-math" class="text-sm opacity-80">
+        {hd(Estimate.explain(@item, 7, @estimate))}
+      </p>
+
+      <div
+        :if={@estimate.ready and @item.type not in @no_use}
+        id="item-math"
+        class="space-y-1 text-sm"
+      >
         <p class="font-semibold">
           In one year: {Format.kwh(@estimate.items[@item.id].year)} · {Format.money(
             Format.cost(@estimate.items[@item.id].year, @price.cents)

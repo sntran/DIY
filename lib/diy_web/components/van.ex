@@ -276,7 +276,7 @@ defmodule DIYWeb.VanPage do
     low = Enum.min_by(months, &if(&1.days == :unlimited, do: :infinity, else: &1.days))
 
     if Enum.all?(months, &(&1.days == low.days)),
-      do: "Off the grid: #{days(low.days)} in each month.",
+      do: "Off the grid: #{days(low.days)}, in any month of the year.",
       else: "Off the grid: #{days(low.days)} in #{low.name}. No month gives fewer days."
   end
 

@@ -75,7 +75,7 @@ defmodule DIYWeb.Start do
         <button type="submit" class="btn btn-primary btn-lg">Next</button>
       </form>
       <p :if={@error} id="zip-error" class="text-error">{@error}</p>
-      <button type="button" phx-click="restart" class="btn btn-ghost btn-sm">Back to the doors</button>
+      <button type="button" phx-click="restart" class="btn btn-ghost btn-sm">Back</button>
     </section>
     """
   end

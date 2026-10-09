@@ -205,6 +205,38 @@ defmodule DIYWeb.PowerLiveTest do
     refute has_element?(view, "#plan")
   end
 
+  test "panels on the grid stop in an outage: the box says so, and the hours do not count them",
+       %{conn: conn} do
+    {base, _id} = add(house(), "Laundry", "power_station")
+    base = flag(base, "fridge", :backup)
+    view = open(conn, ~p"/power", base)
+    hours = view |> element("#backup-hours") |> render()
+    refute has_element?(view, "#backup-grid-panels")
+
+    {build, panels} = add(base, "Roof", "solar_panels", %{"to" => "grid", "watts" => "9000"})
+    view = open(conn, ~p"/power", build)
+    assert view |> element("#backup-hours") |> render() == hours
+
+    assert has_element?(
+             view,
+             "#backup-grid-panels",
+             "Panels on the grid stop in an outage: their inverter needs the grid. These hours do not count them."
+           )
+
+    # The same panels on the station: more hours.
+    {:ok, on_station} = Build.update_item(build, panels, %{"to" => "station"})
+    view = open(conn, ~p"/power", on_station)
+    refute view |> element("#backup-hours") |> render() == hours
+
+    # A station that feeds the circuits through an inlet. A warning tells
+    # to turn off the inverter, and the note does not show.
+    station = Enum.find(build.items, &(&1.type == "power_station"))
+    {:ok, inlet} = Build.update_item(build, station.id, %{"feeds" => "panel"})
+    view = open(conn, ~p"/power", inlet)
+    refute has_element?(view, "#backup-grid-panels")
+    assert has_element?(view, "#today-grid-tie")
+  end
+
   test "a plan that does not pay back, and a station in an outage of the plan", %{conn: conn} do
     {build, _id} = add(house(), "Laundry", "power_station", %{"cost" => "2000"})
     build = build |> flag("power_station", :planned) |> flag("fridge", :backup)
@@ -214,10 +246,11 @@ defmodule DIYWeb.PowerLiveTest do
     assert html =~ "On savings alone, the planned equipment saves no money."
     assert html =~ "A different reason: in an outage"
     # The fridge uses the same kWh in each month: the hours are the same.
-    assert html =~ "hours in each month"
+    assert html =~ "hours, in any month of the year"
     assert html =~ "A battery of 3,000 cycles (a cycle is one full charge and one full use)"
     # The hours are at the top of the page, with the size for 2 days.
     assert has_element?(view, "#backup-hours", "hours")
+    refute has_element?(view, "#backup-grid-panels")
     assert has_element?(view, "#backup-size", "For 2 days (48 hours), the stations need near")
     refute has_element?(view, "#parts")
     # In the mode night with one price, the station costs more.

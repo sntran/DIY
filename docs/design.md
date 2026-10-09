@@ -166,7 +166,8 @@ The front of the house helps a person with no skill in power:
   until the user gives a price. A person who thinks that the bill is
   wrong usually has a price that is not the typical price.
 - With no camper van, a card tells that a van goes in the driveway, and
-  adds one with one tap.
+  adds one with one tap. With a van, a card has a link to the build of
+  each van.
 - The button "See the rooms and the items" opens the page Rooms.
 
 Each page starts at its top (the hook Top). All the pages are one
@@ -514,7 +515,8 @@ at night does not save money: the page says it. The station loses near
 The hours of backup are the first question of a person with a station.
 So they are at the top of the page Power, in large text. They are the
 hours of the month with the fewest hours, with the plan when there is
-one. When each month has the same hours, the page says "in each month".
+one. When each month has the same hours, the page says "in any month of
+the year".
 In the mode that keeps the batteries full, the page also gives the kWh
 for 2 days: the kWh of now × 48 ÷ the hours. This is near, because the
 sun of the next days also charges the station. In the other modes, the
@@ -525,6 +527,24 @@ gives the warning, not the hours. The sheet of a station, and of an item
 that a station runs, also gives the hours, with a link to the page
 Power. The view "What feeds what" shows the plan when there is one. The
 warnings of today under it have their own label.
+
+A second play test (in the role of a neighbor who wants backup in an
+outage, and a van) found more faults. The fixes:
+
+- Panels on the grid stop in an outage, because their inverter needs the
+  grid. The box of the outage says so. The hours do not count them. A
+  station that feeds the circuits through an inlet does not get this
+  note. There, a warning tells the user to turn off the breaker of the
+  inverter.
+- The sheet of a station, of solar panels, of a transfer switch, of a
+  meter and of a van gives its note, and no kWh. The page Bill does not
+  list them, and the list for a screen reader gives them no kWh. The words "In one year: 0 kWh" looked like a fault.
+- The hours of an outage, or the days off the grid of a van, can be the
+  same in each month. Then the page says "in any month of the year". The
+  words "in each month" read like an amount for each month.
+- The front of the house has a link to the build of each van. Before, a
+  person had to find the van in the rooms.
+- The settings show the price of a bill with 2 decimals.
 
 The sheet of solar panels helps to choose their size and their price
 (`DIY.Solar`). It has at most 2 short notes:

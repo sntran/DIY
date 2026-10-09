@@ -379,9 +379,24 @@ defmodule DIYWeb.Front do
   defp van(assigns) do
     outside = Enum.filter(assigns.build.rooms, &(&1.place == :outdoor))
     room = Enum.find(outside, &(&1.name =~ ~r/driveway/i)) || List.first(outside)
-    assigns = assign(assigns, room: room, none: Van.vans(assigns.build) == [])
+    vans = Van.vans(assigns.build)
+    assigns = assign(assigns, room: room, none: vans == [], vans: vans)
 
     ~H"""
+    <div :if={@vans != []} id="vans-card" class="card card-border bg-base-100 p-4 space-y-2">
+      <p class="text-sm font-semibold">
+        {if length(@vans) == 1, do: "Your camper van", else: "Your camper vans"}
+      </p>
+      <.link
+        :for={{van, i} <- Enum.with_index(@vans, 1)}
+        patch={~p"/van?#{[id: van.id]}"}
+        id={"open-van-#{van.id}"}
+        class="btn btn-sm w-full justify-start"
+      >
+        <.icon name="hero-truck" class="size-4" />
+        {if length(@vans) > 1, do: "Van #{i}: "}{model_name(van)}
+      </.link>
+    </div>
     <div :if={@room && @none} id="van-card" class="card card-border bg-base-100 p-4 space-y-2">
       <p class="text-sm">
         <span class="font-semibold">A camper van?</span>
@@ -400,6 +415,9 @@ defmodule DIYWeb.Front do
     </div>
     """
   end
+
+  defp model_name(van),
+    do: Catalog.van_models() |> List.keyfind(van.params["model"], 0) |> elem(1)
 
   # The site that gives the file of the meter: Smart Meter Texas in an area
   # with retail choice, else the site of the utility.

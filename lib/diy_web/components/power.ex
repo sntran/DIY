@@ -12,7 +12,7 @@ defmodule DIYWeb.PowerPage do
   """
   use DIYWeb, :html
 
-  alias DIY.{Build, Catalog, Power}
+  alias DIY.{Build, Catalog, Estimate, Power}
   alias DIYWeb.{Format, Scene}
 
   attr :build, :map, required: true
@@ -156,6 +156,13 @@ defmodule DIYWeb.PowerPage do
           <p :if={@low.outage == 0} class="text-sm">
             In this mode, the batteries can be empty at 18:00. The mode "Keep the batteries full for an outage" gives more hours.
           </p>
+          <p
+            :if={@sys.grid_panels_w > 0 and not Power.panel?(@sys)}
+            id="backup-grid-panels"
+            class="text-sm"
+          >
+            Panels on the grid stop in an outage: their inverter needs the grid. These hours do not count them.
+          </p>
           <p :if={@need} id="backup-size" class="text-sm">
             For 2 days (48 hours), the stations need near {Format.value(Float.round(@need, 1))} kWh. {if @planned,
               do: "With the plan, they have",
@@ -181,7 +188,7 @@ defmodule DIYWeb.PowerPage do
     low = low_month(power)
 
     if Enum.all?(power.months, &(&1.outage == low.outage)),
-      do: "#{hours_text(low.outage)} in each month",
+      do: "#{hours_text(low.outage)}, in any month of the year",
       else: "#{hours_text(low.outage)} in #{low.name}, the month with the fewest hours"
   end
 
@@ -414,8 +421,7 @@ defmodule DIYWeb.PowerPage do
     others =
       Enum.count(
         assigns.build.items,
-        &(&1.type not in ~w(power_station solar_panels transfer_switch smart_meter camper_van) and
-            &1 not in sys.backup)
+        &(&1.type not in Estimate.no_use() and &1 not in sys.backup)
       )
 
     assigns =

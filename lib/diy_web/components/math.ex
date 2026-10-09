@@ -6,7 +6,7 @@ defmodule DIYWeb.Math do
   """
   use DIYWeb, :html
 
-  alias DIY.{Catalog, Usage}
+  alias DIY.{Catalog, Estimate, Usage}
   alias DIYWeb.{Format, Icon}
 
   attr :build, :map, required: true, doc: "the house of today (no planned item)"
@@ -93,7 +93,12 @@ defmodule DIYWeb.Math do
 
         <h2 class="text-lg font-bold">Each item</h2>
         <ul id="items" class="space-y-1">
-          <li :for={item <- by_size(@build.items, @estimate)} class="flex items-center gap-2">
+          <li
+            :for={
+              item <- by_size(Enum.reject(@build.items, &(&1.type in Estimate.no_use())), @estimate)
+            }
+            class="flex items-center gap-2"
+          >
             <Icon.item type={item.type} class="size-7" />
             <span>
               <.link patch={~p"/inside?#{[item: item.id]}"} class="link">{Catalog.name(item)}{room_of(
