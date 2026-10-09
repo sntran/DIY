@@ -123,9 +123,105 @@ defmodule DIYWeb.SceneTest do
     {build, _} = add(build, Build.zone(build, van, :living).id, "van_fan")
     html = picture(build)
     refute html =~ "s-gdoor"
-    assert html =~ "s-van-r"
+    assert html =~ ~s(class="i-white-)
     assert html =~ ~s(class="s-pv")
     assert Scene.label(Scene.parts(build)) =~ "a camper van"
+  end
+
+  test "the labels of the axles are at the axles of each model of van" do
+    for model <- models() do
+      build = house()
+      {build, van} = add(build, room(build, "Driveway"), "camper_van", %{"model" => model})
+      {:ok, item} = Build.item(build, van)
+      html = render_component(&Scene.van/1, id: "v", parts: Scene.van_parts(build, item))
+      size = DIY.Catalog.van_size(model)
+      front = (size.length - size.front) * 0.0254
+      rear = front - size.wheelbase * 0.0254
+
+      for {name, y} <- [{"Front", front}, {"Rear", rear}] do
+        {sx, sy} = Camera.at(Camera.van(), {0, 0}, {size.width * 0.0254 + 1.0, y, 0.0})
+        at = "translate(#{Camera.round1(sx)} #{Camera.round1(sy)})"
+
+        assert html =~
+                 ~r/#{Regex.escape(at)} scale\([\d.]+\)">\s*<rect[^>]*><\/rect>\s*<text[^>]*>#{name} /
+      end
+    end
+  end
+
+  test "the van stands in the drive, between the garage and the street" do
+    for model <- models(), car <- [true, false] do
+      parts = %{Scene.parts(house()) | car: car, van: %{model: model, solar: 0, fan: false}}
+      {_x, y} = Scene.drive_spot(parts)
+      l = DIY.Catalog.van_size(model).length * 0.0254
+
+      # The front of the garage is at y = 7 m, and the lot ends at
+      # y = 14.2 m.
+      assert y >= 7.0 and y + l <= 14.2
+    end
+  end
+
+  test "the body of a van is at its place, and its panels and its fan are on its roof" do
+    camera = Camera.van()
+
+    for model <- models() do
+      parts = %{
+        model: model,
+        solar: 800,
+        fan: true,
+        front: 0,
+        rear: 0,
+        front_gawr: 0,
+        rear_gawr: 0,
+        storage: 0
+      }
+
+      html = render_component(&Scene.van/1, id: "v", parts: parts)
+      size = DIY.Catalog.van_size(model)
+      {w, h} = {size.width * 0.0254, size.height * 0.0254}
+      front = (size.length - size.front) * 0.0254
+      rear = front - size.wheelbase * 0.0254
+
+      # The tires on the near side are on the plane of that side
+      # (x = w + 0.01). Their centers are at the axles, 0.37 m over the
+      # ground.
+      tires =
+        for points <- polygons(html, "i-black"), length(points) == 24 do
+          {sx, sy} =
+            Enum.reduce(points, {0, 0}, fn {x, y}, {a, b} -> {a + x / 24, b + y / 24} end)
+
+          world(camera, {sx, sy}, :x, w + 0.01)
+        end
+
+      assert [{y1, z1}, {y2, z2}] = Enum.sort(tires)
+      assert_in_delta y1, rear, 0.02
+      assert_in_delta y2, front, 0.02
+      assert_in_delta z1, 0.37, 0.02
+      assert_in_delta z2, 0.37, 0.02
+
+      # The panels are 4 cm over the roof, and in its middle. They are in
+      # from the two sides, which lean in at the top (10 cm at most).
+      assert length(polygons(html, "s-pv")) == 4
+
+      for points <- polygons(html, "s-pv"), point <- points do
+        {x, _y} = world(camera, point, :z, h + 0.04)
+        assert x > 0.1 and x < w - 0.1, model
+      end
+
+      # With three panels, the panel that is alone in its row is in the
+      # middle of the roof.
+      html = render_component(&Scene.van/1, id: "v", parts: %{parts | solar: 600})
+      [_one, _two, alone] = polygons(html, "s-pv")
+      xs = for point <- alone, do: elem(world(camera, point, :z, h + 0.04), 0)
+      assert_in_delta (Enum.min(xs) + Enum.max(xs)) / 2, w / 2, 0.01
+
+      # The top of the fan is 16 cm over the roof, also in its middle.
+      assert [_top] = polygons(html, "s-ac-t")
+
+      for points <- polygons(html, "s-ac-t"), point <- points do
+        {x, _y} = world(camera, point, :z, h + 0.16)
+        assert x > 0.1 and x < w - 0.1, model
+      end
+    end
   end
 
   test "the van with its two budgets" do
@@ -179,7 +275,11 @@ defmodule DIYWeb.SceneTest do
           roof <- fixed_map(%{station: watts(), grid: watts()}),
           yard <- fixed_map(%{station: watts(), grid: watts()}),
           stations <- list_of(tuple({float(min: 0.1, max: 30.0), boolean()}), max_length: 3),
-          van <- one_of([constant(nil), fixed_map(%{solar: watts(), fan: boolean()})])
+          van <-
+            one_of([
+              constant(nil),
+              fixed_map(%{solar: watts(), fan: boolean(), model: member_of(models())})
+            ])
         ) do
       %{
         floors: floors,
@@ -196,6 +296,8 @@ defmodule DIYWeb.SceneTest do
       }
     end
   end
+
+  defp models, do: Enum.map(DIY.Catalog.van_models(), &elem(&1, 0))
 
   defp watts, do: one_of([constant(0), integer(1..20_000)])
 
@@ -216,7 +318,7 @@ defmodule DIYWeb.SceneTest do
       end
 
       # No label covers the van or the car.
-      for object <- ["s-van", "s-car"],
+      for object <- ["i-white", "s-car"],
           box = screen_box(html, object),
           box != nil,
           label <- Enum.chunk_every(chips(html), 4) do
@@ -230,7 +332,8 @@ defmodule DIYWeb.SceneTest do
                (parts.roof.grid + parts.yard.grid > 0 or
                   (parts.stations != [] and parts.roof.station + parts.yard.station > 0))
 
-      assert html =~ "s-van-r" == (parts.van != nil)
+      # The van is the only white part of the picture.
+      assert html =~ ~s(class="i-white-) == (parts.van != nil)
       assert html =~ "s-car-l" == parts.car
     end
   end
@@ -240,7 +343,7 @@ defmodule DIYWeb.SceneTest do
     [x, y, w, h] = box(html)
 
     # The four corners of the bottom of the lot.
-    for corner <- [{-3.0, -2.5, -1.2}, {19.0, -2.5, -1.2}, {19.0, 13.5, -1.2}, {-3.0, 13.5, -1.2}] do
+    for corner <- [{-3.0, -2.5, -1.2}, {19.0, -2.5, -1.2}, {19.0, 14.2, -1.2}, {-3.0, 14.2, -1.2}] do
       {sx, sy} = Camera.at(Camera.house(), {0, 0}, corner)
       assert sx >= x and sx <= x + w and sy >= y and sy <= y + h
     end
@@ -282,6 +385,27 @@ defmodule DIYWeb.SceneTest do
         {xs, ys} = points |> Enum.map(&List.to_tuple/1) |> Enum.unzip()
         {Enum.min_max(xs), Enum.min_max(ys)}
     end
+  end
+
+  # The points on the screen of each polygon with a class.
+  defp polygons(html, class) do
+    for [_, list] <- Regex.scan(~r/points="([^"]+)" class="#{class}[ "]/, html) do
+      for pair <- String.split(list) do
+        [x, y] = pair |> String.split(",") |> Enum.map(&(&1 |> Float.parse() |> elem(0)))
+        {x, y}
+      end
+    end
+  end
+
+  # The point of the world at a point of the screen, on a plane. On the
+  # plane x = k, it gives y and z. On the plane z = k, it gives x and y.
+  defp world(camera, {sx, sy}, axis, k) do
+    at = &Camera.at(camera, {0, 0}, &1)
+    {ex, ey, ez} = {at.({1, 0, 0}), at.({0, 1, 0}), at.({0, 0, 1})}
+    {{ax, ay}, {bx, by}, {kx, ky}} = if axis == :x, do: {ey, ez, ex}, else: {ex, ey, ez}
+    {px, py} = {sx - k * kx, sy - k * ky}
+    det = ax * by - bx * ay
+    {(px * by - bx * py) / det, (ax * py - px * ay) / det}
   end
 
   # True when the box of a label and the box of an object overlap.

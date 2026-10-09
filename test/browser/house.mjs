@@ -222,6 +222,7 @@ async function van(page, name) {
   await page.click("#add-insulation")
   await page.waitForSelector("#item-sheet:has-text('Insulation')")
   await page.click("#item-sheet .btn-ghost[aria-label=Close]")
+  await page.waitForSelector("#item-sheet", { state: "detached" })
   await page.waitForSelector('#van-shell a[id^="shell-item-"]')
 
   await page.click('#van-stations button:has-text("Take it in this van")')
@@ -372,6 +373,7 @@ async function build(context, name) {
   await page.click("#add-freezer")
   await page.waitForSelector("#item-sheet:has-text('Freezer')")
   await page.click("#item-sheet .btn-ghost[aria-label=Close]")
+  await page.waitForSelector("#item-sheet", { state: "detached" })
 
   await page.click("nav >> text=Bill")
   await page.waitForSelector("#months")
@@ -422,6 +424,7 @@ for (const colorScheme of ["light", "dark"]) {
     // The new LiveView restores the build: the pool pump is there.
     await page.waitForSelector("#item-sheet:has-text('Pool pump')")
     await page.click("#item-sheet .btn-ghost[aria-label=Close]")
+    await page.waitForSelector("#item-sheet", { state: "detached" })
     await page.click("nav >> text=House")
     await page.waitForSelector("#bill-average")
 
@@ -435,6 +438,7 @@ for (const colorScheme of ["light", "dark"]) {
     await page.setInputFiles("#usage-file", { name: "IntervalMeterUsage.csv", mimeType: "text/csv", buffer: meterFile() })
     await page.waitForSelector("#usage-months:has-text('Smart Meter Texas: 12 months, from July 2024 to June 2025')")
     await page.click("#item-sheet .btn-ghost[aria-label=Close]")
+    await page.waitForSelector("#item-sheet", { state: "detached" })
     await page.click("nav >> text=Bill")
     await page.waitForSelector("#real-months")
     await page.waitForSelector("#fit")
@@ -456,6 +460,9 @@ for (const colorScheme of ["light", "dark"]) {
     await page.check("#flags-form input[name=backup][type=checkbox]")
     await page.waitForSelector("#flags-form input[name=backup]:checked")
     await page.click("#item-sheet .btn-ghost[aria-label=Close]")
+    // The text of the list changes before the sheet closes: so the test
+    // waits for the two.
+    await page.waitForSelector("#item-sheet", { state: "detached" })
     await page.waitForSelector('a[id^="item-"]:has-text("on the station")', { state: "attached" })
     await follow(page, 'a[id^="add-"][aria-label="Add an item to Roof"]')
     await page.click("#add-solar_panels")
@@ -465,6 +472,7 @@ for (const colorScheme of ["light", "dark"]) {
     await page.waitForSelector("#flags-form input[name=planned]:checked")
     await check(page, `${name} planned item`)
     await page.click("#item-sheet .btn-ghost[aria-label=Close]")
+    await page.waitForSelector("#item-sheet", { state: "detached" })
     await page.waitForSelector('a[id^="item-"]:has-text("a plan")', { state: "attached" })
 
     // The page Bill with a planned item: the house of today, and a note.
@@ -491,6 +499,7 @@ for (const colorScheme of ["light", "dark"]) {
     await page.press("#item-form input[name='item[output_w]']", "Tab")
     await page.waitForFunction(() => document.querySelector("#item-form input[name='item[output_w]']").value === "100")
     await page.click("#item-sheet .btn-ghost[aria-label=Close]")
+    await page.waitForSelector("#item-sheet", { state: "detached" })
     await page.click("nav >> text=Power")
     await page.waitForSelector("#today-overload")
     await check(page, `${name} power with an overload`)

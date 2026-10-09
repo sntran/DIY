@@ -857,7 +857,9 @@ For the two cameras, the eye is at the large x, the large y and the
 large z. So a box shows its top, its front (at y + d) and its side (at
 x + w). The order of the paint is the same for the two cameras. The face
 that looks more to the camera is in the light (`-l`), and the other one
-is in the shade (`-r`).
+is in the shade (`-r`). A face of a round shape looks between the two.
+It gets one of three steps between the light and the shade (`-m1`,
+`-m2`, `-m3`), from the angle of its normal (`DIYWeb.Camera.light/2`).
 
 - A picture of the house shows only what the house of today has (with no
   planned item). The picture on the page Van counts the planned items of
@@ -875,10 +877,35 @@ is in the shade (`-r`).
 - The lines of the flows move. With the reduced motion of the system,
   they do not move. Labels give the kW of the panels of each place and
   the kWh of the stations.
-- The van shows the weight on each axle (red when it is over the rating
-  of the axle), the Wh of its batteries, and the watts of its panels.
+- The van shows the weight on each axle, at the wheels of that axle. A
+  weight is red when it is over the rating of the axle. The van also
+  shows the Wh of its batteries and the watts of its panels.
+- A van has the shape of its model (`DIYWeb.Icon.VanShapes`): the Ford
+  Transit, the Mercedes-Benz Sprinter or the Ram ProMaster. Its length,
+  its width, its height and its axles come from `DIY.Catalog.van_size/1`.
+  The side profile, the grille and the lights follow photos of each
+  model, for the picture only:
+  - The Transit has a hood that slopes into the windshield, a wide grille
+    in the shape of a trapezoid, and lights that sweep back.
+  - The Sprinter has a long, low hood and a tall grille with the star.
+    Its roof rises in a curve from the top of the windshield.
+  - The ProMaster has a short nose that is almost upright, a large black
+    grille, and lights high on the front.
+  - Over the bottom of the windows (the belt), the sides lean in. The van
+    has its mirrors, its bumpers, and its wheels with their rims. It has
+    the windows of its doors, the sliding door on its right side, and the
+    doors at its back. A mirror reaches 7 inches out of its side: the
+    plan gives a van this space (`DIY.Layout.size/1`).
+  - The same shape shows in the pictures and in the plan of the house.
+    The plan of the van uses only the height of its hood
+    (`DIYWeb.VanCutaway`).
+  - On the roof, the panels are in rows of two, in the middle of the
+    roof. The fan is at the back. In the drive, the van stands between
+    the garage and the street.
 - The colors are CSS variables (`assets/css/app.css`): a day in the light
-  mode, and a night with lit windows in the dark mode.
+  mode, and a night with lit windows in the dark mode. The van uses the
+  colors of the icons (`i-white`). At night, these are dim in a picture
+  of a house, as the walls are.
 - The pictures are for the eyes only (`aria-hidden`): the text of each
   page gives the same facts. The picture of the front page is the link
   into the house, with a label that tells what the picture shows.
@@ -894,15 +921,29 @@ is in the shade (`-r`).
   code paints each object from the back to the front, in an order that it
   sets by hand. The lines of the flows go behind the bushes, the person
   and the cars, and the labels go last.
-- A property test makes random parts of a house: each point of the
+- A property test makes random parts of a house. Each point of the
   picture is in its box, and each flow and label has its equipment.
 
 Each kind of item has its icon (`DIYWeb.Icon`), in the same style. The
 camera of the house shows the front of an item. A car and a van show
-their side (the camera of a van). An icon is a few boxes, discs and
-details of a material (white, steel, wood, cloth). The faces have a thin
-edge, so that a white item shows on a light page. The icon is next to
-the name of the item in these places:
+their side (the camera of a van). An icon is made of boxes, boxes with
+round corners, cylinders and details of a material (white, steel, wood,
+cloth). The faces of a box have a thin edge, so that a white item shows
+on a light page.
+
+- A round shape is a prism: a cylinder has 24 sides, and a corner of a
+  box with round corners has 4 sides. Each side has the light of its
+  normal, so the shape has a soft light. The sides have no edge between
+  them. Under them is the silhouette of the sides that show, and over
+  them its edge (`i-outline`).
+- The appliances have the details of a real model. Some examples:
+  - a fridge has its doors and its handles;
+  - a range has its knobs and the window of its oven;
+  - a microwave has its window and its keys;
+  - a water heater has its pipes;
+  - an AC has the grille of its fan.
+
+The icon is next to the name of the item in these places:
 
 - the cards of the zones of a van;
 - the lists to add an item;
@@ -991,6 +1032,19 @@ its turn. A length is in inches.
   (`DIYWeb.Icon.Shapes.placed/2`). A turn turns the model, and a face
   that looks away does not show. Solar panels on a roof lie on its slope.
   In a yard, they stand in rows on a rack.
+- The details of the plan:
+  - A floor has the lines of its material. Wood has planks (6 inches
+    wide), and tile has tiles of 18 inches. Concrete has slabs, a deck
+    has boards, and ply has sheets of 4 by 8 feet. Grass has the stripes
+    of a mower, and a roof has rows of shingles. A flat roof has the
+    seams of its membrane, and the metal floor of a van has ribs. Each
+    is an SVG pattern on the plane of the floor
+    (`DIYWeb.Cutaway.textures/0`): one unit of a pattern is one inch on
+    the floor. A floor of carpet has no lines.
+  - An item that stands on a floor has a soft shadow under it, 3 inches
+    out from each side. An item on a wall or a ceiling has no shadow.
+  - A high wall has a baseboard. When it has its full height and is 42
+    inches long or more, it also has a window (4 feet wide at most).
 - The order of the paint (`DIYWeb.Camera.order/2`). A wall or an item that
   is behind a different one paints first. A box is behind a different box
   when it is on the far side of it along x, y or z. A wall is flat for

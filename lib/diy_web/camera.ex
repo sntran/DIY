@@ -97,17 +97,29 @@ defmodule DIYWeb.Camera do
   def shows?(camera, normal), do: dot(camera.eye, normal) > 1.0e-9
 
   @doc """
-  The light of a face with a normal: `t` (a top), `l` or `r`. `l` is the
-  face that looks more to the camera, and `r` is the face in the shade.
+  The light of a face with a normal: `t` (a top), `l`, `m1`, `m2`, `m3` or
+  `r`. `l` is the face that looks to the side in the light of the camera.
+  This side is the front for the house, and the side for a van. `r` is
+  the face in the shade. The three steps between them are for a face that
+  looks between the two: a part of a round shape.
   """
   def light(camera, {x, y, z}) do
-    cond do
-      z >= max(x, y) -> "t"
-      camera.lit == :front and y > x -> "l"
-      camera.lit == :side and x > y -> "l"
-      true -> "r"
-    end
+    if z >= max(x, y), do: "t", else: side_light(camera, x, y)
   end
+
+  # The part of the normal on the ground that goes to the side in the
+  # light (from -1 to 1).
+  defp side_light(camera, x, y) do
+    length = :math.sqrt(x * x + y * y)
+    part = if camera.lit == :front, do: y, else: x
+    step(if length < 1.0e-9, do: -1.0, else: part / length)
+  end
+
+  defp step(part) when part >= 0.92, do: "l"
+  defp step(part) when part >= 0.7, do: "m1"
+  defp step(part) when part >= 0.45, do: "m2"
+  defp step(part) when part >= 0.2, do: "m3"
+  defp step(_part), do: "r"
 
   @doc """
   The three faces of a box (`DIYWeb.Geometry.box/2`) with the classes of a

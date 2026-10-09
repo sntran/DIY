@@ -34,8 +34,9 @@ defmodule DIYWeb.Scene do
   """
   use DIYWeb, :html
 
-  alias DIY.{Build, Power, Van}
+  alias DIY.{Build, Catalog, Power, Van}
   alias DIYWeb.{Camera, Format, Geometry}
+  alias DIYWeb.Icon.Shapes
 
   # The house: its width (x), its depth (y), the height of a floor, the
   # rise of the roof, and the overhang of the roof (in meters).
@@ -46,7 +47,7 @@ defmodule DIYWeb.Scene do
   @eave 0.5
 
   # The lot: from x0 to x1, and from y0 to y1, and its depth.
-  @lot {-3.0, 19.0, -2.5, 13.5}
+  @lot {-3.0, 19.0, -2.5, 14.2}
   @slab 1.2
 
   # The garage, on the right of the house: x, y, width, depth, height.
@@ -62,11 +63,6 @@ defmodule DIYWeb.Scene do
   # a house, and one of a van.
   @panel_w 400
   @van_panel_w 200
-
-  # The van: its width, its length, and its height.
-  @van_w 2.1
-  @van_l 5.9
-  @van_h 2.75
 
   # The house of the first page.
   @sample %{
@@ -118,7 +114,7 @@ defmodule DIYWeb.Scene do
       car: of.("ev") != [],
       van:
         case of.("camper_van") do
-          [van | _] -> van_look(Enum.reject(van_items(build, van), & &1.planned))
+          [van | _] -> van_look(van, Enum.reject(van_items(build, van), & &1.planned))
           [] -> nil
         end
     }
@@ -126,9 +122,11 @@ defmodule DIYWeb.Scene do
 
   defp van_items(build, van), do: for({_zone, item} <- Van.items(build, van.id), do: item)
 
-  # What a van shows from the outside: the watts of its panels, and a fan.
-  defp van_look(items) do
+  # What a van shows from the outside: its model, the watts of its panels,
+  # and a fan.
+  defp van_look(van, items) do
     %{
+      model: van.params["model"],
       solar: watts(Enum.filter(items, &(&1.type == "van_solar"))),
       fan: Enum.any?(items, &(&1.type == "van_fan"))
     }
@@ -142,7 +140,7 @@ defmodule DIYWeb.Scene do
   def van_parts(build, van) do
     weight = Van.weight(build, van)
 
-    Map.merge(van_look(van_items(build, van)), %{
+    Map.merge(van_look(van, van_items(build, van)), %{
       front: weight.front,
       rear: weight.rear,
       front_gawr: weight.front_gawr,
@@ -267,7 +265,8 @@ defmodule DIYWeb.Scene do
   def van(assigns) do
     parts = assigns.parts
     camera = Camera.van()
-    {x0, x1, y0, y1} = {-1.6, @van_w + 1.6, -1.4, @van_l + 1.6}
+    {l, w, _h} = van_size(parts)
+    {x0, x1, y0, y1} = {-1.6, w + 1.6, -1.4, l + 1.6}
     slab = Geometry.box({x0, y0, -0.5}, {x1 - x0, y1 - y0, 0.5})
     [dirt_r, dirt_l, _top] = faces(slab, "s-dirt", camera)
 
@@ -287,22 +286,24 @@ defmodule DIYWeb.Scene do
   # the batteries, and the watts of the panels.
   defp van_chips(parts) do
     axle = fn lb, limit -> if limit > 0 and lb > limit, do: "s-chip-bad", else: "s-chip" end
+    size = Catalog.van_size(parts.model)
+    {_l, w, h} = van_size(parts)
+    front = (size.length - size.front) * 0.0254
+    rear = front - size.wheelbase * 0.0254
 
     [
-      {:chip, {@van_w + 1.0, 5.6, 0.0}, "Front #{lb(parts.front)}",
+      {:chip, {w + 1.0, front, 0.0}, "Front #{lb(parts.front)}",
        axle.(parts.front, parts.front_gawr)},
-      {:chip, {@van_w + 1.0, 1.2, 0.0}, "Rear #{lb(parts.rear)}",
-       axle.(parts.rear, parts.rear_gawr)}
+      {:chip, {w + 1.0, rear, 0.0}, "Rear #{lb(parts.rear)}", axle.(parts.rear, parts.rear_gawr)}
     ] ++
       if(parts.storage > 0,
         do: [
-          {:chip, {@van_w / 2, 1.0, @van_h + 1.2}, "#{Format.int(parts.storage)} Wh",
-           "s-chip-good"}
+          {:chip, {w / 2, 1.0, h + 1.2}, "#{Format.int(parts.storage)} Wh", "s-chip-good"}
         ],
         else: []
       ) ++
       if(parts.solar > 0,
-        do: [{:chip, {@van_w / 2, 3.4, @van_h + 1.2}, "#{parts.solar} W", "s-chip-sun"}],
+        do: [{:chip, {w / 2, 3.4, h + 1.2}, "#{parts.solar} W", "s-chip-sun"}],
         else: []
       )
   end
@@ -489,11 +490,25 @@ defmodule DIYWeb.Scene do
     front =
       bushes() ++
         person() ++
-        if(parts.van, do: van_body({van_x(parts), 7.3}, parts.van, Camera.house()), else: []) ++
+        drive_van(parts) ++
         car(parts) ++
         tree({-2.1, 12.4}, 0.8)
 
     {back, front}
+  end
+
+  defp drive_van(%{van: nil}), do: []
+  defp drive_van(parts), do: van_body(drive_spot(parts), parts.van, Camera.house())
+
+  @doc """
+  The place of the van in the drive of the picture of a house: the back
+  corner of its body, in meters. The van stands between the garage and the
+  street. Its front is 0.2 meters from the end of the lot.
+  """
+  def drive_spot(%{van: van} = parts) do
+    {l, _w, _h} = van_size(van)
+    {_x0, _x1, _y0, y1} = @lot
+    {van_x(parts), y1 - 0.2 - l}
   end
 
   # The van and the car share the drive.
@@ -857,60 +872,28 @@ defmodule DIYWeb.Scene do
     end
   end
 
-  # A camper van, from its back corner at x, y, with the front to +y. It has
-  # the wheels, the side with its windows and its door, and the roof (with
-  # panels and a fan). Then it has the windshield, the hood, and the front.
-  # The camera gives the light of the side and of the front.
+  # A camper van of its model (`DIYWeb.Icon.VanShapes`), from the back
+  # corner of its body at x, y, with the front to +y. On its roof: its
+  # panels (two in a row, in the middle of the roof) and its fan, at the
+  # back.
   defp van_body({x, y}, parts, camera) do
-    {w, low, high} = {@van_w, 0.45, @van_h}
-    {cab, nose} = {y + 4.5, y + @van_l}
+    {_l, w, h} = van_size(parts)
+    model = Shapes.van(parts.model)
+    # The box of the model starts at the far mirror, out of the body.
+    {{mx, _my, _mz}, _high} = Shapes.bounds(model)
+    body = Shapes.placed_model(model, %{at: {x + mx, y, 0.0}, turn: 0, camera: camera})
 
-    profile = [
-      {y, low},
-      {nose, low},
-      {nose, 1.45},
-      {y + 5.3, 1.6},
-      {y + 4.8, 2.5},
-      {cab, high},
-      {y, high}
-    ]
-
-    side = Enum.map(profile, fn {b, z} -> {x + w, b, z} end)
-
-    across = fn {b1, z1}, {b2, z2} ->
-      [{x, b1, z1}, {x + w, b1, z1}, {x + w, b2, z2}, {x, b2, z2}]
-    end
-
-    front = Geometry.on_plane({x, nose, low}, {1, 0, 0}, {0, 0, 1}, {0.0, 0.0}, {w, 1.0})
-    plane = &Geometry.on_plane({x + w + 0.01, y, low}, {0, 1, 0}, {0, 0, 1}, &1, &2)
-
-    wheels(x + w, [y + 1.1, y + 5.1], 0.42) ++
-      [
-        {:poly, side, "s-van-" <> Camera.light(camera, {1, 0, 0})},
-        {:poly, plane.({0.0, 0.0}, {@van_l, 0.35}), "s-van-trim"},
-        {:poly, plane.({1.6, 1.15}, {1.3, 0.75}), "s-vglass"},
-        {:poly, plane.({3.0, 0.35}, {1.5, 1.85}), "s-van-door"},
-        {:poly, plane.({4.75, 1.1}, {0.9, 0.8}), "s-vglass"},
-        {:poly, across.({y, high}, {cab, high}), "s-van-t"},
-        {:poly, across.({cab, high}, {y + 4.8, 2.5}), "s-van-t"}
-      ] ++
-      van_roof({x, y}, parts, camera) ++
-      [
-        {:poly, across.({y + 5.3, 1.6}, {y + 4.8, 2.5}), "s-vglass"},
-        {:poly, across.({nose, 1.45}, {y + 5.3, 1.6}), "s-van-t"},
-        {:poly, front, "s-van-" <> Camera.light(camera, {0, 1, 0})}
-      ] ++
-      lights({x, nose, 0.95}, w)
-  end
-
-  # The panels on the roof of a van (two in a row), and its fan.
-  defp van_roof({x, y}, parts, camera) do
     panels =
       if parts.solar > 0 do
-        for i <- 0..(count(parts.solar, @van_panel_w, 4) - 1) do
-          at = {rem(i, 2) * 0.97, div(i, 2) * 1.55}
-          corner = {x + 0.1, y + 0.2, @van_h + 0.06}
-          {:poly, Geometry.on_plane(corner, {1, 0, 0}, {0, 1, 0}, at, {0.92, 1.5}), "s-pv"}
+        count = count(parts.solar, @van_panel_w, 4)
+
+        for i <- 0..(count - 1) do
+          row = div(i, 2)
+          # A row of one panel is in the middle of the roof too.
+          left = if count - 2 * row == 1, do: w / 2 - 0.44, else: w / 2 - 0.895
+          at = {rem(i, 2) * 0.91, row * 1.4}
+          corner = {x + left, y + 0.75, h + 0.04}
+          {:poly, Geometry.on_plane(corner, {1, 0, 0}, {0, 1, 0}, at, {0.88, 1.36}), "s-pv"}
         end
       else
         []
@@ -918,10 +901,16 @@ defmodule DIYWeb.Scene do
 
     fan =
       if parts.fan,
-        do: faces(Geometry.box({x + 0.75, y + 3.4, @van_h}, {0.6, 0.6, 0.18}), "s-ac", camera),
+        do: faces(Geometry.box({x + w / 2 - 0.3, y + 0.15, h}, {0.6, 0.5, 0.16}), "s-ac", camera),
         else: []
 
-    panels ++ fan
+    body ++ panels ++ fan
+  end
+
+  # The length, the width and the height of the model of a van (meters).
+  defp van_size(parts) do
+    size = Catalog.van_size(parts.model)
+    {size.length * 0.0254, size.width * 0.0254, size.height * 0.0254}
   end
 
   # The label of the kWh of the stations: on the open ground at the front,

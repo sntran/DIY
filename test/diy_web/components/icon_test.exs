@@ -1,10 +1,11 @@
 defmodule DIYWeb.IconTest do
   use ExUnit.Case, async: true
+  use ExUnitProperties
 
   import Phoenix.LiveViewTest
 
   alias DIY.Catalog
-  alias DIYWeb.{Camera, Icon}
+  alias DIYWeb.{Camera, Geometry, Icon}
   alias DIYWeb.Icon.Shapes
 
   test "each kind has shapes of its own" do
@@ -53,4 +54,92 @@ defmodule DIYWeb.IconTest do
       end
     end
   end
+
+  test "a loop round a rectangle with round corners" do
+    near? = fn {a, b}, {c, d} -> abs(a - c) < 1.0e-9 and abs(b - d) < 1.0e-9 end
+
+    no_twice? = fn loop ->
+      not Enum.any?(Enum.zip(loop, tl(loop) ++ [hd(loop)]), fn {a, b} -> near?.(a, b) end)
+    end
+
+    # Each corner has 5 points.
+    loop = Shapes.rounded({0, 0}, {1.0, 0.6}, 0.1)
+    assert length(loop) == 20 and no_twice?.(loop)
+
+    # The radius is at most half of the short side. Then the two short
+    # sides have no length: at each end, two corners share one point. The
+    # last corner and the first corner can also share a point.
+    for size <- [{1.0, 0.6}, {0.6, 1.0}] do
+      loop = Shapes.rounded({0, 0}, size, 0.5)
+      assert length(loop) == 18 and no_twice?.(loop)
+    end
+
+    # A circle: the four corners share their ends.
+    loop = Shapes.rounded({0, 0}, {0.6, 0.6}, 0.3)
+    assert length(loop) == 16 and no_twice?.(loop)
+
+    for {u, v} <- loop do
+      assert u > -1.0e-9 and u < 0.6 + 1.0e-9 and v > -1.0e-9 and v < 0.6 + 1.0e-9
+      assert_in_delta :math.sqrt((u - 0.3) * (u - 0.3) + (v - 0.3) * (v - 0.3)), 0.3, 1.0e-9
+    end
+  end
+
+  property "a round shape: its shape, the faces that look to the camera, its edge and its top" do
+    check all(
+            turn <- integer(0..3),
+            camera <- member_of([Camera.house(), Camera.van()]),
+            r <- float(min: 0.0, max: 0.4)
+          ) do
+      model = [{:prism, Shapes.rounded({0, 0}, {1.0, 0.6}, r), 0.0, 0.8, "white"}]
+      polys = Shapes.placed_model(model, %{at: {0, 0, 0}, turn: turn, camera: camera})
+
+      # The shape of the faces that show paints first, and its edge paints
+      # after the faces. Then the top.
+      [{:poly, shape, "i-white-m2"} | rest] = polys
+
+      {body, [{:poly, edge, "i-outline"}, {:poly, top, "i-white-t i-face"}]} =
+        Enum.split(rest, -2)
+
+      assert shape == edge
+
+      # Each face that shows looks to the camera, and it is a part of the
+      # shape. Its light is one of the five steps.
+      corners = MapSet.new(edge)
+
+      for {:poly, [a, b, _c, d] = face, class} <- body do
+        assert class =~ ~r/^i-white-(l|m1|m2|m3|r)$/
+        assert Enum.all?(face, &(&1 in corners))
+
+        normal =
+          cross(Geometry.add(b, Geometry.scale(a, -1)), Geometry.add(d, Geometry.scale(a, -1)))
+
+        assert Camera.shows?(camera, normal)
+      end
+
+      # The count of the faces that show: the sides of the top that look to
+      # the camera.
+      shown =
+        Enum.count(Enum.zip(top, tl(top) ++ [hd(top)]), fn {{x1, y1, _}, {x2, y2, _}} ->
+          Camera.shows?(camera, {y2 - y1, x1 - x2, 0})
+        end)
+
+      assert length(body) == shown
+    end
+  end
+
+  test "a cylinder has the five steps of the light, for each camera" do
+    for camera <- [Camera.house(), Camera.van()] do
+      polys =
+        Shapes.placed_model([{:cyl, {0, 0, 0}, 0.5, 1.0, "steel"}], %{
+          at: {0, 0, 0},
+          turn: 0,
+          camera: camera
+        })
+
+      lights = for {:poly, _corners, "i-steel-" <> light} <- polys, uniq: true, do: light
+      assert Enum.sort(lights) == ["l", "m1", "m2", "m3", "r", "t i-face"]
+    end
+  end
+
+  defp cross({a, b, c}, {d, e, f}), do: {b * f - c * e, c * d - a * f, a * e - b * d}
 end
