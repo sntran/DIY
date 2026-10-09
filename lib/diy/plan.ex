@@ -45,27 +45,37 @@ defmodule DIY.Plan do
         }
 
   # The delivery charges of the utilities, for an EFL that does not give
-  # them. Oncor and CenterPoint: as the EFLs of October 2026 give them
-  # (Oncor: the EFLs of Discount Power and Reliant in test/fixtures/efl;
-  # CenterPoint: the EFL of Just Energy there). The other utilities: the
-  # table "TDSP delivery charges" of Xoom Energy, with the rates of
+  # them. Oncor and CenterPoint: the EFLs of October 2026 in
+  # test/fixtures/efl. For Oncor, these are the EFLs of Discount Power and
+  # Reliant; for CenterPoint, the EFL of Just Energy. The other utilities:
+  # the table "TDSP delivery charges" of Xoom Energy, with the rates of
   # 10/4/2026. This table gives the same numbers for Oncor and CenterPoint.
-  # A utility changes its charges in March and in September.
-  @tdus %{
-    "oncor" => %{name: "Oncor", base: 4.06, cents: 6.8673},
-    "centerpoint" => %{name: "CenterPoint", base: 4.9, cents: 6.5333},
-    "aep texas central" => %{name: "AEP Texas Central", base: 3.24, cents: 5.6898},
-    "aep texas north" => %{name: "AEP Texas North", base: 3.24, cents: 5.5751},
-    "tnmp" => %{name: "TNMP", base: 7.56, cents: 7.771},
-    "texas-new mexico" => %{name: "TNMP", base: 7.56, cents: 7.771},
-    "lubbock" => %{name: "Lubbock Power & Light", base: 0.0, cents: 6.312}
-  }
+  # Most utilities change their charges in March and in September.
+  #
+  # Each utility has the ways that an EFL or Power to Choose writes its
+  # name (in small letters).
+  @tdus [
+    {~w(oncor), %{name: "Oncor", base: 4.06, cents: 6.8673}},
+    {~w(centerpoint), %{name: "CenterPoint", base: 4.9, cents: 6.5333}},
+    {["aep texas central", "aep central"],
+     %{name: "AEP Texas Central", base: 3.24, cents: 5.6898}},
+    {["aep texas north", "aep north"], %{name: "AEP Texas North", base: 3.24, cents: 5.5751}},
+    {["tnmp", "texas-new mexico", "texas new mexico"], %{name: "TNMP", base: 7.56, cents: 7.771}},
+    {["lubbock", "lp&l"], %{name: "Lubbock Power & Light", base: 0.0, cents: 6.312}}
+  ]
 
-  @doc "The delivery charges of a utility (by its name in an EFL), or `nil`."
+  @doc """
+  The delivery charges of a utility (by its name in an EFL), or `nil`. A
+  text that names more than one utility gives `nil`: for example, a line
+  with the charges of all the utilities.
+  """
   def tdu(text) when is_binary(text) do
-    Enum.find_value(@tdus, fn {key, tdu} ->
-      if String.contains?(String.downcase(text), key), do: tdu
-    end)
+    text = String.downcase(text)
+
+    case for({names, tdu} <- @tdus, Enum.any?(names, &String.contains?(text, &1)), do: tdu) do
+      [tdu] -> tdu
+      _none_or_more -> nil
+    end
   end
 
   @doc """

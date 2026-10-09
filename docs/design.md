@@ -535,21 +535,26 @@ device. The PDF stays on the device. The page says so. The links of the
 numbers open the PDF with the type of a PDF, whatever the name of the
 file.
 
-`DIY.EFL` finds the numbers of the plan in the lines: the base charge,
-the energy charge and its tiers, the price at night and its hours, the
-delivery charges of the utility (TDU), the credits, the minimum usage
-fee, and the averages at 500, 1,000 and 2,000 kWh. The page shows each
-number with the line where it came from, and a link opens the PDF at its
-page. When the EFL does not give the delivery charges, the reader takes
-them from the table of the utility (`DIY.Plan.tdu/1`). The table has
-Oncor and CenterPoint (from the EFLs of October 2026), and AEP Texas
-Central, AEP Texas North, TNMP and Lubbock Power & Light (from the table
-of Xoom Energy, with the rates of 10/4/2026). Else the reader finds them
-from the averages at 500 and 2,000 kWh (only when it found the energy
-charge). The
-page tells where they come from; with a fit, only the average at 1,000
-kWh checks the numbers. The form of a plan gives the delivery charges
-only of a utility of the table; for another utility, the user gives them.
+`DIY.EFL` finds these numbers of the plan in the lines:
+
+- the base charge, the energy charge and its tiers;
+- the price at night and its hours;
+- the delivery charges of the utility (TDU);
+- the credits and the minimum usage fee;
+- the averages at 500, 1,000 and 2,000 kWh.
+
+The page shows each number with the line where it came from, and a link
+opens the PDF at its page. When the EFL does not give the delivery
+charges, the reader takes them from the table of the utility
+(`DIY.Plan.tdu/1`). For Oncor and CenterPoint, the table has the charges
+of the EFLs of October 2026. For AEP Texas Central, AEP Texas North,
+TNMP and Lubbock Power & Light, it has the table of Xoom Energy, with
+the rates of 10/4/2026. A line that names more than one utility does not
+tell the utility. Else the reader finds the charges from the averages at
+500 and 2,000 kWh (only when it found the energy charge). The page tells
+where they come from; with a fit, only the average at 1,000 kWh checks
+the numbers. The form of a plan gives the delivery charges only of a
+utility of the table; for another utility, the user gives them.
 
 The reader joins at most 600 bytes of lines into one sentence, and reads
 at most 64 KB of text, so that a crafted message cannot make it slow. The

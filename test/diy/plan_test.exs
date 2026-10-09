@@ -163,7 +163,11 @@ defmodule DIY.PlanTest do
           {"AEP Texas North Company", "AEP Texas North", 3.24, 5.5751},
           {"TNMP", "TNMP", 7.56, 7.771},
           {"Texas-New Mexico Power Company", "TNMP", 7.56, 7.771},
-          {"Lubbock Power & Light", "Lubbock Power & Light", 0.0, 6.312}
+          {"Lubbock Power & Light", "Lubbock Power & Light", 0.0, 6.312},
+          {"AEP Central Delivery Charge", "AEP Texas Central", 3.24, 5.6898},
+          {"AEP North TDU charges", "AEP Texas North", 3.24, 5.5751},
+          {"Texas New Mexico Power", "TNMP", 7.56, 7.771},
+          {"LP&L delivery", "Lubbock Power & Light", 0.0, 6.312}
         ] do
       assert Plan.tdu(text) == %{name: name, base: base, cents: cents}
     end
@@ -171,6 +175,10 @@ defmodule DIY.PlanTest do
     # A name with no utility of the table: the user gives the charges.
     assert Plan.tdu("AEP Texas") == nil
     assert Plan.tdu("Entergy") == nil
+
+    # A line with the names of more than one utility does not tell which
+    # one.
+    assert Plan.tdu("Oncor $4.06, CenterPoint $4.90, TNMP $7.56") == nil
   end
 
   defp stored(changes \\ %{}) do
