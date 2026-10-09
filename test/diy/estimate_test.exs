@@ -375,6 +375,42 @@ defmodule DIY.EstimateTest do
     assert Enum.any?(Estimate.explain(ac, 7, estimate), &(&1 =~ "the most cooling that it gives"))
   end
 
+  test "a fridge or a freezer around the house works harder in the heat, and less in the cold" do
+    climate = climate()
+
+    {build, garage} =
+      add(build(), "Garage", "fridge", %{"kwh_year" => "500"})
+
+    {build, freezer} = add(build, "Garage", "freezer", %{"kwh_year" => "300"})
+    {build, kitchen} = add(build, "Kitchen", "fridge", %{"kwh_year" => "500"})
+    estimate = Estimate.run(build, climate)
+    month = fn m, id -> Enum.at(estimate.months, m - 1).items[id].kwh end
+
+    # In the kitchen: the label, in each month.
+    assert_in_delta month.(7, kitchen), 500 * 31 / 365, 1.0e-9
+
+    # In the garage: the mean temperature outside of July, against 72 °F.
+    t = climate.months[7].t
+    assert_in_delta month.(7, garage), 500 * 31 / 365 * (t - 37) / (72 - 37), 1.0e-9
+    assert month.(7, garage) > month.(7, kitchen)
+    assert month.(1, garage) < month.(1, kitchen)
+    assert_in_delta month.(7, freezer), 300 * 31 / 365 * t / 72, 1.0e-9
+
+    # The math tells it.
+    item = fn id -> elem(Build.item(build, id), 1) end
+    [_days, heat, _all] = Estimate.explain(item.(garage), 7, estimate)
+
+    assert heat =~
+             "Around the house, the air has the temperature outside: #{round(t)} °F in July."
+
+    assert heat =~ "× (#{round(t)} − 37) ÷ (72 − 37) = ×"
+    assert length(Estimate.explain(item.(kitchen), 7, estimate)) == 2
+
+    # Colder than its inside: no heat comes in, and it uses nothing.
+    assert Estimate.heat_factor("fridge", %{around: true, t: 30.0}) == 0.0
+    assert Estimate.heat_factor("freezer", %{around: false, t: 100.0}) == 1.0
+  end
+
   test "the format of a number" do
     assert Estimate.fmt(1_234_567.4) == "1,234,567"
     assert Estimate.fmt(999) == "999"

@@ -670,7 +670,10 @@ defmodule DIY.VanTest do
       power = Van.power(build, van, climate)
       assert_in_delta power.storage, 100 * 12 * 0.9, 1.0e-9
       july = Enum.at(power.months, 6)
-      assert_in_delta july.use, 400 + 90 * 2 / 0.9 + 10 * 2, 1.0e-9
+      # The fridge works harder in the heat of July (its label is at 77 °F).
+      fridge = 400 * (climate.months[7].t - 41) / (77 - 41)
+      assert fridge > 400
+      assert_in_delta july.use, fridge + 90 * 2 / 0.9 + 10 * 2, 1.0e-9
       assert july.sun == 0 and july.drive == 0
       assert_in_delta july.days, 1080 / july.use, 1.0e-9
 
@@ -715,6 +718,15 @@ defmodule DIY.VanTest do
              ) == 1000.0
 
       assert Van.wh_day(item.("stove", %{}), 7) == 0.0
+
+      # A 12 V fridge: its label at 77 °F, more in the heat, less in the
+      # cold, and nothing under its inside (41 °F).
+      fridge = item.("van_fridge", %{"wh_day" => 360})
+      assert Van.wh_day(fridge, 7) == 360.0
+      assert Van.wh_day(fridge, 7, 77.0) == 360.0
+      assert_in_delta Van.wh_day(fridge, 7, 95.0), 360 * 54 / 36, 1.0e-9
+      assert Van.wh_day(fridge, 1, 30.0) == 0.0
+      assert Van.wh_day(item.("van_lights", %{}), 7, 95.0) == 80.0
       assert Van.wh_day(item.("water_pump", %{"watts" => 60, "minutes" => 10}), 7) == 10.0
       assert Van.wh_day(item.("van_fan", %{}), 7) == 240.0
       assert Van.wh_day(item.("van_fan", %{}), 1) == 0.0

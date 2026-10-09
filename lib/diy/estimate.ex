@@ -258,11 +258,14 @@ defmodule DIY.Estimate do
     heat_btu = ua * @heating * hdd * 24
     backup = backup(build.items, heating, heat_btu, days)
 
+    around = MapSet.new(for r <- build.rooms, r.level == "outside", do: r.id)
+
     Map.new(build.items, fn item ->
       ctx = %{
         days: days,
         month: month,
         t: t,
+        around: MapSet.member?(around, item.room),
         t_year: t_year,
         cool_btu: cool_btu * Map.get(cooling, item.id, 0),
         heat_btu: heat_btu * Map.get(heating, item.id, 0) + Map.get(backup, item.id, 0),
@@ -377,8 +380,10 @@ defmodule DIY.Estimate do
     other(if(per_kwh, do: btu / 3_412 / per_kwh, else: 0.0))
   end
 
-  def kwh(%{type: type, params: p}, ctx) when type in ["fridge", "freezer"],
-    do: other(p["kwh_year"] * ctx.days / 365)
+  def kwh(%{type: type, params: p}, ctx) when type in ["fridge", "freezer"] do
+    heat = heat_factor(type, ctx)
+    Map.put(other(p["kwh_year"] * ctx.days / 365 * heat), :heat, heat)
+  end
 
   def kwh(%{type: "range", params: p}, ctx),
     do: other(if(p["fuel"] == "electric", do: 1.0, else: 0.05) * ctx.days)
@@ -416,6 +421,25 @@ defmodule DIY.Estimate do
     do: other(in_season(item, ctx) * p["watts"] * p["hours"] * ctx.days / 1_000)
 
   defp other(kwh), do: %{kwh: kwh / 1, part: :other, full: false}
+
+  # The label of a fridge gives its use in a kitchen, near 72 °F. A fridge
+  # works against the heat that comes in through its walls: the heat goes
+  # with the difference between the air around it and its inside (37 °F
+  # in a fridge, 0 °F in a freezer). A room around the house (a garage, a
+  # yard) has the mean temperature outside, a simple model of the app.
+  @kitchen 72
+  @cold %{"fridge" => 37, "freezer" => 0}
+
+  @doc """
+  The factor of the use of a fridge or a freezer for the temperature
+  around it: 1 in the house, else the difference between the air outside
+  (`ctx.t`, °F) and its inside, divided by the same difference in a
+  kitchen. A fridge in a cold garage uses less, but not less than 0.
+  """
+  def heat_factor(type, %{around: true, t: t}),
+    do: max(t - @cold[type], 0) / (@kitchen - @cold[type])
+
+  def heat_factor(_type, _ctx), do: 1.0
 
   @doc "The part of the power that goes into the battery of a car: a charge loses some."
   def charge_efficiency("l1"), do: 0.85
@@ -564,6 +588,16 @@ defmodule DIY.Estimate do
         "heat_pump" ->
           "#{fmt(btu)} BTU ÷ 3,412 BTU for each kWh ÷ 3.5 = #{number_text(btu / 3_412 / 3.5)} kWh: a heat pump gives 3.5 times the heat of its electricity."
       end
+    ]
+  end
+
+  defp steps(%{type: type, params: p}, m, %{heat: heat}, _estimate)
+       when type in ["fridge", "freezer"] and heat != 1.0 do
+    cold = @cold[type]
+
+    [
+      "#{fmt(p["kwh_year"])} kWh in one year ÷ 365 days × #{m.days} days.",
+      "Around the house, the air has the temperature outside: #{round(m.t)} °F in #{m.name}. It works harder than in a kitchen (72 °F): × (#{round(m.t)} − #{cold}) ÷ (72 − #{cold}) = × #{:erlang.float_to_binary(heat, decimals: 2)}."
     ]
   end
 

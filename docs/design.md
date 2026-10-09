@@ -233,6 +233,14 @@ the degree days. A month with no sun keeps its degree days.
 - A water heater: 15 gallons for each person in one day, from the
   temperature of the ground to 120 °F.
 - The other items: power × hours, or the kWh in one year of the label.
+- A fridge or a freezer around the house (in a garage or a yard). Its
+  label gives its use in a kitchen, near 72 °F. The heat that comes in
+  through its walls goes with the difference between the air around it
+  and its inside (37 °F in a fridge, 0 °F in a freezer). Around the house,
+  the air has the mean temperature outside of the month, a simple model
+  of the app. So a garage fridge in Plano uses near 1.4 times its label
+  in July, and less than its label in January. Under its inside
+  temperature, it uses nothing.
 - The range: the weather and the model (15% for heat and cooling, 20% for
   a typical item, 10% for a checked item), added as squares, because they
   are independent. The weather of a month: the same month of each of the
@@ -788,6 +796,12 @@ The power budget, for each month:
 - The use: the Wh that the items use in one day. A fan works in the warm
   months, and a heater in the cold months. An item on an outlet of 120 V
   loses 10% in the inverter.
+- A 12 V fridge: its label gives its use at 77 °F (25 °C) around it, with
+  41 °F (5 °C) inside. Its use goes with the difference between the mean
+  temperature outside and its inside, as for a fridge of the house. The
+  label of one model (the Dometic CFX3 45: 0.49 kWh in one day at 25 °C,
+  1.03 at 32 °C) shows a larger rise in the heat than this model. So in a
+  hot month the app can be low.
 - The sun: the panels give 80% of their watts in full sun, with the sun
   of NASA POWER at the house.
 - The engine: the amps of the alternator charger, at the voltage of the

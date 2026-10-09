@@ -162,8 +162,18 @@ defmodule DIYWeb.VanLiveTest do
     {build, _} = add(build, van, :bay, "van_battery", %{"ah" => "100", "fused" => "true"})
     view = open(conn, ~p"/van?#{[id: van]}", build)
 
-    # With no sun and no engine, each month gives the same days.
-    assert render(view) =~ ~r/Off the grid: \d+\.\d days in each month\./
+    # With no sun and no engine, the hot months give the fewest days: the
+    # fridge works harder.
+    assert render(view) =~
+             ~r/Off the grid: \d+\.\d days in (July|August)\. No month gives fewer days\./
+
+    # Lights in place of the fridge: each month gives the same days.
+    fridge = Enum.find(build.items, &(&1.type == "van_fridge"))
+    {:ok, lit} = Build.delete_item(build, fridge.id)
+    {lit, _} = add(lit, van, :living, "van_lights")
+
+    assert render(open(conn, ~p"/van?#{[id: van]}", lit)) =~
+             ~r/Off the grid: \d+\.\d days in each month\./
 
     # The person drives 1 hour in one day, but the van has no alternator
     # charger: the page tells why the engine gives no power. With a

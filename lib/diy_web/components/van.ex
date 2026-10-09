@@ -43,7 +43,8 @@ defmodule DIYWeb.VanPage do
         van: van,
         zone: Enum.find(zones, &(&1.id == assigns.room and &1.plan != nil)),
         weight: van && Van.weight(assigns.build, van),
-        power: van && Van.power(assigns.build, van, assigns.climate)
+        power: van && Van.power(assigns.build, van, assigns.climate),
+        temps: %{1 => temp(assigns.climate, 1), 7 => temp(assigns.climate, 7)}
       )
 
     ~H"""
@@ -104,6 +105,7 @@ defmodule DIYWeb.VanPage do
           view={@view}
           zone={@zone}
           status={@status}
+          temps={@temps}
         />
         <.weight weight={@weight} />
         <.power power={@power} hours={@van.params["drive_hours"]} />
@@ -116,6 +118,7 @@ defmodule DIYWeb.VanPage do
           van={@van}
           item={elem(van_item(@build, @van, @item), 1)}
           error={@item_error}
+          temps={@temps}
         />
         <.add_sheet
           :if={@add && match?(%{}, Enum.find(Build.zones(@build, @van.id), &(&1.id == @add)))}
@@ -283,6 +286,22 @@ defmodule DIYWeb.VanPage do
   defp left(%{payload: payload, load: load}),
     do: "#{lb(load - payload)} more than the van can take."
 
+  # The mean temperature outside in a month (°F), or nil with no weather.
+  defp temp(nil, _month), do: nil
+  defp temp(climate, month), do: climate.months[month].t
+
+  # The Wh of an item in a day of a month, or nothing for an item with no
+  # use.
+  defp day_text(item, month, t) do
+    case Van.wh_day(item, month, t) do
+      wh when wh > 0 ->
+        " · #{Format.int(wh)} Wh in a day of #{Enum.at(DIY.Estimate.month_names(), month - 1)}"
+
+      _none ->
+        nil
+    end
+  end
+
   defp days(nil), do: "–"
   defp days(:unlimited), do: "no limit"
   defp days(days) when days >= 30, do: "30 days or more"
@@ -337,6 +356,7 @@ defmodule DIYWeb.VanPage do
   attr :view, :map, required: true
   attr :zone, :map, default: nil
   attr :status, :string, default: nil
+  attr :temps, :map, default: %{}, doc: "the mean temperature (°F) of January and July"
 
   # The inside of the van, cut open: the plan of its zones and its items
   # (the hook Plan). Then the bar of the chosen zone, and the list.
@@ -366,7 +386,7 @@ defmodule DIYWeb.VanPage do
             DIY.Layout.cab()
           )}) and the thickness of the doors at the back ({Inside.feet(Van.doors())}) are guesses of the app. The places of the seats, the dash and the wheel wells are for the picture only.
         </p>
-        <.list build={@build} van={@van} />
+        <.list build={@build} van={@van} temps={@temps} />
         <p id="plan-status" class="sr-only" aria-live="polite">{@status}</p>
       </div>
     </div>
@@ -522,6 +542,7 @@ defmodule DIYWeb.VanPage do
 
   attr :build, :map, required: true
   attr :van, :map, required: true
+  attr :temps, :map, default: %{}
 
   # The zones and their items, as a list: for a screen reader, and for a
   # keyboard (it shows when it has the focus). The arrow keys move an item
@@ -562,8 +583,8 @@ defmodule DIYWeb.VanPage do
                 data-nudge={item.at && item.id}
                 class="link"
               >
-                {Catalog.name(item)}: {lb(Van.weight(item))}{if Van.wh_day(item, 7) > 0,
-                  do: ", #{Format.int(Van.wh_day(item, 7))} Wh in a day of July"}
+                {Catalog.name(item)}: {lb(Van.weight(item))}{if Van.wh_day(item, 7, @temps[7]) > 0,
+                  do: ", #{Format.int(Van.wh_day(item, 7, @temps[7]))} Wh in a day of July"}
               </.link>
             </li>
             <li>
@@ -638,6 +659,7 @@ defmodule DIYWeb.VanPage do
   attr :van, :map, required: true
   attr :item, :map, required: true
   attr :error, :string, default: nil
+  attr :temps, :map, default: %{}
 
   # The numbers of an item of the van (or of the van itself).
   defp item_sheet(assigns) do
@@ -687,11 +709,7 @@ defmodule DIYWeb.VanPage do
       </button>
 
       <p :if={not @van?} class="text-sm">
-        {lb(Van.weight(@item))}{if Van.wh_day(@item, 7) > 0,
-          do: " · #{Format.int(Van.wh_day(@item, 7))} Wh in a day of July"}{if Van.wh_day(@item, 1) >
-                                                                                 0,
-                                                                               do:
-                                                                                 " · #{Format.int(Van.wh_day(@item, 1))} Wh in a day of January"}
+        {lb(Van.weight(@item))}{day_text(@item, 7, @temps[7])}{day_text(@item, 1, @temps[1])}
       </p>
 
       <Inside.place

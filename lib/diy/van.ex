@@ -178,7 +178,8 @@ defmodule DIY.Van do
     months =
       for m <- 1..12 do
         sun = climate && climate.months[m].sun
-        use = items |> Enum.map(fn {_zone, item} -> wh_day(item, m) end) |> Enum.sum()
+        t = climate && climate.months[m].t
+        use = items |> Enum.map(fn {_zone, item} -> wh_day(item, m, t) end) |> Enum.sum()
         solar = if sun, do: panels * sun * DIY.Power.derate(), else: 0.0
         net = use - solar - drive
 
@@ -226,24 +227,46 @@ defmodule DIY.Van do
 
   defp storage(_item), do: 0.0
 
-  @doc "The Wh that an item uses in one day of a month."
-  def wh_day(%{type: "van_fridge", params: p}, _month), do: p["wh_day"] / 1
+  # The label of a 12 V fridge gives its use at 77 °F (25 °C) around it,
+  # with 41 °F (5 °C) inside. A fridge works against the heat that comes
+  # in through its walls: the heat goes with the difference between the air
+  # around it and its inside. The van has the mean temperature outside, a
+  # simple model of the app.
+  @label_f 77
+  @fridge_f 41
 
-  def wh_day(%{type: "stove", params: %{"fuel" => "induction"} = p}, _month),
+  @doc """
+  The Wh that an item uses in one day of a month. `t` is the mean
+  temperature outside in that month (°F), or nil with no weather: a 12 V
+  fridge then uses the Wh of its label.
+  """
+  def wh_day(item, month, t \\ nil)
+
+  def wh_day(%{type: "van_fridge", params: p}, _month, t) when is_number(t),
+    do: p["wh_day"] * fridge_factor(t)
+
+  def wh_day(%{type: "van_fridge", params: p}, _month, _t), do: p["wh_day"] / 1
+
+  def wh_day(item, month, _t), do: day_use(item, month)
+
+  @doc "The factor of the use of a 12 V fridge in a van at a mean temperature (°F)."
+  def fridge_factor(t), do: max(t - @fridge_f, 0) / (@label_f - @fridge_f)
+
+  defp day_use(%{type: "stove", params: %{"fuel" => "induction"} = p}, _month),
     do: p["watts"] * p["minutes"] / 60 / @inverter
 
-  def wh_day(%{type: "water_pump", params: p}, _month), do: p["watts"] * p["minutes"] / 60
+  defp day_use(%{type: "water_pump", params: p}, _month), do: p["watts"] * p["minutes"] / 60
 
-  def wh_day(%{type: type, params: p}, month) when type in ["van_fan", "diesel_heater"],
+  defp day_use(%{type: type, params: p}, month) when type in ["van_fan", "diesel_heater"],
     do: if(month in Catalog.season_months(p["season"]), do: p["watts"] * p["hours"], else: 0.0)
 
-  def wh_day(%{type: "van_lights", params: p}, _month), do: p["watts"] * p["hours"]
+  defp day_use(%{type: "van_lights", params: p}, _month), do: p["watts"] * p["hours"]
 
-  def wh_day(%{type: "devices", params: p}, _month),
+  defp day_use(%{type: "devices", params: p}, _month),
     do: p["watts"] * p["hours"] / if(p["outlet"] == "ac", do: @inverter, else: 1)
 
-  def wh_day(%{type: "inverter", params: p}, _month), do: p["idle_w"] * p["hours"]
-  def wh_day(_item, _month), do: 0.0
+  defp day_use(%{type: "inverter", params: p}, _month), do: p["idle_w"] * p["hours"]
+  defp day_use(_item, _month), do: 0.0
 
   @doc """
   The safety notes of a van, where they apply:
