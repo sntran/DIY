@@ -650,6 +650,20 @@ defmodule DIY.VanTest do
   end
 
   describe "the power budget" do
+    test "a van with a heater: the fridge keeps its label in the cold, so January has a limit" do
+      {build, id} = with_van()
+      {:ok, build} = Build.update_item(build, id, %{"drive_hours" => "0"})
+      {build, _} = add(build, id, :galley, "van_fridge", %{"wh_day" => "400"})
+      {build, _} = add(build, id, :living, "diesel_heater")
+      {build, _} = add(build, id, :living, "van_lights")
+      {build, _} = add(build, id, :bay, "van_battery", %{"ah" => "100", "volts" => "12"})
+      {build, _} = add(build, id, :van_roof, "van_solar", %{"watts" => "200"})
+      climate = climate()
+      january = hd(Van.power(build, van(build, id), climate).months)
+      assert january.use > january.sun
+      assert is_float(january.days)
+    end
+
     test "the use, the sun, the engine, and the days off the grid" do
       {build, id} = with_van()
       {:ok, build} = Build.update_item(build, id, %{"drive_hours" => "0"})
@@ -670,7 +684,7 @@ defmodule DIY.VanTest do
       power = Van.power(build, van, climate)
       assert_in_delta power.storage, 100 * 12 * 0.9, 1.0e-9
       july = Enum.at(power.months, 6)
-      # The fridge works harder in the heat of July (its label is at 77 °F).
+      # The fridge uses more in the heat of July (its label is at 77 °F).
       fridge = 400 * (climate.months[7].t - 41) / (77 - 41)
       assert fridge > 400
       assert_in_delta july.use, fridge + 90 * 2 / 0.9 + 10 * 2, 1.0e-9
@@ -719,13 +733,13 @@ defmodule DIY.VanTest do
 
       assert Van.wh_day(item.("stove", %{}), 7) == 0.0
 
-      # A 12 V fridge: its label at 77 °F, more in the heat, less in the
-      # cold, and nothing under its inside (41 °F).
+      # A 12 V fridge: its label at 77 °F, more in the heat, and its label
+      # in the cold (a budget on the safe side).
       fridge = item.("van_fridge", %{"wh_day" => 360})
       assert Van.wh_day(fridge, 7) == 360.0
       assert Van.wh_day(fridge, 7, 77.0) == 360.0
       assert_in_delta Van.wh_day(fridge, 7, 95.0), 360 * 54 / 36, 1.0e-9
-      assert Van.wh_day(fridge, 1, 30.0) == 0.0
+      assert Van.wh_day(fridge, 1, 30.0) == 360.0
       assert Van.wh_day(item.("van_lights", %{}), 7, 95.0) == 80.0
       assert Van.wh_day(item.("water_pump", %{"watts" => 60, "minutes" => 10}), 7) == 10.0
       assert Van.wh_day(item.("van_fan", %{}), 7) == 240.0

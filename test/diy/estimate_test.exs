@@ -309,6 +309,8 @@ defmodule DIY.EstimateTest do
     {build, _id} = add(build, "Living room", "ceiling_fan", %{"season" => "summer"})
     {build, _id} = add(build, "Living room", "ceiling_fan", %{"season" => "all"})
     {build, _id} = add(build, "Driveway", "ev", %{"charger" => "l1", "miles" => "45"})
+    {build, _id} = add(build, "Garage", "fridge", %{"kwh_year" => "600"})
+    {build, _id} = add(build, "Garage", "freezer", %{"kwh_year" => "400"})
     estimate = Estimate.run(build, climate())
 
     for item <- build.items, month <- 1..12 do
@@ -375,7 +377,7 @@ defmodule DIY.EstimateTest do
     assert Enum.any?(Estimate.explain(ac, 7, estimate), &(&1 =~ "the most cooling that it gives"))
   end
 
-  test "a fridge or a freezer around the house works harder in the heat, and less in the cold" do
+  test "a fridge or a freezer around the house uses more in the heat, and its label in the cold" do
     climate = climate()
 
     {build, garage} =
@@ -383,32 +385,55 @@ defmodule DIY.EstimateTest do
 
     {build, freezer} = add(build, "Garage", "freezer", %{"kwh_year" => "300"})
     {build, kitchen} = add(build, "Kitchen", "fridge", %{"kwh_year" => "500"})
+
+    # A room that the user adds around the house: the level decides, not
+    # the name.
+    {:ok, build, shed} = Build.add_room(build, "Workshop", "outside", :indoor)
+    {:ok, build, shed_fridge} = Build.add_item(build, shed, "fridge")
     estimate = Estimate.run(build, climate)
     month = fn m, id -> Enum.at(estimate.months, m - 1).items[id].kwh end
 
     # In the kitchen: the label, in each month.
     assert_in_delta month.(7, kitchen), 500 * 31 / 365, 1.0e-9
 
-    # In the garage: the mean temperature outside of July, against 72 °F.
+    # In the garage: the mean air outside of July, against 72 °F.
     t = climate.months[7].t
-    assert_in_delta month.(7, garage), 500 * 31 / 365 * (t - 37) / (72 - 37), 1.0e-9
+    assert_in_delta month.(7, garage), 500 * 31 / 365 * (t - 39) / (72 - 39), 1.0e-9
     assert month.(7, garage) > month.(7, kitchen)
-    assert month.(1, garage) < month.(1, kitchen)
     assert_in_delta month.(7, freezer), 300 * 31 / 365 * t / 72, 1.0e-9
+    assert month.(7, shed_fridge) > month.(7, kitchen) * 1.3
+    # In January: the label, not less.
+    assert_in_delta month.(1, garage), month.(1, kitchen), 1.0e-9
+    assert estimate.items[garage].year > estimate.items[kitchen].year
 
     # The math tells it.
     item = fn id -> elem(Build.item(build, id), 1) end
-    [_days, heat, _all] = Estimate.explain(item.(garage), 7, estimate)
+    [label, air, heat, _all] = Estimate.explain(item.(garage), 7, estimate)
+    assert label =~ "= 42.5 kWh: the label, for a kitchen near 72 °F."
+
+    assert air ==
+             "Around the house, the app uses the mean air outside: #{Estimate.number_text(t)} °F in July."
 
     assert heat =~
-             "Around the house, the air has the temperature outside: #{round(t)} °F in July."
+             "42.5 kWh × (#{Estimate.number_text(t)} °F − 39 °F in the fridge) ÷ (72 °F − 39 °F) ="
 
-    assert heat =~ "× (#{round(t)} − 37) ÷ (72 − 37) = ×"
+    [cold, _days, _all] = Estimate.explain(item.(garage), 1, estimate)
+    assert cold =~ "It is not hotter than a kitchen: the app uses the label."
     assert length(Estimate.explain(item.(kitchen), 7, estimate)) == 2
+    assert Estimate.air_factor("freezer", %{around: false, t: 100.0}) == 1.0
+  end
 
-    # Colder than its inside: no heat comes in, and it uses nothing.
-    assert Estimate.heat_factor("fridge", %{around: true, t: 30.0}) == 0.0
-    assert Estimate.heat_factor("freezer", %{around: false, t: 100.0}) == 1.0
+  property "around the house, a warmer month never lowers a fridge, and it never goes under its label" do
+    check all(
+            type <- member_of(["fridge", "freezer"]),
+            a <- float(min: -40.0, max: 120.0),
+            b <- float(min: -40.0, max: 120.0)
+          ) do
+      [cold, warm] = Enum.sort([a, b])
+      low = Estimate.air_factor(type, %{around: true, t: cold})
+      assert low >= 1.0
+      assert Estimate.air_factor(type, %{around: true, t: warm}) >= low
+    end
   end
 
   test "the format of a number" do

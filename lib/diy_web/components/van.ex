@@ -257,7 +257,7 @@ defmodule DIYWeb.VanPage do
           </table>
         </div>
         <p class="text-xs opacity-80">
-          Wh in one day. The sun is the sun of NASA POWER at your house: a trip to a different place has a different sun. The panels give 80% of their watts in full sun. The engine: the amps of the alternator charger at the voltage of the batteries (12.8 V for each 12 V), for the hours that you drive. A lithium battery gives 90% of its label, a lead acid battery 50%, and a power station 95%. An item on an outlet of 120 V loses 10% in the inverter. The app does not count the loss of the outlets of a station.
+          Wh in one day. The sun and the temperature come from NASA POWER at your house. A trip to a different place has a different sun and temperature. A 12 V fridge uses more in the heat. The panels give 80% of their watts in full sun. The engine: the amps of the alternator charger at the voltage of the batteries (12.8 V for each 12 V), for the hours that you drive. A lithium battery gives 90% of its label, a lead acid battery 50%, and a power station 95%. An item on an outlet of 120 V loses 10% in the inverter. The app does not count the loss of the outlets of a station.
         </p>
       <% end %>
     </div>
@@ -295,7 +295,7 @@ defmodule DIYWeb.VanPage do
   defp day_text(item, month, t) do
     case Van.wh_day(item, month, t) do
       wh when wh > 0 ->
-        " · #{Format.int(wh)} Wh in a day of #{Enum.at(DIY.Estimate.month_names(), month - 1)}"
+        " · #{Format.int(wh)} Wh in a day of #{Enum.at(DIY.Estimate.month_names(), month - 1)}#{if t, do: " (#{round(t)} °F)"}"
 
       _none ->
         nil

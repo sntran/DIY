@@ -160,10 +160,25 @@ defmodule DIYWeb.VanLiveTest do
     refute render(view) =~ "keep 0 Wh"
 
     {build, _} = add(build, van, :bay, "van_battery", %{"ah" => "100", "fused" => "true"})
+
+    # The sheet of the fridge: more in July, its label in January, and the
+    # temperature of each month (the weather of Plano).
+    fridge = Enum.find(build.items, &(&1.type == "van_fridge"))
+    view = open(conn, ~p"/van?#{[id: van, item: fridge.id]}", build)
+    settle(view)
+
+    assert has_element?(
+             view,
+             "#item-sheet",
+             "499 Wh in a day of July (86 °F) · 400 Wh in a day of January (42 °F)"
+           )
+
+    assert has_element?(view, "#van-list", "499 Wh in a day of July")
+
     view = open(conn, ~p"/van?#{[id: van]}", build)
 
     # With no sun and no engine, the hot months give the fewest days: the
-    # fridge works harder.
+    # fridge uses more.
     assert render(view) =~
              ~r/Off the grid: \d+\.\d days in (July|August)\. No month gives fewer days\./
 

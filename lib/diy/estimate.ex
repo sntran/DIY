@@ -31,7 +31,8 @@ defmodule DIY.Estimate do
     person in one day, from the temperature of the water in the ground to
     120 °F.
   - The other items use `power × hours`, or the kWh in one year of their
-    label.
+    label. A fridge or a freezer in a room around the house (a garage, a
+    shed) uses more in a hot month (`air_factor/2`).
 
   ## The range
 
@@ -344,7 +345,8 @@ defmodule DIY.Estimate do
   @doc """
   The kWh of one item in one month. `ctx` has the days, the month, the
   temperature, the BTU of cooling and heating of the item, and the size of
-  the house.
+  the house. It also has `around`: true for an item in a room around the
+  house.
   """
   def kwh(%{type: "ac", params: p} = item, ctx) do
     capacity = capacity(item, ctx.days)
@@ -381,8 +383,10 @@ defmodule DIY.Estimate do
   end
 
   def kwh(%{type: type, params: p}, ctx) when type in ["fridge", "freezer"] do
-    heat = heat_factor(type, ctx)
-    Map.put(other(p["kwh_year"] * ctx.days / 365 * heat), :heat, heat)
+    air = air_factor(type, ctx)
+
+    other(p["kwh_year"] * ctx.days / 365 * air)
+    |> Map.merge(%{air: air, around: Map.get(ctx, :around, false)})
   end
 
   def kwh(%{type: "range", params: p}, ctx),
@@ -422,24 +426,27 @@ defmodule DIY.Estimate do
 
   defp other(kwh), do: %{kwh: kwh / 1, part: :other, full: false}
 
-  # The label of a fridge gives its use in a kitchen, near 72 °F. A fridge
-  # works against the heat that comes in through its walls: the heat goes
-  # with the difference between the air around it and its inside (37 °F
-  # in a fridge, 0 °F in a freezer). A room around the house (a garage, a
-  # yard) has the mean temperature outside, a simple model of the app.
+  # The label of a fridge comes from a test at 90 °F with closed doors.
+  # This test stands for a kitchen near 72 °F, with doors that open (10
+  # CFR 430, subpart B, appendix A). A fridge works against the heat that
+  # comes in through its walls. This heat is in proportion to the
+  # difference between the air around it and its inside. The inside of the
+  # test is 39 °F in a fridge and 0 °F in a freezer. A room around the house
+  # (a garage, a shed) has the mean air outside: a simple model of the app.
   @kitchen 72
-  @cold %{"fridge" => 37, "freezer" => 0}
+  @cold %{"fridge" => 39, "freezer" => 0}
 
   @doc """
-  The factor of the use of a fridge or a freezer for the temperature
-  around it: 1 in the house, else the difference between the air outside
-  (`ctx.t`, °F) and its inside, divided by the same difference in a
-  kitchen. A fridge in a cold garage uses less, but not less than 0.
+  The factor of the use of a fridge or a freezer for the air around it. In
+  the house, it is 1. Around the house, it is the difference between the
+  mean air outside (`ctx.t`, °F) and its inside, divided by the same
+  difference in a kitchen. It is never under 1. In a cold month, the app
+  keeps the label: a garage is warmer than the air outside.
   """
-  def heat_factor(type, %{around: true, t: t}),
-    do: max(t - @cold[type], 0) / (@kitchen - @cold[type])
+  def air_factor(type, %{around: true, t: t}),
+    do: max((t - @cold[type]) / (@kitchen - @cold[type]), 1.0)
 
-  def heat_factor(_type, _ctx), do: 1.0
+  def air_factor(_type, _ctx), do: 1.0
 
   @doc "The part of the power that goes into the battery of a car: a charge loses some."
   def charge_efficiency("l1"), do: 0.85
@@ -591,14 +598,25 @@ defmodule DIY.Estimate do
     ]
   end
 
-  defp steps(%{type: type, params: p}, m, %{heat: heat}, _estimate)
-       when type in ["fridge", "freezer"] and heat != 1.0 do
-    cold = @cold[type]
+  defp steps(%{type: type, params: p}, m, %{around: true} = data, _estimate)
+       when type in ["fridge", "freezer"] do
+    label = p["kwh_year"] * m.days / 365
 
-    [
-      "#{fmt(p["kwh_year"])} kWh in one year ÷ 365 days × #{m.days} days.",
-      "Around the house, the air has the temperature outside: #{round(m.t)} °F in #{m.name}. It works harder than in a kitchen (72 °F): × (#{round(m.t)} − #{cold}) ÷ (72 − #{cold}) = × #{:erlang.float_to_binary(heat, decimals: 2)}."
-    ]
+    air =
+      "Around the house, the app uses the mean air outside: #{number_text(m.t)} °F in #{m.name}."
+
+    if data.air > 1.0 do
+      [
+        "#{fmt(p["kwh_year"])} kWh in one year ÷ 365 days × #{m.days} days = #{number_text(label)} kWh: the label, for a kitchen near #{@kitchen} °F.",
+        air,
+        "#{number_text(label)} kWh × (#{number_text(m.t)} °F − #{@cold[type]} °F in the #{type}) ÷ (#{@kitchen} °F − #{@cold[type]} °F) = #{number_text(data.kwh)} kWh."
+      ]
+    else
+      [
+        air <> " It is not hotter than a kitchen: the app uses the label.",
+        "#{fmt(p["kwh_year"])} kWh in one year ÷ 365 days × #{m.days} days."
+      ]
+    end
   end
 
   defp steps(%{type: type, params: p}, m, _data, _estimate) when type in ["fridge", "freezer"],

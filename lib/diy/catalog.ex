@@ -747,7 +747,7 @@ defmodule DIY.Catalog do
           400,
           0,
           5000,
-          "The label gives the Ah (amp hours) in one day at 12 V and 77 °F: 30 Ah is near 360 Wh. In the heat, it uses more."
+          "The label gives the Ah (amp hours) in one day at 12 V, near 77 °F (25 °C): 30 Ah is near 360 Wh. In the heat, it uses more."
         ),
         weight(45)
       ]

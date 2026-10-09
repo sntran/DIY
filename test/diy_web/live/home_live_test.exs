@@ -509,6 +509,21 @@ defmodule DIYWeb.HomeLiveTest do
     assert has_element?(view, "#item-form", "It is not an outlet: an electrician installs it.")
   end
 
+  test "a fridge in the garage: its math gives the air outside", %{conn: conn} do
+    build = house()
+    garage = Enum.find(build.rooms, &(&1.name == "Garage"))
+    {:ok, build, fridge} = Build.add_item(build, garage.id, "fridge")
+    view = open(conn, ~p"/inside?#{[item: fridge]}", build)
+    settle(view)
+    assert has_element?(view, "#item-math", "the label, for a kitchen near 72 °F")
+
+    assert has_element?(
+             view,
+             "#item-math",
+             "Around the house, the app uses the mean air outside: 85.9 °F in July."
+           )
+  end
+
   test "two items with the same name: the bill gives the room of each one", %{conn: conn} do
     build = house()
     garage = Enum.find(build.rooms, &(&1.name == "Garage"))

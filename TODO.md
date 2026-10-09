@@ -61,6 +61,8 @@ The owner decides about each item.
   layout).
 - The sun of the place of a trip, in place of the sun at the house.
 - The axles of the Transit and of the Sprinter in the models of vans.
+- The range of a fridge around the house with the temperature of each
+  year (today the history uses the mean temperature of the month).
 
 ## Ideas of the play test
 
