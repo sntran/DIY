@@ -111,12 +111,14 @@ defmodule DIY.Layout do
   else the typical size of its kind. Solar panels are an array: about 400 W
   for each panel.
   """
-  def size(%{size: %{w: w, d: d, h: h}}), do: {w, d, h}
-
+  # The watts of solar panels give their size, also when a stored build
+  # gives them a size.
   def size(%{type: "solar_panels", params: %{"watts" => watts}}) do
     {cols, rows} = panel_grid(watts)
     {cols * @panel_w, rows * @panel_d, 2}
   end
+
+  def size(%{size: %{w: w, d: d, h: h}}), do: {w, d, h}
 
   def size(%{type: type}), do: Catalog.size(type)
 

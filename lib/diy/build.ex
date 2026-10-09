@@ -707,8 +707,9 @@ defmodule DIY.Build do
   def size_item(build, id, size) do
     with {:ok, item} <- item(build, id),
          true <- (size == nil or Layout.valid_size?(size)) || {:error, :size},
-         # The watts of solar panels give their size.
-         true <- item.type != "solar_panels" || {:error, :size},
+         # The watts of solar panels give their size: a size goes, and no
+         # size comes.
+         true <- (size == nil or item.type != "solar_panels") || {:error, :size},
          do: {:ok, replace_item(build, %{item | size: size})}
   end
 

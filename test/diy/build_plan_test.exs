@@ -107,6 +107,21 @@ defmodule DIY.BuildPlanTest do
     {:ok, with_panels, panels} = Build.add_item(build, roof.id, "solar_panels")
     assert Build.size_item(with_panels, panels, %{w: 57, d: 12, h: 35}) == {:error, :size}
 
+    # A stored size of panels has no effect, and it can go.
+    stored = %{
+      with_panels
+      | items:
+          Enum.map(
+            with_panels.items,
+            &if(&1.id == panels, do: %{&1 | size: %{w: 400, d: 30, h: 2}}, else: &1)
+          )
+    }
+
+    {:ok, panels_item} = Build.item(stored, panels)
+    assert Layout.size(panels_item) == Layout.size(%{panels_item | size: nil})
+    assert {:ok, cleared} = Build.size_item(stored, panels, nil)
+    assert elem(Build.item(cleared, panels), 1).size == nil
+
     {:ok, sized} = Build.size_item(build, tv.id, %{w: 57, d: 12, h: 35})
     assert Layout.size(item(sized, tv.id)) == {57, 12, 35}
     {:ok, typical} = Build.size_item(sized, tv.id, nil)
