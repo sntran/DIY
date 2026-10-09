@@ -673,6 +673,23 @@ defmodule DIYWeb.HomeLiveTest do
     refute has_element?(view, "#item-solar")
   end
 
+  test "the sheet of a CPAP tells how to keep it on in an outage", %{conn: conn} do
+    build = house()
+    bedroom = Enum.find(build.rooms, &(&1.name == "Bedroom 1"))
+    {:ok, build, cpap} = Build.add_item(build, bedroom.id, "cpap")
+    view = open(conn, ~p"/inside?#{[item: cpap]}", build)
+    settle(view)
+    assert has_element?(view, "#item-medical", "A power station can run it for some hours")
+    assert has_element?(view, "#item-medical", "On a battery, turn off the humidifier")
+    # 50 W for 8 hours in the 31 days of July.
+    assert has_element?(view, "#item-sheet", "12.4 kWh")
+
+    # A fridge has no such note.
+    fridge = Enum.find(build.items, &(&1.type == "fridge"))
+    render_patch(view, ~p"/inside?#{[item: fridge.id]}")
+    refute has_element?(view, "#item-medical")
+  end
+
   test "two items with the same name: the bill gives the room of each one", %{conn: conn} do
     build = house()
     garage = Enum.find(build.rooms, &(&1.name == "Garage"))

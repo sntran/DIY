@@ -87,9 +87,10 @@ other faults are in the next pull requests.
   check it on a real phone.
 - A new station or new panels are items that the user has: the user
   must tick "it is a plan".
-- No CPAP in the list of the items, and no note for a medical device.
 - The permit notes name Dallas and New Braunfels, not the city of the
   user.
+- A medical device (a CPAP) cannot go in the bed of a van. A person can
+  sleep in the van in a long outage.
 - The labels of the rooms in the picture. Some rooms have no name in the
   view of all the house. The tab of the floor is not marked.
 - The handles of a zone of the van cover its name.

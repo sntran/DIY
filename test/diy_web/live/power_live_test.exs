@@ -237,6 +237,22 @@ defmodule DIYWeb.PowerLiveTest do
     assert has_element?(view, "#today-grid-tie")
   end
 
+  test "a CPAP on a small station: the time when it stops, and the size for 2 nights", %{
+    conn: conn
+  } do
+    {build, _id} = add(house(), "Bedroom 1", "cpap")
+    {build, _id} = add(build, "Bedroom 1", "power_station", %{"kwh" => "0.256"})
+    build = flag(build, "cpap", :backup)
+    view = open(conn, ~p"/power", build)
+    # The outage starts at 18:00, and the CPAP at 22:00: 0.224 kWh at the
+    # outlets give 50 W for 4.5 hours.
+    assert has_element?(view, "#backup-hours", "8.5 hours")
+    assert render(view) =~ "8.5 hours (from 18:00 to 2:28), in any month of the year"
+    # Two nights of 0.4 kWh, with the losses of the battery: 0.92 kWh. The
+    # page rounds up, so that a station of this size runs 48 hours.
+    assert has_element?(view, "#backup-size", "the stations need near 1 kWh")
+  end
+
   test "a plan that does not pay back, and a station in an outage of the plan", %{conn: conn} do
     {build, _id} = add(house(), "Laundry", "power_station", %{"cost" => "2000"})
     build = build |> flag("power_station", :planned) |> flag("fridge", :backup)
@@ -246,7 +262,7 @@ defmodule DIYWeb.PowerLiveTest do
     assert html =~ "On savings alone, the planned equipment saves no money."
     assert html =~ "A different reason: in an outage"
     # The fridge uses the same kWh in each month: the hours are the same.
-    assert html =~ "hours, in any month of the year"
+    assert html =~ "on day 3), in any month of the year"
     assert html =~ "A battery of 3,000 cycles (a cycle is one full charge and one full use)"
     # The hours are at the top of the page, with the size for 2 days.
     assert has_element?(view, "#backup-hours", "hours")

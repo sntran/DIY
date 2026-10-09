@@ -629,6 +629,25 @@ defmodule DIY.PowerTest do
     end
   end
 
+  test "the least battery for 48 hours: a CPAP needs two nights" do
+    need =
+      Enum.map(
+        Profile.shape(%{type: "cpap", params: %{"hours" => 8.0}}, :other, 0.4),
+        &(&1 * 0.4)
+      )
+
+    sun = List.duplicate(0.0, 24)
+    kwh = Power.kwh_for(need, sun, 48)
+    # Two nights of 0.4 kWh, with the losses of the battery.
+    assert_in_delta kwh, 0.8 / (Power.usable() * 0.92), 0.001
+    assert Power.outage(need, sun, %{kwh: kwh}, kwh * Power.usable()) >= 48
+    assert Power.outage(need, sun, %{kwh: kwh * 0.99}, kwh * 0.99 * Power.usable()) < 48
+    # A straight line of the hours gives too little.
+    hours = Power.outage(need, sun, %{kwh: 0.5}, 0.5 * Power.usable())
+    assert 0.5 * 48 / hours < kwh
+    assert Power.kwh_for(List.duplicate(0.0, 24), sun, 48) == nil
+  end
+
   test "the shapes of the day" do
     for kind <- DIY.Kinds.house(), part <- [:cooling, :heating, :other] do
       item = %{type: kind.type, params: DIY.Catalog.defaults(kind.type)}
@@ -646,6 +665,16 @@ defmodule DIY.PowerTest do
     assert Enum.at(evening, 18) == 1.0
     assert Profile.shape(car, :other, 0.0) == List.duplicate(1 / 24, 24)
     assert Profile.charge_hours(car, 14.4) == 2.0
+
+    # A CPAP runs for its hours from 22:00. With 24 hours, the shape is
+    # flat. With no hours, it uses no power, and the shape is flat too.
+    cpap = &Profile.shape(%{type: "cpap", params: %{"hours" => &1}}, :other, 0.4)
+    assert Enum.at(cpap.(8.0), 22) == 1 / 8 and Enum.at(cpap.(8.0), 5) == 1 / 8
+    assert Enum.at(cpap.(8.0), 6) == 0 and Enum.at(cpap.(8.0), 21) == 0
+    assert Enum.at(cpap.(10.5), 7) == 1 / 10.5 and Enum.at(cpap.(10.5), 8) == 0.5 / 10.5
+    assert Enum.at(cpap.(10.5), 9) == 0
+    assert cpap.(24.0) == List.duplicate(1 / 24, 24)
+    assert cpap.(0.0) == List.duplicate(1 / 24, 24)
     assert Profile.charger_kw("l1") == 1.4
 
     assert_in_delta Profile.day_length(0, 3), 12.0, 0.1

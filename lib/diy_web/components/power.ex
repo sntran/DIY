@@ -116,8 +116,9 @@ defmodule DIYWeb.PowerPage do
 
   # The first question of a person with a station: how long its items run
   # in an outage. The answer is at the top of the page. In the mode that
-  # keeps the batteries full, the page also gives the size for 2 days: the
-  # hours grow with the kWh. In the other modes, the charge at the start of
+  # keeps the batteries full, the page also gives the size for 2 days. It
+  # is the least battery that runs 48 hours in each month
+  # (`DIY.Power.kwh_for/3`). In the other modes, the charge at the start of
   # an outage changes with the use of the day.
   defp backup(assigns) do
     low = low_month(assigns.power)
@@ -129,8 +130,11 @@ defmodule DIYWeb.PowerPage do
         low: low,
         overload: :overload in Power.warnings(assigns.power),
         need:
-          assigns.mode == "backup" && low && is_number(low.outage) && low.outage >= 1 &&
-            low.outage < 48 && sys.kwh * 48 / low.outage
+          assigns.mode == "backup" && low && is_number(low.outage) && low.outage < 48 &&
+            assigns.power.months
+            |> Enum.map(& &1.need_2_days)
+            |> Enum.filter(&is_number/1)
+            |> Enum.max()
       )
 
     ~H"""
@@ -164,7 +168,7 @@ defmodule DIYWeb.PowerPage do
             Panels on the grid stop in an outage: their inverter needs the grid. These hours do not count them.
           </p>
           <p :if={@need} id="backup-size" class="text-sm">
-            For 2 days (48 hours), the stations need near {Format.value(Float.round(@need, 1))} kWh. {if @planned,
+            For 2 days (48 hours), the stations need near {Format.value(Float.ceil(@need, 1))} kWh. {if @planned,
               do: "With the plan, they have",
               else: "They have"} {Format.value(Float.round(@sys.kwh / 1, 1))} kWh. Extra batteries of a station add kWh.
           </p>
@@ -186,11 +190,26 @@ defmodule DIYWeb.PowerPage do
   # has the same hours, the words say so.
   defp low_text(power) do
     low = low_month(power)
+    hours = hours_text(low.outage) <> clock_text(low.outage)
 
     if Enum.all?(power.months, &(&1.outage == low.outage)),
-      do: "#{hours_text(low.outage)}, in any month of the year",
-      else: "#{hours_text(low.outage)} in #{low.name}, the month with the fewest hours"
+      do: "#{hours}, in any month of the year",
+      else: "#{hours} in #{low.name}, the month with the fewest hours"
   end
+
+  # The time when the stations stop: an outage starts at 18:00 (day 1). An
+  # item that runs at night (a CPAP) needs this time, not only the hours.
+  defp clock_text(hours) when is_number(hours) and hours > 0 do
+    minutes = 18 * 60 + round(hours * 60)
+    clock = rem(minutes, 1440)
+    time = "#{div(clock, 60)}:#{String.pad_leading("#{rem(clock, 60)}", 2, "0")}"
+
+    if minutes < 42 * 60,
+      do: " (from 18:00 to #{time})",
+      else: " (from 18:00 on day 1 to #{time} on day #{div(minutes, 1440) + 1})"
+  end
+
+  defp clock_text(_hours), do: ""
 
   defp equipment?(build), do: Enum.any?(build.items, &(&1.planned or &1.type in @power_types))
 
