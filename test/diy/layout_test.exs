@@ -61,8 +61,10 @@ defmodule DIY.LayoutTest do
     assert plan.("Kitchen") == %{x: 0, y: 0, w: 144, d: 294}
     assert plan.("Living room") == %{x: 144, y: 0, w: 216, d: 294}
     assert plan.("Laundry") == %{x: 360, y: 0, w: 78, d: 294}
-    assert plan.("Bedroom 1") == %{x: 0, y: 0, w: 174, d: 294}
-    assert plan.("Bathroom") == %{x: 348, y: 0, w: 90, d: 294}
+    # Floor 2: 3 bedrooms and the bathroom, in 2 rows.
+    assert plan.("Bedroom 1") == %{x: 0, y: 0, w: 216, d: 168}
+    assert plan.("Bathroom") == %{x: 0, y: 168, w: 144, d: 126}
+    assert plan.("Bedroom 3") == %{x: 144, y: 168, w: 294, d: 126}
     assert plan.("Roof") == %{x: 0, y: 0, w: 438, d: 294}
     assert plan.("Attic") == %{x: 0, y: 0, w: 438, d: 294}
 

@@ -148,10 +148,14 @@ plans, the estimate shows when the house has an AC (the plan: "as soon as
 the house has walls and an AC").
 
 A preset has the rooms of the house and its typical items
-(`DIY.House`). A typical item has a dashed border and the word "Typical":
-its numbers are a guess of the app. A change of a number, or a tap on
-"They are right", makes it checked. The range of a checked item is
-smaller.
+(`DIY.House`). It has a bedroom for each person that the preset gives
+the house (the people of the water heater). That is 2 under 1,500 sq ft,
+3 under 2,200 sq ft, else 4. The bathroom comes after the second
+bedroom, so the draft gives the bedrooms better shapes. A typical item
+has a dashed border and the word "Typical": its numbers are a guess of
+the app. A change of a number, or a tap on "They are right", makes it
+checked. The
+range of a checked item is smaller.
 
 The front of the house helps a person with no skill in power:
 
@@ -659,6 +663,10 @@ the app checks the ends of the range and each limit in it.
 4. On your own: the worksheet. Each plan has the bill of each of the 12
    months, and the cost of the year, in the order that the user added the
    plans.
+
+A person who knows how to read a bill can go to the worksheet at once.
+On step 1, the button "Go to the worksheet" is under the text of the
+lesson. It opens all the steps.
 
 ### The bill of a month
 
@@ -1208,8 +1216,10 @@ its turn. A length is in inches.
 - The plan does not trap the page. The mouse wheel alone scrolls the
   page: a note on the plan then tells how to zoom. When the plan shows
   all the house (all its width and all its height), a finger that moves
-  up or down scrolls the page. After a zoom in, the finger moves the
-  view. The button to add a room is under the plan: so it does not hide
+  up or down scrolls the page. When the finger lifts, the page keeps its
+  speed and slows down, as a page that the browser scrolls. A finger that
+  stops before it lifts gives no glide. After a zoom in, the finger moves
+  the view. The button to add a room is under the plan: so it does not hide
   the name of a room.
 - The tabs of the layers. A tab fills the screen with its layer, and the
   other layers are pale. The button "Show all the house", or a tap on a

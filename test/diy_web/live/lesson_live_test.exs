@@ -96,6 +96,23 @@ defmodule DIYWeb.LessonLiveTest do
     assert build(view).lesson == 2
   end
 
+  test "a person who knows how to read a bill goes to the worksheet at once", %{conn: conn} do
+    view = open(conn, ~p"/plans", house())
+    view |> element("#skip-lesson", "Go to the worksheet") |> render_click()
+    assert_patch(view, ~p"/plans?step=4")
+    assert build(view).lesson == 4
+    assert has_element?(view, "#worksheet", "4. On your own: the worksheet")
+    refute has_element?(view, "#skip-lesson")
+
+    # Each step is open.
+    for n <- ~w(1. 2. 3. 4.),
+        do: assert(has_element?(view, "nav[aria-label='The steps of the lesson'] a", n))
+
+    # The button is only on step 1, before the worksheet is open.
+    view = open(conn, ~p"/plans?step=2", Build.set_lesson(house(), 2))
+    refute has_element?(view, "#skip-lesson")
+  end
+
   test "step 2: the user does each step, and the app checks it", %{conn: conn} do
     view = open(conn, ~p"/plans?step=2", Build.set_lesson(house(), 2))
     html = render(view)
