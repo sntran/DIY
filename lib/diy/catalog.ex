@@ -864,7 +864,18 @@ defmodule DIY.Catalog do
       name: "Alternator charger (DC-DC)",
       places: [:cab, :bay],
       features: [:weight, :van_power],
-      params: [int("amps", "Charge", "A", 30, 1, 200, "The label gives its amps."), weight(5)]
+      params: [
+        int(
+          "amps",
+          "Charge",
+          "A",
+          30,
+          1,
+          200,
+          "It charges the batteries from the engine while you drive. The label gives its amps."
+        ),
+        weight(5)
+      ]
     },
     %{
       type: "van_fridge",

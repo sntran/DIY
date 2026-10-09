@@ -54,6 +54,7 @@ defmodule DIYWeb.HomeLive do
      |> assign(:estimate, %{ready: false, missing: []})
      |> assign(:full, %{ready: false, missing: []})
      |> assign(:power, nil)
+     |> assign(:bill_month, nil)
      |> assign(:bill, nil)
      |> assign(:whatif, nil)
      |> assign(:shares, %{})
@@ -412,6 +413,15 @@ defmodule DIYWeb.HomeLive do
     end
   end
 
+  # A month of the chart of the bill (a tap or the keyboard): the line
+  # over the chart gives that month.
+  def handle_event("bill_month", %{"month" => month}, socket) do
+    case parse_int(month) do
+      month when month in 1..12 -> {:noreply, assign(socket, :bill_month, month)}
+      _other -> {:noreply, socket}
+    end
+  end
+
   # The price of the last bill of the person: its total divided by its kWh.
   # A price out of 3¢ to 100¢ is not a price of a bill: the page asks the
   # person to check the two numbers. With the month of the bill, the
@@ -618,7 +628,11 @@ defmodule DIYWeb.HomeLive do
   end
 
   def handle_event("restart", _params, socket) do
-    {:noreply, socket |> put(Build.restart(socket.assigns.build)) |> push_patch(to: ~p"/")}
+    {:noreply,
+     socket
+     |> put(Build.restart(socket.assigns.build))
+     |> assign(:bill_month, nil)
+     |> push_patch(to: ~p"/")}
   end
 
   def handle_event("upload", _params, socket), do: {:noreply, socket}
@@ -791,7 +805,10 @@ defmodule DIYWeb.HomeLive do
       case Build.import(socket.assigns.build, text) do
         {:ok, build} ->
           {:noreply,
-           socket |> put(build) |> put_flash(:info, "The page shows the build of the file now.")}
+           socket
+           |> put(build)
+           |> assign(:bill_month, nil)
+           |> put_flash(:info, "The page shows the build of the file now.")}
 
         {:error, _reason} ->
           {:noreply, put_flash(socket, :error, "The file is not a build of this app.")}
@@ -1124,6 +1141,7 @@ defmodule DIYWeb.HomeLive do
               weather={@weather}
               market={@market}
               scene={@scene}
+              bill_month={@bill_month}
             />
         <% end %>
       <% end %>
