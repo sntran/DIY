@@ -1050,17 +1050,22 @@ defmodule DIYWeb.Cutaway do
           <title :if={object.kind == :item}>{object.name}</title>
           <polygon :for={{points, class} <- object.polys} points={points} class={class} />
         </g>
-        <text
-          :for={label <- level.labels}
-          :key={label.id}
-          x={label.x}
-          y={label.y}
-          text-anchor="middle"
-          class="p-label"
-          data-rank={label.rank}
-        >
-          {label.text}
-        </text>
+        <g :for={label <- level.labels} :key={label.id}>
+          <rect
+            class={["p-pill", label.id == @selected && "p-pill-chosen"]}
+            data-pill={label.id}
+          />
+          <text
+            x={label.x}
+            y={label.y}
+            text-anchor="middle"
+            class="p-label"
+            data-rank={label.rank}
+            data-label={label.id}
+          >
+            {label.text}
+          </text>
+        </g>
       </g>
       <g :if={@selection} id="plan-selection">
         <polygon

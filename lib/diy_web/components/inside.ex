@@ -170,17 +170,39 @@ defmodule DIYWeb.Inside do
   attr :room, :map, required: true
   attr :build, :map, required: true
 
-  # The bar of the chosen room: its name, its size, and its buttons.
+  # The bar of the chosen room: its name, its size, and its buttons. The
+  # arrows go to the room before it and to the next room, in the order of
+  # the list (`neighbors/2`). The plan zooms in to the room (the hook).
   defp room_bar(assigns) do
+    assigns = assign(assigns, :neighbors, neighbors(assigns.build, assigns.room))
+
     ~H"""
     <div id="room-bar" class="card card-border bg-base-100 p-3 gap-2">
       <div class="flex items-center gap-2">
+        <.link
+          :if={@neighbors}
+          patch={~p"/inside?#{[room: elem(@neighbors, 0).id]}"}
+          id="room-before"
+          class="btn btn-sm btn-ghost btn-square"
+          aria-label={"Go to the room before: #{elem(@neighbors, 0).name}"}
+        >
+          <.icon name="hero-chevron-left" class="size-4" />
+        </.link>
         <div class="grow min-w-0">
           <p class="font-semibold truncate">{@room.name}</p>
           <p class="text-xs opacity-70">
             {Build.level_name(@room.level)} · {feet(@room.plan.w)} by {feet(@room.plan.d)}
           </p>
         </div>
+        <.link
+          :if={@neighbors}
+          patch={~p"/inside?#{[room: elem(@neighbors, 1).id]}"}
+          id="room-next"
+          class="btn btn-sm btn-ghost btn-square"
+          aria-label={"Go to the next room: #{elem(@neighbors, 1).name}"}
+        >
+          <.icon name="hero-chevron-right" class="size-4" />
+        </.link>
         <.link
           patch={~p"/inside?#{[add: @room.id, room: @room.id]}"}
           id="bar-add"
@@ -210,6 +232,22 @@ defmodule DIYWeb.Inside do
       />
     </div>
     """
+  end
+
+  @doc """
+  The room before a room of the house and the next room, in the order of
+  the list. The list goes from the roof down to the floors, and then
+  around the house. After
+  the last room comes the first room. A house with one room gives `nil`.
+  """
+  def neighbors(build, room) do
+    rooms =
+      for level <- Build.levels(build.house.floors), r <- Build.rooms_on(build, level), do: r
+
+    i = Enum.find_index(rooms, &(&1.id == room.id))
+
+    if length(rooms) > 1,
+      do: {Enum.at(rooms, i - 1), Enum.at(rooms, rem(i + 1, length(rooms)))}
   end
 
   @doc """

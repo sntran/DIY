@@ -303,8 +303,11 @@ function setup({storage = new Map(), chosen = true, width = 400, height = 800, w
   // The edge of the slab under the living room.
   const slab = add({"data-of": "r2"}, ground)
   slab.bbox = {x: 100, y: 65, width: 40, height: 5}
-  const labels = [["20000", 10], ["100", 20], ["50", 60]].map(([rank, x]) => {
-    const label = add({"data-rank": rank}, ground)
+  // Each label has its pill (the house shows it).
+  const pills = []
+  const labels = [["20000", 10], ["100", 20], ["50", 60]].map(([rank, x], i) => {
+    pills.push(add({"data-pill": `p${i}`}, ground))
+    const label = add({"data-rank": rank, "data-label": `p${i}`}, ground)
     label.bbox = {x, y: 10, width: 30, height: 6}
     return label
   })
@@ -408,7 +411,7 @@ function setup({storage = new Map(), chosen = true, width = 400, height = 800, w
   const pointer = (type, id, x, y, target = empty, pointerType = "mouse") =>
     svg.fire(type, {pointerId: id, clientX: x, clientY: y, target, pointerType, preventDefault() {}})
   return {
-    hook, svg, root, kitchen, living, roof, fridge, fridgeG, kitchenG, empty, selection, outlineEl, handles, labels,
+    hook, svg, root, kitchen, living, roof, fridge, fridgeG, kitchenG, empty, selection, outlineEl, handles, labels, pills,
     pushed, pointer, storage, setUnder: (list) => (under = list), win, timers, hint, wallFace, slab,
     zoomIn, zoomOut, fitButton, focus, focusF2, listItem, listRoom, other, tableG, bedroom, upper,
   }
@@ -454,7 +457,7 @@ test("the page starts on its first layer: its house fills the screen, and the ot
 
   // The view that the person had wins, with its layer. A view of all the
   // house has no layer.
-  const again = setup({start: "ground", storage: new Map([["plan-view:plan", "1 2 30 60"]])})
+  const again = setup({start: "ground", chosen: false, storage: new Map([["plan-view:plan", "1 2 30 60"]])})
   assert.deepEqual(again.hook.view, {x: 1, y: 2, w: 30, h: 60})
   assert.equal(again.svg.getAttribute("data-dim"), null)
   const storage = new Map([["plan-view:plan", "100 -90 30 60"], ["plan-view:plan:layer", "f2"]])
@@ -468,7 +471,7 @@ test("the page starts on its first layer: its house fills the screen, and the ot
   assert.equal(chosen.svg.getAttribute("data-dim"), "ground")
   assert.equal(chosen.storage.get("plan-view:plan:layer"), "ground")
   // A first layer that is not there: all the house.
-  const gone = setup({start: "f3"})
+  const gone = setup({start: "f3", chosen: false})
   assert.equal(gone.svg.getAttribute("viewBox"), "0.00 0.00 200.00 400.00")
   assert.equal(gone.svg.getAttribute("data-dim"), null)
 })
@@ -922,6 +925,18 @@ test("a room that the person chooses in the list shows: its layer comes, and the
   // The kitchen is chosen, on floor 1: the view stays.
   hook.updated()
   assert.equal(svg.getAttribute("viewBox"), "98.40 0.00 43.20 86.40")
+  // The arrow of the bar goes to the living room, on the same floor. The
+  // view zooms in to it (40 by 40 at 100, 30).
+  hook.show(hook.fit())
+  outlineEl.setAttribute("data-outline", "r2")
+  hook.updated()
+  near(hook.view.x + hook.view.w / 2, 120)
+  near(hook.view.w, 50)
+  // In the van, a choice on the layer that shows does not move the view.
+  const van = setup()
+  van.outlineEl.setAttribute("data-outline", "r2")
+  van.hook.updated()
+  assert.equal(van.svg.getAttribute("viewBox"), "0.00 0.00 200.00 400.00")
   // The bedroom on floor 2 is chosen now: floor 2 comes.
   outlineEl.setAttribute("data-outline", "r4")
   hook.updated()
@@ -1040,6 +1055,25 @@ test("the label of a larger room shows; a label over it hides until a zoom in", 
   for (const label of labels) label.bbox = {...label.bbox, width: 8, height: 2}
   hook.show({...hook.view, w: hook.view.w / 2, h: hook.view.h / 2})
   assert.deepEqual(labels.map((l) => l.style.visibility), ["", "", ""])
+
+  // In the house, a label is on a pill. Its margin is half the height of
+  // the text at the sides, and a quarter of it at the top and the bottom. The
+  // pill hides with its label. The pills are larger: so the label of the
+  // middle room hides earlier.
+  const house = setup({start: "ground"})
+  const pill = (i) => ["x", "y", "width", "height", "rx"].map((k) => house.pills[i].getAttribute(k))
+  assert.deepEqual(pill(0), ["7.00", "8.50", "36.00", "9.00", "4.50"])
+  assert.deepEqual(house.pills.map((p) => p.style.visibility), ["", "hidden", ""])
+  house.labels[1].bbox = {x: 45, y: 10, width: 10, height: 6}
+  house.hook.updated()
+  assert.equal(house.labels[1].style.visibility, "hidden")
+  house.labels[1].bbox = {x: 49, y: 10, width: 10, height: 6}
+  house.hook.updated()
+  assert.equal(house.pills[1].style.visibility, "")
+  // A label with no pill (a page that the server has not drawn again).
+  house.pills[0].attrs["data-pill"] = "gone"
+  house.hook.updated()
+  assert.equal(house.labels[0].style.visibility, "")
 })
 
 test("the hook goes: it removes its listeners, and the note does not wait", () => {

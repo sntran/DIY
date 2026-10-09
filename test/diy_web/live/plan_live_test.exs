@@ -51,6 +51,17 @@ defmodule DIYWeb.PlanLiveTest do
     assert has_element?(view, "polygon.p-chosen[data-room=#{kitchen.id}]")
     refute has_element?(view, "#add-room")
 
+    # The pill of the name of the chosen room has the color of the choice.
+    assert has_element?(view, "rect.p-pill-chosen[data-pill=#{kitchen.id}]")
+
+    # The arrows of the bar go to the room before it and to the next room,
+    # in the order of the list.
+    assert has_element?(view, "#room-before[aria-label='Go to the room before: Bedroom 3']")
+    view |> element("#room-next") |> render_click()
+    assert_patch view, ~p"/inside?#{[room: room(view, "Living room").id]}"
+    view |> element("#room-before") |> render_click()
+    assert_patch view, ~p"/inside?#{[room: kitchen.id]}"
+
     view |> element("#bar-add") |> render_click()
     assert has_element?(view, "#add-sheet")
 
@@ -278,6 +289,22 @@ defmodule DIYWeb.PlanLiveTest do
     assert_patch view, ~p"/inside"
     refute room(view, "Kitchen")
     render_click(view, "delete_room", %{"id" => "r999"})
+  end
+
+  test "the room before a room and the next room: in the order of the list, in a loop" do
+    build = house()
+    names = fn {a, b} -> {a.name, b.name} end
+    at = fn name -> Enum.find(build.rooms, &(&1.name == name)) end
+
+    # The list: the roof and the attic, floor 2, floor 1, and around the
+    # house.
+    assert names.(Inside.neighbors(build, at.("Roof"))) == {"Driveway", "Attic"}
+    assert names.(Inside.neighbors(build, at.("Bedroom 3"))) == {"Bathroom", "Kitchen"}
+    assert names.(Inside.neighbors(build, at.("Driveway"))) == {"Backyard", "Roof"}
+
+    # A house with one room: no arrows.
+    one = %{build | rooms: [at.("Kitchen")]}
+    assert Inside.neighbors(one, at.("Kitchen")) == nil
   end
 
   test "the list tells the usage and the flags of each item, and a station away" do

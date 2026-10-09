@@ -199,6 +199,11 @@ export function clamp(view, fit) {
 
 // The id of the layer of an element of the plan.
 const layerOf = (el) => el.closest("[data-box]").getAttribute("id").replace("plan-", "")
+// The box of a pill around the box of a text. Its margin is half the
+// height of the text at the sides, and a quarter of it at the top and the
+// bottom.
+const pillBox = (b) => ({x: b.x - b.height / 2, y: b.y - b.height / 4, width: b.width + b.height, height: b.height * 1.5})
+
 // A room or an item, and its layer, as a text; or null.
 const placeOf = (el) => (el ? `${el.getAttribute("data-room") || el.getAttribute("data-item")} ${layerOf(el)}` : null)
 
@@ -349,16 +354,17 @@ export const planHook = {
   },
 
   // A room that the person chooses, or an item with an open sheet, shows
-  // (also from the list or a sheet). When it is on a layer that hides, the
-  // view zooms in to the room, or its layer shows. Only a new choice, or a
-  // move to a different layer, moves the view.
+  // (also from the list or a sheet). In the house, the view zooms in to a
+  // new chosen room. So the arrows of the bar of a room go from room to
+  // room. When an open item is on a layer that hides, its layer shows.
+  // Only a new choice, or a move to a different layer, moves the view.
   reveal() {
     const outline = this.svg.querySelector("[data-outline]")
     const room = outline && this.surface(outline.getAttribute("data-outline"))
     const open = this.svg.getAttribute("data-open")
     const item = open && this.svg.querySelector(`[data-item="${open}"]`)
     const [chosen, opened] = [placeOf(room), placeOf(item)]
-    if (chosen !== this.chosen && room && this.hidden(room)) this.zoomTo(room)
+    if (chosen !== this.chosen && room && (this.oneLayer() || this.hidden(room))) this.zoomTo(room)
     else if (opened !== this.opened && item && this.hidden(item)) this.showLayer(layerOf(item))
     this.chosen = chosen
     this.opened = opened
@@ -391,6 +397,7 @@ export const planHook = {
 
   // Where two labels overlap, or are nearer than 4 pixels, the label of
   // the larger room shows (data-rank). The other one hides until a zoom in.
+  // In the house, a label is on a pill: a round box around its text.
   declutter() {
     const labels = [...this.svg.querySelectorAll("[data-rank]")].sort(
       (a, b) => Number(b.getAttribute("data-rank")) - Number(a.getAttribute("data-rank")),
@@ -398,9 +405,15 @@ export const planHook = {
     const shown = []
     for (const label of labels) {
       label.style.visibility = ""
-      const box = label.getBBox()
+      const box = this.oneLayer() ? pillBox(label.getBBox()) : label.getBBox()
       if (shown.some((other) => overlaps(other, box, 4 * this.labelUnits))) label.style.visibility = "hidden"
       else shown.push(box)
+      const pill = this.svg.querySelector(`[data-pill="${label.getAttribute("data-label")}"]`)
+      if (pill) {
+        for (const [key, value] of Object.entries({x: box.x, y: box.y, width: box.width, height: box.height, rx: box.height / 2}))
+          pill.setAttribute(key, value.toFixed(2))
+        pill.style.visibility = label.style.visibility
+      }
     }
   },
 
