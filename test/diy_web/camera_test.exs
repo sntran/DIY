@@ -131,6 +131,35 @@ defmodule DIYWeb.CameraTest do
     end
   end
 
+  property "a round shape goes from the light to the shade in steps" do
+    steps = ~w(l m1 m2 m3 r)
+
+    check all(c <- camera(), a <- float(min: 0.0, max: 90.0), b <- float(min: 0.0, max: 90.0)) do
+      # Two normals on the ground, from the side in the light (0 degrees) to
+      # the other side (90 degrees). The normal nearer to the side in the
+      # light has the same light or more light.
+      normal = fn degrees ->
+        {s, t} = {:math.sin(degrees * :math.pi() / 180), :math.cos(degrees * :math.pi() / 180)}
+        if c.lit == :front, do: {s, t, 0}, else: {t, s, 0}
+      end
+
+      [near, far] = Enum.sort([a, b])
+      rank = &Enum.find_index(steps, fn step -> step == Camera.light(c, normal.(&1)) end)
+      assert rank.(near) <= rank.(far)
+    end
+  end
+
+  test "the steps of the light, and a normal that looks straight down" do
+    house = Camera.house()
+
+    for {degrees, light} <- [{0, "l"}, {30, "m1"}, {55, "m2"}, {70, "m3"}, {85, "r"}] do
+      a = degrees * :math.pi() / 180
+      assert Camera.light(house, {:math.sin(a), :math.cos(a), 0}) == light
+    end
+
+    assert Camera.light(house, {0, 0, -1}) == "r"
+  end
+
   test "a box and a cylinder have their part in the light on the same side of the screen" do
     model = [{:box, {0, 0, 0}, {1, 1, 1}, "white"}, {:cyl, {2.5, 0.5, 0}, 0.5, 1, "white"}]
 
@@ -142,7 +171,7 @@ defmodule DIYWeb.CameraTest do
       middle = fn light, part? ->
         xs =
           for {:poly, corners, class} <- polys,
-              class =~ "i-white-#{light} ",
+              hd(String.split(class)) == "i-white-#{light}",
               Enum.all?(corners, fn {x, _y, _z} -> part?.(x) end),
               {x, y, z} <- corners,
               do: elem(Camera.at(c, {0, 0}, {x, y, z}), 0)

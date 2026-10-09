@@ -421,6 +421,11 @@ defmodule DIYWeb.Cutaway do
     {ox0, oy0, ox1, oy1} = flat
     shape = Geometry.wedge({cx * @m, cy * @m, z}, {sw * @m, sd * @m}, {h0, h1}, axis)
 
+    trim =
+      if min(h0, h1) > @low and side in ~w(x0 y0),
+        do: trim(side, line, {a, b}, z, {h0, h1}),
+        else: []
+
     %{
       id: id,
       kind: :wall,
@@ -428,8 +433,43 @@ defmodule DIYWeb.Cutaway do
       loose: false,
       box: {ox0 * @m, oy0 * @m, z, ox1 * @m, oy1 * @m, z + max(h0, h1)},
       key: Camera.depth(camera, {(ox0 + ox1) / 2 * @m, (oy0 + oy1) / 2 * @m, 0}),
-      polys: Camera.faces(camera, shape, "p-wall")
+      polys: Camera.faces(camera, shape, "p-wall") ++ trim
     }
+  end
+
+  # The trim on the face of a high wall in its room (the face at the line
+  # of the wall). It is a baseboard, and a window when the wall has its
+  # full height and room for it. A window is 4 feet wide at most, from 3
+  # feet over the floor.
+  defp trim(side, line, {a, b}, z, {h0, h1}) do
+    plane = fn {u0, u1}, {z0, z1} ->
+      for {u, zz} <- [{u0, z0}, {u1, z0}, {u1, z1}, {u0, z1}] do
+        if side == "x0",
+          do: {line * @m + 0.004, u * @m, z + zz},
+          else: {u * @m, line * @m + 0.004, z + zz}
+      end
+    end
+
+    length = b - a
+    middle = (a + b) / 2
+    half = min(48, length - 18) / 2
+    top = min(h0, h1) - 0.25
+
+    window =
+      if h0 == h1 and length >= 42 and top > 1.6 do
+        bar = 1.5 / 2
+
+        [
+          {plane.({middle - half, middle + half}, {0.9, top}), "p-frame"},
+          {plane.({middle - half + 2, middle - bar}, {0.95, top - 0.05}), "p-pane"},
+          {plane.({middle + bar, middle + half - 2}, {0.95, top - 0.05}), "p-pane"},
+          {plane.({middle - half - 2, middle + half + 2}, {0.86, 0.9}), "p-frame"}
+        ]
+      else
+        []
+      end
+
+    [{plane.({a, b}, {0.0, 0.1}), "p-baseboard"} | window]
   end
 
   ## The rooms
@@ -441,10 +481,14 @@ defmodule DIYWeb.Cutaway do
     rise = p.d / 2 * @pitch
     {x1, y1, yc} = {p.x + p.w, p.y + p.d, p.y + p.d / 2}
 
+    back = [{p.x, p.y, z}, {x1, p.y, z}, {x1, yc, z + rise}, {p.x, yc, z + rise}]
+    front = [{p.x, yc, z + rise}, {x1, yc, z + rise}, {x1, y1, z}, {p.x, y1, z}]
+
     polys = [
-      {[{p.x, p.y, z}, {x1, p.y, z}, {x1, yc, z + rise}, {p.x, yc, z + rise}],
-       "p-floor p-roof-b"},
-      {[{p.x, yc, z + rise}, {x1, yc, z + rise}, {x1, y1, z}, {p.x, y1, z}], "p-floor p-roof-f"},
+      {back, "p-floor p-roof-b"},
+      {back, "p-tex p-tex-roof"},
+      {front, "p-floor p-roof-f"},
+      {front, "p-tex p-tex-roof"},
       {[{x1, p.y, z}, {x1, y1, z}, {x1, yc, z + rise}], "p-gable"}
     ]
 
@@ -452,6 +496,23 @@ defmodule DIYWeb.Cutaway do
   end
 
   defp room_view(room, z, camera), do: floor(room, z, material(room), camera)
+
+  # The patterns of the floors, on the plan (inches): the size of a tile of
+  # the pattern, and its lines (an SVG path). Planks of wood are 6 inches
+  # wide, and a tile is 18 inches. A board of a deck is 6 inches, and a
+  # sheet of ply is 4 by 8 feet. The floor of a van has ribs. A roof has
+  # rows of shingles, and grass has stripes of a mower (a fill).
+  @textures %{
+    "wood" => {96, 12, "M0 0H96M0 6H96M0 0V6M48 6V12"},
+    "tile" => {18, 18, "M0 0H18M0 0V18"},
+    "concrete" => {72, 72, "M0 0H72M0 0V72"},
+    "deck" => {6, 96, "M0 0V96M0 0H6"},
+    "ply" => {48, 96, "M0 0H48M0 0V96"},
+    "membrane" => {36, 120, "M0 0V120"},
+    "vmetal" => {4, 24, "M0 0V24"},
+    "roof" => {12, 10, "M0 0H12M0 5H12M0 0V5M6 5V10"},
+    "grass" => {72, 72, :stripe}
+  }
 
   @doc """
   The surface of a room on a flat floor at a height (meters), for a
@@ -463,8 +524,20 @@ defmodule DIYWeb.Cutaway do
     p = meters(room.plan)
     {x1, y1} = {p.x + p.w, p.y + p.d}
     corners = [{p.x, p.y, z}, {x1, p.y, z}, {x1, y1, z}, {p.x, y1, z}]
-    %{surface(room, z, camera) | polys: [{corners, "p-floor p-" <> material}], fixed: fixed}
+    polys = [{corners, "p-floor p-" <> material} | texture(corners, material)]
+    %{surface(room, z, camera) | polys: polys, fixed: fixed}
   end
+
+  # The lines of a floor of a material (`textures/0`): a second polygon over
+  # the floor, with the pattern of the material.
+  defp texture(corners, material) do
+    if Map.has_key?(@textures, material),
+      do: [{corners, "p-tex p-tex-" <> material}],
+      else: []
+  end
+
+  @doc "The patterns of the floors: `{name, width, height, lines}`."
+  def textures, do: for({name, {w, h, lines}} <- Enum.sort(@textures), do: {name, w, h, lines})
 
   defp surface(room, z, camera) do
     {ox, oy} = Camera.at(camera, {0, 0}, {0, 0, z})
@@ -585,6 +658,22 @@ defmodule DIYWeb.Cutaway do
             camera: camera
           })
       end
+
+    # A soft shadow on the floor under an item that stands on it.
+    shadow =
+      if roof == nil and Catalog.lift(item.type) == 0 do
+        {x0, y0, x1, y1} = {(x - 3) * @m, (y - 3) * @m, (x + ew + 3) * @m, (y + ed + 3) * @m}
+
+        [
+          {:poly,
+           [{x0, y0, z + 0.002}, {x1, y0, z + 0.002}, {x1, y1, z + 0.002}, {x0, y1, z + 0.002}],
+           "p-shadow"}
+        ]
+      else
+        []
+      end
+
+    polys = shadow ++ polys
 
     # The box of the item: its space on the plan, and the height of its
     # shapes.
@@ -707,6 +796,8 @@ defmodule DIYWeb.Cutaway do
 
     assigns =
       assign(assigns,
+        textures: textures(),
+        pattern: "matrix(#{Enum.map_join([ax, ay, bx, by], " ", &Float.round(&1 / 1, 6))} 0 0)",
         axes: Enum.map_join([ax, ay, bx, by, cx, cy], " ", &Float.round(&1 / 1, 6)),
         arrows: "#{rx} #{ry} #{dx} #{dy}",
         fit: box_text(assigns.view.box),
@@ -724,6 +815,24 @@ defmodule DIYWeb.Cutaway do
       aria-hidden="true"
       phx-mounted={JS.ignore_attributes(["viewBox", "style"])}
     >
+      <defs>
+        <radialGradient id="p-shadow-fill">
+          <stop offset="0" class="p-shadow-0" />
+          <stop offset="0.6" class="p-shadow-1" />
+          <stop offset="1" class="p-shadow-2" />
+        </radialGradient>
+        <pattern
+          :for={{name, w, h, lines} <- @textures}
+          id={"tex-" <> name}
+          patternUnits="userSpaceOnUse"
+          width={w}
+          height={h}
+          patternTransform={@pattern}
+        >
+          <rect :if={lines == :stripe} width={w / 2} height={h} class="p-tex-stripe" />
+          <path :if={lines != :stripe} d={lines} class="p-tex-line" />
+        </pattern>
+      </defs>
       <g :for={level <- @view.levels} id={"plan-#{level.id}"} data-box={box_text(level.box)}>
         <polygon :for={{points, class} <- level.ground} points={points} class={class} />
         <.surface :for={room <- level.low} :key={room.id} room={room} selected={@selected} />
@@ -788,18 +897,25 @@ defmodule DIYWeb.Cutaway do
   defp surface(assigns) do
     ~H"""
     <g id={"plan-room-#{@room.id}"}>
-      <polygon
-        :for={{points, class} <- @room.polys}
-        points={points}
-        class={[class, @room.id == @selected && "p-chosen"]}
-        data-room={@room.id}
-        data-plan={@room.plan}
-        data-origin={@room.origin}
-        data-rise={@room.rise}
-      />
+      <%= for {points, class} <- @room.polys do %>
+        <polygon :if={texture?(class)} points={points} class={class} />
+        <polygon
+          :if={!texture?(class)}
+          points={points}
+          class={[class, @room.id == @selected && "p-chosen"]}
+          data-room={@room.id}
+          data-plan={@room.plan}
+          data-origin={@room.origin}
+          data-rise={@room.rise}
+        />
+      <% end %>
     </g>
     """
   end
+
+  # The lines of a floor are for the eyes. A tap goes through them to the
+  # floor, and they move with the group of their room.
+  defp texture?(class), do: String.starts_with?(class, "p-tex ")
 
   # The outline of the room that the user chose, and a handle in the middle
   # of each wall.

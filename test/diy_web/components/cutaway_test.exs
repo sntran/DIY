@@ -147,6 +147,108 @@ defmodule DIYWeb.CutawayTest do
              )
   end
 
+  test "the lines of the floors: a pattern of each material, on the plane of the floor" do
+    build = house()
+    html = html(build)
+
+    # The pattern of a floor goes along the axes of the camera: one unit of
+    # the pattern is one inch on the floor.
+    transform = ~s{patternTransform="matrix(0.295921 0.04514 -0.096151 0.138927 0 0)"}
+    css = File.read!("assets/css/app.css")
+
+    for {name, w, h, _lines} <- Cutaway.textures() do
+      assert html =~
+               ~s(id="tex-#{name}" patternUnits="userSpaceOnUse" width="#{w}" height="#{h}" #{transform})
+
+      assert css =~ ".p-tex-#{name} { fill: url(#tex-#{name}) }"
+    end
+
+    # The lines of a floor are a second polygon with the same points, after
+    # the floor. A floor of carpet has no lines.
+    kitchen = room(build, "Kitchen")
+
+    assert [{floor, "p-floor p-tile"}, {floor, "p-tex p-tex-tile"}] =
+             Cutaway.view(build).levels
+             |> Enum.flat_map(& &1.rooms)
+             |> Enum.find(&(&1.id == kitchen))
+             |> Map.fetch!(:polys)
+
+    bedroom = room(build, "Bedroom 1")
+
+    assert [{_floor, "p-floor p-carpet"}] =
+             Cutaway.view(build).levels
+             |> Enum.flat_map(& &1.rooms)
+             |> Enum.find(&(&1.id == bedroom))
+             |> Map.fetch!(:polys)
+
+    # The two slopes of the roof have their shingles.
+    assert length(Regex.scan(~r/class="p-tex p-tex-roof"/, html)) == 2
+
+    # The lines are for the eyes: they have no data of their room, so a tap
+    # goes through them to the floor.
+    assert html =~ ~r/<polygon points="[^"]+" class="p-tex p-tex-tile"><\/polygon>/
+    refute html =~ ~r/class="p-tex [^"]*" data-/
+  end
+
+  test "a soft shadow under an item on a floor, and none under an item on a wall" do
+    build = house()
+    kitchen = room(build, "Kitchen")
+    {build, fridge} = add(build, kitchen, "fridge")
+    {build, meter} = add(build, kitchen, "smart_meter")
+    {:ok, build} = Build.place_item(build, fridge, kitchen, %{x: 20, y: 10})
+    [ground | _] = Cutaway.view(build).levels
+    objects = Map.new(ground.objects, &{&1.id, &1})
+
+    # The shadow paints first. It is on the floor, 3 inches out from each
+    # side of the fridge. On the screen, it goes past the corners of the
+    # bottom of the fridge.
+    [{shadow, "p-shadow"} | _rest] = objects[fridge].polys
+    {x0, y0, z, x1, y1, _z1} = objects[fridge].box
+
+    xs = fn points ->
+      for pair <- String.split(points), do: pair |> String.split(",") |> hd() |> number()
+    end
+
+    bottom =
+      Camera.points(Camera.house(), {0, 0}, [{x0, y0, z}, {x1, y0, z}, {x1, y1, z}, {x0, y1, z}])
+
+    assert Enum.min(xs.(shadow)) < Enum.min(xs.(bottom))
+    assert Enum.max(xs.(shadow)) > Enum.max(xs.(bottom))
+
+    refute Enum.any?(objects[meter].polys, &match?({_points, "p-shadow"}, &1))
+    assert html(build) =~ ~s(<radialGradient id="p-shadow-fill">)
+  end
+
+  test "a high wall has a baseboard, and a window when it is long enough" do
+    build = house()
+    kitchen = room(build, "Kitchen")
+    [ground | _] = Cutaway.view(build).levels
+    walls = Map.new(for %{kind: :wall, room: ^kitchen} = w <- ground.objects, do: {w.id, w})
+    classes = fn id -> for {_points, class} <- walls[id].polys, do: class end
+
+    # The wall at the back of the kitchen: its three faces, its baseboard,
+    # and a window (a frame, two panes and a sill).
+    assert classes.("ground-#{kitchen}-y0-0") ==
+             ~w(p-wall-r p-wall-l p-wall-t p-baseboard p-frame p-pane p-pane p-frame)
+
+    # A low wall and a wall on a slope have no trim.
+    assert classes.("ground-#{kitchen}-y1-0") == ~w(p-wall-r p-wall-l p-wall-t)
+    assert classes.("ground-#{kitchen}-x0-0") == ~w(p-wall-r p-wall-l p-wall-t)
+
+    # A short high wall has its baseboard, but no window.
+    small = %{kitchen_room(build) | plan: %{kitchen_room(build).plan | w: 40}}
+    rooms = Enum.map(build.rooms, &if(&1.id == kitchen, do: small, else: &1))
+    [ground | _] = Cutaway.view(%{build | rooms: rooms}).levels
+
+    assert ["p-wall-r", "p-wall-l", "p-wall-t", "p-baseboard"] ==
+             for(
+               %{kind: :wall, id: "ground-" <> _ = id} = w <- ground.objects,
+               id == "ground-#{kitchen}-y0-0",
+               {_points, class} <- w.polys,
+               do: class
+             )
+  end
+
   test "the materials of the floors" do
     material = &Cutaway.material/1
     assert material.(%{place: :outdoor, name: "Driveway"}) == "asphalt"
@@ -199,12 +301,15 @@ defmodule DIYWeb.CutawayTest do
       %{at: {0, 0, 0}, size: {1.0, 2.6, 1.25}, turn: turn, camera: camera}
     end
 
-    # The van shows one of its two sides (the profile has 7 corners) in each
-    # turn, for each camera.
+    # The van shows one of its two sides in each turn, for each camera. The
+    # part of the side under the belt is upright. It has the profile of the
+    # van: more than 6 corners on one plane (x or y).
     for turn <- 0..3, camera <- [Camera.house(), Camera.van()] do
       sides =
-        for {:poly, corners, _class} <- Shapes.placed("camper_van", frame.(turn, camera)),
-            length(corners) == 7,
+        for {:poly, corners, "i-white" <> _} <- Shapes.placed("camper_van", frame.(turn, camera)),
+            length(corners) > 6,
+            {xs, ys, _zs} = unzip3(corners),
+            length(Enum.uniq(xs)) == 1 or length(Enum.uniq(ys)) == 1,
             do: 1
 
       assert sides == [1]
@@ -258,6 +363,11 @@ defmodule DIYWeb.CutawayTest do
       |> Enum.unzip()
 
     {Enum.min(xs), Enum.min(ys), Enum.max(xs), Enum.max(ys)}
+  end
+
+  defp unzip3(points) do
+    {Enum.map(points, &elem(&1, 0)), Enum.map(points, &elem(&1, 1)),
+     Enum.map(points, &elem(&1, 2))}
   end
 
   defp overlap?({ax0, ay0, ax1, ay1}, {bx0, by0, bx1, by1}),

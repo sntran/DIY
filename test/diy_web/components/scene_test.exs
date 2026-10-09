@@ -123,9 +123,29 @@ defmodule DIYWeb.SceneTest do
     {build, _} = add(build, Build.zone(build, van, :living).id, "van_fan")
     html = picture(build)
     refute html =~ "s-gdoor"
-    assert html =~ "s-van-r"
+    assert html =~ ~s(class="i-white-)
     assert html =~ ~s(class="s-pv")
     assert Scene.label(Scene.parts(build)) =~ "a camper van"
+  end
+
+  test "the labels of the axles are at the axles of each model of van" do
+    for model <- models() do
+      build = house()
+      {build, van} = add(build, room(build, "Driveway"), "camper_van", %{"model" => model})
+      {:ok, item} = Build.item(build, van)
+      html = render_component(&Scene.van/1, id: "v", parts: Scene.van_parts(build, item))
+      size = DIY.Catalog.van_size(model)
+      front = (size.length - size.front) * 0.0254
+      rear = front - size.wheelbase * 0.0254
+
+      for {name, y} <- [{"Front", front}, {"Rear", rear}] do
+        {sx, sy} = Camera.at(Camera.van(), {0, 0}, {size.width * 0.0254 + 1.0, y, 0.0})
+        at = "translate(#{Camera.round1(sx)} #{Camera.round1(sy)})"
+
+        assert html =~
+                 ~r/#{Regex.escape(at)} scale\([\d.]+\)">\s*<rect[^>]*><\/rect>\s*<text[^>]*>#{name} /
+      end
+    end
   end
 
   test "the van with its two budgets" do
@@ -179,7 +199,11 @@ defmodule DIYWeb.SceneTest do
           roof <- fixed_map(%{station: watts(), grid: watts()}),
           yard <- fixed_map(%{station: watts(), grid: watts()}),
           stations <- list_of(tuple({float(min: 0.1, max: 30.0), boolean()}), max_length: 3),
-          van <- one_of([constant(nil), fixed_map(%{solar: watts(), fan: boolean()})])
+          van <-
+            one_of([
+              constant(nil),
+              fixed_map(%{solar: watts(), fan: boolean(), model: member_of(models())})
+            ])
         ) do
       %{
         floors: floors,
@@ -196,6 +220,8 @@ defmodule DIYWeb.SceneTest do
       }
     end
   end
+
+  defp models, do: Enum.map(DIY.Catalog.van_models(), &elem(&1, 0))
 
   defp watts, do: one_of([constant(0), integer(1..20_000)])
 
@@ -216,7 +242,7 @@ defmodule DIYWeb.SceneTest do
       end
 
       # No label covers the van or the car.
-      for object <- ["s-van", "s-car"],
+      for object <- ["i-white", "s-car"],
           box = screen_box(html, object),
           box != nil,
           label <- Enum.chunk_every(chips(html), 4) do
@@ -230,7 +256,8 @@ defmodule DIYWeb.SceneTest do
                (parts.roof.grid + parts.yard.grid > 0 or
                   (parts.stations != [] and parts.roof.station + parts.yard.station > 0))
 
-      assert html =~ "s-van-r" == (parts.van != nil)
+      # The van is the only white part of the picture.
+      assert html =~ ~s(class="i-white-) == (parts.van != nil)
       assert html =~ "s-car-l" == parts.car
     end
   end

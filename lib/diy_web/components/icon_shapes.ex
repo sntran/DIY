@@ -17,6 +17,9 @@ defmodule DIYWeb.Icon.Shapes do
 
   - `{:box, corner, size, material}`: a box.
   - `{:cyl, center, r, h, material}`: a cylinder that stands at a center.
+  - `{:prism, loop, z, h, material}`: a prism that stands on a loop of
+    points (`{x, y}`, counterclockwise from above), from z to z + h. A
+    box with round corners (`rbox/4`) is a prism.
   - `{:face, corners, normal, class}`: a flat part, with the direction
     that it looks to (`nil`: it always shows).
 
@@ -26,6 +29,7 @@ defmodule DIYWeb.Icon.Shapes do
   """
 
   alias DIYWeb.{Camera, Geometry}
+  alias DIYWeb.Icon.VanShapes
 
   @doc """
   The shapes of the icon of a kind for a camera (the camera of the house
@@ -54,188 +58,11 @@ defmodule DIYWeb.Icon.Shapes do
     draw(model, %{at: at, turn: turn, size: size}, camera)
   end
 
-  # The side profile of each model of van, in meters, from the back (y = 0)
-  # to the front. It gives the roof to the start of the cap, and the top
-  # and the bottom of the windshield. Then it gives the end of the hood,
-  # and the top of the nose. The ProMaster has a short hood; the Sprinter a long
-  # one that slopes.
-  @profiles %{
-    "promaster_159" => %{
-      cap: 1.30,
-      top: {1.15, 0.35},
-      glass: {0.55, 1.15},
-      hood: {0.08, 0.95},
-      nose: 0.85
-    },
-    "transit_148" => %{
-      cap: 1.45,
-      top: {1.30, 0.45},
-      glass: {0.85, 1.25},
-      hood: {0.15, 1.05},
-      nose: 0.95
-    },
-    "sprinter_170" => %{
-      cap: 1.55,
-      top: {1.40, 0.40},
-      glass: {0.95, 1.30},
-      hood: {0.10, 0.95},
-      nose: 0.90
-    }
-  }
-
   @doc "The height of the hood of a model of a van over the ground, in meters."
-  def hood_height(model), do: elem(Map.get(@profiles, model, @profiles["transit_148"]).hood, 1)
+  defdelegate hood_height(model), to: VanShapes
 
-  # The bottom of the body, the radius of a wheel (a tire of 30 in), and
-  # the depth of a bumper.
-  @sill 0.45
-  @tire 0.38
-  @bumper 0.12
-
-  @doc """
-  The model of a camper van of a model (`DIY.Catalog.van_size/1`), at its
-  real size in meters. The body has the nose, the hood and the windshield
-  of its brand, and the wheels are at its axles. The model also has the
-  doors of the cab, the sliding door on the right side and the doors at
-  the back. It has the mirrors, the lights, the grille and the bumpers. The front
-  looks to y. A face looks out: after a turn, a face that looks away does
-  not show.
-  """
-  def van(model) do
-    size = DIY.Catalog.van_size(model)
-    {l, w, h} = {size.length * 0.0254, size.width * 0.0254, size.height * 0.0254}
-    shape = Map.get(@profiles, model, @profiles["transit_148"])
-    {top_y, top_down} = shape.top
-    {glass_y, glass_z} = shape.glass
-    {hood_y, hood_z} = shape.hood
-    hood_y = max(hood_y, @bumper + 0.03)
-
-    # The windshield, from its bottom to its top.
-    low = {l - glass_y, glass_z}
-    high = {l - top_y, h - top_down}
-
-    # The profile, counterclockwise from the back of the bottom (y to the
-    # right, z up): the outer side of each edge is on its right.
-    profile = [
-      {@bumper, @sill},
-      {l - @bumper, @sill},
-      {l - @bumper, shape.nose},
-      {l - hood_y, hood_z},
-      low,
-      high,
-      {l - shape.cap, h},
-      {@bumper, h}
-    ]
-
-    front_axle = l - size.front * 0.0254
-    rear_axle = front_axle - size.wheelbase * 0.0254
-    # The back of the door of the cab, and the sliding door behind it.
-    cab_door = elem(low, 0) - 0.95
-    sliding = {cab_door - 1.25, cab_door - 0.05}
-    mirror = fn x -> box({x, elem(low, 0) - 0.15, glass_z + 0.05}, {0.16, 0.06, 0.24}, "dark") end
-
-    # The faces across the van paint first, then the sides, then the details
-    # on the sides. So a side paints over the hood after a turn. No part of
-    # the body goes into the bumpers: they paint as parts of their own.
-    body =
-      [
-        face(across(w, {@bumper, h}, {@bumper, @sill}), {0, -1, 0}, "i-white-~ i-face"),
-        face(
-          for(
-            {x, z} <- [
-              {w / 2 - 0.01, @sill},
-              {w / 2 + 0.01, @sill},
-              {w / 2 + 0.01, h - 0.1},
-              {w / 2 - 0.01, h - 0.1}
-            ],
-            do: {x, @bumper, z}
-          ),
-          {0, -1, 0},
-          "i-line"
-        )
-      ] ++
-        body(profile, w) ++
-        [face(Enum.map(profile, fn {y, z} -> {0, y, z} end), {-1, 0, 0}, "i-white-~ i-face")] ++
-        van_side(0, -1, cab_door, {low, high}, h) ++
-        [far_side({0, elem(sliding, 0), @sill + 0.05}, {1.2, h - @sill - 0.3}, "i-steel-l")] ++
-        [van_window(0, -1, sliding, h)] ++
-        wheels(0, [rear_axle, front_axle], @tire) ++
-        [face(Enum.map(profile, fn {y, z} -> {w, y, z} end), {1, 0, 0}, "i-white-~ i-face")] ++
-        van_side(w, 1, cab_door, {low, high}, h) ++
-        [van_window(w, 1, sliding, h)] ++
-        wheels(w, [rear_axle, front_axle], @tire) ++
-        [
-          front({0.12, l - @bumper - 0.01, @sill + 0.25}, {0.22, 0.12}, "i-bulb"),
-          front({w - 0.34, l - @bumper - 0.01, @sill + 0.25}, {0.22, 0.12}, "i-bulb"),
-          front({w / 2 - 0.35, l - @bumper - 0.01, @sill + 0.05}, {0.7, 0.18}, "i-black")
-        ]
-
-    [
-      {:group, box({0, 0, @sill - 0.12}, {w, @bumper, 0.16}, "dark")},
-      {:group, mirror.(-0.18)},
-      {:group, body},
-      {:group, mirror.(w + 0.02)},
-      {:group, box({0, l - @bumper, @sill - 0.12}, {w, @bumper, 0.16}, "dark")}
-    ]
-  end
-
-  # The faces across the van between the points of its profile. They are
-  # the nose, the front of the hood, the hood, the windshield, the cap and
-  # the roof.
-  # The bottom and the back are not here. An edge from a to b has its
-  # outer side on its right: its normal is (dz, -dy).
-  defp body(profile, w) do
-    edges = Enum.zip(profile, tl(profile) ++ [hd(profile)])
-
-    for {{{y1, z1}, {y2, z2}}, i} <- Enum.with_index(edges), i not in [0, length(edges) - 1] do
-      {dy, dz} = {y2 - y1, z2 - z1}
-      class = if i == 4, do: "i-glass-dark", else: "i-white-~ i-face"
-      face(across(w, {y1, z1}, {y2, z2}), {0, dz, -dy}, class)
-    end
-  end
-
-  defp across(w, {y1, z1}, {y2, z2}), do: [{0, y1, z1}, {w, y1, z1}, {w, y2, z2}, {0, y2, z2}]
-
-  # A side of a van (x = 0 with the normal -x, x = w with +x). It has the
-  # window of the door of the cab (its front follows the windshield), and a
-  # dark band at the bottom.
-  defp van_side(x, sign, cab_door, {{y0, z0}, {y1, z1}}, h) do
-    on_glass = fn z -> y0 + (y1 - y0) * (z - z0) / (z1 - z0) - 0.06 end
-    {bottom, top} = {z0 + 0.06, h - 0.4}
-    corners = fn list -> Enum.map(list, fn {y, z} -> {x + sign * 0.01, y, z} end) end
-
-    [
-      face(
-        corners.([
-          {cab_door + 0.1, bottom},
-          {on_glass.(bottom), bottom},
-          {on_glass.(top), top},
-          {cab_door + 0.1, top}
-        ]),
-        {sign, 0, 0},
-        "i-glass-dark"
-      ),
-      face(
-        corners.([{@bumper, @sill}, {y0, @sill}, {y0, @sill + 0.16}, {@bumper, @sill + 0.16}]),
-        {sign, 0, 0},
-        "i-dark-~"
-      )
-    ]
-  end
-
-  # A window of the cargo area, at the sliding door.
-  defp van_window(x, sign, {y0, y1}, h) do
-    corners =
-      for {y, z} <- [
-            {y0 + 0.2, h - 1.15},
-            {y1 - 0.2, h - 1.15},
-            {y1 - 0.2, h - 0.45},
-            {y0 + 0.2, h - 0.45}
-          ],
-          do: {x + sign * 0.02, y, z}
-
-    face(corners, {sign, 0, 0}, "i-glass-dark")
-  end
+  @doc "The model of a camper van of a model, at its real size (`DIYWeb.Icon.VanShapes`)."
+  defdelegate van(model), to: VanShapes
 
   @doc """
   The box of a model: its two far corners, `{low, high}`.
@@ -253,6 +80,9 @@ defmodule DIYWeb.Icon.Shapes do
 
         {:cyl, {x, y, z}, r, h, _material} ->
           [{x - r, y - r, z}, {x + r, y + r, z + h}]
+
+        {:prism, loop, z, h, _material} ->
+          Enum.flat_map(loop, fn {x, y} -> [{x, y, z}, {x, y, z + h}] end)
 
         {:face, corners, _normal, _class} ->
           corners
@@ -365,37 +195,49 @@ defmodule DIYWeb.Icon.Shapes do
         do: {:poly, corners, class <> " i-face"}
   end
 
-  # A cylinder that stands at a center. It shows the near half of its body
-  # (a part in the light and a part in the shade), and its top. A point of
-  # the ring is on the near half when it goes to the eye on the ground
-  # (`gx`, `gy`). The screen shows its part along the ground to the right
-  # (gy, -gx). The part in the light is on the side of the face in the
-  # light of a box. For the camera of the house, it is on the left (the
-  # front). For the camera of a van, it is on the right (the side).
-  defp draw_one({:cyl, {x, y, z} = center, r, h, material}, %{point: point, camera: camera}) do
-    {cx, cy, _cz} = at(point, center)
-    {gx, gy} = camera.ground
+  # A cylinder that stands at a center: a prism of 24 sides.
+  defp draw_one({:cyl, {x, y, z}, r, h, material}, view) do
+    loop =
+      for {px, py, _pz} <- Geometry.circle({x, y, 0}, {1, 0, 0}, {0, 1, 0}, r, 24), do: {px, py}
 
-    ring = fn zz ->
-      Enum.map(Geometry.circle({x, y, zz}, {1, 0, 0}, {0, 1, 0}, r, 16), &at(point, &1))
+    draw_one({:prism, loop, z, h, material}, view)
+  end
+
+  # A prism: a loop of points on the ground (counterclockwise from above),
+  # from z up to z + h. Each side of the loop is a face, with the light of
+  # its normal (`DIYWeb.Camera.light/2`): so a round shape has a soft
+  # light. The faces have no edge. Under them is the shape of all the faces
+  # that show, and over them its edge (`i-outline`). Then the top.
+  defp draw_one({:prism, loop, z, h, material}, %{point: point, normal: turn, camera: camera}) do
+    corners = List.to_tuple(loop)
+    n = tuple_size(corners)
+
+    lift = fn i, zz ->
+      {x, y} = elem(corners, rem(i, n))
+      at(point, {x, y, zz})
     end
 
-    side = fn {px, py, _} -> (px - cx) * gy - (py - cy) * gx end
+    low = &lift.(&1, z)
+    high = &lift.(&1, z + h)
 
-    half = fn sign, face ->
-      near = fn zz ->
-        Enum.filter(ring.(zz), fn {px, py, _} = p ->
-          (px - cx) * gx + (py - cy) * gy >= -1.0e-9 and sign * side.(p) >= -1.0e-9
-        end)
+    faces =
+      for i <- 0..(n - 1) do
+        {{x1, y1}, {x2, y2}} = {elem(corners, i), elem(corners, rem(i + 1, n))}
+        normal = at(turn, {y2 - y1, x1 - x2, 0})
+        {i, Camera.shows?(camera, normal), normal}
       end
 
-      lower = Enum.sort_by(near.(z), side)
-      upper = Enum.sort_by(near.(z + h), &(-side.(&1)))
-      {:poly, lower ++ upper, "i-#{material}-#{face} i-face"}
-    end
+    run = shown_run(faces, n)
+    outline = Enum.map(run, low) ++ Enum.map(Enum.reverse(run), high)
+    top = {:poly, Enum.map(0..(n - 1), high), "i-#{material}-t i-face"}
 
-    {left, right} = if camera.lit == :front, do: {"l", "r"}, else: {"r", "l"}
-    [half.(-1, left), half.(1, right), {:poly, ring.(z + h), "i-#{material}-t i-face"}]
+    body =
+      for {i, true, normal} <- faces,
+          do:
+            {:poly, [low.(i), low.(i + 1), high.(i + 1), high.(i)],
+             "i-#{material}-#{Camera.light(camera, normal)}"}
+
+    [{:poly, outline, "i-#{material}-m2"}] ++ body ++ [{:poly, outline, "i-outline"}, top]
   end
 
   # A face shows when it looks to the eye of the camera. A face with no
@@ -408,6 +250,17 @@ defmodule DIYWeb.Icon.Shapes do
     if n == nil or Camera.shows?(camera, n),
       do: [{:poly, Enum.map(corners, &at(point, &1)), light(class, n, camera)}],
       else: []
+  end
+
+  # The corners of the faces of a prism that show, in the order of the
+  # loop. The run starts at the first face that shows after a face that
+  # does not show, and it goes on while the faces show. The camera looks
+  # down at a slant, so a prism always has the two kinds of faces.
+  defp shown_run(faces, n) do
+    shown = MapSet.new(for {i, true, _normal} <- faces, do: i)
+    first = Enum.find(0..(n - 1), &(&1 in shown and rem(&1 + n - 1, n) not in shown))
+    run = Enum.take_while(first..(first + n - 1), &(rem(&1, n) in shown))
+    run ++ [List.last(run) + 1]
   end
 
   defp light(class, nil, _camera), do: class
@@ -427,13 +280,6 @@ defmodule DIYWeb.Icon.Shapes do
     do:
       {:face, Geometry.on_plane({x + 0.01, y, z}, {0, 1, 0}, {0, 0, 1}, {0, 0}, {d, h}),
        {1, 0, 0}, class}
-
-  # A rectangle on the far side face (x = x) of a box: it shows after a
-  # turn.
-  defp far_side({x, y, z}, {d, h}, class),
-    do:
-      {:face, Geometry.on_plane({x - 0.01, y, z}, {0, 1, 0}, {0, 0, 1}, {0, 0}, {d, h}),
-       {-1, 0, 0}, class}
 
   # A rectangle on a top (z = z), from x, y.
   defp top({x, y, z}, {w, d}, class),
@@ -457,6 +303,31 @@ defmodule DIYWeb.Icon.Shapes do
   # A cylinder that stands at a center.
   defp cylinder(center, r, h, material), do: [{:cyl, center, r, h, material}]
 
+  # A box with round corners (a radius r), from a corner and a size.
+  defp rbox({x, y, z}, {w, d, h}, r, material) do
+    r = min(r, min(w, d) / 2)
+
+    centers = [
+      {x + w - r, y + r, -90},
+      {x + w - r, y + d - r, 0},
+      {x + r, y + d - r, 90},
+      {x + r, y + r, 180}
+    ]
+
+    loop =
+      for {cx, cy, from} <- centers,
+          k <- 0..4,
+          a = (from + k * 22.5) * :math.pi() / 180,
+          do: {cx + r * :math.cos(a), cy + r * :math.sin(a)}
+
+    # Two corners that are at the same point (a side with no length) are
+    # one corner.
+    key = fn {px, py} -> {Float.round(px / 1, 9), Float.round(py / 1, 9)} end
+    loop = Enum.dedup_by(loop, key)
+    loop = if key.(hd(loop)) == key.(List.last(loop)), do: Enum.drop(loop, -1), else: loop
+    [{:prism, loop, z, h, material}]
+  end
+
   # The wheels of a car or a van: on the side at x (x = 0 is the far side).
   defp wheels(x, ys, r) do
     {dx, face} = if x == 0, do: {-0.02, :far_side}, else: {0.02, :side}
@@ -473,77 +344,152 @@ defmodule DIYWeb.Icon.Shapes do
   The model of a kind: boxes, cylinders and faces, in the order of the
   paint. The unit is near a meter, and the front looks to y.
   """
+  # A fridge with French doors and a drawer. It has a steel body with round
+  # corners, the line of each door, the dispenser and the handles. A plate
+  # is at its foot.
   def model("fridge") do
-    box({0, 0, 0}, {0.8, 0.7, 1.8}, "white") ++
+    {w, d, h} = {0.84, 0.8, 1.78}
+
+    rbox({0, 0, 0.05}, {w, d, h - 0.05}, 0.035, "steel") ++
+      box({0.04, d - 0.08, 0}, {w - 0.08, 0.06, 0.05}, "dark") ++
       [
-        front({0, 0.7, 1.2}, {0.8, 0.02}, "i-line"),
-        front({0.62, 0.7, 1.3}, {0.05, 0.35}, "i-steel-r"),
-        front({0.62, 0.7, 0.75}, {0.05, 0.35}, "i-steel-r")
-      ]
+        front({0, d, 0.7}, {w, 0.012}, "i-line"),
+        front({w / 2 - 0.005, d, 0.71}, {0.01, h - 0.74}, "i-line"),
+        front({0.1, d, 1.08}, {0.18, 0.3}, "i-black"),
+        front({0.13, d + 0.002, 1.32}, {0.12, 0.03}, "i-led")
+      ] ++
+      box({w / 2 - 0.07, d, 0.95}, {0.025, 0.04, 0.62}, "steel") ++
+      box({w / 2 + 0.045, d, 0.95}, {0.025, 0.04, 0.62}, "steel") ++
+      box({0.2, d, 0.58}, {w - 0.4, 0.04, 0.03}, "steel")
   end
 
+  # A chest freezer: a white body with round corners, the line of its lid,
+  # the handle, and the light of its power.
   def model("freezer") do
-    box({0, 0, 0}, {1.2, 0.7, 0.85}, "white") ++
+    {w, d, h} = {1.42, 0.76, 0.84}
+
+    rbox({0, 0, 0.03}, {w, d, h - 0.03}, 0.04, "white") ++
+      box({0.05, 0.05, 0}, {w - 0.1, d - 0.1, 0.03}, "gray") ++
       [
-        front({0, 0.7, 0.72}, {1.2, 0.02}, "i-line"),
-        front({0.45, 0.7, 0.6}, {0.3, 0.05}, "i-steel-r")
-      ]
+        front({0, d, h - 0.1}, {w, 0.012}, "i-line"),
+        front({0.12, d, h - 0.2}, {0.04, 0.02}, "i-led")
+      ] ++
+      box({w / 2 - 0.15, d, h - 0.16}, {0.3, 0.04, 0.03}, "gray")
   end
 
+  # A range: a steel body, and a cooktop of black glass with four burners.
+  # It has a guard at the back and a strip of knobs. The door of the oven
+  # has its window and its handle. A drawer is under the door.
   def model("range") do
-    box({0, 0, 0}, {0.8, 0.7, 0.9}, "steel") ++
-      box({0, 0, 0.9}, {0.8, 0.12, 0.25}, "steel") ++
-      [top({0.04, 0.16, 0.9}, {0.72, 0.5}, "i-black")] ++
+    {w, d} = {0.76, 0.66}
+
+    rbox({0, 0, 0}, {w, d, 0.92}, 0.02, "steel") ++
+      box({0, 0, 0.92}, {w, 0.08, 0.22}, "steel") ++
+      [top({0.02, 0.1, 0.92}, {w - 0.04, d - 0.12}, "i-black")] ++
       for(
-        {x, y} <- [{0.22, 0.3}, {0.58, 0.3}, {0.22, 0.54}, {0.58, 0.54}],
-        do: disc({x, y, 0.92}, :top, 0.11, "i-burner")
+        {x, y} <- [{0.2, 0.26}, {0.56, 0.26}, {0.2, 0.5}, {0.56, 0.5}],
+        do: disc({x, y, 0.94}, :top, 0.1, "i-burner")
       ) ++
       [
-        front({0.12, 0.7, 0.15}, {0.56, 0.45}, "i-glass-dark"),
-        front({0.12, 0.7, 0.68}, {0.56, 0.05}, "i-steel-r")
-      ]
+        front({0.02, d, 0.8}, {w - 0.04, 0.1}, "i-dark-l"),
+        front({0.06, d, 0.12}, {w - 0.12, 0.6}, "i-steel-t"),
+        front({0.14, d + 0.002, 0.22}, {w - 0.28, 0.36}, "i-glass-dark"),
+        front({0.18, d + 0.004, 0.42}, {0.12, 0.12}, "i-shine"),
+        front({0.04, d, 0.03}, {w - 0.08, 0.012}, "i-line")
+      ] ++
+      for(k <- 0..4, do: disc({0.12 + k * 0.13, d + 0.014, 0.85}, :front, 0.022, "i-steel-t")) ++
+      box({0.1, d, 0.66}, {w - 0.2, 0.04, 0.03}, "steel")
   end
 
+  # A microwave: a steel body, the door with its window, and the keys with
+  # their display.
   def model("microwave") do
-    box({0, 0, 0}, {0.8, 0.5, 0.45}, "steel") ++
+    {w, d, h} = {0.61, 0.46, 0.36}
+
+    rbox({0, 0, 0}, {w, d, h}, 0.02, "steel") ++
       [
-        front({0.06, 0.5, 0.07}, {0.5, 0.31}, "i-glass-dark"),
-        front({0.62, 0.5, 0.1}, {0.12, 0.25}, "i-black")
-      ]
+        front({0.03, d, 0.04}, {0.42, 0.28}, "i-black"),
+        front({0.06, d + 0.002, 0.07}, {0.36, 0.22}, "i-glass-dark"),
+        front({0.08, d + 0.004, 0.2}, {0.1, 0.08}, "i-shine"),
+        front({0.47, d, 0.04}, {0.11, 0.28}, "i-dark-l"),
+        front({0.49, d + 0.002, 0.26}, {0.07, 0.03}, "i-led")
+      ] ++
+      for(
+        row <- 0..2,
+        col <- 0..1,
+        do: front({0.49 + col * 0.04, d + 0.002, 0.07 + row * 0.055}, {0.028, 0.03}, "i-steel-t")
+      )
   end
 
+  # A dishwasher: a steel body, the strip of its keys with a light, the
+  # handle, and the plate at its foot.
   def model("dishwasher") do
-    box({0, 0, 0}, {0.7, 0.7, 0.85}, "steel") ++
+    {w, d, h} = {0.6, 0.6, 0.86}
+
+    rbox({0, 0, 0.06}, {w, d, h - 0.06}, 0.015, "steel") ++
+      box({0.03, d - 0.06, 0}, {w - 0.06, 0.04, 0.06}, "dark") ++
       [
-        front({0, 0.7, 0.72}, {0.7, 0.13}, "i-black"),
-        front({0.2, 0.7, 0.62}, {0.3, 0.04}, "i-steel-t")
-      ]
+        front({0, d, h - 0.12}, {w, 0.12}, "i-black"),
+        front({w - 0.2, d + 0.002, h - 0.07}, {0.12, 0.025}, "i-led")
+      ] ++
+      box({0.12, d, h - 0.2}, {w - 0.24, 0.04, 0.03}, "steel")
   end
 
   def model("washer"), do: laundry("i-glass")
   def model("dryer"), do: laundry("i-glass-dark")
 
+  # A water heater: a round tank on its foot, with its cap and its label.
+  # Two pipes are on its top, and the relief valve is on its side.
   def model("water_heater") do
-    cylinder({0.35, 0.35, 0}, 0.35, 1.4, "white") ++
-      box({0.2, 0.3, 1.4}, {0.07, 0.07, 0.25}, "copper") ++
-      box({0.45, 0.3, 1.4}, {0.07, 0.07, 0.25}, "copper")
-  end
+    {r, h} = {0.27, 1.42}
 
-  def model("ac") do
-    box({0, 0, 0}, {1.0, 1.0, 0.8}, "steel") ++
+    cylinder({0.28, 0.28, 0}, 0.24, 0.05, "gray") ++
+      cylinder({0.28, 0.28, 0.05}, r, h, "white") ++
+      cylinder({0.28, 0.28, 0.05 + h}, 0.23, 0.04, "gray") ++
+      cylinder({0.18, 0.28, 0.09 + h}, 0.025, 0.14, "copper") ++
+      cylinder({0.38, 0.28, 0.09 + h}, 0.025, 0.14, "copper") ++
       [
-        disc({0.5, 0.5, 0.81}, :top, 0.36, "i-black"),
-        disc({0.5, 0.5, 0.82}, :top, 0.08, "i-steel-t")
+        face(
+          for({x, z} <- [{0.2, 0.75}, {0.36, 0.75}, {0.36, 1.0}, {0.2, 1.0}], do: {x, 0.553, z}),
+          {0, 1, 0},
+          "i-shade-t i-face"
+        )
       ] ++
-      for(k <- 1..4, do: side({1.0, 0.1, k * 0.15}, {0.8, 0.03}, "i-line")) ++
-      for(k <- 1..4, do: far_side({0.0, 0.1, k * 0.15}, {0.8, 0.03}, "i-line"))
+      box({0.55, 0.25, 1.25}, {0.05, 0.06, 0.06}, "copper")
   end
 
-  def model("mini_split") do
-    box({0, 0, 0}, {1.1, 0.3, 0.38}, "white") ++
+  # The AC outside: a steel box with round corners on a pad. The grille of
+  # its fan and its hub are on its top. Its sides have the lines of its
+  # coil.
+  def model("ac") do
+    {w, h} = {0.74, 0.84}
+
+    box({0, 0, 0}, {w, w, 0.05}, "dark") ++
+      rbox({0.02, 0.02, 0.05}, {w - 0.04, w - 0.04, h - 0.05}, 0.04, "steel") ++
       [
-        front({0.08, 0.3, 0.05}, {0.94, 0.08}, "i-glass-dark"),
-        front({0.9, 0.3, 0.24}, {0.06, 0.04}, "i-led")
+        disc({w / 2, w / 2, h + 0.005}, :top, 0.29, "i-black"),
+        disc({w / 2, w / 2, h + 0.01}, :top, 0.07, "i-steel-t")
+      ] ++
+      for(
+        k <- 1..6,
+        part <- [
+          front({0.08, w - 0.02, 0.1 + k * 0.1}, {w - 0.16, 0.012}, "i-line"),
+          side({w - 0.02, 0.08, 0.1 + k * 0.1}, {w - 0.16, 0.012}, "i-line")
+        ],
+        do: part
+      )
+  end
+
+  # The head of a mini split on a wall: a white body with round corners, the
+  # slot of its vane, and its light.
+  def model("mini_split") do
+    {w, d, h} = {0.8, 0.22, 0.3}
+
+    rbox({0, 0, 0}, {w, d, h}, 0.05, "white") ++
+      [
+        front({0.06, d, 0.04}, {w - 0.12, 0.06}, "i-glass-dark"),
+        front({0.08, d, 0.12}, {w - 0.16, 0.01}, "i-line"),
+        front({w - 0.12, d, 0.2}, {0.05, 0.02}, "i-led")
       ]
   end
 
@@ -575,11 +521,25 @@ defmodule DIYWeb.Icon.Shapes do
       cylinder({0.25, 0.25, 0.45}, 0.24, 0.28, "shade")
   end
 
+  # A TV on its stand: the foot, the neck, and the thin panel with its
+  # screen and a shine on it.
   def model("tv") do
-    box({0.5, 0.2, 0}, {0.3, 0.2, 0.05}, "dark") ++
-      box({0.62, 0.27, 0.05}, {0.06, 0.06, 0.15}, "dark") ++
-      box({0, 0.28, 0.2}, {1.3, 0.05, 0.75}, "dark") ++
-      [front({0.04, 0.33, 0.24}, {1.22, 0.67}, "i-screen")]
+    {w, h} = {1.12, 0.6}
+
+    box({0.36, 0.0, 0}, {0.4, 0.2, 0.02}, "dark") ++
+      box({0.53, 0.06, 0.02}, {0.06, 0.04, 0.1}, "dark") ++
+      box({0, 0.1, 0.12}, {w, 0.035, h}, "dark") ++
+      [
+        front({0.015, 0.125, 0.135}, {w - 0.03, h - 0.03}, "i-screen"),
+        face(
+          for(
+            {x, z} <- [{0.2, 0.135}, {0.4, 0.135}, {0.6, h + 0.105}, {0.4, h + 0.105}],
+            do: {x, 0.137, z}
+          ),
+          {0, 1, 0},
+          "i-shine"
+        )
+      ]
   end
 
   def model("computer") do
@@ -621,13 +581,22 @@ defmodule DIYWeb.Icon.Shapes do
       for(k <- 1..4, do: front({0.1, 0.3, 0.06 + k * 0.11}, {0.25, 0.04}, "i-hot"))
   end
 
+  # A power station: a body with round corners, with two handles on its
+  # top. Its dark front has its screen and its outlets. Its side has vents.
   def model("power_station") do
-    box({0, 0, 0}, {0.8, 0.5, 0.62}, "dark") ++
+    {w, d, h} = {0.64, 0.28, 0.41}
+
+    box({0.04, 0.03, 0}, {w - 0.08, d - 0.06, 0.02}, "dark") ++
+      rbox({0, 0, 0.02}, {w, d, h - 0.05}, 0.03, "steel") ++
+      box({0.05, 0.04, h - 0.03}, {0.07, d - 0.08, 0.03}, "dark") ++
+      box({w - 0.12, 0.04, h - 0.03}, {0.07, d - 0.08, 0.03}, "dark") ++
       [
-        front({0.12, 0.5, 0.34}, {0.56, 0.12}, "i-led"),
-        front({0.1, 0.5, 0.1}, {0.6, 0.06}, "i-steel-r")
+        front({0.03, d, 0.05}, {w - 0.06, h - 0.13}, "i-dark-l"),
+        front({0.06, d + 0.002, 0.2}, {0.14, 0.08}, "i-screen"),
+        front({0.08, d + 0.004, 0.23}, {0.07, 0.02}, "i-led")
       ] ++
-      box({0.15, 0.2, 0.62}, {0.5, 0.1, 0.06}, "gray")
+      for(k <- 0..3, do: front({0.26 + k * 0.08, d + 0.002, 0.18}, {0.05, 0.06}, "i-white-t")) ++
+      for(k <- 0..3, do: side({w, 0.06, 0.1 + k * 0.05}, {d - 0.12, 0.012}, "i-line"))
   end
 
   def model("solar_panels") do
@@ -692,30 +661,8 @@ defmodule DIYWeb.Icon.Shapes do
       ] ++ wheels(w, [0.45, l - 0.5], 0.2) ++ wheels(0, [0.45, l - 0.5], 0.2)
   end
 
-  def model("camper_van") do
-    {l, w, h} = {2.6, 1.0, 1.25}
-    profile = [{0, 0.2}, {l, 0.2}, {l, 0.65}, {2.3, 0.72}, {2.1, 1.12}, {2.0, h}, {0, h}]
-    across = fn {y1, z1}, {y2, z2} -> [{0, y1, z1}, {w, y1, z1}, {w, y2, z2}, {0, y2, z2}] end
-
-    # The two sides have the profile, and the back has its doors: they
-    # show after a turn. The sliding door is on the right side of the van
-    # (x = 0, `DIYWeb.Geometry`). A slope of the cab looks to the front and up. The
-    # hood is low: when the front looks away, the body is in front of it,
-    # so it shows only with the front.
-    [
-      face(Enum.map(profile, fn {y, z} -> {0, y, z} end), {-1, 0, 0}, "i-white-~ i-face"),
-      far_side({0, 0.75, 0.6}, {0.6, 0.35}, "i-glass-dark"),
-      far_side({0, 1.45, 0.2}, {0.55, 0.85}, "i-steel-l"),
-      face(across.({0, 0.2}, {0, h}), {0, -1, 0}, "i-white-~ i-face"),
-      face(Enum.map(profile, fn {y, z} -> {w, y, z} end), {1, 0, 0}, "i-white-~ i-face"),
-      face(across.({0, h}, {2.0, h}), {0, 0, 1}, "i-white-t i-face"),
-      face(across.({2.0, h}, {2.1, 1.12}), {0, 0.79, 0.61}, "i-white-t i-face"),
-      face(across.({2.3, 0.72}, {2.1, 1.12}), {0, 0.89, 0.45}, "i-glass-dark"),
-      face(across.({l, 0.65}, {2.3, 0.72}), {0, 1, 0.5}, "i-white-t i-face"),
-      front({0, l, 0.2}, {w, 0.45}, "i-white-~ i-face"),
-      side({w, 0.75, 0.6}, {0.6, 0.35}, "i-glass-dark")
-    ] ++ wheels(w, [0.5, 2.25], 0.2) ++ wheels(0, [0.5, 2.25], 0.2)
-  end
+  # The icon of a camper van: the model of the Ford Transit.
+  def model("camper_van"), do: VanShapes.van("transit_148")
 
   def model("swivel_seat") do
     cylinder({0.35, 0.35, 0}, 0.3, 0.12, "dark") ++
@@ -892,13 +839,24 @@ defmodule DIYWeb.Icon.Shapes do
     box({0, 0, 0}, {0.6, 0.6, 0.6}, "gray") ++ [front({0.2, 0.6, 0.2}, {0.2, 0.2}, "i-steel-t")]
   end
 
-  # A washer or a dryer: a box with a round door.
+  # A washer or a dryer with a door in front: a white body with round
+  # corners. The panel has its drawer, its display and its dial. The door
+  # has its ring, and its glass has a shine. A plate is at its foot.
   defp laundry(glass) do
-    box({0, 0, 0}, {0.7, 0.7, 0.9}, "white") ++
+    {w, d, h} = {0.69, 0.72, 0.99}
+    {cx, cz} = {w / 2, 0.45}
+
+    rbox({0, 0, 0.03}, {w, d, h - 0.03}, 0.03, "white") ++
+      box({0.04, d - 0.06, 0}, {w - 0.08, 0.04, 0.03}, "gray") ++
       [
-        front({0, 0.7, 0.75}, {0.7, 0.02}, "i-line"),
-        disc({0.35, 0.71, 0.38}, :front, 0.24, "i-steel-l"),
-        disc({0.35, 0.72, 0.38}, :front, 0.18, glass)
+        front({0, d, h - 0.17}, {w, 0.012}, "i-line"),
+        front({0.04, d, h - 0.14}, {0.2, 0.08}, "i-white-t"),
+        front({0.4, d, h - 0.13}, {0.12, 0.05}, "i-black"),
+        disc({0.6, d + 0.012, h - 0.09}, :front, 0.035, "i-steel-l"),
+        disc({cx, d + 0.012, cz}, :front, 0.25, "i-gray-l"),
+        disc({cx, d + 0.016, cz}, :front, 0.2, "i-steel-t"),
+        disc({cx, d + 0.02, cz}, :front, 0.16, glass),
+        disc({cx - 0.05, d + 0.024, cz + 0.05}, :front, 0.05, "i-shine")
       ]
   end
 end

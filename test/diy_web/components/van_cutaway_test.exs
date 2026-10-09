@@ -65,9 +65,17 @@ defmodule DIYWeb.VanCutawayTest do
 
       assert_in_delta door, 48 * m, 1.0e-9
 
-      # The model of the van has its sliding door on the same side.
-      [_bumper, _mirror, {:group, body}, _other_mirror, _front] = Shapes.van(model)
-      assert [{-1, 0, 0}] == for({:face, _corners, normal, "i-steel-l"} <- body, do: normal)
+      # The model of the van has its sliding door on the same side. The rail
+      # of the door is the only long line along a side.
+      [_arm, _mirror, {:group, body}, _other_arm, _other_mirror] = Shapes.van(model)
+
+      rails =
+        for {:face, corners, normal, "i-line"} <- body,
+            {low, high} = corners |> Enum.map(&elem(&1, 1)) |> Enum.min_max(),
+            high - low > 1.0,
+            do: normal
+
+      assert rails == [{-1, 0, 0}]
     end
   end
 
