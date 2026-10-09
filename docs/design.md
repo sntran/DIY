@@ -167,7 +167,8 @@ The front of the house helps a person with no skill in power:
 
 Each page starts at its top (the hook Top). All the pages are one
 LiveView, and a patch keeps the scroll of the page before it. The hook
-sees the name of the page, the step of the lesson and the van change.
+looks at the name of the page, the step of the lesson and the van. When
+one of them changes, the window goes to the top.
 
 The words. A sheet tells a technical word in plain words:
 
@@ -176,13 +177,16 @@ The words. A sheet tells a technical word in plain words:
 - GVWR and GAWR are the most weight of the van and of one axle;
 - Ah are amp hours.
 
-The heat efficiency shows only for a unit that heats. The rooms
-at the ground outside the house (the garage, the yard, the driveway)
-are on the "Ground level". A wide table tells the person to swipe it on
+The heat efficiency shows only for a unit that heats. The level of the
+garage, the yard and the driveway has the name "Around the house" (not
+"Outside"). The sheet of an item in one of these rooms gives no level. A
+wide table tells the person to swipe it on
 a phone. The bill page gives the room of an item when two items have the
 same name. The answers of the exercise stay in the form after a check.
-The main buttons have the same orange in the light and the dark theme.
-Their white words have a contrast of 4.7 (WCAG AA).
+The main buttons are orange in the light and the dark theme. In the
+light theme, white words on a dark orange have a contrast of 4.9 (WCAG
+AA). In the dark theme, dark words on a light orange have a contrast of
+6.7.
 
 ### The rooms
 

@@ -406,18 +406,32 @@ defmodule DIYWeb.HomeLive do
   end
 
   # The price of the last bill of the person: its total divided by its kWh.
+  # A price out of 3¢ to 100¢ is not a price of a bill: the page asks the
+  # person to check the two numbers.
   def handle_event("my_bill", %{"dollars" => dollars, "kwh" => kwh}, socket)
       when is_binary(dollars) and is_binary(kwh) do
-    with {total, ""} when total > 0 <- Float.parse(typed(dollars)),
-         {kwh, ""} when kwh > 0 <- Float.parse(typed(kwh)),
-         {:ok, build} <- Build.set_price(socket.assigns.build, total / kwh * 100) do
-      {:noreply,
-       socket
-       |> put(build)
-       |> put_flash(
-         :info,
-         "The app now uses the price of your bill: #{Format.cents(build.price)} for each kWh."
-       )}
+    with {total, ""} when total > 0 and total <= 100_000 <- Float.parse(typed(dollars)),
+         {kwh, ""} when kwh >= 1 and kwh <= 1_000_000 <- Float.parse(typed(kwh)) do
+      cents = total / kwh * 100
+
+      if cents >= 3 and cents <= 100 do
+        {:ok, build} = Build.set_price(socket.assigns.build, cents)
+
+        {:noreply,
+         socket
+         |> put(build)
+         |> put_flash(
+           :info,
+           "The app now uses the price of your bill: #{Format.cents(cents)} for each kWh."
+         )}
+      else
+        {:noreply,
+         put_flash(
+           socket,
+           :error,
+           "These numbers give #{Format.cents(cents)} for each kWh. Check the total and the kWh of the bill."
+         )}
+      end
     else
       _error ->
         {:noreply,
@@ -496,7 +510,7 @@ defmodule DIYWeb.HomeLive do
   end
 
   def handle_event("lesson_plan", %{"plan" => id}, socket),
-    do: {:noreply, assign(socket, plan_id: id, checks: nil)}
+    do: {:noreply, assign(socket, plan_id: id, checks: nil, answers: %{})}
 
   def handle_event("hint", _params, socket), do: {:noreply, assign(socket, :hint, true)}
 
@@ -1135,7 +1149,7 @@ defmodule DIYWeb.HomeLive do
       end
 
     step = if page == :plans, do: lesson_step(assigns.lesson_step, build)
-    "#{page}:#{step}:#{assigns.van_id}"
+    "#{page}:#{step}:#{assigns.shown_van}"
   end
 
   # A number that a person types, with no "$", no commas and no spaces.

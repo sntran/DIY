@@ -433,7 +433,7 @@ defmodule DIYWeb.Inside do
 
     ~H"""
     <.sheet id="item-sheet" title={Catalog.name(@item)} icon={@item.type}>
-      <p class="text-sm opacity-80">In {@room.name} ({Build.level_name(@room.level)})</p>
+      <p class="text-sm opacity-80">In {@room.name}{level_note(@room.level)}</p>
 
       <div :if={@item.typical} class="alert alert-warning text-sm">
         <span>
@@ -747,6 +747,11 @@ defmodule DIYWeb.Inside do
   # A month that shows the work of an item: January for heat, July else.
   defp math_month(%{type: type}) when type in ["furnace", "heat_strips", "space_heater"], do: 1
   defp math_month(_item), do: 7
+
+  # The level of the room of an item, for a floor or the roof. A room
+  # around the house (a garage, a yard) needs no level.
+  defp level_note("outside"), do: ""
+  defp level_note(level), do: " (#{Build.level_name(level)})"
 
   defp season(1), do: ", a cold month"
   defp season(7), do: ", a hot month"

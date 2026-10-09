@@ -431,8 +431,8 @@ defmodule DIYWeb.HomeLiveTest do
     assert render(view) =~ "The app now uses the price of your bill: 13.6¢ for each kWh."
     refute has_element?(view, "#my-bill")
 
-    # A total or a kWh that is not a number, or that is 0, and a price that
-    # is too high: an error, and the price stays.
+    # A total or a kWh that is not a number, that is 0, or that is too
+    # large: an error, and the price stays.
     view = open(conn, ~p"/", house())
     settle(view)
 
@@ -441,10 +441,21 @@ defmodule DIYWeb.HomeLiveTest do
           {"abc", "1000"},
           {"150", "0"},
           {"150", "12x"},
-          {"9000", "10"}
+          {"1e307", "1"},
+          {"150", "1e-320"}
         ] do
       view |> form("#my-bill", %{"dollars" => dollars, "kwh" => kwh}) |> render_submit()
       assert render(view) =~ "Give the total of the bill in dollars and its kWh"
+      assert build(view).price == nil
+    end
+
+    # A typo gives a price that no bill has: the page asks to check it.
+    for {dollars, kwh, cents} <- [{"150", "11,000", "1.4¢"}, {"9000", "1000", "900.0¢"}] do
+      view |> form("#my-bill", %{"dollars" => dollars, "kwh" => kwh}) |> render_submit()
+
+      assert render(view) =~
+               "These numbers give #{cents} for each kWh. Check the total and the kWh"
+
       assert build(view).price == nil
     end
   end
@@ -501,6 +512,23 @@ defmodule DIYWeb.HomeLiveTest do
     assert html =~ "Fridge (Kitchen)"
     assert html =~ "Fridge (Garage)"
     refute html =~ "Clothes dryer ("
+  end
+
+  test "each page starts at its top: the key of the page changes with the page, not with a sheet",
+       %{conn: conn} do
+    build = house()
+    fridge = Enum.find(build.items, &(&1.type == "fridge"))
+    view = open(conn, ~p"/", build)
+    assert has_element?(view, ~s(#top[data-page="front::"]))
+    render_patch(view, ~p"/inside")
+    assert has_element?(view, ~s(#top[data-page="inside::"]))
+    render_patch(view, ~p"/inside?#{[item: fridge.id]}")
+    assert has_element?(view, ~s(#top[data-page="inside::"]))
+    render_patch(view, ~p"/plans?step=1")
+    assert has_element?(view, ~s(#top[data-page="plans:1:"]))
+
+    {:ok, view, _html} = live(conn, ~p"/")
+    assert has_element?(view, ~s(#top[data-page="load"]))
   end
 
   test "the math of a house with no items", %{conn: conn} do

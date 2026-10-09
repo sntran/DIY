@@ -162,8 +162,8 @@ defmodule DIYWeb.VanLiveTest do
     {build, _} = add(build, van, :bay, "van_battery", %{"ah" => "100", "fused" => "true"})
     view = open(conn, ~p"/van?#{[id: van]}", build)
 
-    assert render(view) =~
-             ~r/Off the grid: \d+\.\d days in [A-Z][a-z]+\. The other months give more days\./
+    # With no sun and no engine, each month gives the same days.
+    assert render(view) =~ ~r/Off the grid: \d+\.\d days in each month\./
 
     # The person drives 1 hour in one day, but the van has no alternator
     # charger: the page tells why the engine gives no power. With a
@@ -180,6 +180,12 @@ defmodule DIYWeb.VanLiveTest do
 
     {sunny, _} = add(build, van, :van_roof, "van_solar", %{"watts" => "2000"})
     assert render(open(conn, ~p"/van?#{[id: van]}", sunny)) =~ "no limit off the grid"
+
+    # A small panel: the month with the least sun gives the fewest days.
+    {some_sun, _} = add(build, van, :van_roof, "van_solar", %{"watts" => "50"})
+
+    assert render(open(conn, ~p"/van?#{[id: van]}", some_sun)) =~
+             ~r/Off the grid: \d+\.\d days in [A-Z][a-z]+\. No month gives fewer days\./
 
     # With no weather, no power budget. (A ZIP code that no other test
     # uses: the app keeps the weather of each place.)

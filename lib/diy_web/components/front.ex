@@ -153,7 +153,7 @@ defmodule DIYWeb.Front do
       </div>
     </form>
     <p class="text-xs opacity-80">
-      A kWh (a kilowatt-hour) is 1,000 watts for one hour: the bill counts the power in kWh.
+      A kWh (a kilowatt-hour) is 1,000 watts for one hour. The bill counts your use in kWh.
       At {Format.cents(@cents)} for each kWh: {@price.source}.{if @power.night_cents,
         do:
           " At night (#{@power.night_from}:00 to #{@power.night_to}:00): #{Format.cents(@power.night_cents)}."}{if @bill.export >
@@ -286,7 +286,12 @@ defmodule DIYWeb.Front do
           </p>
         <% true -> %>
           <p class="text-sm">
-            A next small step: see the real use of your house. Your smart meter (outside, on a wall) sends its use to your utility. In Texas, the site smartmetertexas.com gives the file of this use. Add the meter here, and open the file in it.
+            A next small step: see the real use of your house. Your smart meter (outside, on a wall) sends its use to your utility. {if @build.market &&
+                                                                                                                                          @build.market.choice,
+                                                                                                                                        do:
+                                                                                                                                          "The site smartmetertexas.com gives the file of this use.",
+                                                                                                                                        else:
+                                                                                                                                          "The site of your utility gives the file of this use (\"Green Button\" or \"Download My Data\")."} Add the meter here, and open the file in it.
             <.link :if={@room} patch={~p"/inside?#{[add: @room.id]}"} class="link">Add the meter</.link>
           </p>
       <% end %>
@@ -347,7 +352,7 @@ defmodule DIYWeb.Front do
         <% @build.market && @build.market.choice -> %>
           <p>
             Your area has retail choice: you choose the company that sells your power (a retail plan), and {@build.market.utility ||
-              "a utility"} delivers the power on its wires. The delivery charges are the charges of the utility for its wires.
+              "a utility"} delivers the power on its wires. The delivery charges are the charges of the utility for its wires. Power to Choose (powertochoose.org) is the site of Texas for the plans.
           </p>
         <% @build.market -> %>
           <p>

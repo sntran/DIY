@@ -266,11 +266,16 @@ defmodule DIYWeb.VanPage do
   defp days_text(months) do
     if Enum.all?(months, &(&1.days == :unlimited)),
       do: "The sun and the engine give more than the van uses: no limit off the grid.",
-      else: fewest(Enum.min_by(months, &if(&1.days == :unlimited, do: :infinity, else: &1.days)))
+      else: fewest(months)
   end
 
-  defp fewest(month),
-    do: "Off the grid: #{days(month.days)} in #{month.name}. The other months give more days."
+  defp fewest(months) do
+    low = Enum.min_by(months, &if(&1.days == :unlimited, do: :infinity, else: &1.days))
+
+    if Enum.all?(months, &(&1.days == low.days)),
+      do: "Off the grid: #{days(low.days)} in each month.",
+      else: "Off the grid: #{days(low.days)} in #{low.name}. No month gives fewer days."
+  end
 
   defp left(%{payload: payload, load: load}) when payload >= load,
     do: "#{lb(payload - load)} is left."

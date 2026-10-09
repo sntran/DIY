@@ -203,7 +203,7 @@ defmodule DIY.Catalog do
           13.4,
           8.0,
           30.0,
-          "The efficiency of the cooling: a higher number uses less power. The yellow EnergyGuide label gives the SEER2. An old unit is near 9 to 11."
+          "The efficiency of the cooling: a unit with a higher number uses less power. The yellow EnergyGuide label gives the SEER2. An old unit is near 9 to 11."
         ),
         %{
           key: "heat_pump",
@@ -220,7 +220,7 @@ defmodule DIY.Catalog do
           7.5,
           5.0,
           14.0,
-          "The efficiency of the heat: a higher number uses less power. The EnergyGuide label gives the HSPF2."
+          "The efficiency of the heat: a unit with a higher number uses less power. The EnergyGuide label gives the HSPF2."
         )
       ]
     },
@@ -520,7 +520,8 @@ defmodule DIY.Catalog do
           "It powers",
           [
             {"plug", "Items that plug into it"},
-            {"panel", "Circuits of the house, through an inlet (a plug on the wall of the house)"}
+            {"panel",
+             "Circuits of the house, through an inlet (a connector for a station on the wall of the house, not an outlet: an electrician installs it)"}
           ],
           "plug"
         ),
@@ -913,7 +914,7 @@ defmodule DIY.Catalog do
           200,
           1,
           5000,
-          "The Ah (amp hours) on the label of each battery. Add the Ah of the batteries that are in parallel."
+          "The label of each battery gives its Ah (amp hours). Add the Ah of the batteries that are in parallel."
         ),
         choice("volts", "Voltage", [{"12", "12 V"}, {"24", "24 V"}, {"48", "48 V"}], "12"),
         choice(

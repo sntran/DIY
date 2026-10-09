@@ -50,7 +50,7 @@ defmodule DIY.BuildTest do
     assert Build.levels(3) == ["roof", "f3", "f2", "f1", "outside"]
     assert Build.level_name("roof") == "Roof and attic"
     assert Build.level_name("f2") == "Floor 2"
-    assert Build.level_name("outside") == "Ground level"
+    assert Build.level_name("outside") == "Around the house"
   end
 
   test "the ZIP code, the market and the price" do

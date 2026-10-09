@@ -83,7 +83,7 @@ defmodule DIY.Prices do
     %{
       cents: median,
       source:
-        "the middle price (the median) of #{plans} plans for your ZIP code on Power to Choose (powertochoose.org, the site of Texas for the plans), at 1,000 kWh in one month, with the delivery charges of the utility (#{date})",
+        "the middle price (the median) of #{plans} plans for your ZIP code on Power to Choose (#{date}). It is the price at 1,000 kWh in one month, with the delivery charges",
       kind: :market
     }
   end

@@ -166,7 +166,10 @@ defmodule DIYWeb.LessonLiveTest do
     right = answers(view, hd(build(view).plans))
     view |> form("#exercise", %{"answer" => right}) |> render_submit()
     assert has_element?(view, "#exercise-done")
+    assert has_element?(view, ~s(#answer-total[value="#{right["total"]}"]))
+    # A different plan: the answers of the plan before go away.
     render_change(view, "lesson_plan", %{"plan" => id})
+    refute has_element?(view, "#answer-total[value]")
 
     # An EFL with no averages, a file that is not a PDF, and an EFL that the
     # app cannot read in full.
