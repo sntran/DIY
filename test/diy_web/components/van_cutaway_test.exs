@@ -28,6 +28,8 @@ defmodule DIYWeb.VanCutawayTest do
       {build, van} = van(model)
       view = view(build, van)
       assert Enum.map(view.levels, & &1.id) == ["floor", "roof"]
+      # The page of a van starts on all the van.
+      refute render_component(&Cutaway.cutaway/1, view: view) =~ "data-start"
       [floor, roof] = view.levels
       assert roof.z > floor.z
 

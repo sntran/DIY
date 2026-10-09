@@ -9,20 +9,28 @@ defmodule DIYWeb.Cutaway do
 
   The walls on the outside at the back have their full height. The wall
   on the outside at the left end of the house is cut on a slope. It is full
-  at the back of the house, and near the floor at its front. The other
-  walls are cut near the floor: at the front of a room, between two rooms,
-  and at the right end. A wall is also cut near the floor where a room or
-  a yard is behind it, also on a slant. So the camera sees each room and
-  its items.
+  at the back of the house, and near the floor at its front. A wall
+  between two rooms is cut at 75 cm: it shows the rooms, and it hides
+  little of the room behind it. The other walls are cut near the floor: at
+  the front of a room and at the right end. A wall is also cut near the
+  floor where a room or a yard is behind it, also on a slant. So the
+  camera sees each room and its items.
+
+  The look follows a picture that an artist drew of a house
+  (`assets/css/app.css`). It has warm colors and brown lines of ink. The
+  top of each wall is a dark cut, and the walls have a soft light. At night (the dark mode), the floor
+  of each room inside has the warm light of a lamp (the class `p-glow`).
 
   The page moves the items and the rooms with a script (the hook Plan,
   `assets/js/plan.js`). The SVG gives the script what it needs:
 
-  - the SVG: `data-axes`, `data-arrows` and `data-fit`. `data-axes` has
-    the SVG vectors of one inch along `x`, along `y`, and up
-    (`DIYWeb.Camera.axes/1`). `data-arrows` has the steps of the plan for a
-    move to the right and down (`DIYWeb.Camera.arrows/1`). `data-fit` is
-    the box of all the layers;
+  - the SVG: `data-axes`, `data-arrows`, `data-fit` and `data-start`.
+    `data-axes` has the SVG vectors of one inch along `x`, along `y`, and
+    up (`DIYWeb.Camera.axes/1`). `data-arrows` has the steps of the plan
+    for a move to the right and down (`DIYWeb.Camera.arrows/1`).
+    `data-fit` is the box of all the layers. `data-start` is the layer of
+    the first view (floor 1): the house fills the screen, and the other
+    layers hide;
   - each surface of a room: `data-room`, `data-plan` (`x y w d`, inches)
     and `data-origin`. The origin is the SVG point of the plan point 0, 0
     on the surface of the room. A roof also has `data-rise`: the height of
@@ -53,8 +61,9 @@ defmodule DIYWeb.Cutaway do
   @full 2.4
   @attic 0.5
   @low 0.25
-  @thick 0.12
-  @slab 0.2
+  @inner 0.75
+  @thick 0.16
+  @slab 0.3
 
   @doc """
   The layers of the cut-open house, from the bottom to the top, and the
@@ -86,7 +95,8 @@ defmodule DIYWeb.Cutaway do
         level(%{id: id, name: name, z: z, camera: camera}, rooms, items, house)
       end
 
-    frame(levels, camera)
+    # The page starts on floor 1 (`data-start`).
+    Map.put(frame(levels, camera), :start, "ground")
   end
 
   @doc """
@@ -267,6 +277,7 @@ defmodule DIYWeb.Cutaway do
         case {cut(side, camera), kind} do
           {:back, :high} -> {high, high}
           {:far, :high} -> :slope
+          {_cut, :shared} -> {@inner, @inner}
           _low -> {@low, @low}
         end
 
@@ -430,7 +441,7 @@ defmodule DIYWeb.Cutaway do
     shape = Geometry.wedge({cx * @m, cy * @m, z}, {sw * @m, sd * @m}, {h0, h1}, axis)
 
     trim =
-      if min(h0, h1) > @low and side in ~w(x0 y0),
+      if max(h0, h1) > @low and side in ~w(x0 y0),
         do: trim(side, line, {a, b}, z, {h0, h1}),
         else: []
 
@@ -445,9 +456,10 @@ defmodule DIYWeb.Cutaway do
     }
   end
 
-  # The trim on the face of a high wall in its room (the face at the line
-  # of the wall). It is a baseboard, and a window when the wall has its
-  # full height and room for it. A window is 4 feet wide at most, from 3
+  # The trim of a wall that is higher than the cut near the floor. It is on
+  # the face of the wall in its room (the face at the line of the wall). It
+  # is a baseboard, and a window when the wall has its full height and room
+  # for it. A window is 4 feet wide at most, from 3
   # feet over the floor.
   defp trim(side, line, {a, b}, z, {h0, h1}) do
     plane = fn {u0, u1}, {z0, z1} ->
@@ -501,6 +513,12 @@ defmodule DIYWeb.Cutaway do
     ]
 
     %{surface(room, z, camera) | polys: polys, rise: round(rise / @m)}
+  end
+
+  defp room_view(%{place: :indoor} = room, z, camera) do
+    view = floor(room, z, material(room), camera)
+    [{corners, _class} | _] = view.polys
+    %{view | polys: view.polys ++ [{corners, "p-tex p-glow"}]}
   end
 
   defp room_view(room, z, camera), do: floor(room, z, material(room), camera)
@@ -809,6 +827,7 @@ defmodule DIYWeb.Cutaway do
         axes: Enum.map_join([ax, ay, bx, by, cx, cy], " ", &Float.round(&1 / 1, 6)),
         arrows: "#{rx} #{ry} #{dx} #{dy}",
         fit: box_text(assigns.view.box),
+        start: Map.get(assigns.view, :start),
         selection: selection(assigns.view, assigns.selected)
       )
 
@@ -817,6 +836,7 @@ defmodule DIYWeb.Cutaway do
       id="plan-svg"
       viewBox={@fit}
       data-fit={@fit}
+      data-start={@start}
       data-axes={@axes}
       data-arrows={@arrows}
       class="cutaway block w-full h-full touch-none select-none"
@@ -824,6 +844,18 @@ defmodule DIYWeb.Cutaway do
       phx-mounted={JS.ignore_attributes(["viewBox", "style", "data-dim"])}
     >
       <defs>
+        <linearGradient id="p-wall-light" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" class="p-wall-top" />
+          <stop offset="1" class="p-wall-low" />
+        </linearGradient>
+        <linearGradient id="p-wall-side" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" class="p-side-top" />
+          <stop offset="1" class="p-side-low" />
+        </linearGradient>
+        <radialGradient id="p-glow-fill">
+          <stop offset="0" class="p-glow-0" />
+          <stop offset="1" class="p-glow-1" />
+        </radialGradient>
         <radialGradient id="p-shadow-fill">
           <stop offset="0" class="p-shadow-0" />
           <stop offset="0.6" class="p-shadow-1" />

@@ -66,11 +66,12 @@ defmodule DIYWeb.CameraTest do
       assert sx == 0.0 and sy < 0
     end
 
-    # The house: x goes to the right, and y (to its front) down the screen.
+    # The house: x goes to the right, and y (to its front) down the screen
+    # and to the left.
     house = Camera.house()
     {hx, hy} = Camera.at(house, {0, 0}, {1, 0, 0})
     {fx, fy} = Camera.at(house, {0, 0}, {0, 1, 0})
-    assert hx > abs(hy) and fy > abs(fx)
+    assert hx > abs(hy) and fy > 0 and fx < 0
     assert Camera.depth_axis(house) == :y
     assert Camera.arrows(house) == {{1, 0}, {0, 1}}
 
@@ -225,6 +226,6 @@ defmodule DIYWeb.CameraTest do
     assert Camera.round1(2.0) == "2"
     assert Camera.round1(2.25) == "2.3"
     assert Camera.round1(-0.04) == "0"
-    assert Camera.points(Camera.house(), {0, 0}, [{0, 0, 0}, {0, 0, 1}]) == "0,0 0,-10.8"
+    assert Camera.points(Camera.house(), {0, 0}, [{0, 0, 0}, {0, 0, 1}]) == "0,0 0,-10.2"
   end
 end

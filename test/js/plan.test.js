@@ -37,8 +37,10 @@ const axesOf = (yaw, pitch) => {
   ]
 }
 // The axes of the two cameras of the app, as the SVG has them.
-const HOUSE = [0.295921, 0.04514, -0.096151, 0.138927, 0.0, -0.274729]
+const HOUSE = [0.269464, 0.086996, -0.155575, 0.150682, 0.0, -0.257955]
 const VAN = [0.096151, 0.138927, -0.295921, 0.04514, 0.0, -0.274729]
+// The move on the SVG of some inches along x, as a transform.
+const along = (inches) => `translate(${(inches * HOUSE[0]).toFixed(2)} ${(inches * HOUSE[1]).toFixed(2)})`
 const near = (a, b, e = 1e-6) => assert.ok(Math.abs(a - b) < e, `${a} is not near ${b}`)
 // A camera that turns and looks down as the cameras of the app do. It looks
 // down more than a roof slopes (5 in 12, 23 degrees): so it sees the two
@@ -46,7 +48,7 @@ const near = (a, b, e = 1e-6) => assert.ok(Math.abs(a - b) < e, `${a} is not nea
 const cameras = fc.tuple(fc.integer({min: 10, max: 80}), fc.integer({min: 25, max: 80})).map(([y, p]) => axesOf(y, p))
 
 test("the axes of the two cameras", () => {
-  axesOf(72, 28).forEach((n, i) => near(n, HOUSE[i]))
+  axesOf(60, 34).forEach((n, i) => near(n, HOUSE[i]))
   axesOf(18, 28).forEach((n, i) => near(n, VAN[i]))
 })
 
@@ -139,7 +141,7 @@ test("a wall of a room moves", () => {
   assert.deepEqual(resize(plan, "x1", 5, 7), [10, 20, 105, 200])
   assert.deepEqual(resize(plan, "y0", 5, 7), [10, 27, 100, 193])
   assert.deepEqual(resize(plan, "y1", 5, 7), [10, 20, 100, 207])
-  assert.equal(outline([0, 0, 10, 10], [1, 2], HOUSE), "1.0,2.0 4.0,2.5 3.0,3.8 0.0,3.4")
+  assert.equal(outline([0, 0, 10, 10], [1, 2], HOUSE), "1.0,2.0 3.7,2.9 2.1,4.4 -0.6,3.5")
 })
 
 test("a zoom keeps the point under it, between its two limits", () => {
@@ -270,17 +272,24 @@ class El {
 // The page of the plan. It has a kitchen (chosen, with its outline and
 // handles), a living room with a wall, and a roof. It has a fridge in the
 // kitchen, and three labels. Then the buttons.
-function setup({storage = new Map(), chosen = true, width = 400, height = 800, withHint = true} = {}) {
+function setup({storage = new Map(), chosen = true, width = 400, height = 800, withHint = true, start} = {}) {
   const els = []
   const add = (attrs, parent) => {
     const el = new El(attrs, parent)
     els.push(el)
     return el
   }
-  const svg = add({"data-axes": HOUSE.join(" "), "data-arrows": "1 0 0 1", "data-fit": "0 0 200 400", viewBox: "0 0 200 400"})
+  const svg = add({
+    "data-axes": HOUSE.join(" "),
+    "data-arrows": "1 0 0 1",
+    "data-fit": "0 0 200 400",
+    viewBox: "0 0 200 400",
+    ...(start && {"data-start": start}),
+  })
   svg.clientWidth = width
   svg.clientHeight = height
-  const ground = add({id: "plan-ground", "data-box": "0 100 100 50"}, svg)
+  // The box of the layer has all its parts.
+  const ground = add({id: "plan-ground", "data-box": "0 0 150 80"}, svg)
   const kitchenG = add({id: "plan-room-r1"}, ground)
   const kitchen = add({"data-room": "r1", "data-plan": "0 0 100 100", "data-origin": "0 0"}, kitchenG)
   const living = add({"data-room": "r2", "data-plan": "100 0 100 100", "data-origin": "0 0"}, ground)
@@ -412,6 +421,29 @@ test("the view: the box of the house, or the view that the person had", () => {
   assert.equal(wide.svg.style.props["--p-label"], "48.000px")
 })
 
+test("the page starts on its first layer: its house fills the screen, and the other layers hide", () => {
+  // The walls and the slabs of floor 1 (40 by 40) fill the width of the
+  // screen, with a margin. The view stays in the box of the layer (150 by
+  // 80): it is higher than the layer, so it starts at its top.
+  const {svg, hook, kitchenG} = setup({start: "ground"})
+  assert.equal(svg.getAttribute("viewBox"), "98.40 0.00 43.20 86.40")
+  assert.equal(svg.getAttribute("data-dim"), "ground")
+  // A layer with no walls and no slabs (a roof): its box fills the screen.
+  kitchenG.setAttribute("data-box", "0 0 50 100")
+  kitchenG.querySelectorAll = () => []
+  const roof = hook.layerView("room-r1")
+  ;[roof.x, roof.y, roof.w, roof.h].forEach((n, i) => near(n, [-1.25, -2.5, 52.5, 105][i]))
+
+  // The view that the person had wins: no layer hides.
+  const again = setup({start: "ground", storage: new Map([["plan-view:plan", "1 2 30 60"]])})
+  assert.deepEqual(again.hook.view, {x: 1, y: 2, w: 30, h: 60})
+  assert.equal(again.svg.getAttribute("data-dim"), null)
+  // A first layer that is not there: all the house.
+  const gone = setup({start: "f2"})
+  assert.equal(gone.svg.getAttribute("viewBox"), "0.00 0.00 200.00 400.00")
+  assert.equal(gone.svg.getAttribute("data-dim"), null)
+})
+
 test("a drag on an empty place moves the view, and a tap clears the choice", () => {
   const {hook, pointer, pushed, svg, root, zoomIn} = setup()
   // All the house shows: a drag keeps it on the screen.
@@ -445,19 +477,20 @@ test("a tap chooses a room or opens an item; a tap on a handle does nothing", ()
   pointer("pointerdown", 1, 50, 50, living)
   pointer("pointerup", 1, 50, 50)
   // The view zooms in to the room, its wall and its slab: 40 by 40. With a
-  // margin, it is 46 wide: less than a third of the house (66.7). The view
-  // is at the middle of the room, in the house.
-  near(hook.view.w, 200 / 3)
-  near(hook.view.h, 400 / 3)
-  near(hook.view.x, 120 - 100 / 3)
+  // margin, it is 46 wide: less than a third of its layer (150 / 3 = 50),
+  // because the other layers hide. The view is at the middle of the room,
+  // in the layer.
+  near(hook.view.w, 50)
+  near(hook.view.h, 100)
+  near(hook.view.x, 120 - 25)
   near(hook.view.y, 0)
   // A page with no size yet: a square view.
   const none = setup({width: 0, height: 0})
   none.pointer("pointerdown", 1, 50, 50, none.living)
   none.pointer("pointerup", 1, 50, 50)
-  near(none.hook.view.w, 200 / 3)
-  near(none.hook.view.h, 200 / 3)
-  near(none.hook.view.y, 50 - 100 / 3)
+  near(none.hook.view.w, 50)
+  near(none.hook.view.h, 50)
+  near(none.hook.view.y, 50 - 25)
   // A roof has two slopes: the zoom shows the two (100 by 20, with a
   // margin), whatever the slope of the tap.
   const top = setup()
@@ -481,7 +514,7 @@ test("a tap chooses a room or opens an item; a tap on a handle does nothing", ()
     ["select_room", {id: "r2"}],
   ])
   // A tab made the layer of the room stand out: it stays. A tap on a room
-  // of a different layer: no layer stands out.
+  // of a different layer: its layer stands out, and the others hide.
   hook.dim("ground")
   pointer("pointerdown", 1, 50, 50, living)
   pointer("pointerup", 1, 50, 50)
@@ -489,7 +522,7 @@ test("a tap chooses a room or opens an item; a tap on a handle does nothing", ()
   hook.dim("f2")
   pointer("pointerdown", 1, 50, 50, living)
   pointer("pointerup", 1, 50, 50)
-  assert.equal(svg.getAttribute("data-dim"), null)
+  assert.equal(svg.getAttribute("data-dim"), "ground")
 })
 
 test("a finger scrolls the page when the view shows all the house", () => {
@@ -662,8 +695,9 @@ test("a finger on an item, or on the chosen room, moves it: the page does not sc
 test("a view as wide as the house but not as high: the finger moves the view", () => {
   // A wide screen: the tab of the layer gives a view of all the width of
   // the house, but not of all its height.
-  const {hook, pointer, win, root, focus, svg} = setup({chosen: false, width: 1000, height: 600})
-  svg.querySelector("#plan-ground").setAttribute("data-box", "0 100 196 50")
+  const {hook, pointer, win, root, focus, slab, svg} = setup({chosen: false, width: 1000, height: 600})
+  slab.bbox = {x: 0, y: 100, width: 196, height: 50}
+  svg.querySelector("#plan-ground").setAttribute("data-box", "0 0 200 400")
   root.fire("click", {target: focus})
   assert.ok(hook.view.w >= 200 && hook.view.h < 400)
   const y = hook.view.y
@@ -679,7 +713,7 @@ test("an item goes to the room under the center of its space, not under the poin
   // (on the top of the fridge) is on the living room.
   pointer("pointerdown", 1, 100, 100, fridge)
   pointer("pointermove", 1, 100 + 2 * HOUSE[0] * 40, 100 + 2 * HOUSE[1] * 40)
-  assert.equal(fridgeG.getAttribute("transform"), "translate(11.84 1.81)")
+  assert.equal(fridgeG.getAttribute("transform"), along(40))
   assert.ok(fridgeG.classes.has("p-dragging"))
   setUnder([fridge, living])
   pointer("pointerup", 1, 100, 100)
@@ -714,7 +748,7 @@ test("the chosen room moves with its items, and a wall moves with its handle", (
   const {hook, pointer, pushed, kitchen, kitchenG, fridgeG, selection, outlineEl, handles} = setup()
   pointer("pointerdown", 1, 100, 100, kitchen)
   pointer("pointermove", 1, 100 + 2 * HOUSE[0] * 12, 100 + 2 * HOUSE[1] * 12)
-  for (const el of [kitchenG, fridgeG, selection]) assert.equal(el.getAttribute("transform"), "translate(3.55 0.54)")
+  for (const el of [kitchenG, fridgeG, selection]) assert.equal(el.getAttribute("transform"), along(12))
   pointer("pointerup", 1, 100, 100)
   assert.deepEqual(pushed, [["move_room", {id: "r1", dx: 12, dy: 0}]])
   hook.replies.pop()()
@@ -723,7 +757,7 @@ test("the chosen room moves with its items, and a wall moves with its handle", (
   pointer("pointerdown", 1, 100, 100, handles.x1)
   pointer("pointermove", 1, 100 + 2 * HOUSE[0] * 24, 100 + 2 * HOUSE[1] * 24)
   assert.equal(outlineEl.getAttribute("points"), outline([0, 0, 124, 100], [0, 0], HOUSE))
-  assert.equal(handles.x1.getAttribute("transform"), "translate(7.10 1.08)")
+  assert.equal(handles.x1.getAttribute("transform"), along(24))
   pointer("pointerup", 1, 100, 100)
   assert.deepEqual(pushed[1], ["size_room", {id: "r1", edge: "x1", dx: 24, dy: 0}])
   hook.replies.pop()()
@@ -800,18 +834,20 @@ test("Ctrl and the mouse wheel zoom; the wheel alone scrolls the page, and a not
   assert.deepEqual(bare.timers, [])
 })
 
-test("the buttons zoom; the tab of a layer shows the layer, and the other layers are pale", () => {
+test("the buttons zoom; the tab of a layer shows the house of the layer, and the other layers hide", () => {
   const {hook, svg, root, zoomIn, zoomOut, fitButton, focus, other} = setup()
   root.fire("click", {target: zoomIn})
   near(hook.view.w, 200 / 1.5)
   root.fire("click", {target: zoomOut})
   near(hook.view.w, 200)
-  // The layer (100 by 50) fills the width of the screen, with a margin.
+  // The house of the layer (its walls and its slabs: 40 by 40) fills the
+  // width of the screen, with a margin. The view stays in the box of the
+  // layer.
   root.fire("click", {target: focus})
-  assert.equal(svg.getAttribute("viewBox"), "0.00 20.00 105.00 210.00")
+  assert.equal(svg.getAttribute("viewBox"), "98.40 0.00 43.20 86.40")
   assert.equal(svg.getAttribute("data-dim"), "ground")
   root.fire("click", {target: other})
-  assert.equal(svg.getAttribute("viewBox"), "0.00 20.00 105.00 210.00")
+  assert.equal(svg.getAttribute("viewBox"), "98.40 0.00 43.20 86.40")
   root.fire("click", {target: fitButton})
   assert.equal(hook.view.w, 200)
   assert.equal(svg.getAttribute("data-dim"), null)
