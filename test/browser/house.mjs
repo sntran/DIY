@@ -196,6 +196,34 @@ async function van(page, name) {
     .catch(() => assert.fail(`${name}: the fridge moves in the van with a drag`))
   await check(page, `${name} van plan`)
 
+  // A tap on the cab chooses it: the seats and the dash let the tap
+  // through. The cab is fixed.
+  const zoneId = (zone) =>
+    page.evaluate((zone) => [...document.querySelectorAll('#van-list li[id^="zone-"]')]
+      .find((li) => li.querySelector("h3").textContent.trim().startsWith(zone)).id.slice(5), zone)
+  const cab = `polygon[data-room="${await zoneId("Cab")}"]`
+  await page.locator(cab).scrollIntoViewIfNeeded()
+  await page.mouse.click(...Object.values(center(await page.locator(cab).boundingBox())))
+  await page.waitForSelector("#zone-bar:has-text('It stays where it is')")
+  await check(page, `${name} van zone`)
+
+  // The bed: its bar and its sheet.
+  await follow(page, `#choose-${await zoneId("Bed")}`)
+  await page.waitForSelector("#zone-bar:has-text('Bed')")
+  await page.click("#bar-change")
+  await page.waitForSelector("#zone-sheet")
+  await check(page, `${name} van zone sheet`)
+  await page.keyboard.press("Escape")
+  await page.waitForSelector("#zone-sheet", { state: "detached" })
+
+  // The shell has no place on the plan: a tap adds insulation to it.
+  await page.click("#shell-add")
+  await page.waitForSelector("#add-sheet")
+  await page.click("#add-insulation")
+  await page.waitForSelector("#item-sheet:has-text('Insulation')")
+  await page.click("#item-sheet .btn-ghost[aria-label=Close]")
+  await page.waitForSelector('#van-shell a[id^="shell-item-"]')
+
   await page.click('#van-stations button:has-text("Take it in this van")')
   await page.waitForSelector("#van-stations:has-text('in this van')")
   await page.waitForSelector("#van-months")

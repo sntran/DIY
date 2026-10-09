@@ -192,8 +192,9 @@ defmodule DIYWeb.VanPlanLiveTest do
     assert html =~ "p-vinsul-t"
     assert html =~ "p-vpanel-r"
     assert html =~ "p-floor p-wood"
-    # The swivel seat is at the back corner of the cab (x = 0, the right
-    # side of the van): at the place of the seat of the passenger.
+    # The swivel seat is at the back corner of the cab, at x = 0 (the right
+    # side of the van). There, it takes the place of the seat of the
+    # passenger.
     refute has_element?(view, "#plan-fixture-van-seat-passenger")
     assert has_element?(view, "#plan-fixture-van-seat-driver[class=p-fixture]")
   end

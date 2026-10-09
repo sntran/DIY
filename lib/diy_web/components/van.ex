@@ -353,7 +353,7 @@ defmodule DIYWeb.VanPage do
   attr :build, :map, required: true
   attr :van, :map, required: true
 
-  # The shell of the van has no place on the plan: its items (the
+  # The shell of the van has no place on the plan. Its items (the
   # insulation, the walls and the floor) are the materials of the picture.
   # A tap can open them and add one.
   defp shell(assigns) do

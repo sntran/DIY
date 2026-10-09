@@ -132,7 +132,7 @@ defmodule DIYWeb.Icon.Shapes do
     mirror = fn x -> box({x, elem(low, 0) - 0.15, glass_z + 0.05}, {0.16, 0.06, 0.24}, "dark") end
 
     # The faces across the van paint first, then the sides, then the details
-    # on the sides: so a side paints over the hood after a turn. No part of
+    # on the sides. So a side paints over the hood after a turn. No part of
     # the body goes into the bumpers: they paint as parts of their own.
     body =
       [

@@ -187,8 +187,8 @@ defmodule DIYWeb.CutawayTest do
   end
 
   # The pairs of polygons (in the order of the paint) where the first one
-  # is nearer to the eye at a point that both cover: the second one paints
-  # over it. The eye looks along (-1, -1, -1): a larger x + y + z is nearer.
+  # is nearer to the eye at a point that both cover. Then the second one
+  # paints over it. The eye looks along (-1, -1, -1): a larger x + y + z is nearer.
   defp depth_faults(polys) do
     prepared = polys |> Enum.map(&prepare/1) |> Enum.with_index()
 
@@ -244,8 +244,8 @@ defmodule DIYWeb.CutawayTest do
   defp cross({a, b, c}, {x, y, z}), do: {b * z - c * y, c * x - a * z, a * y - b * x}
   defp dot({a, b, c}, {x, y, z}), do: a * x + b * y + c * z
 
-  # The plane of a polygon (a normal and a point), or nil for a polygon that
-  # is not flat or that the eye sees on its edge.
+  # The plane of a polygon: a normal and a point. A polygon that is not flat,
+  # or that the eye sees on its edge, has no plane (nil).
   defp plane([p | rest] = corners) do
     normals =
       for {q, r} <- Enum.zip(rest, tl(rest)),

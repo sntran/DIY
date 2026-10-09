@@ -16,8 +16,8 @@ defmodule DIY.Van do
   The water of a tank weighs 8.34 lb for each gallon (USGS, "Water
   density"). The people sit in the cab, and the gear goes under the bed:
   at the middle of these zones. An item of the shell (the insulation, the
-  walls, the floor) is at the middle of the plan of the van: the cargo
-  area and the cab.
+  walls, the floor) is at the middle of the plan of the van. The plan is
+  the cargo area and the cab.
 
   ## The power budget
 

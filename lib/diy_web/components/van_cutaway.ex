@@ -158,9 +158,9 @@ defmodule DIYWeb.VanCutaway do
       ]
   end
 
-  # The walls of the van. The right side (x = 0, with the opening of the
-  # sliding door) and the doors at the back are cut at the height of a
-  # table. The left side (the side of the driver) is cut near the floor.
+  # The walls of the van. The right side (x = 0) has the opening of the
+  # sliding door. It is cut at the height of a table, as the doors at the
+  # back. The left side (the side of the driver) is cut near the floor.
   # Panels and insulation of the shell show on the walls and in their cut.
   # The wall at the back fills the two corners.
   defp walls(size, t, shell) do
@@ -244,8 +244,8 @@ defmodule DIYWeb.VanCutaway do
     end
   end
 
-  # The front of the cab: the dash, the steering wheel (on the left side,
-  # in front of the driver) and the hood, with its lights and its bumper.
+  # The front of the cab: the dash, and the steering wheel in front of the
+  # driver. Then the hood, with its lights and its bumper.
   defp cab(size, t, front, van) do
     {cw, dash} = {size.cargo_width, size.cargo_length + Layout.cab()}
     hood = max(0.25, Shapes.hood_height(van.params["model"]) - @floor * @m)
