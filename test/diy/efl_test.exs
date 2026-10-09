@@ -271,7 +271,16 @@ defmodule DIY.EFLTest do
   test "the delivery charges of a utility" do
     assert Plan.tdu("Oncor Electric Delivery") == %{name: "Oncor", base: 4.06, cents: 6.8673}
     assert Plan.tdu("CenterPoint Energy") == %{name: "CenterPoint", base: 4.9, cents: 6.5333}
-    assert Plan.tdu("AEP Texas Central") == nil
+
+    assert Plan.tdu("El Paso Electric") == nil
+
+    # An EFL of AEP Texas Central that gives no delivery charges: the
+    # reader takes them from the table.
+    {:ok, %{plan: plan, sources: sources}} =
+      efl(["AEP Texas Central Company", "Average price per kWh 1.0¢ 1.0¢ 1.0¢"])
+
+    assert sources.tdu_from == {:table, "AEP Texas Central"}
+    assert {plan.tdu_base, plan.tdu_cents} == {3.24, 5.6898}
   end
 
   # The lines of all the test EFLs.

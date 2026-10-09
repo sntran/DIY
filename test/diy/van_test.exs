@@ -308,6 +308,21 @@ defmodule DIY.VanTest do
       assert load.(%{map | "items" => [1]}) == {:error, :items}
     end
 
+    test "the items of a van that is not there go away, also with a room of the house with no id" do
+      {build, id, station} = stored()
+      map = build |> Build.to_json() |> Jason.decode!()
+      driveway = room(build, "Driveway")
+      rooms = Enum.map(map["rooms"], &if(&1["id"] == driveway, do: %{&1 | "id" => ""}, else: &1))
+      items = Enum.reject(map["items"], &(&1["id"] == id))
+
+      # The station goes home. The items with no home go away, and the
+      # build loads again the same.
+      {:ok, loaded} = Build.from_json(Jason.encode!(%{map | "rooms" => rooms, "items" => items}))
+      assert van(loaded, station).room == room(build, "Laundry")
+      refute Enum.any?(loaded.items, &(&1.type in ["van_fridge", "van_battery"]))
+      assert Build.from_json(Build.to_json(loaded)) == {:ok, loaded}
+    end
+
     # A change of the van part of a stored build.
     defp change(map, {:drop_zone, i}, zones, _items),
       do: %{map | "rooms" => map["rooms"] -- [Enum.at(zones, i)]}
