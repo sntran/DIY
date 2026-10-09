@@ -175,6 +175,11 @@ defmodule DIYWeb.HomeLiveTest do
     view |> element("#item-#{fridge.id}") |> render_click()
     assert_patch view, ~p"/inside?item=#{fridge.id}"
     html = render(view)
+    # The plan shows the layer of the open item (the hook). An id that is
+    # not an item of the house does not go to the plan.
+    assert html =~ ~s(data-open="#{fridge.id}")
+    refute render_patch(view, ~p"/inside?#{[item: ~s(x"])]}") =~ "data-open"
+    html = render_patch(view, ~p"/inside?item=#{fridge.id}")
     assert html =~ "Energy in one year"
     assert html =~ "kWh in one year"
     assert html =~ "the estimate of your power bill"

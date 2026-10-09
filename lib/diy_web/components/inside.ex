@@ -88,7 +88,12 @@ defmodule DIYWeb.Inside do
           "relative overflow-hidden rounded-box border border-base-300",
           if(@chosen, do: "h-[calc(100dvh-22rem)]", else: "h-[calc(100dvh-17rem)]")
         ]}>
-          <Cutaway.cutaway view={@view} selected={@chosen && @chosen.id} open={@item} />
+          <%!-- Only an item of the house: the hook puts its id in a selector. --%>
+          <Cutaway.cutaway
+            view={@view}
+            selected={@chosen && @chosen.id}
+            open={if match?({:ok, _}, Build.item(@build, @item)), do: @item}
+          />
           <.zoom all="Show all the house" />
         </div>
         <div :if={!@chosen} class="flex justify-end">
