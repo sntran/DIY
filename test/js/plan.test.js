@@ -188,12 +188,14 @@ test("a zoom in to a room: the room fills the screen, and a smaller view stays",
   same(focus(view, {x: 10, y: 10, w: 10, h: 100}, 1, fit), {x: -42.5, y: 2.5, w: 115, h: 115})
   // A small room: the view shows a third of the house at least.
   same(focus(view, {x: 10, y: 10, w: 10, h: 10}, 1, fit), {x: -20, y: -20, w: 70, h: 70})
-  // The view shows all the room in more detail: it stays.
+  // The view shows the room in more detail: it stays (a tap).
   const small = {x: 0, y: 0, w: 50, h: 100}
-  assert.equal(focus(small, {x: 10, y: 10, w: 30, h: 20}, 0.5, fit), small)
-  // A part of the room is out of the view: the view frames the room.
-  same(focus(small, {x: 10, y: 10, w: 100, h: 20}, 0.5, fit), {x: 2.5, y: -95, w: 115, h: 230})
-  same(focus(small, {x: 10, y: 90, w: 30, h: 20}, 0.5, fit), {x: -10, y: 30, w: 70, h: 140})
+  assert.equal(focus(small, {x: 10, y: 10, w: 100, h: 20}, 0.5, fit), small)
+  // A choice in the list or an arrow (all): the view stays when all the
+  // room is in it. Else it frames the room.
+  assert.equal(focus(small, {x: 10, y: 10, w: 30, h: 20}, 0.5, fit, true), small)
+  same(focus(small, {x: 10, y: 10, w: 100, h: 20}, 0.5, fit, true), {x: 2.5, y: -95, w: 115, h: 230})
+  same(focus(small, {x: 10, y: 90, w: 30, h: 20}, 0.5, fit, true), {x: -10, y: 30, w: 70, h: 140})
 })
 
 test("a frame shows a box with a margin, at the middle, on the shape of the screen", () => {
@@ -964,6 +966,29 @@ test("a room that the person chooses in the list shows: its layer comes, and the
   outlineEl.setAttribute("data-outline", "r9")
   hook.updated()
   outlineEl.removeAttribute("data-outline")
+  hook.updated()
+  assert.equal(svg.getAttribute("data-dim"), "ground")
+})
+
+test("a tap on a room does not zoom out: the room is under the finger", () => {
+  const {hook, pointer, living, root, zoomIn} = setup({start: "ground", chosen: false})
+  for (let i = 0; i < 3; i++) root.fire("click", {target: zoomIn})
+  const view = {...hook.view}
+  pointer("pointerdown", 1, 50, 50, living)
+  pointer("pointerup", 1, 50, 50)
+  assert.deepEqual(hook.view, view)
+})
+
+test("the sheet of an item closes after a move to a different layer: the chosen room comes back", () => {
+  // The kitchen is chosen, and its fridge is open.
+  const {hook, svg, fridgeG, upper} = setup({start: "ground", open: "i1"})
+  assert.equal(svg.getAttribute("data-dim"), "ground")
+  // The sheet moves the fridge to a room of floor 2: floor 2 comes.
+  fridgeG.parentNode = upper
+  hook.updated()
+  assert.equal(svg.getAttribute("data-dim"), "f2")
+  // The sheet closes: the kitchen comes back, with floor 1.
+  svg.removeAttribute("data-open")
   hook.updated()
   assert.equal(svg.getAttribute("data-dim"), "ground")
 })

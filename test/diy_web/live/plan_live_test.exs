@@ -71,8 +71,39 @@ defmodule DIYWeb.PlanLiveTest do
     assert has_element?(view, "#room-bar", "Kitchen")
     assert has_element?(view, ~s(#item-sheet a[data-close][href="/inside?room=#{kitchen.id}"]))
 
+    # From the bar, the person adds an item to the room, and then deletes
+    # it. The room stays chosen. In the list, an item also keeps the room.
     view |> element("#bar-add") |> render_click()
     assert has_element?(view, "#add-sheet")
+    view |> element("#add-freezer") |> render_click()
+    freezer = item(view, "freezer")
+    assert_patch view, ~p"/inside?#{[item: freezer.id, room: kitchen.id]}"
+
+    assert has_element?(
+             view,
+             ~s(#item-#{freezer.id}[href="/inside?item=#{freezer.id}&room=#{kitchen.id}"])
+           )
+
+    assert has_element?(
+             view,
+             ~s(#add-#{kitchen.id}[href="/inside?add=#{kitchen.id}&room=#{kitchen.id}"])
+           )
+
+    view |> element("#delete-item") |> render_click()
+    assert_patch view, ~p"/inside?#{[room: kitchen.id]}"
+    assert has_element?(view, "#room-bar", "Kitchen")
+
+    # With no chosen room, a new item and a deleted item give the page of
+    # the rooms.
+    render_patch(view, ~p"/inside?#{[add: kitchen.id]}")
+    view |> element("#add-freezer") |> render_click()
+    freezer = item(view, "freezer")
+    assert_patch view, ~p"/inside?#{[item: freezer.id]}"
+    view |> element("#delete-item") |> render_click()
+    assert_patch view, ~p"/inside"
+
+    render_patch(view, ~p"/inside?#{[room: kitchen.id]}")
+    view |> element("#bar-add") |> render_click()
 
     render_hook(view, "select_room", %{"id" => ""})
     assert_patch view, ~p"/inside"
@@ -301,16 +332,31 @@ defmodule DIYWeb.PlanLiveTest do
   end
 
   property "the arrows visit each room of the house one time, and come back" do
-    check all(floors <- integer(1..3), extra <- integer(0..4)) do
+    check all(
+            floors <- integer(1..3),
+            extra <-
+              list_of(tuple({integer(0..4), member_of([:indoor, :outdoor])}), max_length: 5),
+            max_runs: 40
+          ) do
       {house, rooms, items} =
         House.preset(%{size: 1800, year: 2005, floors: floors, heat: "gas", lot: nil})
 
       {:ok, build} = Build.choose_door(Build.new(), "my_house")
       build = Build.put_house(build, house, rooms, items)
 
+      # More rooms, on random levels. A room outside is around the house.
+      levels = Build.levels(floors)
+
       build =
-        Enum.reduce(1..extra//1, build, fn i, build ->
-          {:ok, build, _id} = Build.add_room(build, "Room #{i}", "f1", :indoor)
+        extra
+        |> Enum.with_index()
+        |> Enum.reduce(build, fn {{level, place}, i}, build ->
+          level =
+            if place == :outdoor,
+              do: "outside",
+              else: Enum.at(levels, rem(level, length(levels) - 1))
+
+          {:ok, build, _id} = Build.add_room(build, "Room #{i}", level, place)
           build
         end)
 

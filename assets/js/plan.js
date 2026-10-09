@@ -179,13 +179,14 @@ export function frame(box, shape, margin = 1.15, least = 0) {
 }
 
 // The view that shows a room: a third of the box of the house at least,
-// so that the person sees where the room is. A view that shows all the
-// room in more detail stays: a tap does not zoom out.
-export function focus(view, box, shape, fit) {
+// so that the person sees where the room is. A view that shows the room in
+// more detail stays: a tap does not zoom out. With `all`, the view stays
+// only when all the room is in it (a choice in the list, or an arrow).
+export function focus(view, box, shape, fit, all = false) {
   const next = frame(box, shape, 1.15, fit.w / 3)
   const inside =
     box.x >= view.x && box.y >= view.y && box.x + box.w <= view.x + view.w && box.y + box.h <= view.y + view.h
-  return next.w >= view.w && inside ? view : next
+  return next.w >= view.w && (inside || !all) ? view : next
 }
 
 // A view that keeps the house (the box fit) on the screen. A view smaller
@@ -359,15 +360,20 @@ export const planHook = {
   // (also from the list or a sheet). In the house, the view zooms in to a
   // new chosen room. So the arrows of the bar of a room go from room to
   // room. When an open item is on a layer that hides, its layer shows.
-  // Only a new choice, or a move to a different layer, moves the view.
+  // Only a new choice, a move to a different layer, or a sheet that closes
+  // moves the view.
   reveal() {
     const outline = this.svg.querySelector("[data-outline]")
     const room = outline && this.surface(outline.getAttribute("data-outline"))
     const open = this.svg.getAttribute("data-open")
     const item = open && this.svg.querySelector(`[data-item="${open}"]`)
     const [chosen, opened] = [placeOf(room), placeOf(item)]
-    if (chosen !== this.chosen && room && this.oneLayer()) this.zoomTo(room)
+    if (chosen !== this.chosen && room && this.oneLayer()) this.zoomTo(room, true)
     else if (opened !== this.opened && item && this.hidden(item)) this.showLayer(layerOf(item))
+    // The sheet of an item closes, and the chosen room is on a layer that
+    // hides because the sheet moved the item. The view goes back to the
+    // room.
+    else if (opened !== this.opened && !item && room && this.hidden(room)) this.zoomTo(room, true)
     this.chosen = chosen
     this.opened = opened
   },
@@ -674,7 +680,7 @@ export const planHook = {
 
   // The view zooms in to a room: all the surfaces of its floor (a roof has
   // three), its items, its walls and its slab. The other layers hide.
-  zoomTo(room) {
+  zoomTo(room, all = false) {
     const layer = layerOf(room)
     const dimmed = this.dimmed()
     if (this.oneLayer()) this.dim(layer)
@@ -686,7 +692,7 @@ export const planHook = {
     const y = Math.min(...boxes.map((b) => b.y))
     const w = Math.max(...boxes.map((b) => b.x + b.width)) - x
     const h = Math.max(...boxes.map((b) => b.y + b.height)) - y
-    this.show(focus(this.view, {x, y, w, h}, this.shape(), this.fit()))
+    this.show(focus(this.view, {x, y, w, h}, this.shape(), this.fit(), all))
   },
 
   // One layer stands out (the tab of a layer): the other layers hide (the

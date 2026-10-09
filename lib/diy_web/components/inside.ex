@@ -86,7 +86,8 @@ defmodule DIYWeb.Inside do
         <%!-- Under the plan: the bar of the chosen room, or the button to add a room. --%>
         <div class={[
           "relative overflow-hidden rounded-box border border-base-300",
-          if(@chosen, do: "h-[calc(100dvh-24rem)]", else: "h-[calc(100dvh-17rem)]")
+          if(@chosen, do: "h-[calc(100dvh-24rem)]", else: "h-[calc(100dvh-17rem)]"),
+          "min-h-48"
         ]}>
           <%!-- Only an item of the house: the hook puts its id in a selector. --%>
           <Cutaway.cutaway
@@ -114,6 +115,7 @@ defmodule DIYWeb.Inside do
           estimate={@estimate}
           price={@price}
           away={@away}
+          chosen={@chosen && @chosen.id}
         />
         <p id="plan-status" class="sr-only" aria-live="polite">{@status}</p>
       </div>
@@ -191,7 +193,7 @@ defmodule DIYWeb.Inside do
         >
           <.icon name="hero-chevron-left" class="size-4" />
         </.link>
-        <div class="grow min-w-0 text-center" aria-live="polite">
+        <div class="grow min-w-0 text-center" aria-live="polite" aria-atomic="true">
           <p class="font-semibold truncate">{@room.name}</p>
           <p class="text-xs opacity-70">
             <span class="whitespace-nowrap">{Build.level_name(@room.level)}</span>
@@ -287,6 +289,7 @@ defmodule DIYWeb.Inside do
   attr :estimate, :map, required: true
   attr :price, :map, required: true
   attr :away, :list, default: []
+  attr :chosen, :string, default: nil, doc: "the chosen room: it stays when an item opens"
 
   # The rooms and their items, as a list: for a screen reader, and for a
   # keyboard (it shows when it has the focus). The arrow keys move an item
@@ -323,7 +326,7 @@ defmodule DIYWeb.Inside do
               </li>
               <li :for={item <- Build.items_in(@build, room.id)}>
                 <.link
-                  patch={~p"/inside?#{[item: item.id]}"}
+                  patch={~p"/inside?#{[item: item.id] ++ if(@chosen, do: [room: @chosen], else: [])}"}
                   id={"item-#{item.id}"}
                   data-nudge={item.id}
                   class="link"
@@ -338,7 +341,7 @@ defmodule DIYWeb.Inside do
               </li>
               <li>
                 <.link
-                  patch={~p"/inside?#{[add: room.id]}"}
+                  patch={~p"/inside?#{[add: room.id] ++ if(@chosen, do: [room: @chosen], else: [])}"}
                   id={"add-#{room.id}"}
                   class="link"
                   aria-label={"Add an item to #{room.name}"}

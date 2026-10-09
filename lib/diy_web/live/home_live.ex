@@ -170,7 +170,7 @@ defmodule DIYWeb.HomeLive do
   def handle_event("add_item", %{"room" => room, "type" => type}, socket) do
     case Build.add_item(socket.assigns.build, room, type) do
       {:ok, build, id} ->
-        {:noreply, socket |> put(build) |> push_patch(to: item_path(build, id))}
+        {:noreply, socket |> put(build) |> push_patch(to: item_path(socket, build, id))}
 
       {:error, _reason} ->
         {:noreply, socket}
@@ -224,7 +224,7 @@ defmodule DIYWeb.HomeLive do
 
     with {:ok, item} <- Build.item(build, id),
          {:ok, build} <- Build.delete_item(build, id) do
-      {:noreply, socket |> put(build) |> push_patch(to: page_of(socket.assigns.build, item))}
+      {:noreply, socket |> put(build) |> push_patch(to: page_of(socket, item))}
     else
       _ -> {:noreply, socket}
     end
@@ -265,11 +265,8 @@ defmodule DIYWeb.HomeLive do
 
   # A tap on an item opens it. In the house, the chosen room stays: the
   # sheet of the item closes back to it.
-  def handle_event("open_item", %{"id" => id}, socket) when is_binary(id) do
-    room = if socket.assigns.live_action == :inside, do: socket.assigns.room
-    params = if room, do: [item: id, room: room], else: [item: id]
-    {:noreply, push_patch(socket, to: plan_path(socket, params))}
-  end
+  def handle_event("open_item", %{"id" => id}, socket) when is_binary(id),
+    do: {:noreply, push_patch(socket, to: plan_path(socket, keep_room(socket, item: id)))}
 
   # An item that the person drops on the plan. x and y are its center on
   # the plan, in inches. The room is the room of that center (the hook).
@@ -687,20 +684,27 @@ defmodule DIYWeb.HomeLive do
   defp flag(build, _id, _flag, _value), do: {:ok, build}
 
   # The page of a new item: the van of a zone, else the rooms.
-  defp item_path(build, id) do
+  defp item_path(socket, build, id) do
     {:ok, item} = Build.item(build, id)
 
     case van_of(build, item) do
-      nil -> ~p"/inside?#{[item: id]}"
+      nil -> ~p"/inside?#{keep_room(socket, item: id)}"
       van -> ~p"/van?#{[id: van, item: id]}"
     end
   end
 
+  # The params of a page of the house, with the chosen room: it stays.
+  defp keep_room(%{assigns: %{live_action: :inside, room: room}}, params) when is_binary(room),
+    do: params ++ [room: room]
+
+  defp keep_room(_socket, params), do: params
+
   # The page of an item that goes: its van, else the rooms.
-  defp page_of(build, item) do
-    case van_of(build, item) do
-      nil -> ~p"/inside"
-      van -> ~p"/van?#{[id: van]}"
+  defp page_of(socket, item) do
+    case {van_of(socket.assigns.build, item), keep_room(socket, [])} do
+      {nil, []} -> ~p"/inside"
+      {nil, params} -> ~p"/inside?#{params}"
+      {van, _params} -> ~p"/van?#{[id: van]}"
     end
   end
 
