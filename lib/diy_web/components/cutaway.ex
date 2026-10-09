@@ -270,7 +270,8 @@ defmodule DIYWeb.Cutaway do
   # (`slope/3`). It is full at the back of the rooms of the layer, and near
   # the floor at their front. A wall between two rooms (the kind `:shared`)
   # is cut at 75 cm. Where it can hide an item of the room behind it, it is
-  # cut near the floor (`hidden/4`). Each other wall is cut near the floor.
+  # cut near the floor (the kind `:shared_low`, `hidden/4`). It stays on
+  # the line between the rooms. Each other wall is cut near the floor.
   # (A high wall between two rooms, or at the near side, can hide a part of
   # a room.)
   defp walls(id, {rooms, all}, items, base, camera) do
@@ -350,7 +351,7 @@ defmodule DIYWeb.Cutaway do
   # its kind: :high, :low, or :shared (a wall of 75 cm between two rooms
   # inside). A part is :high when no room of the layer (`all`, with the
   # yards) is behind it, also on a slant (`reach/3`). A part between two
-  # rooms is :low where it can hide an item (`hidden`).
+  # rooms is :shared_low where it can hide an item (`hidden`).
   defp spans(room, side, {rooms, all}, reach, hidden) do
     others = Enum.reject(rooms, &(&1.id == room.id))
     {line, range} = edge(room.plan, side)
@@ -365,7 +366,7 @@ defmodule DIYWeb.Cutaway do
 
   defp span(a, b, true, true, _behind, hidden) do
     for {p, q, hides?} <- split({a, b}, hidden),
-        do: {p, q, if(hides?, do: :low, else: :shared)}
+        do: {p, q, if(hides?, do: :shared_low, else: :shared)}
   end
 
   defp span(_a, _b, true, false, _behind, _hidden), do: []
@@ -457,13 +458,13 @@ defmodule DIYWeb.Cutaway do
     t = @thick / @m
     # The ends of an outside wall on x go past the corners of the room.
     {a, b} =
-      if side in ~w(x0 x1) and kind != :shared,
+      if side in ~w(x0 x1) and kind not in [:shared, :shared_low],
         do: {if(a == r0, do: a - t, else: a), if(b == r1, do: b + t, else: b)},
         else: {a, b}
 
     near =
       case {side, kind} do
-        {_side, :shared} -> line - t / 2
+        {_side, kind} when kind in [:shared, :shared_low] -> line - t / 2
         {side, _kind} when side in ~w(x0 y0) -> line - t
         _front -> line
       end
@@ -485,7 +486,7 @@ defmodule DIYWeb.Cutaway do
 
     # The face of the wall in its room. A wall between two rooms stands on
     # the line: its face is half its thickness in front of the line.
-    face = if kind == :shared, do: line * @m + @thick / 2, else: line * @m
+    face = if kind in [:shared, :shared_low], do: line * @m + @thick / 2, else: line * @m
 
     trim =
       if max(h0, h1) > @low and side in ~w(x0 y0),

@@ -218,6 +218,14 @@ defmodule DIYWeb.CutawayTest do
 
     assert low > 124
 
+    # The dishwasher at the back: the low part starts at the back corner. It
+    # stays on the line between the two rooms: it does not go past the
+    # corner, as a wall on the outside does.
+    assert [{0, low, 0.25}, {low, 294, 0.75}] =
+             parts.(move.(build, "dishwasher", kitchen, %{x: 120, y: 0}), living, "x0")
+
+    assert low > 24
+
     # The computer of the bedroom against the wall of the bathroom.
     assert [{0, 50, 0.75}, {50, low, 0.25}, {low, 144, 0.75}] =
              parts.(move.(build, "computer", bed, %{x: 50, y: 150}), bath, "y0")
