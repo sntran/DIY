@@ -21,8 +21,8 @@ defmodule DIY.Layout do
 
   The app makes a draft of the plan (`draft/2`). The size of the house
   gives the size of its floors, and the rooms of a floor are in rows. The
-  rooms outside are around the house. The garage is 24 by 24 feet, and the
-  driveway is 24 by 25 feet: a camper van (274 inches long) fits in each.
+  rooms outside are around the house. The garage and the driveway are 24
+  by 25 feet: the longest camper van (290 inches) fits in each.
   The user then moves the rooms and the items.
 
   The rules (`fill/1` keeps them after each change; `specs/Plan.tla`
@@ -235,8 +235,8 @@ defmodule DIY.Layout do
         {{:strips, _layer}, list} -> strips(list, {0, 0, w, d})
         _other -> []
       end) ++
-        column(garages, yard_w, 0, {288, 288}) ++
-        column(drives, yard_w, 288 * length(garages), {288, 300}) ++
+        column(garages, yard_w, 0, {288, 300}) ++
+        column(drives, yard_w, 300 * length(garages), {288, 300}) ++
         strips(yards, {0, d, yard_w, max(300, 90 * yard_rows)})
 
     by_index = Map.new(plans)
@@ -349,8 +349,10 @@ defmodule DIY.Layout do
   def van_draft(van, zones) do
     %{w: w, d: d} = van_box(van)
     cargo = d - @cab
-    bed = min(72, round(cargo * 0.42))
     bay = @min_room
+    # A short van gives the bed less, so that the living area and the
+    # galley keep the smallest size of a zone.
+    bed = Enum.min([72, round(cargo * 0.42), cargo - bay - 2 * @min_room])
     living = div(cargo - bed - bay, 2)
 
     plans = %{

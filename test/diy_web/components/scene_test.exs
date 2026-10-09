@@ -204,8 +204,8 @@ defmodule DIYWeb.SceneTest do
       l = DIY.Catalog.van_size(model).length * 0.0254
 
       # The front of the garage is at y = 7 m, and the lot ends at
-      # y = 14.2 m.
-      assert y >= 7.0 and y + l <= 14.2
+      # y = 14.6 m.
+      assert y >= 7.0 and y + l <= 14.6
     end
   end
 
@@ -393,7 +393,7 @@ defmodule DIYWeb.SceneTest do
     [x, y, w, h] = box(html)
 
     # The four corners of the bottom of the lot.
-    for corner <- [{-3.0, -2.5, -1.2}, {19.0, -2.5, -1.2}, {19.0, 14.2, -1.2}, {-3.0, 14.2, -1.2}] do
+    for corner <- [{-3.0, -2.5, -1.2}, {19.0, -2.5, -1.2}, {19.0, 14.6, -1.2}, {-3.0, 14.6, -1.2}] do
       {sx, sy} = Camera.at(Camera.house(), {0, 0}, corner)
       assert sx >= x and sx <= x + w and sy >= y and sy <= y + h
     end

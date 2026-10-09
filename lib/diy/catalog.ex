@@ -106,6 +106,15 @@ defmodule DIY.Catalog do
   # the weight of each axle of the empty van. 0 for the rating of an axle:
   # the app does not know it.
   @van_models [
+    {"promaster_136", "Ram ProMaster 2500, 136 in, high roof",
+     %{
+       "gvwr" => 8900,
+       "front_gawr" => 4629,
+       "rear_gawr" => 5291,
+       "front_empty" => 2982,
+       "rear_empty" => 1696
+     },
+     "The source is Stellantis, 2026 Ram ProMaster Trailer Towing Charts, row 2L13. It gives the rating (8,900 lb), the ratings of the axles, and the empty weight on each axle (2,982 and 1,696 lb)."},
     {"promaster_159", "Ram ProMaster 2500, 159 in, high roof",
      %{
        "gvwr" => 8900,
@@ -115,6 +124,24 @@ defmodule DIY.Catalog do
        "rear_empty" => 1762
      },
      "The rating (8,900 lb) and the empty weight (4,895 lb): Autopadre, 2025 Tradesman. The ratings of the axles, and 64% of the empty weight on the front axle: Auto123, 2025 ProMaster 2500 with 136 in (reserves of 1,731 and 3,679 lb)."},
+    {"promaster_159_ext", "Ram ProMaster 3500, 159 in extended, high roof",
+     %{
+       "gvwr" => 9350,
+       "front_gawr" => 4629,
+       "rear_gawr" => 5291,
+       "front_empty" => 3131,
+       "rear_empty" => 1834
+     },
+     "The source is Stellantis, 2026 Ram ProMaster Trailer Towing Charts, row 3L17. It gives the rating (9,350 lb), the ratings of the axles, and the empty weight on each axle (3,131 and 1,834 lb)."},
+    {"transit_148_medium", "Ford Transit 250, 148 in, medium roof",
+     %{
+       "gvwr" => 9070,
+       "front_gawr" => 0,
+       "rear_gawr" => 0,
+       "front_empty" => 3063,
+       "rear_empty" => 2193
+     },
+     "The rating (9,070 lb) and the empty weight (5,256 lb, rear wheel drive): Ford, 2025 Transit Technical Specifications. 58% of the empty weight is on the front axle: Cars.com, 2025 Transit-250 148 in medium roof (3,051 and 2,184 lb). The app does not know the ratings of the axles."},
     {"transit_148", "Ford Transit 250, 148 in, high roof",
      %{
        "gvwr" => 9070,
@@ -124,6 +151,24 @@ defmodule DIY.Catalog do
        "rear_empty" => 2398
      },
      "The rating (9,070 lb) and the empty weight (5,330 lb): Autopadre, 2025. The app does not know the ratings of the axles. 55% of the empty weight on the front axle is a guess of the app."},
+    {"transit_148_el", "Ford Transit 250, 148 in extended, high roof",
+     %{
+       "gvwr" => 9070,
+       "front_gawr" => 0,
+       "rear_gawr" => 0,
+       "front_empty" => 3032,
+       "rear_empty" => 2520
+     },
+     "The rating (9,070 lb) and the empty weight (5,552 lb, rear wheel drive): Ford, 2025 Transit Technical Specifications. 55% of the empty weight is on the front axle of the van with all wheel drive (3,135 and 2,605 lb): Cars.com. The app uses this split. It does not know the ratings of the axles."},
+    {"sprinter_144", "Mercedes-Benz Sprinter 2500, 144 in, high roof",
+     %{
+       "gvwr" => 9050,
+       "front_gawr" => 4101,
+       "rear_gawr" => 5359,
+       "front_empty" => 2914,
+       "rear_empty" => 2025
+     },
+     "The rating (9,050 lb) and the ratings of the axles: mbvans.com, 2026 Sprinter Cargo Van with rear wheel drive. The page gives 2,025 and 2,914 lb on the axles, in an order that is not sure. The app puts 2,914 lb on the front axle, as the 170 in extended with all wheel drive (3,274 lb front). The page gives 4,916 lb in all: the two axles give 23 lb more."},
     {"sprinter_170", "Mercedes-Benz Sprinter 2500, 170 in, high roof",
      %{
        "gvwr" => 9050,
@@ -133,6 +178,15 @@ defmodule DIY.Catalog do
        "rear_empty" => 2430
      },
      "The rating (9,050 lb): Autopadre, 2022. The empty weight is 4,993 to 5,743 lb with the options: the app takes 5,400 lb. The app does not know the ratings of the axles. 55% of the empty weight on the front axle is a guess of the app."},
+    {"sprinter_170_ext", "Mercedes-Benz Sprinter 2500, 170 in extended, high roof",
+     %{
+       "gvwr" => 9050,
+       "front_gawr" => 4101,
+       "rear_gawr" => 5359,
+       "front_empty" => 2954,
+       "rear_empty" => 2416
+     },
+     "The rating (9,050 lb) and the ratings of the axles: mbvans.com, 2026 Sprinter Cargo Van with rear wheel drive. The page gives 2,416 and 2,954 lb on the axles, in an order that is not sure. The app puts 2,954 lb on the front axle, as the van with all wheel drive (3,274 lb front). The page gives 5,346 lb in all: the two axles give 24 lb more."},
     {"other", "Another van", %{}, nil}
   ]
 
@@ -144,6 +198,84 @@ defmodule DIY.Catalog do
   #   and the width between the wheel wells.
   # Each model has the source of its size (the page shows it).
   @van_sizes %{
+    "promaster_136" => %{
+      length: 213,
+      width: 80,
+      height: 104,
+      wheelbase: 136,
+      front: 38,
+      cargo_length: 123,
+      cargo_width: 76,
+      cargo_height: 76,
+      wells: 56,
+      source:
+        "The length (213.2 in), the width with no mirrors (80.3 in) and the height (103.6 in): iSeeCars, 2025 ProMaster. The cargo area and the front axle: Cars.com, 2025 ProMaster 2500 136 in high roof. The cargo area is 123 in long and 76 in high, with 56 in between the wheel wells. The front axle is 38 in from the front. The width of the cargo area (75.6 in) is the width of the other ProMaster vans: Ram Canada."
+    },
+    "promaster_159_ext" => %{
+      length: 251,
+      width: 80,
+      height: 103,
+      wheelbase: 159,
+      front: 38,
+      cargo_length: 160,
+      cargo_width: 76,
+      cargo_height: 76,
+      wells: 56,
+      source:
+        "The source of the size is Ram Canada, 2026 ProMaster. The van is 250.6 in long, 80.3 in wide with no mirrors, and 102.5 in high. The cargo area is 160.2 by 75.6 in, 76 in high, with 55.8 in between the wheel wells. The front axle (38 in from the front): Cars.com, 2025 ProMaster 3500 159 in extended high roof."
+    },
+    "transit_148_medium" => %{
+      length: 236,
+      width: 81,
+      height: 101,
+      wheelbase: 148,
+      front: 40,
+      cargo_length: 144,
+      cargo_width: 70,
+      cargo_height: 72,
+      wells: 55,
+      source:
+        "The source of the size is Ford, 2025 Transit Technical Specifications. The van is 235.5 in long, 81.3 in wide with no mirrors, and 101.3 in high. The front axle is 40.3 in from the front. The cargo area is 143.7 in long and 72 in high, with 54.8 in between the wheel wells. The width of the cargo area (70.2 in) is the width of the high roof: Ford Middle East."
+    },
+    "transit_148_el" => %{
+      length: 264,
+      width: 81,
+      height: 110,
+      wheelbase: 148,
+      front: 40,
+      cargo_length: 172,
+      cargo_width: 70,
+      cargo_height: 82,
+      wells: 55,
+      source:
+        "The source of the size is Ford, 2025 Transit Technical Specifications. The van is 263.9 in long, 81.3 in wide with no mirrors, and 110.4 in high. The front axle is 40.3 in from the front. The cargo area is 172.2 in long and 81.5 in high, with 54.8 in between the wheel wells. The width of the cargo area (70.2 in) is the width of the high roof: Ford Middle East."
+    },
+    "sprinter_144" => %{
+      length: 234,
+      width: 80,
+      height: 108,
+      wheelbase: 144,
+      front: 40,
+      cargo_length: 133,
+      cargo_width: 70,
+      cargo_height: 79,
+      wells: 53,
+      source:
+        "The source of the size is Mercedes-Benz USA, the drawing for upfitters of the 2500 cargo van 144 in high roof. The van is 234 in long, 80 in wide with no mirrors, and 107.5 in high with no load. The front axle is 40 in from the front. The cargo area is 133 by 70 in, 79 in high, with 53 in between the wheel wells."
+    },
+    "sprinter_170_ext" => %{
+      length: 290,
+      width: 80,
+      height: 107,
+      wheelbase: 170,
+      front: 40,
+      cargo_length: 189,
+      cargo_width: 70,
+      cargo_height: 79,
+      wells: 53,
+      source:
+        "The source of the size is Mercedes-Benz USA, the drawing for upfitters of the 2500 cargo van 170 in extended high roof. The van is 290 in long, 79.5 in wide with no mirrors, and 107 in high. The front axle is 40.2 in from the front. The cargo area is 189.4 by 70.4 in, 79.1 in high, with 53.1 in between the wheel wells."
+    },
     "promaster_159" => %{
       length: 236,
       width: 80,

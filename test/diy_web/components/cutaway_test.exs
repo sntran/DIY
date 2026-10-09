@@ -256,9 +256,11 @@ defmodule DIYWeb.CutawayTest do
     assert classes.("ground-#{kitchen}-y0-0") ==
              ~w(p-wall-r p-wall-l p-wall-t p-baseboard p-frame p-pane p-pane p-frame)
 
-    # A low wall and a wall on a slope have no trim.
+    # A low wall has no trim. A wall on a slope has no window. The garage
+    # is deeper than the house: so the front of the slope is over a low
+    # wall, and the wall has its baseboard.
     assert classes.("ground-#{kitchen}-y1-0") == ~w(p-wall-r p-wall-l p-wall-t)
-    assert classes.("ground-#{kitchen}-x0-0") == ~w(p-wall-r p-wall-l p-wall-t)
+    assert classes.("ground-#{kitchen}-x0-0") == ~w(p-wall-r p-wall-l p-wall-t p-baseboard)
 
     # A short high wall has its baseboard, but no window.
     small = %{kitchen_room(build) | plan: %{kitchen_room(build).plan | w: 40}}

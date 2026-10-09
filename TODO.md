@@ -60,7 +60,8 @@ The owner decides about each item.
 - The place of each zone of a van, from the user (today a typical
   layout).
 - The sun of the place of a trip, in place of the sun at the house.
-- The axles of the Transit and of the Sprinter in the models of vans.
+- The axles of the Transit models, and of the Sprinter of 170 in, in the
+  models of vans.
 - Two sets of solar panels on the same side of the roof: a check of
   their sum against the roof. And a roof that the user adds (a porch):
   today it gets the number of the main roof.
@@ -83,7 +84,5 @@ the next pull requests.
 - "Am I on a good plan?" The app does not rank plans, and the lesson
   comes before the worksheet. A person with little time may want the
   worksheet first.
-- More models of each van: other roofs and lengths (for example a Transit
-  with a medium roof).
 - A medium house of 2 floors gets 2 bedrooms. Many such houses have 3.
 - A finger that scrolls the page over the plan has no momentum.

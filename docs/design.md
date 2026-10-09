@@ -892,12 +892,37 @@ The power budget, for each month:
   limit. The page names the month with the fewest days.
 
 The models of vans give typical numbers (`DIY.Catalog.van_models/0`), and
-the page shows their sources: the GVWR and the empty weight from
-Autopadre, and the rating of each axle of the ProMaster from Auto123. The
-app does not know the axles of the other models, and the split of their
-empty weight is a guess: the page says so. A new model gives its numbers.
-The numbers are typical until the user changes a number of the label or
-says that they are correct.
+the page shows their sources. There are 9 models: 3 lengths or roofs of
+each make.
+
+- Ram ProMaster: 136 in and 159 in with a high roof, and 159 in extended
+  (3500). For the 136 in and the 159 in extended, the source is the
+  towing charts of Stellantis (2026). They give the rating, the rating of
+  each axle and the empty weight on each axle. For the 159 in, Autopadre
+  gives the rating and the empty weight, and Auto123 gives the axles.
+- Ford Transit: 148 in with a medium roof or a high roof, and 148 in
+  extended with a high roof. For the medium roof and the extended van,
+  the technical specifications of Ford (2025) give the rating, the empty
+  weight and the size. Cars.com gives the split of the empty weight. For
+  the high roof, Autopadre gives the rating and the empty weight. The
+  split of the high roof is a guess of the app. The app does not know
+  the axles of a Transit.
+- Mercedes-Benz Sprinter: 144 in, 170 in, and 170 in extended, with a
+  high roof. For the 144 in and the 170 in extended, the site mbvans.com
+  (2026) gives the rating and the axles. The drawings for upfitters give
+  their size. For the 170 in, Autopadre gives the rating, and the split
+  is a guess of the app.
+- The site mbvans.com gives the empty weight of each axle of a Sprinter
+  with rear wheel drive in an order that is not sure. Its van with all
+  wheel drive has more weight on the front axle, as a van with its engine
+  at the front. So the app puts the larger number on the front axle, and
+  the page says so.
+
+A new model gives its numbers. The numbers are typical until the user
+changes a number of the label or says that they are correct. A short van
+gives the bed less of its draft, so that each zone keeps its smallest
+size (24 in). In the picture of the house, the drive is 7.6 m long from
+the garage to the street. So the longest van (290 in) fits in it.
 
 ### The safety notes
 
@@ -1058,8 +1083,9 @@ It gets one of three steps between the light and the shade (`-m1`,
 - The van shows the weight on each axle, at the wheels of that axle. A
   weight is red when it is over the rating of the axle. The van also
   shows the Wh of its batteries and the watts of its panels.
-- A van has the shape of its model (`DIYWeb.Icon.VanShapes`): the Ford
-  Transit, the Mercedes-Benz Sprinter or the Ram ProMaster. Its length,
+- A van has the shape of its make (`DIYWeb.Icon.VanShapes`): the Ford
+  Transit, the Mercedes-Benz Sprinter or the Ram ProMaster. A medium roof
+  rises less behind the windshield. Its length,
   its width, its height and its axles come from `DIY.Catalog.van_size/1`.
   The side profile, the grille and the lights follow photos of each
   model, for the picture only:
@@ -1167,9 +1193,9 @@ its turn. A length is in inches.
 - The draft. A new house gets a plan from its size: a floor of 3 by 2
   with the area of one floor. The rooms of a floor are in rows, and a
   living room gets more space than a bathroom. The garage is on the right
-  of the house (24 by 24 feet). The driveway is in front of the garage
-  (24 by 25 feet). A camper van fits in each. The yard is in front
-  of the house. The first items of a room stand along its back walls. A
+  of the house (24 by 25 feet). The driveway is in front of the garage
+  (24 by 25 feet). The longest camper van (290 in) fits in each. The
+  yard is in front of the house. The first items of a room stand along its back walls. A
   build of an older version gets the draft when it loads.
 - The person changes the plan. A drag moves an item, also to a different
   room. A tap opens an item. A tap on a room, on one of its walls or on

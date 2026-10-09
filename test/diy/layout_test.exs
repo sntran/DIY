@@ -14,6 +14,40 @@ defmodule DIY.LayoutTest do
 
   defp room(build, name), do: Enum.find(build.rooms, &(&1.name == name))
 
+  test "the draft of each model of van: each zone has its smallest size or more, in the van" do
+    for {model, _name, _numbers, _source} <- DIY.Catalog.van_models() do
+      van = %{params: %{"model" => model}}
+      zones = Enum.map([:bed, :bay, :living, :galley, :cab, :van_roof], &%{place: &1})
+      plans = Layout.van_draft(van, zones)
+      box = Layout.van_box(van)
+
+      for plan <- plans do
+        assert Layout.valid_plan?(plan) and Layout.inside?(plan, box), model
+      end
+    end
+
+    # The short ProMaster (123 in of cargo): the bed gets less.
+    [bed, _bay, living, galley | _] =
+      Layout.van_draft(
+        %{params: %{"model" => "promaster_136"}},
+        Enum.map([:bed, :bay, :living, :galley], &%{place: &1})
+      )
+
+    assert {bed.d, living.d, galley.d} == {51, 24, 24}
+  end
+
+  test "each model of van fits in the garage and in the driveway of the draft" do
+    for name <- ["Garage", "Driveway"], {model, _, _, _} <- DIY.Catalog.van_models() do
+      build = house()
+      room = room(build, name)
+      {:ok, build, id} = Build.add_item(build, room.id, "camper_van")
+      {:ok, build} = Build.update_item(build, id, %{"model" => model})
+      {:ok, van} = Build.item(build, id)
+      {w, d} = Layout.extent(van)
+      assert van.at.x + w <= room.plan.w and van.at.y + d <= room.plan.d, "#{model} in #{name}"
+    end
+  end
+
   test "the floor of a house is a rectangle of 3 by 2 with the area of a floor" do
     assert Layout.footprint(@house) == {438, 294}
     assert Layout.footprint(%{@house | floors: 1}) == {624, 414}
@@ -34,8 +68,8 @@ defmodule DIY.LayoutTest do
 
     # The garage is on the right, the driveway in front of it, and the
     # yard in front of the house.
-    assert plan.("Garage") == %{x: 438, y: 0, w: 288, d: 288}
-    assert plan.("Driveway") == %{x: 438, y: 288, w: 288, d: 300}
+    assert plan.("Garage") == %{x: 438, y: 0, w: 288, d: 300}
+    assert plan.("Driveway") == %{x: 438, y: 300, w: 288, d: 300}
     assert plan.("Backyard") == %{x: 0, y: 294, w: 438, d: 300}
 
     # Each item is in its room: the first items of a room are along its
