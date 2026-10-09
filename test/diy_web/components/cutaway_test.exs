@@ -299,6 +299,16 @@ defmodule DIYWeb.CutawayTest do
     refute Enum.any?(polys.("Backyard"), &(elem(&1, 1) == "p-tex p-glow"))
     assert css =~ ".p-glow { fill: url(#p-glow-fill);"
 
+    # The loops of the items that run are only in the house, and only for
+    # an item that is not planned. They stop when the person asks for less
+    # motion.
+    [_, loops] = Regex.run(~r/@media \(prefers-reduced-motion: no-preference\) \{(.*?)\n\}/s, css)
+
+    for part <- ~w(i-flame i-led i-hot) do
+      assert loops =~ ".cutaway-house .p-item:not(.p-planned) .#{part} { animation:"
+      refute String.replace(css, loops, "") =~ ".#{part} { animation:"
+    end
+
     # The two slopes of the roof have their shingles.
     assert length(Regex.scan(~r/class="p-tex p-tex-roof"/, html)) == 2
 

@@ -1389,6 +1389,11 @@ its turn. A length is in inches.
     in the picture.
   - At night (the dark mode), the colors are darker, and the floor of each
     room inside has the warm light of a lamp (`p-glow`).
+  - The items that run have small, slow loops. The flame of a furnace
+    flickers, a small light (an LED) blinks, and the coils of heat strips
+    and of a space heater glow. A planned item does not run: it has no
+    loop. With "reduce motion" in the
+    settings of the device, no part moves (WCAG 2.2, 2.3.3).
   - The furniture of a room (`DIYWeb.Decor`), as in the drawn picture. A
     word in the name of a room gives its pieces, in capital letters or
     not:
