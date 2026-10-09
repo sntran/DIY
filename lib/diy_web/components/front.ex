@@ -5,7 +5,7 @@ defmodule DIYWeb.Front do
   """
   use DIYWeb, :html
 
-  alias DIY.Zip
+  alias DIY.{Van, Zip}
   alias DIYWeb.{Format, Scene}
 
   attr :build, :map, required: true
@@ -43,10 +43,12 @@ defmodule DIYWeb.Front do
 
       <.real build={@build} price={@price} />
 
+      <.van build={@build} />
+
       <.market build={@build} market={@market} place={@place} />
 
       <.link patch={~p"/inside"} id="go-in" class="btn btn-primary btn-lg w-full">
-        <.icon name="hero-arrow-right-end-on-rectangle" class="size-6" /> Go in
+        <.icon name="hero-arrow-right-end-on-rectangle" class="size-6" /> See the rooms and the items
       </.link>
     </section>
     """
@@ -62,7 +64,7 @@ defmodule DIYWeb.Front do
       patch={~p"/inside"}
       id="house-picture"
       class="block overflow-hidden rounded-box"
-      aria-label={"Go in. The picture: #{Scene.label(@scene)}, and you in front of the door."}
+      aria-label={"See the rooms. The picture: #{Scene.label(@scene)}, and you in front of the door."}
     >
       <Scene.house id="front" parts={@scene} />
     </.link>
@@ -86,7 +88,7 @@ defmodule DIYWeb.Front do
         <% :ac in @estimate.missing -> %>
           <p class="font-semibold">Add an AC to see the estimate.</p>
           <p class="text-sm opacity-80">The cooling is the largest part of a bill in a hot place.</p>
-          <.link patch={~p"/inside"} class="btn btn-sm">Go in and add an AC</.link>
+          <.link patch={~p"/inside"} class="btn btn-sm">Add an AC in the rooms</.link>
         <% not @estimate.ready -> %>
           <p class="opacity-70">The page gets the weather history of your ZIP code from NASA.</p>
         <% true -> %>
@@ -128,7 +130,30 @@ defmodule DIYWeb.Front do
       )})
     </p>
     <DIYWeb.Front.chart bill={@bill} />
+    <form
+      :if={@price.kind != :user}
+      id="my-bill"
+      phx-submit="my_bill"
+      class="rounded-box bg-base-200 p-3 space-y-2"
+    >
+      <p class="text-sm">
+        <span class="font-semibold">Is this near your bill?</span>
+        The app uses a typical price. Your last bill gives the price of your plan.
+      </p>
+      <div class="flex flex-wrap items-end gap-2">
+        <label class="text-sm">
+          The total of the bill ($)
+          <input name="dollars" inputmode="decimal" class="input input-sm w-28 block" />
+        </label>
+        <label class="text-sm">
+          The kWh of the bill
+          <input name="kwh" inputmode="numeric" class="input input-sm w-28 block" />
+        </label>
+        <button class="btn btn-sm">Use the price of my bill</button>
+      </div>
+    </form>
     <p class="text-xs opacity-80">
+      A kWh (a kilowatt-hour) is 1,000 watts for one hour. The bill counts your use in kWh.
       At {Format.cents(@cents)} for each kWh: {@price.source}.{if @power.night_cents,
         do:
           " At night (#{@power.night_from}:00 to #{@power.night_to}:00): #{Format.cents(@power.night_cents)}."}{if @bill.export >
@@ -261,13 +286,53 @@ defmodule DIYWeb.Front do
           </p>
         <% true -> %>
           <p class="text-sm">
-            A next small step: add your smart meter (it is outside, on a wall), and open its file. The app then shows your real usage.
+            A next small step: see the real use of your house. Your smart meter (outside, on a wall) sends its use to your utility. {meter_site(
+              @build
+            )} Add the meter here, and open the file in it.
             <.link :if={@room} patch={~p"/inside?#{[add: @room.id]}"} class="link">Add the meter</.link>
           </p>
       <% end %>
     </div>
     """
   end
+
+  attr :build, :map, required: true
+
+  # A camper van goes in the driveway, else in a different room outside.
+  # With no van yet, the page tells the person.
+  defp van(assigns) do
+    outside = Enum.filter(assigns.build.rooms, &(&1.place == :outdoor))
+    room = Enum.find(outside, &(&1.name =~ ~r/driveway/i)) || List.first(outside)
+    assigns = assign(assigns, room: room, none: Van.vans(assigns.build) == [])
+
+    ~H"""
+    <div :if={@room && @none} id="van-card" class="card card-border bg-base-100 p-4 space-y-2">
+      <p class="text-sm">
+        <span class="font-semibold">A camper van?</span>
+        It goes in the {String.downcase(@room.name)}. The app then plans its weight, its power and its trips off the grid.
+      </p>
+      <button
+        type="button"
+        id="add-van"
+        phx-click="add_item"
+        phx-value-room={@room.id}
+        phx-value-type="camper_van"
+        class="btn btn-sm"
+      >
+        <.icon name="hero-truck" class="size-4" /> Add a camper van
+      </button>
+    </div>
+    """
+  end
+
+  # The site that gives the file of the meter: Smart Meter Texas in an area
+  # with retail choice, else the site of the utility.
+  defp meter_site(%{market: %{choice: true}}),
+    do: "The site smartmetertexas.com gives the file of this use."
+
+  defp meter_site(_build),
+    do:
+      "The site of your utility gives the file of this use (\"Green Button\" or \"Download My Data\")."
 
   @doc """
   The kWh of an average month from the meter: one year divided by 12, or
@@ -292,8 +357,8 @@ defmodule DIYWeb.Front do
       <%= cond do %>
         <% @build.market && @build.market.choice -> %>
           <p>
-            Your area has retail choice: you choose a retail plan, and {@build.market.utility ||
-              "a utility"} delivers the power.
+            Your area has retail choice: you choose the company that sells your power (a retail plan), and {@build.market.utility ||
+              "a utility"} delivers the power on its wires. The delivery charges are the charges of the utility for its wires. Power to Choose (powertochoose.org) is the site of Texas for the plans.
           </p>
         <% @build.market -> %>
           <p>

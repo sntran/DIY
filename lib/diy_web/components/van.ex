@@ -106,7 +106,7 @@ defmodule DIYWeb.VanPage do
           status={@status}
         />
         <.weight weight={@weight} />
-        <.power power={@power} />
+        <.power power={@power} hours={@van.params["drive_hours"]} />
         <.notes warnings={Van.warnings(@build, @van)} />
         <.stations build={@build} van={@van} />
 
@@ -208,6 +208,7 @@ defmodule DIYWeb.VanPage do
   end
 
   attr :power, :map, default: nil
+  attr :hours, :any, default: 0, doc: "the hours that the person drives in one day"
 
   # The power budget: the days off the grid in each month.
   defp power(assigns) do
@@ -223,6 +224,13 @@ defmodule DIYWeb.VanPage do
             @power.months
           )}
         </p>
+        <p
+          :if={@hours > 0 and hd(@power.months).drive == 0}
+          id="van-no-engine"
+          class="text-sm"
+        >
+          You drive {Format.value(@hours)} h in one day, but the engine gives no power: the van has no alternator charger (DC-DC). Add one in the cab or in the electrical bay.
+        </p>
         <div class="overflow-x-auto" tabindex="0" role="region" aria-label="The power of each month">
           <table class="table table-xs" id="van-months">
             <thead>
@@ -231,12 +239,12 @@ defmodule DIYWeb.VanPage do
                 <th class="text-right">Use</th>
                 <th class="text-right">Sun</th>
                 <th class="text-right">Engine</th>
-                <th class="text-right">Days off the grid</th>
+                <th class="text-right">Days off grid</th>
               </tr>
             </thead>
             <tbody>
               <tr :for={m <- @power.months}>
-                <td>{m.name}</td>
+                <td>{String.slice(m.name, 0, 3)}</td>
                 <td class="text-right">{Format.int(m.use)}</td>
                 <td class="text-right">{Format.int(m.sun)}</td>
                 <td class="text-right">{Format.int(m.drive)}</td>
@@ -258,11 +266,16 @@ defmodule DIYWeb.VanPage do
   defp days_text(months) do
     if Enum.all?(months, &(&1.days == :unlimited)),
       do: "The sun and the engine give more than the van uses: no limit off the grid.",
-      else: fewest(Enum.min_by(months, &if(&1.days == :unlimited, do: :infinity, else: &1.days)))
+      else: fewest(months)
   end
 
-  defp fewest(month),
-    do: "Off the grid: #{days(month.days)} in #{month.name}, the month with the fewest days."
+  defp fewest(months) do
+    low = Enum.min_by(months, &if(&1.days == :unlimited, do: :infinity, else: &1.days))
+
+    if Enum.all?(months, &(&1.days == low.days)),
+      do: "Off the grid: #{days(low.days)} in each month.",
+      else: "Off the grid: #{days(low.days)} in #{low.name}. No month gives fewer days."
+  end
 
   defp left(%{payload: payload, load: load}) when payload >= load,
     do: "#{lb(payload - load)} is left."
@@ -403,6 +416,11 @@ defmodule DIYWeb.VanPage do
   # The cab and the roof of a van do not move (`DIY.Build.move_room/4`).
   defp movable?(zone), do: zone.place not in [:cab, :van_roof]
 
+  # A zone with a name that a person may not know: what it is.
+  defp zone_note(:galley), do: "The kitchen of the van · "
+  defp zone_note(:bay), do: "The batteries and the chargers · "
+  defp zone_note(_place), do: nil
+
   attr :van, :map, required: true
   attr :zone, :map, required: true
   attr :build, :map, required: true
@@ -415,8 +433,11 @@ defmodule DIYWeb.VanPage do
         <div class="grow min-w-0">
           <p class="font-semibold truncate">{@zone.name}</p>
           <p class="text-xs opacity-70">
-            {Inside.feet(@zone.plan.w)} by {Inside.feet(@zone.plan.d)}{if not movable?(@zone),
-              do: ". It stays where it is."}
+            {zone_note(@zone.place)}{Inside.feet(@zone.plan.w)} by {Inside.feet(@zone.plan.d)}{if not movable?(
+                                                                                                    @zone
+                                                                                                  ),
+                                                                                                  do:
+                                                                                                    ". It stays where it is."}
           </p>
         </div>
         <.link
@@ -636,7 +657,12 @@ defmodule DIYWeb.VanPage do
             do: "These numbers are typical of the model. Check them on the label in the door frame.",
             else: "These numbers are a guess. Check them on the label."}
         </span>
-        <button type="button" phx-click="check_item" phx-value-id={@item.id} class="btn btn-xs">Correct</button>
+        <button
+          type="button"
+          phx-click="check_item"
+          phx-value-id={@item.id}
+          class="btn btn-xs shrink-0 whitespace-nowrap"
+        >They are right</button>
       </div>
 
       <form id="item-form" phx-change="item" phx-submit="item" class="space-y-3">

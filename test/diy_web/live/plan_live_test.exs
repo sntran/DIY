@@ -189,7 +189,7 @@ defmodule DIYWeb.PlanLiveTest do
     view = open(conn, ~p"/inside", house())
     tv = item(view, "tv")
     render_patch(view, ~p"/inside?#{[item: tv.id]}")
-    assert has_element?(view, "#item-place", "The typical size of this kind")
+    assert has_element?(view, "#item-place", "These are the typical sizes of this kind of item")
     refute has_element?(view, "#typical-size")
 
     view |> element("#turn-item") |> render_click()
@@ -233,7 +233,7 @@ defmodule DIYWeb.PlanLiveTest do
     render_click(view, "add_item", %{"room" => roof.id, "type" => "solar_panels"})
     panels = item(view, "solar_panels")
     render_patch(view, ~p"/inside?#{[item: panels.id]}")
-    assert has_element?(view, "#item-place", "The watts give the size of the array")
+    assert has_element?(view, "#item-place", "The watts give the size of the panels on the roof")
     refute has_element?(view, "#size-form")
   end
 

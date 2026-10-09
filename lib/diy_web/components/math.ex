@@ -92,7 +92,10 @@ defmodule DIYWeb.Math do
           <li :for={item <- by_size(@build.items, @estimate)} class="flex items-center gap-2">
             <Icon.item type={item.type} class="size-7" />
             <span>
-              <.link patch={~p"/inside?#{[item: item.id]}"} class="link">{Catalog.name(item)}</.link>: {Format.kwh(
+              <.link patch={~p"/inside?#{[item: item.id]}"} class="link">{Catalog.name(item)}{room_of(
+                  item,
+                  @build
+                )}</.link>: {Format.kwh(
                 @estimate.items[item.id].year
               )} in one year <span :if={item.typical} class="opacity-60">(typical)</span>
             </span>
@@ -280,4 +283,11 @@ defmodule DIYWeb.Math do
   defp percent(kwh, total), do: "#{round(kwh / total * 100)}%"
 
   defp by_size(items, estimate), do: Enum.sort_by(items, &(-estimate.items[&1.id].year))
+
+  # Two items with the same name: each one has the name of its room.
+  defp room_of(item, build) do
+    same = Enum.count(build.items, &(Catalog.name(&1) == Catalog.name(item)))
+    room = Enum.find(build.rooms, &(&1.id == item.room))
+    if same > 1 and room, do: " (#{room.name})"
+  end
 end

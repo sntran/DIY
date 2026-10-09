@@ -54,8 +54,15 @@ defmodule DIY.Catalog.Param do
   # A power that an item uses some minutes in one day.
   def minutes(default), do: int("minutes", "Minutes in one day", "min", default, 0, 1440)
 
-  def choice(key, label, values, default),
-    do: %{key: key, label: label, unit: nil, type: {:choice, values}, default: default, note: nil}
+  def choice(key, label, values, default, note \\ nil),
+    do: %{
+      key: key,
+      label: label,
+      unit: nil,
+      type: {:choice, values},
+      default: default,
+      note: note
+    }
 
   def seasons, do: @seasons
 end
@@ -194,7 +201,7 @@ defmodule DIY.Catalog do
           3.0,
           1.0,
           6.0,
-          "The model number on the outside unit has the size: 36 is 3 tons (36,000 BTU an hour)."
+          "A ton is a size of cooling, not a weight. The model number on the outside unit has the size: 36 is 3 tons (36,000 BTU an hour)."
         ),
         float(
           "seer2",
@@ -203,7 +210,7 @@ defmodule DIY.Catalog do
           13.4,
           8.0,
           30.0,
-          "The yellow EnergyGuide label gives the SEER2. An old unit is near 9 to 11."
+          "The efficiency of the cooling: a unit with a higher number uses less power. The yellow EnergyGuide label gives the SEER2. An old unit is near 9 to 11."
         ),
         %{
           key: "heat_pump",
@@ -220,7 +227,7 @@ defmodule DIY.Catalog do
           7.5,
           5.0,
           14.0,
-          "Only for a heat pump. The EnergyGuide label gives the HSPF2."
+          "The efficiency of the heat: a unit with a higher number uses less power. The EnergyGuide label gives the HSPF2."
         )
       ]
     },
@@ -522,7 +529,8 @@ defmodule DIY.Catalog do
             {"plug", "Items that plug into it"},
             {"panel", "Circuits of the house, through an inlet"}
           ],
-          "plug"
+          "plug",
+          "An inlet is a connector for a station on the wall of the house. It is not an outlet: an electrician installs it."
         ),
         int(
           "cost",
@@ -660,7 +668,7 @@ defmodule DIY.Catalog do
           8900,
           2000,
           30000,
-          "The label in the door frame of the driver gives it."
+          "The most that the van can weigh, with all its load (the gross vehicle weight rating). The label in the door frame of the driver gives it."
         ),
         int(
           "front_gawr",
@@ -669,7 +677,7 @@ defmodule DIY.Catalog do
           4629,
           0,
           20000,
-          "The same label. 0: the app does not know it."
+          "The most that this axle can carry (the gross axle weight rating). The same label gives it. 0: the app does not know it."
         ),
         int(
           "rear_gawr",
@@ -678,7 +686,7 @@ defmodule DIY.Catalog do
           5291,
           0,
           20000,
-          "The same label. 0: the app does not know it."
+          "The most that this axle can carry. The same label gives it. 0: the app does not know it."
         ),
         int(
           "front_empty",
@@ -739,7 +747,7 @@ defmodule DIY.Catalog do
           400,
           0,
           5000,
-          "The label gives Ah in one day at 12 V: 30 Ah is near 360 Wh."
+          "The label gives the Ah (amp hours) in one day at 12 V: 30 Ah is near 360 Wh."
         ),
         weight(45)
       ]
@@ -913,7 +921,7 @@ defmodule DIY.Catalog do
           200,
           1,
           5000,
-          "The label of each battery gives it. Add the Ah of the batteries that are in parallel."
+          "The label of each battery gives its Ah (amp hours). Add the Ah of the batteries that are in parallel."
         ),
         choice("volts", "Voltage", [{"12", "12 V"}, {"24", "24 V"}, {"48", "48 V"}], "12"),
         choice(

@@ -279,6 +279,8 @@ async function build(context, name) {
   await page.click("label[for=age-2000s]")
   await page.click("label[for=floors-2]")
   await page.click("label[for=heat-gas]")
+  // The chosen buttons: their words must stay clear.
+  await check(page, `${name} preset chosen`)
   await page.click("#start-preset")
 
   await page.waitForSelector("#bill-average")

@@ -60,7 +60,7 @@ defmodule DIYWeb.HomeLive do
      |> assign(:lesson_step, nil)
      |> assign(:plan_id, nil)
      |> assign(:efl, nil)
-     |> assign(:checks, nil)
+     |> assign(checks: nil, answers: %{})
      |> assign(:hint, false)
      |> assign(:price, nil)
      |> assign(:item, nil)
@@ -99,7 +99,7 @@ defmodule DIYWeb.HomeLive do
      |> assign(:van_id, params["id"])
      |> pictures()
      |> assign(:lesson_step, parse_int(params["step"]))
-     |> assign(:checks, nil)
+     |> assign(checks: nil, answers: %{})
      |> assign(:hint, false)}
   end
 
@@ -405,6 +405,44 @@ defmodule DIYWeb.HomeLive do
     end
   end
 
+  # The price of the last bill of the person: its total divided by its kWh.
+  # A price out of 3¢ to 100¢ is not a price of a bill: the page asks the
+  # person to check the two numbers.
+  def handle_event("my_bill", %{"dollars" => dollars, "kwh" => kwh}, socket)
+      when is_binary(dollars) and is_binary(kwh) do
+    with {total, ""} when total > 0 and total <= 100_000 <- Float.parse(typed(dollars)),
+         {kwh, ""} when kwh >= 1 and kwh <= 1_000_000 <- Float.parse(typed(kwh)) do
+      cents = total / kwh * 100
+
+      if cents >= 3 and cents <= 100 do
+        {:ok, build} = Build.set_price(socket.assigns.build, cents)
+
+        {:noreply,
+         socket
+         |> put(build)
+         |> put_flash(
+           :info,
+           "The app now uses the price of your bill: #{Format.cents(cents)} for each kWh."
+         )}
+      else
+        {:noreply,
+         put_flash(
+           socket,
+           :error,
+           "These numbers give #{Format.cents(cents)} for each kWh. Check the total and the kWh of the bill."
+         )}
+      end
+    else
+      _error ->
+        {:noreply,
+         put_flash(
+           socket,
+           :error,
+           "Give the total of the bill in dollars and its kWh, for example 150 and 1,100."
+         )}
+    end
+  end
+
   def handle_event("house", %{"house" => values}, socket) when is_map(values) do
     changes =
       for {key, value} <- values, key in ~w(size year floors), into: %{} do
@@ -472,7 +510,7 @@ defmodule DIYWeb.HomeLive do
   end
 
   def handle_event("lesson_plan", %{"plan" => id}, socket),
-    do: {:noreply, assign(socket, plan_id: id, checks: nil)}
+    do: {:noreply, assign(socket, plan_id: id, checks: nil, answers: %{})}
 
   def handle_event("hint", _params, socket), do: {:noreply, assign(socket, :hint, true)}
 
@@ -492,7 +530,11 @@ defmodule DIYWeb.HomeLive do
         do: put(socket, Build.set_lesson_plan(build, plan.id || "example")),
         else: socket
 
-    {:noreply, assign(socket, :checks, checks)}
+    # The page shows the answers again (the text answers only).
+    shown =
+      for {part, text} <- answers(params["answer"]), is_binary(text), into: %{}, do: {part, text}
+
+    {:noreply, assign(socket, checks: checks, answers: shown)}
   end
 
   def handle_event("efl", %{"name" => name, "lines" => lines}, socket) when is_binary(name) do
@@ -963,6 +1005,7 @@ defmodule DIYWeb.HomeLive do
       saved={Device.saved?(assigns)}
     >
       <div id="device" phx-hook="Device" class="hidden"></div>
+      <div id="top" phx-hook="Top" data-page={page_key(assigns)} class="hidden"></div>
       <noscript>
         <p class="alert alert-warning">
           This app needs JavaScript. Turn on JavaScript in the browser.
@@ -1024,6 +1067,7 @@ defmodule DIYWeb.HomeLive do
               tdu={tdu(@build)}
               efl={@efl}
               checks={@checks}
+              answers={@answers}
               hint={@hint}
               shares={@shares}
             />
@@ -1090,6 +1134,27 @@ defmodule DIYWeb.HomeLive do
   # them (DIY.Plan.tdu/1).
   defp tdu(%Build{market: %{utility: utility}}) when is_binary(utility), do: Plan.tdu(utility)
   defp tdu(_build), do: nil
+
+  # The page that the person sees: its name, the step of the lesson, and
+  # the van. When it changes, the page goes to its top (the hook Top).
+  defp page_key(%{build: nil}), do: "load"
+
+  defp page_key(%{build: build} = assigns) do
+    page =
+      cond do
+        is_nil(build.door) -> "door"
+        is_nil(build.zip) -> "zip"
+        is_nil(build.house) -> "house"
+        true -> assigns.live_action
+      end
+
+    step = if page == :plans, do: lesson_step(assigns.lesson_step, build)
+    van = if page == :van, do: assigns.shown_van
+    "#{page}:#{step}:#{van}"
+  end
+
+  # A number that a person types, with no "$", no commas and no spaces.
+  defp typed(text), do: String.replace(text, ~r/[\s$,]/, "")
 
   defp answers(%{} = answers), do: answers
   defp answers(_answers), do: %{}
