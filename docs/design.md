@@ -244,6 +244,20 @@ the degree days. A month with no sun keeps its degree days.
   hotter than a kitchen, the app keeps the label: a garage is warmer than
   the air outside. A room that the user adds around the house has no AC,
   so it gets the air outside too.
+- The gas, in therms (1 therm is 100,000 BTU):
+  - A gas furnace: the BTU of heat ÷ 80%. 80% is the AFUE that the US
+    asks of a gas furnace (10 CFR 430.32(e)).
+  - A gas water heater: the BTU of the hot water ÷ 0.58. The US asks a
+    UEF of 0.58 of a gas tank of 40 gallons, for a medium draw (10 CFR
+    430.32(d)).
+  - A gas stove and oven: 2.02 million BTU in one year (0.055 therm in
+    one day). This is the mean of the US homes that cook with gas (US
+    Energy Information Administration, RECS 2020, table CE5.4.ST).
+  - A gas dryer: 0.073 therm for each load. The US homes with a gas dryer
+    burn 2.06 million BTU in one year (RECS 2020, table CE5.4.ST). The
+    test of the US Department of Energy counts 283 loads in one year (10
+    CFR 430, subpart B, appendix D1).
+  - The gas has its own range, with the same rules as the kWh.
 - The range: the weather and the model (15% for heat and cooling, 20% for
   a typical item, 10% for a checked item), added as squares, because they
   are independent. The weather of a month: the same month of each of the
@@ -260,6 +274,29 @@ step goes into the next one, and the last step gives the kWh of the item.
 The price of one kWh: the price that the user gives, else the median of
 Power to Choose in a Texas area with retail choice, else the average of
 the state. The page tells the source of the price.
+
+The natural gas bill of a month is a fixed charge and a price for each
+therm. The app gets the two numbers from the bills of the homes of Texas
+in the 12 months of 2024 (US Energy Information Administration):
+
+- The bill of a home in a month: the price of the month × the gas of the
+  month ÷ the homes with gas (5,308,705 in Texas).
+- A line through the 12 months: $25.59 each month, and $9.90 for each
+  1,000 cubic feet. The line is near the bills: R² is 0.95.
+- Each 1,000 cubic feet of gas give near 10.37 therms. So a therm costs
+  near $0.95.
+- Outside Texas, the app uses the same line for the US: $17.90 each
+  month, and $10.86 for each 1,000 cubic feet (R² 0.996).
+- The count of the homes with gas stops at 2024. So the app uses the
+  bills of 2024. The bills of 2025 cost more for each therm.
+
+The front page shows a gas bill only for a house with gas use. It has the
+average month, its range, and the month with the most gas, with its
+range. A plan can change the gas: a heat pump heats in place of a
+furnace. Then the page shows the gas bill with the plan, with its range,
+and the bill of today. The plan keeps the gas items of today, so it keeps
+the fixed charge. The gas of an item costs its therms × the price of a
+therm. The fixed charge is for the house.
 
 A typical house of 2,000 square feet from 2005, in Plano, Texas, gives
 near 10,400 kWh in one year with gas heat, 16,900 with a heat pump, and

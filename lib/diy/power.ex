@@ -522,12 +522,14 @@ defmodule DIY.Power do
   planned AC).
 
   The result has the power and the bill (with its range, `DIY.Bill`) of
-  each house, the planned items, and the warnings of the plan. The payback
-  is for the planned equipment with a price (`@priced`): its price, the
-  savings of one year (with their range), the years of the payback, and
-  the years that the equipment lasts. The other planned items (a car, a
-  freezer) have no price in the app: their result is their own
-  (`others`), the change of the bill and the gas that a car saves.
+  each house. It also has the planned items and the warnings of the plan.
+  `therms` has the natural gas of one year of each house, with its range.
+  The payback is for the planned equipment with a price (`@priced`). It
+  has the price, the savings of one year (with their range), the years of
+  the payback, and the years that the equipment lasts. The other planned
+  items (a car, a freezer) have no price in the app. Their result is
+  their own (`others`): the change of the bill and the gas that a car
+  saves.
 
   With two parts of equipment or more, `parts` has each part. The planned
   stations, and the panels that charge a station, are one part: they work
@@ -594,7 +596,11 @@ defmodule DIY.Power do
           |> Enum.min(fn -> nil end),
         parts: parts,
         others: others(others, plan, gear, build.power, cents),
-        warnings: warnings(plan)
+        warnings: warnings(plan),
+        therms: %{
+          today: Map.take(today_estimate, [:therms, :therms_low, :therms_high]),
+          plan: Map.take(plan_estimate, [:therms, :therms_low, :therms_high])
+        }
       }
     else
       _ -> nil

@@ -5,7 +5,7 @@ defmodule DIYWeb.Front do
   """
   use DIYWeb, :html
 
-  alias DIY.{Van, Zip}
+  alias DIY.{Catalog, Prices, Van, Zip}
   alias DIYWeb.{Format, Scene}
 
   attr :build, :map, required: true
@@ -19,7 +19,7 @@ defmodule DIYWeb.Front do
 
   def front(assigns) do
     {:ok, place} = Zip.lookup(assigns.build.zip)
-    assigns = assign(assigns, :place, place)
+    assigns = assign(assigns, place: place, gas: Prices.gas(assigns.build))
 
     ~H"""
     <section class="space-y-4">
@@ -39,7 +39,14 @@ defmodule DIYWeb.Front do
 
       <.bill estimate={@estimate} bill={@bill} price={@price} weather={@weather} build={@build} />
 
-      <.whatif :if={@whatif} whatif={@whatif} />
+      <.gas
+        :if={@estimate.ready && @estimate.therms > 0}
+        estimate={@estimate}
+        build={@build}
+        gas={@gas}
+      />
+
+      <.whatif :if={@whatif} whatif={@whatif} gas={@gas} />
 
       <.real build={@build} price={@price} />
 
@@ -169,10 +176,74 @@ defmodule DIYWeb.Front do
     """
   end
 
+  attr :estimate, :map, required: true
+  attr :build, :map, required: true
+  attr :gas, :map, required: true
+
+  # The gas bill, for a house with a gas item. It has the same weather and
+  # the same model as the power bill.
+  defp gas(assigns) do
+    names =
+      for item <- assigns.build.items,
+          data = assigns.estimate.items[item.id],
+          data && data.therms > 0,
+          uniq: true,
+          do: String.downcase(Catalog.name(item))
+
+    assigns =
+      assign(assigns,
+        names: names,
+        month: Enum.max_by(assigns.estimate.months, & &1.therms),
+        bill: &Format.money(Prices.gas_bill(assigns.gas, &1))
+      )
+
+    ~H"""
+    <div id="gas-bill" class="card card-border bg-base-100 p-4 space-y-1">
+      <p class="text-sm opacity-70">Your gas bill, in an average month</p>
+      <p id="gas-average" class="text-2xl font-bold">
+        {@bill.(@estimate.therms / 12)}
+        <span class="text-base font-normal">· {Format.therms(@estimate.therms / 12)}</span>
+      </p>
+      <p id="gas-range" class="text-sm">
+        The range: {@bill.(@estimate.therms_low / 12)} to {@bill.(@estimate.therms_high / 12)}.
+        The month with the most gas: {@month.name}, {@bill.(@month.therms)} (between {@bill.(
+          @month.therms_low
+        )} and {@bill.(@month.therms_high)}).
+      </p>
+      <p class="text-xs opacity-80">
+        The gas items: {Enum.join(@names, ", ")}. A therm is the unit of gas on the bill: 100,000 BTU.
+        The bill has a fixed charge near {Format.dollars(@gas.fixed)} each month, and near {Format.dollars(
+          @gas.dollars
+        )} for each therm. These numbers come from {@gas.source}.
+      </p>
+    </div>
+    """
+  end
+
   attr :whatif, :map, required: true
+  attr :gas, :map, required: true
 
   # The what-if: the bill with the planned items, next to the bill of today.
+  # The gas bill shows when the plan changes it (a heat pump heats in place
+  # of a furnace). A house with gas use pays the fixed charge. The plan
+  # keeps the gas items of today, so it keeps the fixed charge too.
   defp whatif(assigns) do
+    %{today: today, plan: plan} = assigns.whatif.therms
+    plan_gas = today.therms > 0 or plan.therms > 0
+    bill = &if(&2, do: round(Prices.gas_bill(assigns.gas, &1 / 12)), else: 0)
+
+    assigns =
+      assign(assigns,
+        gas_today: bill.(today.therms, today.therms > 0),
+        gas_plan: bill.(plan.therms, plan_gas),
+        gas_range:
+          if(plan.therms > 0,
+            do:
+              "between #{Format.money(bill.(plan.therms_low, true))} and #{Format.money(bill.(plan.therms_high, true))}",
+            else: "the fixed charge: the house keeps its gas items"
+          )
+      )
+
     ~H"""
     <div id="whatif-card" class="card card-border border-dashed bg-base-100 p-4 space-y-1">
       <p class="text-sm opacity-70">With your plan, in an average month</p>
@@ -183,6 +254,11 @@ defmodule DIYWeb.Front do
       <p class="text-sm">
         The range with the plan: {Format.money(@whatif.plan_bill.cost_low / 12)} to {Format.money(
           @whatif.plan_bill.cost_high / 12
+        )}.
+      </p>
+      <p :if={@gas_plan != @gas_today} id="whatif-gas" class="text-sm">
+        The gas bill with the plan: {Format.money(@gas_plan)} ({@gas_range}) · today {Format.money(
+          @gas_today
         )}.
       </p>
       <p

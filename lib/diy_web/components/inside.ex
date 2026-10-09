@@ -15,7 +15,7 @@ defmodule DIYWeb.Inside do
   """
   use DIYWeb, :html
 
-  alias DIY.{Build, Catalog, Estimate, Layout}
+  alias DIY.{Build, Catalog, Estimate, Layout, Prices}
   alias DIYWeb.{Camera, Cutaway, Format, Icon}
 
   @place_names %{indoor: "Inside", outdoor: "Outside", roof: "On the roof"}
@@ -239,7 +239,7 @@ defmodule DIYWeb.Inside do
   # keyboard (it shows when it has the focus). The arrow keys move an item
   # or a room (the hook Plan).
   defp list(assigns) do
-    assigns = assign(assigns, :place_names, @place_names)
+    assigns = assign(assigns, place_names: @place_names, gas: Prices.gas(assigns.build))
 
     ~H"""
     <section
@@ -275,7 +275,7 @@ defmodule DIYWeb.Inside do
                   data-nudge={item.id}
                   class="link"
                 >
-                  {Catalog.name(item)}{item_note(item, @estimate, @price)}
+                  {Catalog.name(item)}{item_note(item, @estimate, @price, @gas)}
                 </.link>
               </li>
               <li :for={{item, van} <- @away} :if={item.home == room.id}>
@@ -302,13 +302,18 @@ defmodule DIYWeb.Inside do
     """
   end
 
-  # The usage, the cost and the flags of an item, as a text.
-  defp item_note(item, estimate, price) do
+  # The usage, the cost and the flags of an item, as a text. The cost of a
+  # gas item has its gas.
+  defp item_note(item, estimate, price, gas) do
     usage =
-      if estimate.ready,
-        do:
-          ": #{Format.kwh(estimate.items[item.id].year / 12)}, #{Format.money(Format.cost(estimate.items[item.id].year / 12, price.cents))} a month",
-        else: ""
+      if estimate.ready do
+        %{year: kwh, therms: therms} = estimate.items[item.id]
+        gas_text = if therms / 12 >= 0.5, do: " and #{Format.therms(therms / 12)}", else: ""
+        cost = Format.cost(kwh / 12, price.cents) + therms / 12 * gas.dollars
+        ": #{Format.kwh(kwh / 12)}#{gas_text}, #{Format.money(cost)} a month"
+      else
+        ""
+      end
 
     flags =
       [item.typical && "typical", item.planned && "a plan", item.backup && "on the station"]
@@ -445,9 +450,17 @@ defmodule DIYWeb.Inside do
     rooms = Enum.filter(assigns.build.rooms, &(&1.place in kind.places))
     van = Enum.any?(assigns.build.items, &(&1.type == "camper_van"))
     features = if van, do: kind.features, else: kind.features -- @van_features
+    features = if gas_item?(assigns.item), do: features ++ [:gas], else: features
 
     assigns =
-      assign(assigns, kind: kind, room: room, rooms: rooms, van: van, features: features)
+      assign(assigns,
+        kind: kind,
+        room: room,
+        rooms: rooms,
+        van: van,
+        features: features,
+        gas: Prices.gas(assigns.build)
+      )
 
     ~H"""
     <.sheet id="item-sheet" title={Catalog.name(@item)} icon={@item.type}>
@@ -518,6 +531,11 @@ defmodule DIYWeb.Inside do
         <p class="font-semibold">
           In one year: {Format.kwh(@estimate.items[@item.id].year)} · {Format.money(
             Format.cost(@estimate.items[@item.id].year, @price.cents)
+          )}
+        </p>
+        <p :if={@estimate.items[@item.id].therms > 0} id="item-gas" class="font-semibold">
+          Gas in one year: {Format.therms(@estimate.items[@item.id].therms)} · {Format.money(
+            @estimate.items[@item.id].therms * @gas.dollars
           )}
         </p>
         <p class="opacity-80">
@@ -769,6 +787,10 @@ defmodule DIYWeb.Inside do
   # True when the house has a power station (a planned one too).
   defp station?(build), do: Enum.any?(build.items, &(&1.type == "power_station"))
 
+  # An item that burns natural gas.
+  defp gas_item?(%{type: "furnace"}), do: true
+  defp gas_item?(%{params: params}), do: params["fuel"] == "gas"
+
   # The items that a station can run: the items that use power.
   defp loads_power?(%{type: type}),
     do: type not in ~w(power_station solar_panels transfer_switch smart_meter camper_van)
@@ -797,6 +819,7 @@ defmodule DIYWeb.Inside do
   def features(features), do: Enum.map_join(features, ", ", &feature/1)
 
   defp feature(:estimate), do: "the estimate of your power bill"
+  defp feature(:gas), do: "the estimate of your gas bill"
   defp feature(:backup), do: "the hours of backup in an outage"
   defp feature(:shift), do: "the charge at night"
   defp feature(:power_view), do: "the view of what feeds what, and the permit notes"

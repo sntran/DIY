@@ -312,15 +312,14 @@ defmodule DIY.EstimateTest do
     {build, _id} = add(build, "Garage", "fridge", %{"kwh_year" => "600"})
     {build, _id} = add(build, "Garage", "freezer", %{"kwh_year" => "400"})
     estimate = Estimate.run(build, climate())
+    check_all(build, estimate)
 
-    for item <- build.items, month <- 1..12 do
-      lines = Estimate.explain(item, month, estimate)
-      assert Enum.all?(lines, &is_binary/1)
-      m = Enum.at(estimate.months, month - 1)
-      kwh = m.items[item.id].kwh
-      assert List.last(lines) =~ "#{Estimate.number_text(kwh)} kWh in #{m.name}."
-      check_math(lines, kwh, "#{item.type} in #{m.name}")
-    end
+    # A house with no heat pump: the furnace heats, and burns gas.
+    plain = build()
+    plain_estimate = Estimate.run(plain, climate())
+    furnace = Enum.find(plain.items, &(&1.type == "furnace"))
+    assert hd(plain_estimate.months).items[furnace.id].therms > 50
+    check_all(plain, plain_estimate)
 
     ac = Enum.find(build.items, &(&1.type == "ac" and &1.params["heat_pump"]))
     assert Enum.any?(Estimate.explain(ac, 7, estimate), &(&1 =~ "% (its share of the house)"))
@@ -331,6 +330,75 @@ defmodule DIY.EstimateTest do
     assert Enum.any?(Estimate.explain(pump, 1, estimate), &(&1 =~ "It is off in January"))
     strips = Enum.find(build.items, &(&1.type == "heat_strips"))
     assert Enum.any?(Estimate.explain(strips, 7, estimate), &(&1 =~ "The house has other heat"))
+  end
+
+  # The checks of the math of each item of a build in each month.
+  defp check_all(build, estimate) do
+    for item <- build.items, month <- 1..12 do
+      lines = Estimate.explain(item, month, estimate)
+      assert Enum.all?(lines, &is_binary/1)
+      m = Enum.at(estimate.months, month - 1)
+      kwh = m.items[item.id].kwh
+      assert List.last(lines) =~ "#{Estimate.number_text(kwh)} kWh in #{m.name}."
+      check_math(lines, kwh, "#{item.type} in #{m.name}")
+
+      # A gas item gives its therms in a step.
+      therms = m.items[item.id].therms
+
+      if therms > 0,
+        do: assert(Enum.any?(lines, &(&1 =~ "= #{Estimate.number_text(therms)} therms")))
+    end
+  end
+
+  test "a gas furnace, a gas water heater, a gas stove and a gas dryer burn gas, with a range" do
+    {build, dryer} = add(build(), "Laundry", "dryer", %{"fuel" => "gas", "loads" => "5"})
+    estimate = Estimate.run(build, climate())
+    [january, july] = [hd(estimate.months), Enum.at(estimate.months, 6)]
+    of = fn type -> Enum.find(build.items, &(&1.type == type)).id end
+
+    furnace = january.items[of.("furnace")]
+    assert_in_delta furnace.therms, furnace.heat_btu / 0.8 / 100_000, 1.0e-9
+    assert july.items[of.("furnace")].therms < furnace.therms
+    assert_in_delta january.items[of.("range")].therms, 0.055 * 31, 1.0e-9
+    assert_in_delta january.items[dryer].therms, 5 * 31 / 7 * 0.073, 1.0e-9
+    # The water comes in colder in January.
+    assert january.items[of.("water_heater")].therms > july.items[of.("water_heater")].therms
+    assert january.items[of.("fridge")].therms == 0.0
+
+    # The sums: each month, the year, and each item in the year.
+    for m <- estimate.months do
+      assert_in_delta m.therms,
+                      m.items |> Map.values() |> Enum.map(& &1.therms) |> Enum.sum(),
+                      1.0e-9
+
+      assert m.therms_low <= m.therms and m.therms <= m.therms_high
+    end
+
+    assert_in_delta estimate.therms,
+                    estimate.months |> Enum.map(& &1.therms) |> Enum.sum(),
+                    1.0e-6
+
+    assert_in_delta estimate.items[dryer].therms,
+                    estimate.months |> Enum.map(& &1.items[dryer].therms) |> Enum.sum(),
+                    1.0e-9
+
+    assert estimate.therms_low < estimate.therms and estimate.therms < estimate.therms_high
+    assert estimate.items[of.("fridge")].therms == 0.0
+
+    # A house with no gas item burns no gas.
+    electric = build(%{heat: "electric"})
+    estimate = Estimate.run(electric, climate())
+    assert {estimate.therms, estimate.therms_low, estimate.therms_high} == {0.0, 0.0, 0.0}
+
+    # A gas stove alone: the weather does not change it. So its range is
+    # only the part of the model: 10% for an item that the user checked.
+    stove = Enum.find(electric.items, &(&1.type == "range"))
+    {:ok, electric} = Build.update_item(electric, stove.id, %{"fuel" => "gas"})
+    refute Enum.find(electric.items, &(&1.type == "range")).typical
+    estimate = Estimate.run(electric, climate())
+    assert_in_delta estimate.therms, 0.055 * 365, 1.0e-9
+    assert_in_delta estimate.therms_low, 0.9 * estimate.therms, 1.0e-9
+    assert_in_delta estimate.therms_high, 1.1 * estimate.therms, 1.0e-9
   end
 
   test "a heat pump gives at most its size, and the heat strips give the rest" do

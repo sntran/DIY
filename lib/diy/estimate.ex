@@ -27,6 +27,9 @@ defmodule DIY.Estimate do
     to the electric heat (the heat strips), if the house has it.
   - A gas furnace uses gas for heat. Only its blower uses electricity, for
     the hours that it runs.
+  - A gas furnace, a gas water heater, a gas stove and a gas dryer burn
+    gas. The gas is in therms (100,000 BTU), with its own range
+    (`therms/2`).
   - A water heater heats the water of the people: 15 gallons for each
     person in one day, from the temperature of the water in the ground to
     120 °F.
@@ -62,6 +65,25 @@ defmodule DIY.Estimate do
 
   # An AC runs at most 85% of the hours of a month.
   @duty 0.85
+
+  # The gas items (`therms/2`):
+  #
+  # - A furnace gives 80% of the heat of its gas: the AFUE that the US asks
+  #   of a gas furnace (10 CFR 430.32(e)).
+  # - A gas water heater of 40 gallons gives 58% (the UEF of 10 CFR
+  #   430.32(d), for a medium draw).
+  # - A gas stove and oven burns 2.02 million BTU in one year. This is the
+  #   mean of the US homes that cook with gas (RECS 2020 of the US Energy
+  #   Information Administration, table CE5.4.ST).
+  # - A gas dryer burns 2.06 million BTU in one year: the mean of the US
+  #   homes with a gas dryer (RECS 2020, table CE5.4.ST). The test of the
+  #   US Department of Energy counts 283 loads in one year (10 CFR 430,
+  #   subpart B, appendix D1). So a load burns 0.073 therm.
+  @furnace 0.8
+  @gas_water 0.58
+  @stove 0.055
+  @dryer 0.073
+  @therm 100_000
 
   @hvac_range 0.15
   @typical_range 0.20
@@ -123,7 +145,8 @@ defmodule DIY.Estimate do
       Map.new(climate.series, fn {{year, month}, value} ->
         weather = Map.fetch!(climate.months, month)
         days = Enum.at(@days, month - 1)
-        {{year, month}, total(run.(value.cdd, value.hdd, weather, days, month))}
+        items = run.(value.cdd, value.hdd, weather, days, month)
+        {{year, month}, %{kwh: total(items), therms: total(items, :therms)}}
       end)
 
     months =
@@ -132,13 +155,15 @@ defmodule DIY.Estimate do
         days = Enum.at(@days, index)
         mean = run.(weather.cdd, weather.hdd, weather, days, month)
         kwh = total(mean)
-        # The same month of each year: the least and the most kWh.
-        {mild, hard} =
-          Enum.min_max([
-            kwh | for(year <- climate.first..climate.last, v = history[{year, month}], v, do: v)
-          ])
+        therms = total(mean, :therms)
+        # The same month of each year: the least and the most.
+        same = for year <- climate.first..climate.last, v = history[{year, month}], v, do: v
+        model = model(build, mean, :kwh)
+        therms_model = model(build, mean, :therms)
+        {low, high} = ends(kwh, Enum.min_max([kwh | Enum.map(same, & &1.kwh)]), model)
 
-        model = model(build, mean)
+        {therms_low, therms_high} =
+          ends(therms, Enum.min_max([therms | Enum.map(same, & &1.therms)]), therms_model)
 
         %{
           month: month,
@@ -150,8 +175,12 @@ defmodule DIY.Estimate do
           items: mean,
           kwh: kwh,
           model: model,
-          low: max(kwh - hypot(kwh - mild, model), 0.0),
-          high: kwh + hypot(hard - kwh, model),
+          low: low,
+          high: high,
+          therms: therms,
+          therms_model: therms_model,
+          therms_low: therms_low,
+          therms_high: therms_high,
           cooling: part(mean, :cooling),
           heating: part(mean, :heating),
           other: part(mean, :other)
@@ -159,8 +188,16 @@ defmodule DIY.Estimate do
       end
 
     kwh = Enum.sum(Enum.map(months, & &1.kwh))
+    therms = Enum.sum(Enum.map(months, & &1.therms))
     years = years(build, climate, history)
-    model = Enum.sum(Enum.map(months, & &1.model))
+    {low, high} = ends(kwh, least_most(years, :kwh, kwh), Enum.sum(Enum.map(months, & &1.model)))
+
+    {therms_low, therms_high} =
+      ends(
+        therms,
+        least_most(years, :therms, therms),
+        Enum.sum(Enum.map(months, & &1.therms_model))
+      )
 
     %{
       ready: true,
@@ -168,8 +205,11 @@ defmodule DIY.Estimate do
       ua: ua(build.house),
       months: months,
       kwh: kwh,
-      low: max(kwh - hypot(kwh - Enum.min(years, fn -> kwh end), model), 0.0),
-      high: kwh + hypot(Enum.max(years, fn -> kwh end) - kwh, model),
+      low: low,
+      high: high,
+      therms: therms,
+      therms_low: therms_low,
+      therms_high: therms_high,
       items: by_item(build, months),
       shares: %{
         cooling: cooling_split(build.items, build.house.size),
@@ -188,23 +228,37 @@ defmodule DIY.Estimate do
 
   defp hypot(a, b), do: :math.sqrt(a * a + b * b)
 
-  # The kWh of each full year of the weather history.
+  # The range of a value, from the least and the most of the weather, and
+  # the part of the model.
+  defp ends(value, {least, most}, model),
+    do: {max(value - hypot(value - least, model), 0.0), value + hypot(most - value, model)}
+
+  defp least_most(years, key, value) do
+    values = Enum.map(years, &Map.fetch!(&1, key))
+    {Enum.min(values, fn -> value end), Enum.max(values, fn -> value end)}
+  end
+
+  # The kWh and the therms of each full year of the weather history.
   defp years(build, climate, history) do
     for year <- climate.first..climate.last,
         months = for(m <- 1..12, value = history[{year, m}], value, do: value),
         length(months) == 12 do
-      Enum.sum(months)
+      %{
+        kwh: Enum.sum(Enum.map(months, & &1.kwh)),
+        therms: Enum.sum(Enum.map(months, & &1.therms))
+      }
     end
     |> then(fn years -> if build.items == [], do: [], else: years end)
   end
 
-  # The model part of the range of a month: each item with its own range.
-  defp model(build, items) do
+  # The model part of the range of a month (of the kWh or of the therms):
+  # each item with its own range.
+  defp model(build, items, key) do
     typical = Map.new(build.items, &{&1.id, &1.typical})
 
     items
-    |> Enum.map(fn {id, %{kwh: kwh, part: part}} ->
-      kwh *
+    |> Enum.map(fn {id, %{part: part} = data} ->
+      Map.fetch!(data, key) *
         cond do
           part in [:cooling, :heating] -> @hvac_range
           typical[id] -> @typical_range
@@ -214,7 +268,8 @@ defmodule DIY.Estimate do
     |> Enum.sum()
   end
 
-  defp total(items), do: items |> Map.values() |> Enum.map(& &1.kwh) |> Enum.sum()
+  defp total(items, key \\ :kwh),
+    do: items |> Map.values() |> Enum.map(&Map.fetch!(&1, key)) |> Enum.sum()
 
   defp part(items, part) do
     items |> Map.values() |> Enum.filter(&(&1.part == part)) |> Enum.map(& &1.kwh) |> Enum.sum()
@@ -225,7 +280,12 @@ defmodule DIY.Estimate do
       kwh = Enum.map(months, &Map.fetch!(&1.items, item.id).kwh)
 
       {item.id,
-       %{year: Enum.sum(kwh), months: kwh, part: Map.fetch!(hd(months).items, item.id).part}}
+       %{
+         year: Enum.sum(kwh),
+         months: kwh,
+         therms: months |> Enum.map(&Map.fetch!(&1.items, item.id).therms) |> Enum.sum(),
+         part: Map.fetch!(hd(months).items, item.id).part
+       }}
     end)
   end
 
@@ -249,8 +309,9 @@ defmodule DIY.Estimate do
 
   ## The items of one month
 
-  # The kWh of each item in a month: %{id => %{kwh, part, full, cool_btu,
-  # heat_btu}}, with the BTU of cooling and of heat that the item must give.
+  # The kWh and the therms of each item in a month: %{id => %{kwh, therms,
+  # part, full, cool_btu, heat_btu}}. The BTU of cooling and of heat that
+  # the item must give are in cool_btu and heat_btu.
   defp items_kwh(build, ua, cdd, hdd, t, t_year, days, month) do
     house = build.house
     cooling = cooling_split(build.items, house.size)
@@ -273,7 +334,11 @@ defmodule DIY.Estimate do
         size: house.size
       }
 
-      {item.id, item |> kwh(ctx) |> Map.merge(Map.take(ctx, [:cool_btu, :heat_btu]))}
+      {item.id,
+       item
+       |> kwh(ctx)
+       |> Map.put(:therms, therms(item, ctx))
+       |> Map.merge(Map.take(ctx, [:cool_btu, :heat_btu]))}
     end)
   end
 
@@ -378,8 +443,7 @@ defmodule DIY.Estimate do
 
   def kwh(%{type: "water_heater", params: p}, ctx) do
     per_kwh = %{"electric" => 0.93, "heat_pump" => 3.5, "gas" => nil}[p["fuel"]]
-    btu = p["people"] * 15 * 8.34 * max(120 - inlet(ctx), 0) * ctx.days
-    other(if(per_kwh, do: btu / 3_412 / per_kwh, else: 0.0))
+    other(if(per_kwh, do: water_btu(p, ctx) / 3_412 / per_kwh, else: 0.0))
   end
 
   def kwh(%{type: type, params: p}, ctx) when type in ["fridge", "freezer"] do
@@ -447,6 +511,26 @@ defmodule DIY.Estimate do
     do: max((t - @cold[type]) / (@kitchen - @cold[type]), 1.0)
 
   def air_factor(_type, _ctx), do: 1.0
+
+  # The heat of the hot water of a month, in BTU.
+  defp water_btu(p, ctx), do: p["people"] * 15 * 8.34 * max(120 - inlet(ctx), 0) * ctx.days
+
+  @doc """
+  The gas of one item in one month, in therms (100,000 BTU). A gas
+  furnace, a gas water heater, a gas stove and a gas dryer burn gas. The
+  other items burn no gas. `ctx` is the same as for `kwh/2`.
+  """
+  def therms(%{type: "furnace"}, ctx), do: ctx.heat_btu / @furnace / @therm
+
+  def therms(%{type: "water_heater", params: %{"fuel" => "gas"} = p}, ctx),
+    do: water_btu(p, ctx) / @gas_water / @therm
+
+  def therms(%{type: "range", params: %{"fuel" => "gas"}}, ctx), do: @stove * ctx.days
+
+  def therms(%{type: "dryer", params: %{"fuel" => "gas"} = p}, ctx),
+    do: p["loads"] * ctx.days / 7 * @dryer
+
+  def therms(_item, _ctx), do: 0.0
 
   @doc "The part of the power that goes into the battery of a car: a charge loses some."
   def charge_efficiency("l1"), do: 0.85
@@ -549,6 +633,12 @@ defmodule DIY.Estimate do
 
     ["The furnace burns gas for heat. Its blower uses #{fmt(p["blower"])} W while it runs."] ++
       heating(m, data.heat_btu, estimate, share(estimate.shares.heating, item)) ++
+      if(data.therms > 0,
+        do: [
+          "#{fmt(data.heat_btu)} BTU ÷ 80% (the heat that a standard furnace gets from its gas) ÷ 100,000 BTU for each therm = #{number_text(data.therms)} therms of gas."
+        ],
+        else: []
+      ) ++
       [
         "#{fmt(data.heat_btu)} BTU ÷ (30 BTU in one hour for each sq ft × #{fmt(size)} sq ft, a typical furnace) = #{number_text(hours)} hours that it runs.",
         "#{number_text(hours)} hours × #{fmt(p["blower"])} W ÷ 1,000 = #{number_text(hours * p["blower"] / 1_000)} kWh."
@@ -578,24 +668,31 @@ defmodule DIY.Estimate do
       ]
   end
 
-  defp steps(%{type: "water_heater", params: p}, m, _data, estimate) do
+  defp steps(%{type: "water_heater", params: p}, m, data, estimate) do
     inlet = inlet(%{t: m.t, t_year: estimate.climate.t_year})
-    btu = p["people"] * 15 * 8.34 * max(120 - inlet, 0) * m.days
+    btu = water_btu(p, %{t: m.t, t_year: estimate.climate.t_year, days: m.days})
 
     [
       "The water of #{m.name} comes in at #{number_text(inlet)} °F: near the ground, which follows the mean air of the year, and half of the change of the month.",
-      "#{p["people"]} people × 15 gallons in one day × 8.34 pounds for each gallon × (120 °F − #{number_text(inlet)} °F) × #{m.days} days = #{fmt(btu)} BTU.",
+      "#{p["people"]} people × 15 gallons in one day × 8.34 pounds for each gallon × (120 °F − #{number_text(inlet)} °F) × #{m.days} days = #{fmt(btu)} BTU."
+    ] ++
       case p["fuel"] do
         "gas" ->
-          "The water heater uses gas: no electricity."
+          [
+            "#{fmt(btu)} BTU ÷ 0.58 (the efficiency of a standard gas tank) ÷ 100,000 BTU for each therm = #{number_text(data.therms)} therms of gas.",
+            "The water heater uses gas: no electricity."
+          ]
 
         "electric" ->
-          "#{fmt(btu)} BTU ÷ 3,412 BTU for each kWh ÷ 0.93 (the efficiency of an electric water heater) = #{number_text(btu / 3_412 / 0.93)} kWh."
+          [
+            "#{fmt(btu)} BTU ÷ 3,412 BTU for each kWh ÷ 0.93 (the efficiency of an electric water heater) = #{number_text(btu / 3_412 / 0.93)} kWh."
+          ]
 
         "heat_pump" ->
-          "#{fmt(btu)} BTU ÷ 3,412 BTU for each kWh ÷ 3.5 = #{number_text(btu / 3_412 / 3.5)} kWh: a heat pump gives 3.5 times the heat of its electricity."
+          [
+            "#{fmt(btu)} BTU ÷ 3,412 BTU for each kWh ÷ 3.5 = #{number_text(btu / 3_412 / 3.5)} kWh: a heat pump gives 3.5 times the heat of its electricity."
+          ]
       end
-    ]
   end
 
   defp steps(%{type: type, params: p}, m, %{around: true} = data, _estimate)
@@ -629,6 +726,7 @@ defmodule DIY.Estimate do
 
       "gas" ->
         [
+          "A gas stove and oven burns 0.055 therm of gas in one day (the mean of the US homes that cook with gas) × #{m.days} days = #{number_text(@stove * m.days)} therms.",
           "A gas stove and oven: 0.05 kWh in one day (the igniter and the clock) × #{m.days} days."
         ]
     end
@@ -649,7 +747,15 @@ defmodule DIY.Estimate do
         {"dryer", "gas"} -> "0.2 kWh (the drum and the fan; the heat is gas)"
       end
 
-    ["#{num(p["loads"])} loads in one week × #{m.days} days ÷ 7 × #{per_load} for each load."]
+    gas =
+      if type == "dryer" and p["fuel"] == "gas",
+        do: [
+          "#{num(p["loads"])} loads in one week × #{m.days} days ÷ 7 × 0.073 therm of gas for each load (the mean of the US homes) = #{number_text(p["loads"] * m.days / 7 * @dryer)} therms."
+        ],
+        else: []
+
+    gas ++
+      ["#{num(p["loads"])} loads in one week × #{m.days} days ÷ 7 × #{per_load} for each load."]
   end
 
   defp steps(%{type: "lights", params: p}, m, _data, _estimate),

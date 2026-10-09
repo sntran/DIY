@@ -18,7 +18,11 @@ defmodule DIYWeb.Math do
   attr :weather, :map, required: true
 
   def estimate(assigns) do
-    assigns = assign(assigns, :changed, assigns.power != nil and changed?(assigns.power))
+    assigns =
+      assign(assigns,
+        changed: assigns.power != nil and changed?(assigns.power),
+        gas: DIY.Prices.gas(assigns.build)
+      )
 
     ~H"""
     <section id="math" class="space-y-4">
@@ -97,7 +101,9 @@ defmodule DIYWeb.Math do
                   @build
                 )}</.link>: {Format.kwh(
                 @estimate.items[item.id].year
-              )} in one year <span :if={item.typical} class="opacity-60">(typical)</span>
+              )}{if @estimate.items[item.id].therms > 0,
+                do: " and #{Format.therms(@estimate.items[item.id].therms)} of gas"} in one year
+              <span :if={item.typical} class="opacity-60">(typical)</span>
             </span>
           </li>
         </ul>
@@ -117,6 +123,11 @@ defmodule DIYWeb.Math do
             the app, not a measurement.
           </li>
           <li>The price: {Format.cents(@price.cents)} for each kWh, {@price.source}.</li>
+          <li :if={@estimate.therms > 0} id="gas-price">
+            The price of gas: a fixed charge near {Format.dollars(@gas.fixed)} each month, and near {Format.dollars(
+              @gas.dollars
+            )} for each therm. These numbers come from {@gas.source}.
+          </li>
           <li>
             The range: for a month, the same month of each of the 10 years, with the least and the most kWh; for
             the year, the year with the least and the year with the most kWh. And the limits of the model: 15% for
