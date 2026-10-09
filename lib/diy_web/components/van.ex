@@ -370,7 +370,7 @@ defmodule DIYWeb.VanPage do
             :for={level <- Enum.reverse(@view.levels)}
             type="button"
             data-focus={level.id}
-            class="btn btn-sm btn-ghost shrink-0 px-2"
+            class="btn btn-sm btn-ghost shrink-0 px-2 aria-pressed:bg-base-300 aria-pressed:shadow-[inset_0_-3px_0_var(--color-base-content)]"
           >
             {level.name}
           </button>

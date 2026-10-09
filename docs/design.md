@@ -1119,10 +1119,14 @@ A camera is far away and has no vanishing point: each part of a picture
 keeps its scale. It has a turn around the vertical axis (the yaw) and
 the angle that it looks down at (the pitch). The app has two cameras:
 
-- The house (yaw 72°, pitch 28°): a dollhouse with no front wall. The
-  camera is in front of the house, a little to its right, and it looks
-  down a little. The house goes along the screen, and its floors go down
-  the screen. An item shows its front, so it looks as it does in a store.
+- The house (yaw 60°, pitch 34°): a dollhouse with no front wall. The
+  camera is in front of the house and to its right, and it looks down.
+  The house goes along the screen, and its floors go down the screen. An
+  item shows its front and its right side. Before, the camera had a yaw
+  of 72° and a pitch of 28°. Then the owner chose the look of a picture
+  that an artist drew of a house. The picture is for a dashboard of Home
+  Assistant (a post of Anton Frolov). Its floor edges give a yaw near 60°
+  and a pitch near 34°.
 - The van (yaw 18°, pitch 28°): the camera is at the left side of the
   van (the side of the driver). The cab is at the left of the screen, and
   the doors at the back are at the right. The length of the van goes
@@ -1135,7 +1139,8 @@ the phone. A drag left or right moves an item along the house. A drag
 up or down moves it to the back or to the front. A view straight on (a
 pitch near 0) makes the floor too thin to place an item. A view with a
 vanishing point is not at scale. The owner chose these two cameras from
-screenshots of four cameras on a phone.
+screenshots of four cameras on a phone. Later, the owner chose the camera
+of the drawn picture for the house (see above).
 
 For the two cameras, the eye is at the large x, the large y and the
 large z. So a box shows its top, its front (at y + d) and its side (at
@@ -1302,9 +1307,13 @@ its turn. A length is in inches.
   stops before it lifts gives no glide. After a zoom in, the finger moves
   the view. The button to add a room is under the plan: so it does not hide
   the name of a room.
-- The tabs of the layers. A tab fills the screen with its layer, and the
-  other layers are pale. The button "Show all the house", or a tap on a
-  room of a different layer, ends it.
+- The tabs of the layers. A tab fills the screen with its layer. In the
+  house, the other layers hide, and a tap goes through them. The chosen
+  room on a layer that hides is not chosen now. In the van, the other
+  layers are pale, and a tap on a zone of a different layer ends it. The
+  button "Show all the house" (or "Show all the van") ends it. The tab of
+  the layer that shows is pressed (`aria-pressed`): it has a gray fill and
+  a bar under it.
 - A drop. The center of the space of the item on the floor moves with
   the pointer. The item goes to the room that has this center. The script
   tries its own room first, then the rooms of the layer under the pointer,
@@ -1342,12 +1351,18 @@ its turn. A length is in inches.
   the back has its full height (8 feet), where no room or yard is behind
   it. The wall on the outside at the left end of the house is cut on a
   slope. It is full at the back of the house, and near the floor at its
-  front. Each other wall is cut near the floor: at the front of a room,
-  between two rooms, and at the right end. The camera is a little to the
-  right, so a high wall between two rooms can hide a part of the room at
-  its left. A wall at the back is low where a room or a yard is behind
-  it, also on a slant. So a wall does not hide the items of a room or of
-  a yard.
+  front. A wall between two rooms is cut at 75 cm (30 inches): the rooms
+  look like rooms, as in the drawn picture. A high wall there hides a
+  part of the room at its left, because the camera is to the right. A wall
+  of 75 cm hides a band of the floor behind it: near 1 m along y, and
+  near 55 cm along x. Where an item of the room behind is in this band,
+  the wall in front of it is low, also on a slant.
+  An item over the wall (a fan) does not count. Each other wall is cut
+  near the floor: at the front of a room and at the right end. A wall at
+  the back is low where a room or a yard is behind it, also on a slant.
+  So a wall does not hide the items of a room or of a yard. The walls are
+  16 cm thick, and the slabs 30 cm. The van keeps its look: its walls,
+  its colors and its light background.
 - The picture of an item is its icon at the size of the item
   (`DIYWeb.Icon.Shapes.placed/2`). A turn turns the model, and a face
   that looks away does not show. Solar panels on a roof lie on its slope.
@@ -1363,8 +1378,17 @@ its turn. A length is in inches.
     the floor. A floor of carpet has no lines.
   - An item that stands on a floor has a soft shadow under it, 3 inches
     out from each side. An item on a wall or a ceiling has no shadow.
-  - A high wall has a baseboard. When it has its full height and is 42
-    inches long or more, it also has a window (4 feet wide at most).
+  - A wall that is higher than the cut near the floor has a baseboard.
+    When it has its full height and is 42 inches long or more, it also
+    has a window (4 feet wide at most).
+  - The look of the drawn picture: warm colors, and brown lines of ink
+    on each face (the class `i-face`). The items have warm colors on the
+    plan only: cream for white, a dark screen for a TV. The top of each
+    wall is a dark cut. A wall has a soft light: lighter at its top, and
+    warmer at its floor. The plan is on a dark background, by day too, as
+    in the picture.
+  - At night (the dark mode), the colors are darker, and the floor of each
+    room inside has the warm light of a lamp (`p-glow`).
 - The order of the paint (`DIYWeb.Camera.order/2`). A wall or an item that
   is behind a different one paints first. A box is behind a different box
   when it is on the far side of it along x, y or z. A wall is flat for
@@ -1380,7 +1404,17 @@ its turn. A length is in inches.
   property test checks that a point goes to the screen and back. It uses
   random cameras that look down more than a roof slopes.
   The zoom is in the `viewBox`, which LiveView keeps
-  (`JS.ignore_attributes/1`). The tab keeps it in its session storage.
+  (`JS.ignore_attributes/1`). The tab keeps it in its session storage,
+  with the layer that shows. With no view in the session storage, the
+  house starts on floor 1 (`data-start`). The walls and the slabs of
+  floor 1 fill the screen, and the other layers hide. The tab of a layer,
+  or a tap on a room, also hides the other layers. A room that the person
+  chooses in the list, or that an arrow key moves, also shows its layer.
+  So does an item with an open sheet, also after the sheet moves it to a
+  room of a different layer (`data-open`).
+  While one layer shows, the view stays in the box of that layer. So on a
+  phone, the floor is in the middle of the screen. The button "Show all
+  the house" shows all the layers.
 - The plan is for the eyes. A list of the rooms and of their items gives
   the same facts, with the usage of each item. It shows when it has the
   focus. In the list, the arrow keys move an item or a room (6 inches, or

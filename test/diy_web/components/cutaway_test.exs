@@ -53,8 +53,12 @@ defmodule DIYWeb.CutawayTest do
     html = html(build, room(build, "Kitchen"))
     # The axes of the camera of the house: test/js/plan.test.js has the same
     # numbers.
-    assert html =~ ~s(data-axes="0.295921 0.04514 -0.096151 0.138927 0.0 -0.274729")
+    assert html =~ ~s(data-axes="0.269464 0.086996 -0.155575 0.150682 0.0 -0.257955")
     assert html =~ ~s(data-arrows="1 0 0 1")
+    # The page starts on floor 1. The house has its look (the class
+    # cutaway-house in assets/css/app.css).
+    assert html =~ ~s(data-start="ground")
+    assert html =~ "cutaway-house"
     assert html =~ ~s(class="p-floor p-tile p-chosen")
     assert html =~ ~s(data-plan="0 0 144 294")
     # The roof has its rise: 147 inches times 5/12.
@@ -64,6 +68,11 @@ defmodule DIYWeb.CutawayTest do
     assert length(Regex.scan(~r/data-handle="/, html)) == 4
     assert html =~ ~s(data-outline=)
     refute html(build) =~ "data-outline"
+
+    # The item with an open sheet: its layer shows (the hook).
+    refute html =~ "data-open"
+    view = Cutaway.view(build)
+    assert render_component(&Cutaway.cutaway/1, view: view, open: "i16") =~ ~s(data-open="i16")
   end
 
   test "the slab under each room of the house has the id of its room" do
@@ -91,7 +100,7 @@ defmodule DIYWeb.CutawayTest do
     assert Enum.all?(f2.slabs, &match?({_points, _class, nil}, &1))
   end
 
-  test "the cut of the walls: full at the back, on a slope at the far end, else low" do
+  test "the cut of the walls: full at the back, on a slope at the far end, 75 cm between rooms, else low" do
     cut = fn camera -> for side <- ~w(x0 y0 x1 y1), do: Cutaway.cut(side, camera) end
     assert cut.(Camera.house()) == [:far, :back, :near, :front]
     assert cut.(Camera.van()) == [:back, :far, :front, :near]
@@ -113,8 +122,8 @@ defmodule DIYWeb.CutawayTest do
     [ground | _] = view.levels
     walls = Map.new(for %{kind: :wall, room: ^kitchen} = w <- ground.objects, do: {w.id, w})
     height = fn %{box: {_, _, z0, _, _, z1}} -> z1 - z0 end
-    assert height.(walls["ground-#{kitchen}-y0-0"]) == 2.4
-    assert height.(walls["ground-#{kitchen}-y1-0"]) == 0.25
+    assert_in_delta height.(walls["ground-#{kitchen}-y0-0"]), 2.4, 1.0e-9
+    assert_in_delta height.(walls["ground-#{kitchen}-y1-0"]), 0.25, 1.0e-9
 
     # The face of the wall at the left that looks to the side (x). On the
     # screen, its back end (from p1 up to p4) is higher than its front end
@@ -127,16 +136,16 @@ defmodule DIYWeb.CutawayTest do
     assert Enum.at(p1, 1) - Enum.at(p4, 1) > Enum.at(p2, 1) - Enum.at(p3, 1)
     assert Enum.at(p2, 1) - Enum.at(p3, 1) > 0
 
-    # The wall between the kitchen and the living room is low. A high wall
-    # there hides a part of the kitchen: the camera is a little to the
+    # The wall between the kitchen and the living room is cut at 75 cm. A
+    # high wall there hides a part of the kitchen: the camera is to the
     # right.
     living = room(build, "Living room")
 
-    assert [0.25] ==
+    assert [0.75] ==
              for(
                %{kind: :wall, room: ^living, id: id} = w <- ground.objects,
                id =~ "-x0-",
-               do: height.(w)
+               do: Float.round(height.(w), 6)
              )
              |> Enum.uniq()
 
@@ -155,7 +164,7 @@ defmodule DIYWeb.CutawayTest do
 
     {_x0, _x1, near} = Enum.min_by(parts, &elem(&1, 0))
     {_x0, _x1, far} = Enum.max_by(parts, &elem(&1, 0))
-    assert {near, far} == {0.25, 2.4}
+    assert {Float.round(near, 6), Float.round(far, 6)} == {0.25, 2.4}
 
     # A yard behind the kitchen. The wall at the back of the kitchen is then
     # low, so it does not hide the items of the yard.
@@ -168,8 +177,91 @@ defmodule DIYWeb.CutawayTest do
              for(
                %{kind: :wall, room: ^kitchen, id: id} = w <- ground.objects,
                id =~ "-y0-",
-               do: height.(w)
+               do: Float.round(height.(w), 6)
              )
+  end
+
+  test "a wall between two rooms is low where it can hide an item of the room behind it" do
+    build = house()
+
+    [kitchen, living, bed, bath] =
+      Enum.map(["Kitchen", "Living room", "Bedroom 1", "Bathroom"], &room(build, &1))
+
+    height = fn %{box: {_, _, z0, _, _, z1}} -> Float.round(z1 - z0, 6) end
+
+    # The parts of the wall on a side of a room: {from, to, height}, with
+    # from and to along the side (inches).
+    parts = fn build, room, side ->
+      view = Cutaway.view(build)
+
+      for level <- view.levels,
+          %{kind: :wall, room: ^room, id: id, box: {x0, y0, _, x1, y1, _}} = w <- level.objects,
+          id =~ "-#{side}-" do
+        {a, b} = if side == "x0", do: {y0, y1}, else: {x0, x1}
+        {round(a / 0.0254), round(b / 0.0254), height.(w)}
+      end
+      |> Enum.sort()
+    end
+
+    # With no item near them, the walls between the rooms are at 75 cm.
+    assert [{0, 294, 0.75}] == parts.(build, living, "x0")
+    assert [{0, 144, 0.75}] == parts.(build, bath, "y0")
+
+    # The dishwasher of the kitchen against the wall of the living room:
+    # the wall is low in front of it. The eye looks at a slant, so the low
+    # part goes on to the front.
+    move = fn build, type, room, at ->
+      items =
+        for item <- build.items,
+            do: if(item.type == type and item.room == room, do: %{item | at: at}, else: item)
+
+      %{build | items: items}
+    end
+
+    assert [{0, 100, 0.75}, {100, low, 0.25}, {low, 294, 0.75}] =
+             parts.(move.(build, "dishwasher", kitchen, %{x: 120, y: 100}), living, "x0")
+
+    assert low > 124
+
+    # The dishwasher at the back: the low part starts at the back corner. It
+    # stays on the line between the two rooms: it does not go past the
+    # corner, as a wall on the outside does.
+    corner = move.(build, "dishwasher", kitchen, %{x: 120, y: 0})
+    assert [{0, low, 0.25}, {low, 294, 0.75}] = parts.(corner, living, "x0")
+    assert low > 24
+
+    # The face of the low part and the face of the part of 75 cm are on the
+    # same plane. So on the screen, the two parts have a corner in common.
+    [low_part, high_part] =
+      for(
+        level <- Cutaway.view(corner).levels,
+        %{kind: :wall, room: ^living, id: id} = w <- level.objects,
+        id =~ "-x0-",
+        do: w
+      )
+      |> Enum.sort_by(fn %{box: {_, y0, _, _, _, _}} -> y0 end)
+
+    corners = fn w -> MapSet.new(for {points, _} <- w.polys, p <- String.split(points), do: p) end
+    refute MapSet.disjoint?(corners.(low_part), corners.(high_part))
+
+    # The computer of the bedroom against the wall of the bathroom.
+    assert [{0, 50, 0.75}, {50, low, 0.25}, {low, 144, 0.75}] =
+             parts.(move.(build, "computer", bed, %{x: 50, y: 150}), bath, "y0")
+
+    assert low > 74
+
+    # An item far from the wall, or an item over it (a fan), does not count.
+    assert [{0, 294, 0.75}] ==
+             parts.(move.(build, "dishwasher", kitchen, %{x: 60, y: 100}), living, "x0")
+
+    fan =
+      Enum.map(build.items, fn item ->
+        if item.type == "ceiling_fan",
+          do: %{item | room: kitchen, at: %{x: 100, y: 100}},
+          else: item
+      end)
+
+    assert [{0, 294, 0.75}] == parts.(%{build | items: fan}, living, "x0")
   end
 
   test "the lines of the floors: a pattern of each material, on the plane of the floor" do
@@ -178,7 +270,7 @@ defmodule DIYWeb.CutawayTest do
 
     # The pattern of a floor goes along the axes of the camera: one unit of
     # the pattern is one inch on the floor.
-    transform = ~s{patternTransform="matrix(0.295921 0.04514 -0.096151 0.138927 0 0)"}
+    transform = ~s{patternTransform="matrix(0.269464 0.086996 -0.155575 0.150682 0 0)"}
     css = File.read!("assets/css/app.css")
 
     for {name, w, h, _lines} <- Cutaway.textures() do
@@ -189,22 +281,23 @@ defmodule DIYWeb.CutawayTest do
     end
 
     # The lines of a floor are a second polygon with the same points, after
-    # the floor. A floor of carpet has no lines.
-    kitchen = room(build, "Kitchen")
+    # the floor. A floor of carpet has no lines. Then the light of a lamp
+    # at night: a room inside has it, and a yard does not.
+    polys = fn name ->
+      id = room(build, name)
 
-    assert [{floor, "p-floor p-tile"}, {floor, "p-tex p-tex-tile"}] =
-             Cutaway.view(build).levels
-             |> Enum.flat_map(& &1.rooms)
-             |> Enum.find(&(&1.id == kitchen))
-             |> Map.fetch!(:polys)
+      Cutaway.view(build).levels
+      |> Enum.flat_map(&(&1.low ++ &1.rooms))
+      |> Enum.find(&(&1.id == id))
+      |> Map.fetch!(:polys)
+    end
 
-    bedroom = room(build, "Bedroom 1")
+    assert [{floor, "p-floor p-tile"}, {floor, "p-tex p-tex-tile"}, {floor, "p-tex p-glow"}] =
+             polys.("Kitchen")
 
-    assert [{_floor, "p-floor p-carpet"}] =
-             Cutaway.view(build).levels
-             |> Enum.flat_map(& &1.rooms)
-             |> Enum.find(&(&1.id == bedroom))
-             |> Map.fetch!(:polys)
+    assert [{floor, "p-floor p-carpet"}, {floor, "p-tex p-glow"}] = polys.("Bedroom 1")
+    refute Enum.any?(polys.("Backyard"), &(elem(&1, 1) == "p-tex p-glow"))
+    assert css =~ ".p-glow { fill: url(#p-glow-fill);"
 
     # The two slopes of the roof have their shingles.
     assert length(Regex.scan(~r/class="p-tex p-tex-roof"/, html)) == 2
@@ -256,9 +349,8 @@ defmodule DIYWeb.CutawayTest do
     assert classes.("ground-#{kitchen}-y0-0") ==
              ~w(p-wall-r p-wall-l p-wall-t p-baseboard p-frame p-pane p-pane p-frame)
 
-    # A low wall has no trim. A wall on a slope has no window. The garage
-    # is deeper than the house: so the front of the slope is over a low
-    # wall, and the wall has its baseboard.
+    # A low wall has no trim. A wall on a slope has its baseboard, but no
+    # window.
     assert classes.("ground-#{kitchen}-y1-0") == ~w(p-wall-r p-wall-l p-wall-t)
     assert classes.("ground-#{kitchen}-x0-0") == ~w(p-wall-r p-wall-l p-wall-t p-baseboard)
 

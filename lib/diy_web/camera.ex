@@ -8,9 +8,10 @@ defmodule DIYWeb.Camera do
   down at (`pitch`). Two cameras draw the pictures of the app:
 
   - `house/0`: a dollhouse with no front wall. The camera is in front of
-    the house (at the large y), a little to its right, and it looks down
-    a little. The house goes along the screen, and its floors go down the
-    screen. An item shows its front.
+    the house (at the large y) and to its right (a yaw of 60°). It looks
+    down at 34°, as in a picture that an artist drew of a house. The house
+    goes along the screen, and its floors go down the screen. An item
+    shows its front, and its right side.
   - `van/0`: a van with no wall on its left side. The camera is at the
     left side of the van (the side of the driver, at the large x). It is
     a little to the front of the van (to the cab). The cab is at the left
@@ -33,7 +34,7 @@ defmodule DIYWeb.Camera do
   defstruct [:name, :yaw, :pitch, :right, :down, :eye, :ground, :lit]
 
   @doc "The camera of the house: a dollhouse, seen from the front."
-  def house, do: new(:house, 72, 28)
+  def house, do: new(:house, 60, 34)
 
   @doc "The camera of a van: seen from its left side."
   def van, do: new(:van, 18, 28)

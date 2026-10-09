@@ -318,6 +318,30 @@
   --p-grain: rgb(0 0 0 / 0.28); --p-stripe: rgb(255 255 255 / 0.05); --p-shadow: #000000;
   --p-frame: #d6d1c8; --p-pane: #2c4a66; --p-baseboard: #9b958b;
 }
+/* The house (the class cutaway-house): the warm colors of a picture that an
+   artist drew of a house, on a dark background. The van keeps the colors
+   above. */
+.cutaway-house {
+  --p-grass-t: #a9c98a; --p-yard: #97bb78;
+  --p-slab-t: #f3ece1; --p-slab-l: #fbf6ee; --p-slab-r: #e6dccd; --p-wall-t: #5f554c;
+  --p-wood: #dca671; --p-tile: #ece5d8; --p-carpet: #d9c7ad; --p-concrete: #cfcac2; --p-ply: #e3c89a;
+  --p-edge: rgb(64 44 32 / 0.45); --p-grain: rgb(110 60 20 / 0.2);
+  --p-chosen: #1d4ed8; --p-sky: #23211e;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme=light]) .cutaway-house {
+    --p-slab-t: #4a4540; --p-slab-l: #8a7f70; --p-slab-r: #6e6458; --p-wall-t: #1c1a18;
+    --p-wood: #8f5e36; --p-tile: #6e675d; --p-carpet: #74604c; --p-concrete: #5d5a55; --p-ply: #7a6343;
+    --p-grain: rgb(0 0 0 / 0.3);
+    --p-chosen: #93c5fd; --p-sky: #121110;
+  }
+}
+[data-theme=dark] .cutaway-house {
+  --p-slab-t: #4a4540; --p-slab-l: #8a7f70; --p-slab-r: #6e6458; --p-wall-t: #1c1a18;
+  --p-wood: #8f5e36; --p-tile: #6e675d; --p-carpet: #74604c; --p-concrete: #5d5a55; --p-ply: #7a6343;
+  --p-grain: rgb(0 0 0 / 0.3);
+  --p-chosen: #93c5fd; --p-sky: #121110;
+}
 .p-lot-t { fill: var(--p-grass-t) } .p-lot-l { fill: var(--p-grass-l) } .p-lot-r { fill: var(--p-grass-r) }
 .p-slab-t { fill: var(--p-slab-t) } .p-slab-l { fill: var(--p-slab-l) } .p-slab-r { fill: var(--p-slab-r) }
 .p-wall-t { fill: var(--p-wall-t) } .p-wall-l { fill: var(--p-wall-l) } .p-wall-r { fill: var(--p-wall-r) }
@@ -343,6 +367,100 @@
 .p-shadow-1 { stop-color: var(--p-shadow); stop-opacity: 0.16 }
 .p-shadow-2 { stop-color: var(--p-shadow); stop-opacity: 0 }
 .p-frame { fill: var(--p-frame) } .p-pane { fill: var(--p-pane) } .p-baseboard { fill: var(--p-baseboard) }
+
+/* The warm colors of the items on the plan of the house, as in a drawn
+   picture: by day, and at night (the dark mode). The outlines are brown, as
+   of ink. */
+.cutaway-house {
+  --c-white-t: #fbf4e8; --c-white-l: #efe3cf; --c-white-r: #d9c9ae;
+  --c-steel-t: #ece6dc; --c-steel-l: #d5cdc0; --c-steel-r: #b8ae9f;
+  --c-gray-t: #aaa398; --c-gray-l: #8f887d; --c-gray-r: #746d63;
+  --c-dark-t: #5d554d; --c-dark-l: #48413a; --c-dark-r: #37312c;
+  --c-wood-t: #dba26b; --c-wood-l: #c58b56; --c-wood-r: #a57043;
+  --c-light-wood-t: #eed4a8; --c-light-wood-l: #dfbf8c; --c-light-wood-r: #c6a36f;
+  --c-blue-t: #a6bcc6; --c-blue-l: #8ea7b3; --c-blue-r: #738c99;
+  --c-red-t: #dc8c6b; --c-red-l: #c67151; --c-red-r: #a3593d;
+  --c-cloth-t: #b9b2cf; --c-cloth-l: #a199bd; --c-cloth-r: #867ea3;
+  --c-copper-t: #e3a46f; --c-copper-l: #c98250; --c-copper-r: #a6653a;
+  --c-pink-t: #efc4c8; --c-pink-l: #e0a7ad; --c-pink-r: #c48890;
+  --c-shade-t: #fff1cc; --c-shade-l: #f8dc98; --c-shade-r: #e9c26a;
+  --c-screen: #2f3440; --c-glass: #b7cdd6; --c-line: #6e5d50; --c-ink: rgb(64 44 32 / 0.6);
+  --c-wall-top: #fbf5ec; --c-wall-low: #f1dcc2; --c-side-top: #eadfcd; --c-side-low: #dcc5a8;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme=light]) .cutaway-house {
+    --c-white-t: #b4aba0; --c-white-l: #aca090; --c-white-r: #9e8f7a;
+    --c-steel-t: #aaa298; --c-steel-l: #9b9186; --c-steel-r: #887d70;
+    --c-gray-t: #7f766b; --c-gray-l: #6d645a; --c-gray-r: #5b5248;
+    --c-dark-t: #4c423a; --c-dark-l: #3e352d; --c-dark-r: #332b24;
+    --c-wood-t: #9f754e; --c-wood-l: #916640; --c-wood-r: #7c5433;
+    --c-light-wood-t: #ac9676; --c-light-wood-l: #a28864; --c-light-wood-r: #917650;
+    --c-blue-t: #7c868a; --c-blue-l: #6c787d; --c-blue-r: #5b676c;
+    --c-red-t: #a0674e; --c-red-l: #91553d; --c-red-r: #7a452f;
+    --c-cloth-t: #898090; --c-cloth-l: #796f84; --c-cloth-r: #675d73;
+    --c-copper-t: #a47650; --c-copper-l: #93603c; --c-copper-r: #7c4d2d;
+    --c-pink-t: #ac8c8b; --c-pink-l: #a27879; --c-pink-r: #906466;
+    --c-shade-t: #b7a98e; --c-shade-l: #b29b6b; --c-shade-r: #a88a4d;
+    --c-screen: #1d2027; --c-glass: #4c5e6b; --c-line: #2e2520; --c-ink: rgb(20 12 8 / 0.7);
+    --c-wall-top: #6d5747; --c-wall-low: #9c7350; --c-side-top: #5a473a; --c-side-low: #7d5c41;
+  }
+}
+[data-theme=dark] .cutaway-house {
+  --c-white-t: #b4aba0; --c-white-l: #aca090; --c-white-r: #9e8f7a;
+  --c-steel-t: #aaa298; --c-steel-l: #9b9186; --c-steel-r: #887d70;
+  --c-gray-t: #7f766b; --c-gray-l: #6d645a; --c-gray-r: #5b5248;
+  --c-dark-t: #4c423a; --c-dark-l: #3e352d; --c-dark-r: #332b24;
+  --c-wood-t: #9f754e; --c-wood-l: #916640; --c-wood-r: #7c5433;
+  --c-light-wood-t: #ac9676; --c-light-wood-l: #a28864; --c-light-wood-r: #917650;
+  --c-blue-t: #7c868a; --c-blue-l: #6c787d; --c-blue-r: #5b676c;
+  --c-red-t: #a0674e; --c-red-l: #91553d; --c-red-r: #7a452f;
+  --c-cloth-t: #898090; --c-cloth-l: #796f84; --c-cloth-r: #675d73;
+  --c-copper-t: #a47650; --c-copper-l: #93603c; --c-copper-r: #7c4d2d;
+  --c-pink-t: #ac8c8b; --c-pink-l: #a27879; --c-pink-r: #906466;
+  --c-shade-t: #b7a98e; --c-shade-l: #b29b6b; --c-shade-r: #a88a4d;
+  --c-screen: #1d2027; --c-glass: #4c5e6b; --c-line: #2e2520; --c-ink: rgb(20 12 8 / 0.7);
+  --c-wall-top: #6d5747; --c-wall-low: #9c7350; --c-side-top: #5a473a; --c-side-low: #7d5c41;
+}
+.cutaway-house .i-white-t { fill: var(--c-white-t) } .cutaway-house .i-white-l { fill: var(--c-white-l) } .cutaway-house .i-white-r { fill: var(--c-white-r) }
+.cutaway-house .i-white-m1 { fill: color-mix(in oklab, var(--c-white-l) 75%, var(--c-white-r)) } .cutaway-house .i-white-m2 { fill: color-mix(in oklab, var(--c-white-l) 50%, var(--c-white-r)) } .cutaway-house .i-white-m3 { fill: color-mix(in oklab, var(--c-white-l) 25%, var(--c-white-r)) }
+.cutaway-house .i-steel-t { fill: var(--c-steel-t) } .cutaway-house .i-steel-l { fill: var(--c-steel-l) } .cutaway-house .i-steel-r { fill: var(--c-steel-r) }
+.cutaway-house .i-steel-m1 { fill: color-mix(in oklab, var(--c-steel-l) 75%, var(--c-steel-r)) } .cutaway-house .i-steel-m2 { fill: color-mix(in oklab, var(--c-steel-l) 50%, var(--c-steel-r)) } .cutaway-house .i-steel-m3 { fill: color-mix(in oklab, var(--c-steel-l) 25%, var(--c-steel-r)) }
+.cutaway-house .i-gray-t { fill: var(--c-gray-t) } .cutaway-house .i-gray-l { fill: var(--c-gray-l) } .cutaway-house .i-gray-r { fill: var(--c-gray-r) }
+.cutaway-house .i-gray-m1 { fill: color-mix(in oklab, var(--c-gray-l) 75%, var(--c-gray-r)) } .cutaway-house .i-gray-m2 { fill: color-mix(in oklab, var(--c-gray-l) 50%, var(--c-gray-r)) } .cutaway-house .i-gray-m3 { fill: color-mix(in oklab, var(--c-gray-l) 25%, var(--c-gray-r)) }
+.cutaway-house .i-dark-t { fill: var(--c-dark-t) } .cutaway-house .i-dark-l { fill: var(--c-dark-l) } .cutaway-house .i-dark-r { fill: var(--c-dark-r) }
+.cutaway-house .i-dark-m1 { fill: color-mix(in oklab, var(--c-dark-l) 75%, var(--c-dark-r)) } .cutaway-house .i-dark-m2 { fill: color-mix(in oklab, var(--c-dark-l) 50%, var(--c-dark-r)) } .cutaway-house .i-dark-m3 { fill: color-mix(in oklab, var(--c-dark-l) 25%, var(--c-dark-r)) }
+.cutaway-house .i-wood-t { fill: var(--c-wood-t) } .cutaway-house .i-wood-l { fill: var(--c-wood-l) } .cutaway-house .i-wood-r { fill: var(--c-wood-r) }
+.cutaway-house .i-wood-m1 { fill: color-mix(in oklab, var(--c-wood-l) 75%, var(--c-wood-r)) } .cutaway-house .i-wood-m2 { fill: color-mix(in oklab, var(--c-wood-l) 50%, var(--c-wood-r)) } .cutaway-house .i-wood-m3 { fill: color-mix(in oklab, var(--c-wood-l) 25%, var(--c-wood-r)) }
+.cutaway-house .i-light-wood-t { fill: var(--c-light-wood-t) } .cutaway-house .i-light-wood-l { fill: var(--c-light-wood-l) } .cutaway-house .i-light-wood-r { fill: var(--c-light-wood-r) }
+.cutaway-house .i-light-wood-m1 { fill: color-mix(in oklab, var(--c-light-wood-l) 75%, var(--c-light-wood-r)) } .cutaway-house .i-light-wood-m2 { fill: color-mix(in oklab, var(--c-light-wood-l) 50%, var(--c-light-wood-r)) } .cutaway-house .i-light-wood-m3 { fill: color-mix(in oklab, var(--c-light-wood-l) 25%, var(--c-light-wood-r)) }
+.cutaway-house .i-blue-t { fill: var(--c-blue-t) } .cutaway-house .i-blue-l { fill: var(--c-blue-l) } .cutaway-house .i-blue-r { fill: var(--c-blue-r) }
+.cutaway-house .i-blue-m1 { fill: color-mix(in oklab, var(--c-blue-l) 75%, var(--c-blue-r)) } .cutaway-house .i-blue-m2 { fill: color-mix(in oklab, var(--c-blue-l) 50%, var(--c-blue-r)) } .cutaway-house .i-blue-m3 { fill: color-mix(in oklab, var(--c-blue-l) 25%, var(--c-blue-r)) }
+.cutaway-house .i-red-t { fill: var(--c-red-t) } .cutaway-house .i-red-l { fill: var(--c-red-l) } .cutaway-house .i-red-r { fill: var(--c-red-r) }
+.cutaway-house .i-red-m1 { fill: color-mix(in oklab, var(--c-red-l) 75%, var(--c-red-r)) } .cutaway-house .i-red-m2 { fill: color-mix(in oklab, var(--c-red-l) 50%, var(--c-red-r)) } .cutaway-house .i-red-m3 { fill: color-mix(in oklab, var(--c-red-l) 25%, var(--c-red-r)) }
+.cutaway-house .i-cloth-t { fill: var(--c-cloth-t) } .cutaway-house .i-cloth-l { fill: var(--c-cloth-l) } .cutaway-house .i-cloth-r { fill: var(--c-cloth-r) }
+.cutaway-house .i-cloth-m1 { fill: color-mix(in oklab, var(--c-cloth-l) 75%, var(--c-cloth-r)) } .cutaway-house .i-cloth-m2 { fill: color-mix(in oklab, var(--c-cloth-l) 50%, var(--c-cloth-r)) } .cutaway-house .i-cloth-m3 { fill: color-mix(in oklab, var(--c-cloth-l) 25%, var(--c-cloth-r)) }
+.cutaway-house .i-copper-t { fill: var(--c-copper-t) } .cutaway-house .i-copper-l { fill: var(--c-copper-l) } .cutaway-house .i-copper-r { fill: var(--c-copper-r) }
+.cutaway-house .i-copper-m1 { fill: color-mix(in oklab, var(--c-copper-l) 75%, var(--c-copper-r)) } .cutaway-house .i-copper-m2 { fill: color-mix(in oklab, var(--c-copper-l) 50%, var(--c-copper-r)) } .cutaway-house .i-copper-m3 { fill: color-mix(in oklab, var(--c-copper-l) 25%, var(--c-copper-r)) }
+.cutaway-house .i-pink-t { fill: var(--c-pink-t) } .cutaway-house .i-pink-l { fill: var(--c-pink-l) } .cutaway-house .i-pink-r { fill: var(--c-pink-r) }
+.cutaway-house .i-pink-m1 { fill: color-mix(in oklab, var(--c-pink-l) 75%, var(--c-pink-r)) } .cutaway-house .i-pink-m2 { fill: color-mix(in oklab, var(--c-pink-l) 50%, var(--c-pink-r)) } .cutaway-house .i-pink-m3 { fill: color-mix(in oklab, var(--c-pink-l) 25%, var(--c-pink-r)) }
+.cutaway-house .i-shade-t { fill: var(--c-shade-t) } .cutaway-house .i-shade-l { fill: var(--c-shade-l) } .cutaway-house .i-shade-r { fill: var(--c-shade-r) }
+.cutaway-house .i-shade-m1 { fill: color-mix(in oklab, var(--c-shade-l) 75%, var(--c-shade-r)) } .cutaway-house .i-shade-m2 { fill: color-mix(in oklab, var(--c-shade-l) 50%, var(--c-shade-r)) } .cutaway-house .i-shade-m3 { fill: color-mix(in oklab, var(--c-shade-l) 25%, var(--c-shade-r)) }
+.cutaway-house .i-screen { fill: var(--c-screen) } .cutaway-house .i-glass { fill: var(--c-glass) } .cutaway-house .i-line { fill: var(--c-line) }
+.cutaway-house :is(.i-face, .i-outline) { stroke: var(--c-ink); stroke-width: 0.8 }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme=light]) .cutaway-house :is(.i-face, .i-outline) { stroke: var(--c-ink) }
+}
+[data-theme=dark] .cutaway-house :is(.i-face, .i-outline) { stroke: var(--c-ink) }
+.cutaway-house .p-wall-l { fill: url(#p-wall-light) } .cutaway-house .p-wall-r { fill: url(#p-wall-side) }
+.p-wall-top { stop-color: var(--c-wall-top) } .p-wall-low { stop-color: var(--c-wall-low) }
+.p-side-top { stop-color: var(--c-side-top) } .p-side-low { stop-color: var(--c-side-low) }
+/* At night (the dark mode), each room has the warm light of a lamp. */
+.p-glow { fill: url(#p-glow-fill); display: none; pointer-events: none }
+.p-glow-0 { stop-color: #ffb357; stop-opacity: 0.5 } .p-glow-1 { stop-color: #ffb357; stop-opacity: 0 }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme=light]) .p-glow { display: inline }
+}
+[data-theme=dark] .p-glow { display: inline }
 /* The van cut open (DIYWeb.VanCutaway): its walls (bare or with panels),
    the insulation in their cut, its floor, the mat of the cab, its roof. */
 .p-vwall-t { fill: var(--p-vwall-t) } .p-vwall-l { fill: var(--p-vwall-l) } .p-vwall-r { fill: var(--p-vwall-r) }
@@ -363,12 +481,14 @@
   vector-effect: non-scaling-stroke; pointer-events: none
 }
 .p-outline { fill: none; stroke: var(--p-chosen); stroke-width: 2; stroke-dasharray: 6 4; vector-effect: non-scaling-stroke; pointer-events: none }
-/* The tab of a layer: the other layers are pale (assets/js/plan.js). The
-   ids of the layers come from DIYWeb.Cutaway.view/1 (the house) and
+/* The tab of a layer (assets/js/plan.js): in the van, the other layers are
+   pale. In the house, they hide, and a tap goes through them. The ids of
+   the layers come from DIYWeb.Cutaway.view/1 (the house) and
    DIYWeb.VanCutaway (the van). */
 .cutaway[data-dim] > g[data-box] { opacity: 0.3; transition: opacity 0.2s }
+.cutaway-house[data-dim] > g[data-box] { opacity: 0; pointer-events: none }
 .cutaway[data-dim=ground] > #plan-ground, .cutaway[data-dim=f2] > #plan-f2, .cutaway[data-dim=f3] > #plan-f3,
 .cutaway[data-dim=attic] > #plan-attic, .cutaway[data-dim=roof] > #plan-roof, .cutaway[data-dim=floor] > #plan-floor {
-  opacity: 1
+  opacity: 1; pointer-events: auto
 }
 .p-handle { r: var(--p-handle, 2px); fill: var(--p-halo); stroke: var(--p-chosen); stroke-width: 2.5; vector-effect: non-scaling-stroke; cursor: move }

@@ -197,6 +197,11 @@ export function clamp(view, fit) {
   return {...view, x: axis(view.x, view.w, fit.x, fit.w), y: axis(view.y, view.h, fit.y, fit.h)}
 }
 
+// The id of the layer of an element of the plan.
+const layerOf = (el) => el.closest("[data-box]").getAttribute("id").replace("plan-", "")
+// A room or an item, and its layer, as a text; or null.
+const placeOf = (el) => (el ? `${el.getAttribute("data-room") || el.getAttribute("data-item")} ${layerOf(el)}` : null)
+
 // The view as the text of a viewBox.
 const box = (view) => [view.x, view.y, view.w, view.h].map((n) => n.toFixed(2)).join(" ")
 const parseView = (text) => {
@@ -234,7 +239,16 @@ export const planHook = {
     this.pointers = new Map()
     this.drag = null
     const saved = this.saved()
-    this.show(saved || this.fit())
+    // The view of the person comes back with its layer. With no view, the
+    // page starts on its first layer (the house: floor 1): the layer fills
+    // the screen, and the other layers hide.
+    const layer = saved ? this.stored(":layer") : this.svg.getAttribute("data-start")
+    const first = layer ? this.layerView(layer) : null
+    if (first) this.dim(layer)
+    this.show(saved || first || this.fit())
+    this.chosen = null
+    this.opened = null
+    this.reveal()
 
     this.listeners = {
       pointerdown: (e) => this.down(e),
@@ -259,10 +273,13 @@ export const planHook = {
     this.el.removeEventListener("keydown", this.onKey)
   },
 
-  // The box of all the layers. The server changes it when a room moves or
+  // The box of all the layers, or of the layer that shows when the others
+  // hide. The view stays in it. The server changes it when a room moves or
   // comes: so the script reads it each time.
   fit() {
-    return parseView(this.svg.getAttribute("data-fit"))
+    const dimmed = this.dimmed()
+    const layer = this.oneLayer() && dimmed && this.svg.querySelector(`#plan-${dimmed}`)
+    return parseView(layer ? layer.getAttribute("data-box") : this.svg.getAttribute("data-fit"))
   },
 
   units(view) {
@@ -286,23 +303,71 @@ export const planHook = {
     return this.view.w >= fit.w - 1e-6 && this.view.h >= fit.h - 1e-6
   },
 
+  // The house shows one layer at a time (data-start): the tab of a layer,
+  // or a room on a layer, makes the other layers hide. In the van, all the
+  // layers show, and the tab of a layer makes the other layers pale.
+  oneLayer() {
+    return this.svg.getAttribute("data-start") !== null
+  },
+
   // The view that the person had on this page before (a zoom), if any.
   saved() {
+    const text = this.stored("")
+    return text ? parseView(text) : null
+  },
+
+  // A value that stays for this plan in the tab (the view, and its layer),
+  // or null.
+  stored(name) {
     try {
-      const text = this.window().sessionStorage.getItem(KEY + this.el.id)
-      return text ? parseView(text) : null
+      return this.window().sessionStorage.getItem(KEY + this.el.id + name)
     } catch (_error) {
       return null
     }
   },
 
+  // A page with no storage keeps the view only while it is open.
+  store(name, value) {
+    try {
+      const storage = this.window().sessionStorage
+      if (value === null) storage.removeItem(KEY + this.el.id + name)
+      else storage.setItem(KEY + this.el.id + name, value)
+    } catch (_error) {
+      // Nothing to do.
+    }
+  },
+
   // The server draws the SVG again: its labels and its handles show again.
-  // A pale state for a layer that is not there now stops.
+  // The layer that stands out stops when it is not there now. A room that
+  // the person chooses shows.
   updated() {
     const dimmed = this.dimmed()
-    if (dimmed && !this.svg.querySelector(`#plan-${dimmed}`)) this.dim(null)
+    this.dim(dimmed && this.svg.querySelector(`#plan-${dimmed}`) ? dimmed : null)
     this.declutter()
     this.handles()
+    this.reveal()
+  },
+
+  // A room that the person chooses, or an item with an open sheet, shows
+  // (also from the list or a sheet). When it is on a layer that hides, the
+  // view zooms in to the room, or its layer shows. Only a new choice, or a
+  // move to a different layer, moves the view.
+  reveal() {
+    const outline = this.svg.querySelector("[data-outline]")
+    const room = outline && this.surface(outline.getAttribute("data-outline"))
+    const open = this.svg.getAttribute("data-open")
+    const item = open && this.svg.querySelector(`[data-item="${open}"]`)
+    const [chosen, opened] = [placeOf(room), placeOf(item)]
+    if (chosen !== this.chosen && room && this.hidden(room)) this.zoomTo(room)
+    else if (opened !== this.opened && item && this.hidden(item)) this.showLayer(layerOf(item))
+    this.chosen = chosen
+    this.opened = opened
+  },
+
+  // True when an element is on a layer that hides (the house).
+  hidden(el) {
+    const dimmed = this.dimmed()
+    return this.oneLayer() && dimmed !== null && layerOf(el) !== dimmed
   },
 
   // Shows a view: the viewBox, and the size of the labels and the handles
@@ -321,11 +386,7 @@ export const planHook = {
       this.declutter()
     }
     this.handles()
-    try {
-      this.window().sessionStorage.setItem(KEY + this.el.id, box(view))
-    } catch (_error) {
-      // A page with no storage keeps the view only while it is open.
-    }
+    this.store("", box(view))
   },
 
   // Where two labels overlap, or are nearer than 4 pixels, the label of
@@ -589,12 +650,12 @@ export const planHook = {
   },
 
   // The view zooms in to a room: all the surfaces of its floor (a roof has
-  // three), its items, its walls and its slab. When the room is not on the
-  // layer of the tab, no layer is pale.
+  // three), its items, its walls and its slab. The other layers hide.
   zoomTo(room) {
-    const layer = room.closest("[data-box]")
+    const layer = layerOf(room)
     const dimmed = this.dimmed()
-    if (dimmed && layer.getAttribute("id") !== `plan-${dimmed}`) this.dim(null)
+    if (this.oneLayer()) this.dim(layer)
+    else if (dimmed && dimmed !== layer) this.dim(null)
     const id = room.getAttribute("data-room")
     const parts = this.svg.querySelectorAll(`[data-room="${id}"], [data-in="${id}"], [data-of="${id}"]`)
     const boxes = [...parts].map((el) => el.getBBox())
@@ -605,11 +666,39 @@ export const planHook = {
     this.show(focus(this.view, {x, y, w, h}, this.shape(), this.fit()))
   },
 
-  // One layer stands out (the tab of a layer): the other layers are pale.
-  // The SVG keeps the attribute when the server draws it again.
+  // One layer stands out (the tab of a layer): the other layers hide (the
+  // house) or are pale (the van). The SVG keeps the attribute when the
+  // server draws it again. The tab of the layer is pressed.
   dim(id) {
     if (id) this.svg.setAttribute("data-dim", id)
     else this.svg.removeAttribute("data-dim")
+    this.store(":layer", id || null)
+    for (const tab of this.el.querySelectorAll("[data-focus]"))
+      tab.setAttribute("aria-pressed", String(tab.getAttribute("data-focus") === id))
+  },
+
+  // The view fills the screen with a layer, and the other layers hide.
+  showLayer(id) {
+    this.dim(id)
+    this.show(this.layerView(id))
+  },
+
+  // The view that fills the screen with a layer, or null with no layer.
+  // The house fills the screen (its slabs and its walls): the yards can go
+  // past the edge.
+  layerView(id) {
+    const layer = this.svg.querySelector(`#plan-${id}`)
+    if (!layer) return null
+    const shell = [...layer.querySelectorAll("[data-of]")].map((el) => el.getBBox())
+    if (shell.length === 0) {
+      const [x, y, w, h] = numbers(layer.getAttribute("data-box"))
+      return frame({x, y, w, h}, this.shape(), 1.05)
+    }
+    const x = Math.min(...shell.map((b) => b.x))
+    const y = Math.min(...shell.map((b) => b.y))
+    const w = Math.max(...shell.map((b) => b.x + b.width)) - x
+    const h = Math.max(...shell.map((b) => b.y + b.height)) - y
+    return frame({x, y, w, h}, this.shape(), 1.08)
   },
 
   // The layer that stands out, or null.
@@ -672,8 +761,7 @@ export const planHook = {
   },
 
   // The buttons: zoom in, zoom out, all the house, and one layer. The tab
-  // of a layer fills the screen with the layer, and the other layers are
-  // pale.
+  // of a layer fills the screen with the layer, and the other layers hide.
   click(e) {
     const button = e.target.closest("[data-zoom], [data-focus]")
     if (!button) return
@@ -687,10 +775,11 @@ export const planHook = {
       const factor = zoomTo === "in" ? 1.5 : 1 / 1.5
       return this.show(zoom(v, factor, v.x + v.w / 2, v.y + v.h / 2, this.fit()))
     }
-    const id = button.getAttribute("data-focus")
-    const [x, y, w, h] = numbers(this.svg.querySelector(`#plan-${id}`).getAttribute("data-box"))
-    this.dim(id)
-    this.show(frame({x, y, w, h}, this.shape(), 1.05))
+    this.showLayer(button.getAttribute("data-focus"))
+    // A chosen room on a layer that hides is not chosen now.
+    const outline = this.svg.querySelector("[data-outline]")
+    const room = outline && this.surface(outline.getAttribute("data-outline"))
+    if (room && this.hidden(room)) this.pushEvent("select_room", {id: ""})
   },
 
   // The arrow keys on an item or a room of the list.
@@ -700,7 +789,11 @@ export const planHook = {
     if (!el || !move) return
     e.preventDefault()
     const item = el.getAttribute("data-nudge")
+    const room = el.getAttribute("data-nudge-room")
     if (item) this.pushEvent("nudge_item", {id: item, ...move})
-    else this.pushEvent("nudge_room", {id: el.getAttribute("data-nudge-room"), ...move})
+    else this.pushEvent("nudge_room", {id: room, ...move})
+    // The item or the room that moves shows: its layer comes.
+    const target = item ? this.svg.querySelector(`[data-item="${item}"]`) : this.surface(room)
+    if (target && this.hidden(target)) this.showLayer(layerOf(target))
   },
 }
