@@ -15,7 +15,7 @@ defmodule DIYWeb.Inside do
   """
   use DIYWeb, :html
 
-  alias DIY.{Build, Catalog, Estimate, Layout, Prices}
+  alias DIY.{Build, Catalog, Estimate, Layout, Prices, Solar}
   alias DIYWeb.{Camera, Cutaway, Format, Icon}
 
   @place_names %{indoor: "Inside", outdoor: "Outside", roof: "On the roof"}
@@ -452,6 +452,11 @@ defmodule DIYWeb.Inside do
     features = if van, do: kind.features, else: kind.features -- @van_features
     features = if gas_item?(assigns.item), do: features ++ [:gas], else: features
 
+    solar =
+      if assigns.item.type == "solar_panels",
+        do: Solar.notes(assigns.build, assigns.item),
+        else: []
+
     assigns =
       assign(assigns,
         kind: kind,
@@ -459,7 +464,8 @@ defmodule DIYWeb.Inside do
         rooms: rooms,
         van: van,
         features: features,
-        gas: Prices.gas(assigns.build)
+        gas: Prices.gas(assigns.build),
+        solar: solar
       )
 
     ~H"""
@@ -515,6 +521,10 @@ defmodule DIYWeb.Inside do
           error={@error == param.key}
         />
       </form>
+
+      <ul :if={@solar != []} id="item-solar" class="text-sm list-disc pl-5 space-y-1">
+        <li :for={note <- @solar}>{note}</li>
+      </ul>
 
       <p
         :if={@item.type in ~w(power_station solar_panels) or (@outage && @item.backup)}

@@ -148,6 +148,9 @@ defmodule DIY.Layout do
     {cols, div(n + cols - 1, cols)}
   end
 
+  @doc "The watts of one solar panel."
+  def panel_watts, do: @panel_watts
+
   @doc "The count of panels for a power: about 400 W each."
   def panels(watts), do: max(1, round(watts / @panel_watts))
 

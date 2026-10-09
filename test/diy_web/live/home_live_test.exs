@@ -524,6 +524,28 @@ defmodule DIYWeb.HomeLiveTest do
            )
   end
 
+  test "the sheet of solar panels: the roof, the station, and a typical price", %{conn: conn} do
+    build = house()
+    roof = Enum.find(build.rooms, &(&1.name == "Roof"))
+    {:ok, build, panels} = Build.add_item(build, roof.id, "solar_panels")
+    view = open(conn, ~p"/inside?#{[item: panels]}", build)
+    settle(view)
+    assert has_element?(view, "#item-solar", "One side of the roof holds near 15 panels of 400 W")
+    assert has_element?(view, "#item-solar", "No power station is in the house")
+
+    view
+    |> form("#item-form", %{"item" => %{"to" => "grid", "watts" => "6000"}})
+    |> render_change()
+
+    assert has_element?(view, "#item-solar", "For 6,000 W: near $17,880.")
+    refute has_element?(view, "#item-solar", "No power station")
+
+    # A fridge has no such notes.
+    fridge = Enum.find(build.items, &(&1.type == "fridge"))
+    render_patch(view, ~p"/inside?#{[item: fridge.id]}")
+    refute has_element?(view, "#item-solar")
+  end
+
   test "two items with the same name: the bill gives the room of each one", %{conn: conn} do
     build = house()
     garage = Enum.find(build.rooms, &(&1.name == "Garage"))
