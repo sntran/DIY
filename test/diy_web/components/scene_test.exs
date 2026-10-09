@@ -207,6 +207,13 @@ defmodule DIYWeb.SceneTest do
         assert x > 0.1 and x < w - 0.1, model
       end
 
+      # With three panels, the panel that is alone in its row is in the
+      # middle of the roof.
+      html = render_component(&Scene.van/1, id: "v", parts: %{parts | solar: 600})
+      [_one, _two, alone] = polygons(html, "s-pv")
+      xs = for point <- alone, do: elem(world(camera, point, :z, h + 0.04), 0)
+      assert_in_delta (Enum.min(xs) + Enum.max(xs)) / 2, w / 2, 0.01
+
       # The top of the fan is 16 cm over the roof, also in its middle.
       assert [_top] = polygons(html, "s-ac-t")
 
@@ -390,8 +397,8 @@ defmodule DIYWeb.SceneTest do
     end
   end
 
-  # The point of the world at a point of the screen, on a plane: x = k
-  # (it gives y and z) or z = k (it gives x and y).
+  # The point of the world at a point of the screen, on a plane. On the
+  # plane x = k, it gives y and z. On the plane z = k, it gives x and y.
   defp world(camera, {sx, sy}, axis, k) do
     at = &Camera.at(camera, {0, 0}, &1)
     {ex, ey, ez} = {at.({1, 0, 0}), at.({0, 1, 0}), at.({0, 0, 1})}

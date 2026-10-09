@@ -885,9 +885,14 @@ defmodule DIYWeb.Scene do
 
     panels =
       if parts.solar > 0 do
-        for i <- 0..(count(parts.solar, @van_panel_w, 4) - 1) do
-          at = {rem(i, 2) * 0.91, div(i, 2) * 1.4}
-          corner = {x + w / 2 - 0.895, y + 0.75, h + 0.04}
+        count = count(parts.solar, @van_panel_w, 4)
+
+        for i <- 0..(count - 1) do
+          row = div(i, 2)
+          # A row of one panel is in the middle of the roof too.
+          left = if count - 2 * row == 1, do: w / 2 - 0.44, else: w / 2 - 0.895
+          at = {rem(i, 2) * 0.91, row * 1.4}
+          corner = {x + left, y + 0.75, h + 0.04}
           {:poly, Geometry.on_plane(corner, {1, 0, 0}, {0, 1, 0}, at, {0.88, 1.36}), "s-pv"}
         end
       else
