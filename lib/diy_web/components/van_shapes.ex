@@ -1,7 +1,8 @@
 defmodule DIYWeb.Icon.VanShapes do
   @moduledoc """
-  The models of the three vans (`DIY.Catalog.van_models/0`), at their real
-  size in meters, as parts of `DIYWeb.Icon.Shapes`.
+  The models of the vans (`DIY.Catalog.van_models/0`), at their real size
+  in meters, as parts of `DIYWeb.Icon.Shapes`. The models of one make
+  have the same front.
 
   The front of a van looks to y, and its right side (the side of the
   sliding door) is at x = 0 (`DIYWeb.Geometry`). A body is the side
@@ -38,34 +39,49 @@ defmodule DIYWeb.Icon.VanShapes do
   # roof of the cab and its cap, up to the roof.
   # `belt` is the bottom of the windows of the doors, and `lean` is how far
   # each side leans in at the roof. `grille` is the kind of the front.
+  @transit %{
+    front: [{0.06, 0.6}, {0.08, 1.0}, {0.22, 1.08}, {0.8, 1.21}],
+    glass: [{0.86, 1.24}, {1.5, 1.92}],
+    roof: [{1.62, 1.98}, {1.74, 2.12}, {1.94, 2.56}, {2.14, 2.73}, {2.4, :top}],
+    belt: 1.2,
+    lean: 0.1,
+    wrap: {0.08, 0.42, 0.84, 1.0, 1.08},
+    grille: :transit
+  }
+  @sprinter %{
+    front: [{0.05, 0.6}, {0.07, 0.98}, {0.28, 1.07}, {1.0, 1.18}],
+    glass: [{1.06, 1.22}, {1.7, 1.95}],
+    roof: [{1.8, 2.02}, {2.02, 2.36}, {2.32, 2.62}, {2.7, :top}],
+    belt: 1.18,
+    lean: 0.06,
+    wrap: {0.07, 0.5, 0.8, 0.98, 1.08},
+    grille: :sprinter
+  }
+  @promaster %{
+    front: [{0.04, 0.6}, {0.06, 1.0}, {0.44, 1.12}],
+    glass: [{0.5, 1.15}, {1.18, 1.98}],
+    roof: [{1.28, 2.05}, {1.4, 2.42}, {1.58, :top}],
+    belt: 1.15,
+    lean: 0.03,
+    wrap: {0.06, 0.3, 0.84, 1.0, 1.08},
+    grille: :promaster
+  }
+
+  # The models of one make have the same front. A medium roof rises less
+  # behind the windshield.
   @models %{
-    "transit_148" => %{
-      front: [{0.06, 0.6}, {0.08, 1.0}, {0.22, 1.08}, {0.8, 1.21}],
-      glass: [{0.86, 1.24}, {1.5, 1.92}],
-      roof: [{1.62, 1.98}, {1.74, 2.12}, {1.94, 2.56}, {2.14, 2.73}, {2.4, :top}],
-      belt: 1.2,
-      lean: 0.1,
-      wrap: {0.08, 0.42, 0.84, 1.0, 1.08},
-      grille: :transit
+    "transit_148" => @transit,
+    "transit_148_el" => @transit,
+    "transit_148_medium" => %{
+      @transit
+      | roof: [{1.62, 1.98}, {1.74, 2.12}, {1.94, 2.4}, {2.14, 2.5}, {2.3, :top}]
     },
-    "sprinter_170" => %{
-      front: [{0.05, 0.6}, {0.07, 0.98}, {0.28, 1.07}, {1.0, 1.18}],
-      glass: [{1.06, 1.22}, {1.7, 1.95}],
-      roof: [{1.8, 2.02}, {2.02, 2.36}, {2.32, 2.62}, {2.7, :top}],
-      belt: 1.18,
-      lean: 0.06,
-      wrap: {0.07, 0.5, 0.8, 0.98, 1.08},
-      grille: :sprinter
-    },
-    "promaster_159" => %{
-      front: [{0.04, 0.6}, {0.06, 1.0}, {0.44, 1.12}],
-      glass: [{0.5, 1.15}, {1.18, 1.98}],
-      roof: [{1.28, 2.05}, {1.4, 2.42}, {1.58, :top}],
-      belt: 1.15,
-      lean: 0.03,
-      wrap: {0.06, 0.3, 0.84, 1.0, 1.08},
-      grille: :promaster
-    }
+    "sprinter_144" => @sprinter,
+    "sprinter_170" => @sprinter,
+    "sprinter_170_ext" => @sprinter,
+    "promaster_136" => @promaster,
+    "promaster_159" => @promaster,
+    "promaster_159_ext" => @promaster
   }
 
   @doc "The height of the hood of a model of a van over the ground, in meters."

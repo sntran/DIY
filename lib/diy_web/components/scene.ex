@@ -47,7 +47,7 @@ defmodule DIYWeb.Scene do
   @eave 0.5
 
   # The lot: from x0 to x1, and from y0 to y1, and its depth.
-  @lot {-3.0, 19.0, -2.5, 14.2}
+  @lot {-3.0, 19.0, -2.5, 14.6}
   @slab 1.2
 
   # The garage, on the right of the house: x, y, width, depth, height.
