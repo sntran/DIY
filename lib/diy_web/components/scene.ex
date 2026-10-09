@@ -47,7 +47,7 @@ defmodule DIYWeb.Scene do
   @eave 0.5
 
   # The lot: from x0 to x1, and from y0 to y1, and its depth.
-  @lot {-3.0, 19.0, -2.5, 13.5}
+  @lot {-3.0, 19.0, -2.5, 14.2}
   @slab 1.2
 
   # The garage, on the right of the house: x, y, width, depth, height.
@@ -497,13 +497,18 @@ defmodule DIYWeb.Scene do
     {back, front}
   end
 
-  # The van in the drive: its back is far enough from the street for its
-  # length.
   defp drive_van(%{van: nil}), do: []
+  defp drive_van(parts), do: van_body(drive_spot(parts), parts.van, Camera.house())
 
-  defp drive_van(parts) do
-    {l, _w, _h} = van_size(parts.van)
-    van_body({van_x(parts), 13.3 - l}, parts.van, Camera.house())
+  @doc """
+  The place of the van in the drive of the picture of a house: the back
+  corner of its body, in meters. The van stands between the garage and the
+  street. Its front is 0.2 meters from the end of the lot.
+  """
+  def drive_spot(%{van: van} = parts) do
+    {l, _w, _h} = van_size(van)
+    {_x0, _x1, _y0, y1} = @lot
+    {van_x(parts), y1 - 0.2 - l}
   end
 
   # The van and the car share the drive.
@@ -867,20 +872,23 @@ defmodule DIYWeb.Scene do
     end
   end
 
-  # A camper van of its model (`DIYWeb.Icon.VanShapes`), from its back
-  # corner at x, y, with the front to +y. On its roof: its panels (two in a
-  # row) and its fan, at the back.
+  # A camper van of its model (`DIYWeb.Icon.VanShapes`), from the back
+  # corner of its body at x, y, with the front to +y. On its roof: its
+  # panels (two in a row, in the middle of the roof) and its fan, at the
+  # back.
   defp van_body({x, y}, parts, camera) do
-    {_l, _w, h} = van_size(parts)
-    frame = %{at: {x, y, 0.0}, turn: 0, camera: camera}
-    body = Shapes.placed_model(Shapes.van(parts.model), frame)
+    {_l, w, h} = van_size(parts)
+    model = Shapes.van(parts.model)
+    # The box of the model starts at the far mirror, out of the body.
+    {{mx, _my, _mz}, _high} = Shapes.bounds(model)
+    body = Shapes.placed_model(model, %{at: {x + mx, y, 0.0}, turn: 0, camera: camera})
 
     panels =
       if parts.solar > 0 do
         for i <- 0..(count(parts.solar, @van_panel_w, 4) - 1) do
-          at = {rem(i, 2) * 0.97, div(i, 2) * 1.4}
-          corner = {x + 0.06, y + 0.75, h + 0.04}
-          {:poly, Geometry.on_plane(corner, {1, 0, 0}, {0, 1, 0}, at, {0.92, 1.36}), "s-pv"}
+          at = {rem(i, 2) * 0.91, div(i, 2) * 1.4}
+          corner = {x + w / 2 - 0.895, y + 0.75, h + 0.04}
+          {:poly, Geometry.on_plane(corner, {1, 0, 0}, {0, 1, 0}, at, {0.88, 1.36}), "s-pv"}
         end
       else
         []
@@ -888,7 +896,7 @@ defmodule DIYWeb.Scene do
 
     fan =
       if parts.fan,
-        do: faces(Geometry.box({x + 0.72, y + 0.15, h}, {0.6, 0.5, 0.16}), "s-ac", camera),
+        do: faces(Geometry.box({x + w / 2 - 0.3, y + 0.15, h}, {0.6, 0.5, 0.16}), "s-ac", camera),
         else: []
 
     body ++ panels ++ fan

@@ -894,10 +894,18 @@ It gets one of three steps between the light and the shade (`-m1`,
   - Over the bottom of the windows (the belt), the sides lean in. The van
     has its mirrors, its bumpers, and its wheels with their rims. It has
     the windows of its doors, the sliding door on its right side, and the
-    doors at its back. The same shape shows in the picture, in the plan
-    of the house, and in the plan of the van.
+    doors at its back. A mirror reaches 7 inches out of its side: the
+    plan gives a van this space (`DIY.Layout.size/1`).
+  - The same shape shows in the pictures and in the plan of the house.
+    The plan of the van uses only the height of its hood
+    (`DIYWeb.VanCutaway`).
+  - On the roof, the panels are in rows of two, in the middle of the
+    roof. The fan is at the back. In the drive, the van stands between
+    the garage and the street.
 - The colors are CSS variables (`assets/css/app.css`): a day in the light
-  mode, and a night with lit windows in the dark mode.
+  mode, and a night with lit windows in the dark mode. The van uses the
+  colors of the icons (`i-white`). At night, these are dim in a picture
+  of a house, as the walls are.
 - The pictures are for the eyes only (`aria-hidden`): the text of each
   page gives the same facts. The picture of the front page is the link
   into the house, with a label that tells what the picture shows.
@@ -913,7 +921,7 @@ It gets one of three steps between the light and the shade (`-m1`,
   code paints each object from the back to the front, in an order that it
   sets by hand. The lines of the flows go behind the bushes, the person
   and the cars, and the labels go last.
-- A property test makes random parts of a house: each point of the
+- A property test makes random parts of a house. Each point of the
   picture is in its box, and each flow and label has its equipment.
 
 Each kind of item has its icon (`DIYWeb.Icon`), in the same style. The
@@ -1028,9 +1036,11 @@ its turn. A length is in inches.
   - A floor has the lines of its material. Wood has planks (6 inches
     wide), and tile has tiles of 18 inches. Concrete has slabs, a deck
     has boards, and ply has sheets of 4 by 8 feet. Grass has the stripes
-    of a mower, and a roof has rows of shingles. Each is an SVG pattern on the plane of the
-    floor (`DIYWeb.Cutaway.textures/0`): one unit of a pattern is one
-    inch on the floor. A floor of carpet has no lines.
+    of a mower, and a roof has rows of shingles. A flat roof has the
+    seams of its membrane, and the metal floor of a van has ribs. Each
+    is an SVG pattern on the plane of the floor
+    (`DIYWeb.Cutaway.textures/0`): one unit of a pattern is one inch on
+    the floor. A floor of carpet has no lines.
   - An item that stands on a floor has a soft shadow under it, 3 inches
     out from each side. An item on a wall or a ceiling has no shadow.
   - A high wall has a baseboard. When it has its full height and is 42

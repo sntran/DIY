@@ -19,7 +19,7 @@ defmodule DIYWeb.Icon.Shapes do
   - `{:cyl, center, r, h, material}`: a cylinder that stands at a center.
   - `{:prism, loop, z, h, material}`: a prism that stands on a loop of
     points (`{x, y}`, counterclockwise from above), from z to z + h. A
-    box with round corners (`rbox/4`) is a prism.
+    box with round corners (`rounded/3`) is a prism.
   - `{:face, corners, normal, class}`: a flat part, with the direction
     that it looks to (`nil`: it always shows).
 
@@ -303,30 +303,36 @@ defmodule DIYWeb.Icon.Shapes do
   # A cylinder that stands at a center.
   defp cylinder(center, r, h, material), do: [{:cyl, center, r, h, material}]
 
-  # A box with round corners (a radius r), from a corner and a size.
-  defp rbox({x, y, z}, {w, d, h}, r, material) do
-    r = min(r, min(w, d) / 2)
+  @doc """
+  A loop of points round a rectangle with round corners (a radius r),
+  counterclockwise, from a corner and a size. The radius is at most half
+  of the shorter side. Each corner has 5 points. Where two corners meet (a
+  side with no length), they share one point.
+  """
+  def rounded({u, v}, {du, dv}, r) do
+    r = min(r, min(du, dv) / 2)
 
     centers = [
-      {x + w - r, y + r, -90},
-      {x + w - r, y + d - r, 0},
-      {x + r, y + d - r, 90},
-      {x + r, y + r, 180}
+      {u + du - r, v + r, -90},
+      {u + du - r, v + dv - r, 0},
+      {u + r, v + dv - r, 90},
+      {u + r, v + r, 180}
     ]
 
     loop =
-      for {cx, cy, from} <- centers,
+      for {cu, cv, from} <- centers,
           k <- 0..4,
           a = (from + k * 22.5) * :math.pi() / 180,
-          do: {cx + r * :math.cos(a), cy + r * :math.sin(a)}
+          do: {cu + r * :math.cos(a), cv + r * :math.sin(a)}
 
-    # Two corners that are at the same point (a side with no length) are
-    # one corner.
-    key = fn {px, py} -> {Float.round(px / 1, 9), Float.round(py / 1, 9)} end
+    key = fn {pu, pv} -> {Float.round(pu / 1, 9), Float.round(pv / 1, 9)} end
     loop = Enum.dedup_by(loop, key)
-    loop = if key.(hd(loop)) == key.(List.last(loop)), do: Enum.drop(loop, -1), else: loop
-    [{:prism, loop, z, h, material}]
+    if key.(hd(loop)) == key.(List.last(loop)), do: Enum.drop(loop, -1), else: loop
   end
+
+  # A box with round corners (a radius r), from a corner and a size.
+  defp rbox({x, y, z}, {w, d, h}, r, material),
+    do: [{:prism, rounded({x, y}, {w, d}, r), z, h, material}]
 
   # The wheels of a car or a van: on the side at x (x = 0 is the far side).
   defp wheels(x, ys, r) do

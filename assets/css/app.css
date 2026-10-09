@@ -246,6 +246,22 @@
 .i-copper-m1 { fill: color-mix(in oklab, #c97b43 75%, #a55f2c) } .i-copper-m2 { fill: color-mix(in oklab, #c97b43 50%, #a55f2c) } .i-copper-m3 { fill: color-mix(in oklab, #c97b43 25%, #a55f2c) }
 .i-pink-m1 { fill: color-mix(in oklab, #f9a8d4 75%, #ec4899) } .i-pink-m2 { fill: color-mix(in oklab, #f9a8d4 50%, #ec4899) } .i-pink-m3 { fill: color-mix(in oklab, #f9a8d4 25%, #ec4899) }
 .i-line { fill: #6b7280 } .i-black { fill: #1f2328 }
+/* At night (the dark mode), a white item in a picture of a house is dim,
+   as the walls of the house are: for example, the van in the drive. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme=light]) .scene .i-white-t { fill: #c9ccd2 }
+  :root:not([data-theme=light]) .scene .i-white-l { fill: #b8bcc3 }
+  :root:not([data-theme=light]) .scene .i-white-m1 { fill: color-mix(in oklab, #b8bcc3 75%, #969aa2) }
+  :root:not([data-theme=light]) .scene .i-white-m2 { fill: color-mix(in oklab, #b8bcc3 50%, #969aa2) }
+  :root:not([data-theme=light]) .scene .i-white-m3 { fill: color-mix(in oklab, #b8bcc3 25%, #969aa2) }
+  :root:not([data-theme=light]) .scene .i-white-r { fill: #969aa2 }
+}
+[data-theme=dark] .scene .i-white-t { fill: #c9ccd2 }
+[data-theme=dark] .scene .i-white-l { fill: #b8bcc3 }
+[data-theme=dark] .scene .i-white-m1 { fill: color-mix(in oklab, #b8bcc3 75%, #969aa2) }
+[data-theme=dark] .scene .i-white-m2 { fill: color-mix(in oklab, #b8bcc3 50%, #969aa2) }
+[data-theme=dark] .scene .i-white-m3 { fill: color-mix(in oklab, #b8bcc3 25%, #969aa2) }
+[data-theme=dark] .scene .i-white-r { fill: #969aa2 }
 .i-outline { fill: none; stroke: rgb(31 35 40 / 0.35); stroke-width: 0.75; stroke-linejoin: round; vector-effect: non-scaling-stroke }
 .i-burner { fill: none; stroke: #6b7280; stroke-width: 1.5; vector-effect: non-scaling-stroke }
 .i-glass { fill: #8ec5ec } .i-glass-dark { fill: #2b3a52 } .i-shine { fill: rgb(255 255 255 / 0.14) } .i-screen { fill: #1e40af }

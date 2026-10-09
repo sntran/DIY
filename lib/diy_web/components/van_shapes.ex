@@ -21,7 +21,7 @@ defmodule DIYWeb.Icon.VanShapes do
   - Mercedes-Benz Sprinter: a long, low hood, and a high roof that rises
     in a curve from the top of the windshield. A tall grille with the
     star, and long lights.
-  - Ram ProMaster: a short nose that is almost vertical, a large black
+  - Ram ProMaster: a short nose that is almost upright, a large black
     grille and bumper, and lights high on the front. A very flat body.
   """
 
@@ -100,9 +100,12 @@ defmodule DIYWeb.Icon.VanShapes do
         sides(spec, {l, w, h}) ++ back({w, h}) ++ front(spec, {l, w, h})
 
     # The mirrors are parts of their own: the order of the paint puts each
-    # of their boxes at its place.
-    mirror(spec, l, {-0.26, -0.12}, -0.02) ++
-      [{:group, body ++ details}] ++ mirror(spec, l, {w + 0.12, w + 0.26}, w + 0.02)
+    # of their boxes at its place. A mirror reaches 7 inches out of its
+    # side: the plan gives a van this space (`DIY.Layout.size/1`).
+    reach = 7 * 0.0254
+
+    mirror(spec, l, {-reach, -0.06}, -0.02) ++
+      [{:group, body ++ details}] ++ mirror(spec, l, {w + 0.06, w + reach}, w + 0.02)
   end
 
   # The profile of the body, counterclockwise in the plane of y (to the
@@ -393,7 +396,7 @@ defmodule DIYWeb.Icon.VanShapes do
     end
 
     corners = [point.(0.3, 0.0), point.(0.42, 0.0), point.(0.6, 1.0), point.(0.48, 1.0)]
-    [{:face, corners, {0, d1 - d0, z1 - z0}, "i-shine"}]
+    [{:face, corners, {0, z1 - z0, d1 - d0}, "i-shine"}]
   end
 
   # The grille and the lights of each brand, as points `{x, t}` on the

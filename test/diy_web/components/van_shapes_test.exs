@@ -108,6 +108,18 @@ defmodule DIYWeb.VanShapesTest do
     end
   end
 
+  test "the van with its mirrors fills the space of its item on the plan" do
+    for model <- models() do
+      {{x0, y0, _z0}, {x1, y1, _z1}} = DIYWeb.Icon.Shapes.bounds(VanShapes.van(model))
+      {w, d, _h} = DIY.Layout.size(%{type: "camper_van", params: %{"model" => model}})
+
+      # So the plan of the house does not make the van smaller. The scale
+      # is 1, and the body has the real width of the model.
+      assert_in_delta x1 - x0, w * @m, 1.0e-9
+      assert_in_delta y1 - y0, d * @m, 0.01
+    end
+  end
+
   test "a model that the app does not know has the shape and the size of the Transit" do
     assert VanShapes.van("other") == VanShapes.van("transit_148")
     assert VanShapes.hood_height("other") == VanShapes.hood_height("transit_148")
