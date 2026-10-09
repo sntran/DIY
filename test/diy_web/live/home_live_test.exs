@@ -561,6 +561,115 @@ defmodule DIYWeb.HomeLiveTest do
     assert has_element?(view, ~s(#top[data-page="load"]))
   end
 
+  test "a house with gas items has a gas bill; the plan shows its change", %{conn: conn} do
+    build = house()
+    view = open(conn, ~p"/", build)
+    settle(view)
+    estimate = :sys.get_state(view.pid).socket.assigns.estimate
+    gas = DIY.Prices.gas(build)
+    bill = &DIYWeb.Format.money(DIY.Prices.gas_bill(gas, &1))
+    january = hd(estimate.months)
+
+    # The bill: the fixed charge and the therms of an average month, with
+    # the range, and the month with the most gas, with its range.
+    assert has_element?(view, "#gas-bill", "Your gas bill, in an average month")
+    assert has_element?(view, "#gas-average", bill.(estimate.therms / 12))
+
+    assert has_element?(
+             view,
+             "#gas-range",
+             "The range: #{bill.(estimate.therms_low / 12)} to #{bill.(estimate.therms_high / 12)}."
+           )
+
+    assert has_element?(
+             view,
+             "#gas-range",
+             "The month with the most gas: January, #{bill.(january.therms)} (between #{bill.(january.therms_low)} and #{bill.(january.therms_high)})."
+           )
+
+    assert has_element?(
+             view,
+             "#gas-bill",
+             "The gas items: gas furnace, water heater, stove and oven."
+           )
+
+    assert has_element?(view, "#gas-bill", "a fixed charge near $25.59 each month")
+    assert has_element?(view, "#gas-bill", "near $0.95 for each therm")
+    refute has_element?(view, "#whatif-gas")
+
+    # The item, its list line and the math page give the gas.
+    furnace = Enum.find(build.items, &(&1.type == "furnace"))
+    render_patch(view, ~p"/inside?#{[item: furnace.id]}")
+
+    assert has_element?(
+             view,
+             "#item-gas",
+             "Gas in one year: #{DIYWeb.Format.therms(estimate.items[furnace.id].therms)}"
+           )
+
+    assert has_element?(view, "#item-sheet", "the estimate of your gas bill")
+
+    assert has_element?(
+             view,
+             "#plan-list",
+             ~r/Gas furnace: \d+ kWh and \d+ therms, \$\d+ a month/
+           )
+
+    render_patch(view, ~p"/estimate")
+    assert has_element?(view, "#items", "therms of gas in one year")
+    assert has_element?(view, "#gas-price", "The price of gas: a fixed charge near $25.59")
+
+    # A planned heat pump heats in place of the furnace: less gas, with its
+    # range.
+    backyard = Enum.find(build.rooms, &(&1.name == "Backyard"))
+    {:ok, build, pump} = Build.add_item(build, backyard.id, "ac")
+    {:ok, build} = Build.update_item(build, pump, %{"heat_pump" => "true"})
+    {:ok, build} = Build.flag_item(build, pump, :planned, true)
+    view = open(conn, ~p"/", build)
+    settle(view)
+    %{today: today, plan: plan} = :sys.get_state(view.pid).socket.assigns.whatif.therms
+    assert plan.therms < today.therms
+    month = &DIYWeb.Format.money(round(DIY.Prices.gas_bill(gas, &1 / 12)))
+
+    assert has_element?(
+             view,
+             "#whatif-gas",
+             "The gas bill with the plan: #{month.(plan.therms)} (between #{month.(plan.therms_low)} and #{month.(plan.therms_high)}) · today #{month.(today.therms)}."
+           )
+
+    # With no other gas item, the plan uses no gas, but the house keeps its
+    # furnace: the fixed charge stays.
+    electric =
+      for item <- build.items, item.params["fuel"] == "gas", reduce: build do
+        build ->
+          {:ok, build} = Build.update_item(build, item.id, %{"fuel" => "electric"})
+          build
+      end
+
+    view = open(conn, ~p"/", electric)
+    settle(view)
+
+    assert has_element?(
+             view,
+             "#whatif-gas",
+             "The gas bill with the plan: $26 (the fixed charge: the house keeps its gas items)"
+           )
+
+    # A house with no gas today, and a planned furnace: no gas bill today.
+    plain = house("75070", %{heat: "electric"})
+    attic = Enum.find(plain.rooms, &(&1.name == "Attic"))
+    {:ok, plain, furnace} = Build.add_item(plain, attic.id, "furnace")
+    {:ok, plain} = Build.flag_item(plain, furnace, :planned, true)
+    view = open(conn, ~p"/", plain)
+    settle(view)
+    assert has_element?(view, "#whatif-gas", "· today $0.")
+
+    # An all-electric house has no gas bill.
+    view = open(conn, ~p"/", house("75070", %{heat: "electric"}))
+    settle(view)
+    refute has_element?(view, "#gas-bill")
+  end
+
   test "the math of a house with no items", %{conn: conn} do
     {house, rooms, _items} =
       House.preset(%{size: 1800, year: 2005, floors: 1, heat: "gas", lot: nil})

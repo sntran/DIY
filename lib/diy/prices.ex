@@ -71,6 +71,26 @@ defmodule DIY.Prices do
   @us 18.19
   @eia_source "the average price for homes in STATE, January to July 2026 (US Energy Information Administration, Electric Power Monthly, table 5.6.B)"
 
+  # The natural gas bill of a home: a fixed charge each month, and a price
+  # for each 1,000 cubic feet (Mcf). The app fits a line to the bills of
+  # the homes of a place in the 12 months of 2024. The line is: the bill of
+  # a home in a month = fixed + price × Mcf. The data come from the US
+  # Energy Information Administration, release of September 30, 2026. The
+  # tables are Natural Gas Prices, Natural Gas Consumption by End Use, and
+  # Number of Natural Gas Consumers.
+  #
+  # - The bill of a home in a month: the price of the month × the gas of
+  #   the month ÷ the homes with gas.
+  # - The homes with gas in 2024: 5,308,705 in Texas, 73,719,064 in the
+  #   US.
+  # - The line is near the bills of the months: R² is 0.95 in Texas and
+  #   0.996 in the US.
+  #
+  # One Mcf of gas gives near 1.037 million BTU: 10.37 therms.
+  @gas %{"TX" => {25.59, 9.90}}
+  @gas_us {17.90, 10.86}
+  @therms_mcf 10.37
+
   @type t :: %{cents: float(), source: String.t(), kind: atom()}
 
   @doc "The price for the estimate of a build."
@@ -103,4 +123,34 @@ defmodule DIY.Prices do
         %{cents: @us, source: String.replace(@eia_source, "STATE", "the US"), kind: :country}
     end
   end
+
+  @type gas :: %{fixed: float(), dollars: float(), source: String.t()}
+
+  @doc """
+  The price of natural gas, in dollars: the fixed charge of a month, and
+  the price of one therm (100,000 BTU). It also tells where they come
+  from: the bills of the homes of Texas, else of the US.
+  """
+  @spec gas(DIY.Build.t()) :: gas()
+  def gas(%{zip: zip}) do
+    {place, {fixed, mcf}} =
+      case DIY.Zip.lookup(zip) do
+        {:ok, %{state: "TX"}} -> {"Texas", @gas["TX"]}
+        _other -> {"the US", @gas_us}
+      end
+
+    %{
+      fixed: fixed,
+      dollars: mcf / @therms_mcf,
+      source:
+        "a line through the bills of the homes of #{place} in the 12 months of 2024 (US Energy Information Administration)"
+    }
+  end
+
+  @doc """
+  The natural gas bill of a month of a house with gas service: the fixed
+  charge, and the price of the therms.
+  """
+  @spec gas_bill(gas(), number()) :: float()
+  def gas_bill(%{fixed: fixed, dollars: dollars}, therms), do: fixed + therms * dollars
 end

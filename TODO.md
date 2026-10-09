@@ -63,6 +63,13 @@ The owner decides about each item.
 - The axles of the Transit and of the Sprinter in the models of vans.
 - The range of a fridge around the house with the temperature of each
   year (today the history uses the mean temperature of the month).
+- A planned item that replaces a gas item: a heat pump water heater, an
+  electric stove or an electric dryer. Today the plan keeps the gas item.
+  So the what-if shows more power and the same gas.
+- The natural gas price of each state, and of each gas utility of Texas
+  (today: the line of Texas, else of the US).
+- The therms of each month on the math page (today: the year of each
+  item).
 
 ## Ideas of the play test
 
@@ -70,8 +77,6 @@ A play test in the role of a neighbor with no skill in power (October
 2026) gave these ideas. The fixes of the other findings are in #16 and
 the next pull requests.
 
-- The gas bill. The app knows the gas of a water heater, a furnace and a
-  stove, but it shows only the power bill.
 - "Am I on a good plan?" The app does not rank plans, and the lesson
   comes before the worksheet. A person with little time may want the
   worksheet first.

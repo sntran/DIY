@@ -11,8 +11,16 @@ defmodule DIYWeb.Format do
   def money(dollars) when is_number(dollars) and dollars <= -0.5, do: "-$" <> int(-dollars)
   def money(dollars) when is_number(dollars), do: "$" <> int(dollars)
 
+  @doc "Dollars with cents, for a price: $1.87."
+  def dollars(dollars) when is_number(dollars),
+    do: "$" <> :erlang.float_to_binary(dollars / 1, decimals: 2)
+
   @doc "kWh with no decimals: 1,234 kWh."
   def kwh(kwh) when is_number(kwh), do: int(kwh) <> " kWh"
+
+  @doc "Therms of gas with no decimals: 1 therm, 24 therms."
+  def therms(therms) when is_number(therms) and round(therms) == 1, do: "1 therm"
+  def therms(therms) when is_number(therms), do: int(therms) <> " therms"
 
   @doc "Cents with one decimal: 16.1¢."
   def cents(cents) when is_number(cents),
