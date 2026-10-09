@@ -6,12 +6,14 @@ defmodule DIYWeb.Decor do
   no power, it is not an item, and a tap goes through it to the floor of
   the room.
 
-  The name of a room gives its furniture. Each piece has its place in the
-  room: against the back wall, in the middle, or at the front. In a
-  kitchen, counters fill the back wall between the items. A piece that
-  touches an item or a piece before it, or that is larger than the room,
-  does not show. So the items always show. A rug is flat: the other
-  pieces and the items can stand on it.
+  The name of a room gives its furniture (`plan/2`). Each piece has its
+  place in the room: against the back wall, in the middle, or at the
+  front. In a kitchen, counters fill the back wall between the items. A
+  piece does not show when it is larger than the room, or when it touches
+  an item or a piece before it. A piece also does not show when it hides
+  an item on the screen (`hides?/3`). This is also true for an item of a
+  different room of the layer. So the items show. A rug is flat: the other
+  pieces and the items can stand on it, and it hides nothing.
 
   The models use the parts of `DIYWeb.Icon.Shapes`, in meters, with round
   corners where the real piece has them. The front of a model looks to y.
@@ -24,42 +26,147 @@ defmodule DIYWeb.Decor do
   @m 0.0254
   # The space between a piece and a wall, or an item (inches).
   @gap 4
-  # An item on a wall or a ceiling (a fan) leaves the floor under it free:
-  # its lift is this many inches or more.
-  @ceiling 60
+  # The space between a piece in a yard and the edge of the yard (inches).
+  # The walls and the slab of the house go out of the house.
+  @yard_gap 8
   # The depth of a kitchen counter (inches), and its least length.
   @counter 25
   @least 18
+  # A piece does not show when it hides more than this part of an item.
+  @hide 0.25
 
   @doc """
   The pieces of a room: `{model, x, y, turn}`. `x` and `y` are the back
   corner of the piece on the plan of the room (inches). The turn is 0 (the
   front of the piece looks to the front of the room) or 2 (to the back).
+  `items` are the items of the room. `around` are the items of the other
+  rooms of the layer, on the plan of this room (`boxes/2`).
   """
-  def pieces(room, items) do
-    taken =
-      for item <- items, Catalog.lift(item.type) < @ceiling, do: Layout.item_box(item)
+  def pieces(room, items, around \\ []) do
+    boxes = boxes(items, {0, 0})
+    gap = if room.place == :outdoor, do: @yard_gap, else: @gap
 
     room
-    |> plan(taken)
-    |> Enum.reduce({[], taken}, fn {model, anchor, turn}, {done, taken} ->
+    |> plan(boxes)
+    |> Enum.reduce({[], []}, fn {model, anchor, turn}, {done, placed} ->
       {w, d} = footprint(model, turn)
-      flat? = flat?(model)
+      high = height(model)
 
-      with {x, y} <- place(anchor, {w, d}, room.plan),
+      with {x, y} <- place(anchor, {w, d}, room.plan, gap),
            box = %{x: x, y: y, w: w, d: d},
-           false <- not flat? and Enum.any?(taken, &Layout.overlap?(grow(box), &1)) do
-        {[{model, x, y, turn} | done], if(flat?, do: taken, else: [box | taken])}
+           true <- high < 0.02 or free?(box, high, boxes ++ around, placed) do
+        {[{model, x, y, turn} | done], if(high < 0.02, do: placed, else: [box | placed])}
       else
-        _ -> {done, taken}
+        _ -> {done, placed}
       end
     end)
     |> elem(0)
     |> Enum.reverse()
   end
 
+  @doc """
+  The boxes of items on the plan of a room, for `pieces/3`. `{dx, dy}` is
+  the corner of the room of the items on the plan of that room (inches).
+  `dz` is the height of its floor over the floor of that room (meters).
+  A box has the height of the bottom and of the top of its item (`low`
+  and `high`, meters).
+  """
+  def boxes(items, {dx, dy}, dz \\ 0.0) do
+    for item <- items do
+      box = Layout.item_box(item)
+      {_w, _d, h} = Layout.size(item)
+      low = Catalog.lift(item.type) * @m + dz
+      %{box | x: box.x + dx, y: box.y + dy} |> Map.merge(%{low: low, high: low + h * @m})
+    end
+  end
+
+  # True when a piece (its box, and its height in meters) touches no piece
+  # before it, and no item under its top (on the plan). It also does not
+  # hide an item on the screen.
+  defp free?(box, high, boxes, placed) do
+    near = grow(box)
+
+    not Enum.any?(placed, &Layout.overlap?(near, &1)) and
+      not Enum.any?(
+        boxes,
+        &((&1.low < high and Layout.overlap?(near, &1)) or hides?(box, high, &1))
+      )
+  end
+
+  @doc """
+  True when a piece hides more than a quarter of an item at the middle of
+  the height of the item. The piece has its box on the plan, and its
+  height (meters). The camera of the house
+  looks down to the back and to the left. So a piece hides the floor
+  behind it and at its left: its shadow. The shadow of the middle of the
+  item is a hexagon. The part of the box of the item in it is the part
+  that the piece hides.
+  """
+  def hides?(%{x: x0, y: y0, w: w, d: d}, high, item) do
+    {ex, ey, ez} = Camera.house().eye
+    rise = high - (item.low + item.high) / 2
+
+    if rise <= 0 or item.w * item.d == 0 do
+      false
+    else
+      {vx, vy} = {-rise * ex / ez / @m, -rise * ey / ez / @m}
+      {x1, y1} = {x0 + w, y0 + d}
+
+      shadow = [
+        {x0 + vx, y0 + vy},
+        {x1 + vx, y0 + vy},
+        {x1, y0},
+        {x1, y1},
+        {x0, y1},
+        {x0 + vx, y1 + vy}
+      ]
+
+      part =
+        shadow
+        |> clip(fn {px, _} -> px - item.x end)
+        |> clip(fn {px, _} -> item.x + item.w - px end)
+        |> clip(fn {_, py} -> py - item.y end)
+        |> clip(fn {_, py} -> item.y + item.d - py end)
+        |> area()
+
+      part > @hide * item.w * item.d
+    end
+  end
+
+  # The part of a convex polygon where `inside` is 0 or more (one step of
+  # the clip of Sutherland and Hodgman).
+  defp clip([], _inside), do: []
+
+  defp clip(points, inside) do
+    points
+    |> Enum.zip(tl(points) ++ [hd(points)])
+    |> Enum.flat_map(fn {{px, py} = p, {qx, qy} = q} ->
+      {a, b} = {inside.(p), inside.(q)}
+      cut = fn -> {px + (qx - px) * a / (a - b), py + (qy - py) * a / (a - b)} end
+
+      cond do
+        a >= 0 and b >= 0 -> [q]
+        a >= 0 -> [cut.()]
+        b >= 0 -> [cut.(), q]
+        true -> []
+      end
+    end)
+  end
+
+  # The area of a polygon (the formula of the shoelace).
+  defp area(points) when length(points) < 3, do: 0.0
+
+  defp area(points) do
+    points
+    |> Enum.zip(tl(points) ++ [hd(points)])
+    |> Enum.map(fn {{ax, ay}, {bx, by}} -> ax * by - bx * ay end)
+    |> Enum.sum()
+    |> abs()
+    |> Kernel./(2)
+  end
+
   # The pieces of a room, from its name: a model, its place, and its turn.
-  defp plan(%{place: :outdoor, name: name}, _taken) do
+  defp plan(%{place: :outdoor, name: name}, _boxes) do
     if String.contains?(String.downcase(name), "yard"),
       do: [
         {model("patio"), :center, 0},
@@ -71,7 +178,7 @@ defmodule DIYWeb.Decor do
       else: []
   end
 
-  defp plan(%{place: :indoor, name: name} = room, taken) do
+  defp plan(%{place: :indoor, name: name} = room, boxes) do
     name = String.downcase(name)
 
     cond do
@@ -97,7 +204,7 @@ defmodule DIYWeb.Decor do
         ]
 
       String.contains?(name, "kitchen") ->
-        counters(room, taken) ++
+        counters(room, boxes) ++
           [{model("dining"), :front_center, 0}, {model("plant"), :front_left, 0}]
 
       String.contains?(name, "bath") ->
@@ -122,25 +229,29 @@ defmodule DIYWeb.Decor do
     end
   end
 
-  defp plan(_room, _taken), do: []
+  defp plan(_room, _boxes), do: []
 
-  # The counters of a kitchen: they fill the back wall where no item is,
-  # from the left wall to the right wall. A part shorter than 18 inches
-  # stays empty.
-  defp counters(room, taken) do
-    band = %{x: 0, y: 0, w: room.plan.w, d: @counter + @gap}
+  # The counters of a kitchen fill the back wall where no item is. They
+  # stop 4 inches from the left wall and from the right wall. An item
+  # on the wall over the counters (a meter) does not cut them. A part
+  # shorter than 18 inches stays empty.
+  defp counters(room, boxes) do
+    band = %{x: 0, y: 0, w: room.plan.w, d: 1 + @counter + @gap}
 
     cuts =
-      for box <- taken, Layout.overlap?(box, band), do: {box.x - @gap, box.x + box.w + @gap}
+      for box <- boxes,
+          box.low < 0.9,
+          Layout.overlap?(box, band),
+          do: {box.x - @gap, box.x + box.w + @gap}
 
-    {0, room.plan.w}
+    {@gap, room.plan.w - @gap}
     |> free(Enum.sort(cuts))
     |> Enum.filter(fn {a, b} -> b - a >= @least end)
     |> Enum.map(fn {a, b} -> {model({"counter", b - a}), {:at, a, 1}, 0} end)
   end
 
-  # The parts of a range that no cut covers. Each cut starts in the range
-  # (the cuts are of the items on the back wall).
+  # The parts of a length of the wall that no cut covers. Each cut starts in
+  # the length (the cuts are of the items on the back wall).
   defp free({a, b}, []), do: [{a, b}]
 
   defp free({a, b}, [{c, d} | rest]) do
@@ -153,15 +264,15 @@ defmodule DIYWeb.Decor do
   end
 
   # The place of a piece in a room (inches), or nil when it does not fit.
-  defp place({:at, x, y}, {w, d}, %{w: rw, d: rd}),
+  defp place({:at, x, y}, {w, d}, %{w: rw, d: rd}, _gap),
     do: if(x < 0 or y < 0 or x + w > rw or y + d > rd, do: nil, else: {round(x), round(y)})
 
-  defp place(anchor, {w, d}, %{w: rw, d: rd}) do
-    if w + 2 * @gap > rw or d + 2 * @gap > rd do
+  defp place(anchor, {w, d}, %{w: rw, d: rd}, gap) do
+    if w + 2 * gap > rw or d + 2 * gap > rd do
       nil
     else
       {cx, cy} = {(rw - w) / 2, (rd - d) / 2}
-      {left, right, back, front} = {@gap, rw - w - @gap, @gap, rd - d - @gap}
+      {left, right, back, front} = {gap, rw - w - gap, gap, rd - d - gap}
 
       {x, y} =
         case anchor do
@@ -178,7 +289,7 @@ defmodule DIYWeb.Decor do
           :beside_right -> {rw / 2 + 36, back}
         end
 
-      if x < 0 or x + w > rw, do: nil, else: {round(x), round(y)}
+      if x < gap or x + w > rw - gap, do: nil, else: {round(x), round(y)}
     end
   end
 
@@ -192,10 +303,10 @@ defmodule DIYWeb.Decor do
     if rem(turn, 2) == 0, do: {w, d}, else: {d, w}
   end
 
-  # A model that is flat on the floor: a rug or a mat.
-  defp flat?(model) do
+  # The height of a model (meters). A rug or a mat is flat: under 2 cm.
+  defp height(model) do
     {{_, _, z0}, {_, _, z1}} = Shapes.bounds(model)
-    z1 - z0 < 0.02
+    z1 - z0
   end
 
   ## The models (meters)
@@ -226,8 +337,8 @@ defmodule DIYWeb.Decor do
       [{:cyl, {0.8, 0.22, 0.8}, 0.07, 0.2, "clay"}] ++ ball({0.8, 0.22, 1.14}, 0.12, "leaf")
   end
 
-  def model("rug"), do: [round_box({0, 0, 0}, {2.0, 1.5, 0.012}, 0.15, "rug")]
-  def model("bath_mat"), do: [round_box({0, 0, 0}, {0.8, 0.5, 0.012}, 0.1, "rug")]
+  def model("rug"), do: [mat({2.0, 1.5}, 0.15)]
+  def model("bath_mat"), do: [mat({0.8, 0.5}, 0.1)]
 
   def model("sofa") do
     [
@@ -409,7 +520,34 @@ defmodule DIYWeb.Decor do
 
   # A box with round corners (seen from above).
   defp round_box({x, y, z}, {w, d, h}, r, material),
-    do: {:prism, Shapes.rounded({x, y}, {w, d}, r), z, h, material}
+    do: {:prism, soft({x, y}, {w, d}, r), z, h, material}
+
+  # A rug or a mat: only its top, flat on the floor.
+  defp mat({w, d}, r),
+    do: {:face, for({u, v} <- soft({0, 0}, {w, d}, r), do: {u, v, 0.01}), nil, "i-rug-t i-face"}
+
+  # The loop of a box with round corners, as `DIYWeb.Icon.Shapes.rounded/3`,
+  # but with 3 points at each corner. A piece of furniture is small on the
+  # screen, and it has many parts.
+  # Where two corners meet (a side with no length), they share one point.
+  defp soft({u, v}, {du, dv}, r) do
+    r = min(r, min(du, dv) / 2)
+
+    loop =
+      for {cu, cv, from} <- [
+            {u + du - r, v + r, -90},
+            {u + du - r, v + dv - r, 0},
+            {u + r, v + dv - r, 90},
+            {u + r, v + r, 180}
+          ],
+          k <- 0..2,
+          a = (from + k * 45) * :math.pi() / 180,
+          do: {cu + r * :math.cos(a), cv + r * :math.sin(a)}
+
+    key = fn {pu, pv} -> {Float.round(pu / 1, 9), Float.round(pv / 1, 9)} end
+    loop = Enum.dedup_by(loop, key)
+    if key.(hd(loop)) == key.(List.last(loop)), do: Enum.drop(loop, -1), else: loop
+  end
 
   # The legs of a table: four thin boxes under a top of w by d.
   defp legs(w, d, h, material, {x, y} \\ {0, 0}) do
@@ -429,9 +567,4 @@ defmodule DIYWeb.Decor do
         {:box, {x, back_y, z + 0.5}, {0.42, 0.04, 0.45}, "wood"}
       ]
   end
-
-  @doc "The names of the models (for the tests of the paint)."
-  def names,
-    do:
-      ~w(bed nightstand dresser rug bath_mat sofa armchair coffee_table shelf_books dining plant tree bush tub toilet vanity bench shelf basket boxes patio)
 end

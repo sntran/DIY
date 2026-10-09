@@ -1389,31 +1389,46 @@ its turn. A length is in inches.
     in the picture.
   - At night (the dark mode), the colors are darker, and the floor of each
     room inside has the warm light of a lamp (`p-glow`).
-  - The furniture of a room (`DIYWeb.Decor`), as in the drawn picture. The
-    name of a room gives its pieces:
-    - a bedroom: a bed, nightstands, a dresser and a rug;
-    - a living room: a sofa, an armchair, a table, books and plants;
-    - a kitchen: counters, and a table with chairs;
-    - a bathroom: a bath, a toilet and a vanity;
-    - a garage: a bench and shelves;
-    - a yard: a table, trees and bushes.
+  - The furniture of a room (`DIYWeb.Decor`), as in the drawn picture. A
+    word in the name of a room gives its pieces, in capital letters or
+    not:
+    - "bed": a bed, two nightstands, a dresser, a rug and a plant;
+    - "living": a sofa, an armchair, a table, books, a rug and two plants;
+    - "kitchen": counters, a table with chairs, and a plant;
+    - "bath": a bath, a toilet, a vanity and a mat;
+    - "garage": a bench and a shelf;
+    - "laundry": a shelf and a basket;
+    - "attic": boxes;
+    - "yard" (a room outside): a table with chairs, trees and bushes;
+    - a different name inside: a plant. A different room outside, and a
+      roof, have no furniture.
 
-    Each piece has its place: against
-    the back wall, in the middle, or at the front. In a kitchen, counters
-    fill the back wall between the items. A piece that touches an item, or
-    a piece before it, does not show: so the items always show. A rug is
-    flat: it paints first, and the pieces and the items stand on it. The
-    furniture is for the eyes only. It uses no power, and a tap goes
-    through it to the floor of the room. The leaves of a plant or a tree
-    are discs that look to the camera.
-  - A long wall has a picture in a frame at the left of its window.
+    Each piece has its place: against the back wall, in the middle, or at
+    the front. A piece is 4 inches from the walls, and 8 inches from the
+    edge of a yard. A counter is 1 inch from the back wall. In a kitchen, counters fill the back wall between the
+    items. A piece does not show when it touches an item under its top,
+    or a piece before it. The camera looks down to the back and to the
+    left. So a piece also hides the floor behind it and at its left (its
+    shadow). A piece does not show when its shadow hides more than a
+    quarter of an item at the middle of the height of the item. This is
+    also true for an item of a different room of the layer. So the items
+    show, and the person can tap them. A piece can hide more of the lower
+    part of a tall item. A rug is flat: it paints
+    first, and the pieces and the items stand on it. The furniture is for
+    the eyes only. It uses no power, and a tap goes through it to the
+    floor of the room. It moves with its room in a drag. The leaves of a
+    plant or a tree are discs that look to the camera.
+  - A long wall has a picture in a frame at the left of its window. A
+    garage, a laundry and an attic have no picture, and no picture is
+    behind an item (4 feet from the wall at most).
 - The order of the paint (`DIYWeb.Camera.order/2`). A wall or an item that
   is behind a different one paints first. A box is behind a different box
   when it is on the far side of it along x, y or z. A wall is flat for
   this order. So an item in a room is in front of the walls at the back,
   and behind the walls at the front. An item that is larger than its
-  room goes through walls: it paints by its place only. The parts of a
-  model use the same order, so a turned item paints its back part first.
+  room goes through walls: it paints by its place only. A rug paints
+  first. The parts of a model use the same order, so a turned item paints
+  its back part first.
 - The script (the hook Plan, `assets/js/plan.js`) moves the parts of the
   SVG while the pointer moves. It sends the change when the pointer
   stops, and the server then draws the plan again. The script has the

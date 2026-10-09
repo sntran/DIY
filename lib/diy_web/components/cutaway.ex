@@ -45,6 +45,8 @@ defmodule DIYWeb.Cutaway do
   - each wall of a room of the house, and the edge of the slab under it:
     `data-of` (its room). A tap on it chooses the room, and the zoom to a
     room shows its walls;
+  - each piece of furniture: `data-with` (its room). It moves with its
+    room in a drag;
   - each label: `data-rank`, the area of its room;
   - each layer: `data-box` (its box in the SVG), for a zoom to the layer.
 
@@ -78,7 +80,8 @@ defmodule DIYWeb.Cutaway do
 
   - the lot (`ground`), and the surfaces of the rooms outside (`low`);
   - the slabs, and the surfaces of the other rooms (`rooms`);
-  - the walls and the items (`objects`, from the back to the front);
+  - the walls, the furniture and the items (`objects`, from the back to
+    the front);
   - the names of the rooms (`labels`).
   """
   def view(build) do
@@ -136,9 +139,23 @@ defmodule DIYWeb.Cutaway do
           item <- Map.get(items, room.id, []),
           do: item_view(item, room, floor_z.(room), camera)
 
+    # The furniture of each room: it does not hide the items of the layer.
     decor =
       for room <- rooms,
-          {piece, i} <- Enum.with_index(Decor.pieces(room, Map.get(items, room.id, []))),
+          around =
+            for(
+              other <- rooms,
+              other.id != room.id,
+              box <-
+                Decor.boxes(
+                  Map.get(items, other.id, []),
+                  {other.plan.x - room.plan.x, other.plan.y - room.plan.y},
+                  floor_z.(other) - floor_z.(room)
+                ),
+              do: box
+            ),
+          pieces = Decor.pieces(room, Map.get(items, room.id, []), around),
+          {piece, i} <- Enum.with_index(pieces),
           do: decor_view("#{room.id}-#{i}", piece, room, floor_z.(room), camera)
 
     layer(level, %{
@@ -160,7 +177,8 @@ defmodule DIYWeb.Cutaway do
     room}`): a tap on its edge chooses the room;
   - the surfaces of the rooms (`floor/5`) on the ground (`low`) and over
     the slabs (`rooms`);
-  - the objects (walls and items, `item_view/4`), and the labels
+  - the objects (walls, furniture with `decor_view/6`, and items with
+    `item_view/4`), and the labels
     (`label/3`).
 
   The objects go in the order of the paint (`DIYWeb.Camera.order/2`), and
@@ -299,7 +317,8 @@ defmodule DIYWeb.Cutaway do
         end
 
       wall("#{id}-#{room.id}-#{side}-#{i}", room, side, {a, b, kind}, floor, {height, high, span},
-        camera: camera
+        camera: camera,
+        art?: &art?(room, side, Map.get(items, room.id, []), &1)
       )
     end
   end
@@ -460,7 +479,7 @@ defmodule DIYWeb.Cutaway do
   # behind a wall at the front. Its height is `{h0, h1}` (meters, at the
   # two ends), or `:slope` (`slope/3` of the span of the layer, from the
   # full height `high`).
-  defp wall(id, room, side, {a, b, kind}, z, {height, high, span}, camera: camera) do
+  defp wall(id, room, side, {a, b, kind}, z, {height, high, span}, camera: camera, art?: art?) do
     {line, {r0, r1}} = edge(room.plan, side)
     t = @thick / @m
     # The ends of an outside wall on x go past the corners of the room.
@@ -497,7 +516,7 @@ defmodule DIYWeb.Cutaway do
 
     trim =
       if max(h0, h1) > @low and side in ~w(x0 y0),
-        do: trim(side, face, {a, b}, z, {h0, h1}),
+        do: trim(side, face, {a, b}, z, {h0, h1}, art?),
         else: []
 
     %{
@@ -516,7 +535,7 @@ defmodule DIYWeb.Cutaway do
   # and a window when the wall has its full height and room for it. A long
   # wall also has a picture at the left of its window. A window is 4 feet
   # wide at most, from 3 feet over the floor.
-  defp trim(side, face, {a, b}, z, {h0, h1}) do
+  defp trim(side, face, {a, b}, z, {h0, h1}, art?) do
     plane = fn {u0, u1}, {z0, z1} ->
       for {u, zz} <- [{u0, z0}, {u1, z0}, {u1, z1}, {u0, z1}] do
         if side == "x0",
@@ -544,11 +563,12 @@ defmodule DIYWeb.Cutaway do
         []
       end
 
-    # A picture in a frame at the left of the window, on a long wall.
+    # A picture in a frame at the left of the window, on a long wall
+    # (`art?/4`).
     left = middle - half - 34
 
     picture =
-      if window != [] and left - 10 >= a + 6 do
+      if window != [] and left - 10 >= a + 6 and art?.({left - 10, left + 10}) do
         [
           {plane.({left - 10, left + 10}, {1.35, 1.78}), "p-frame"},
           {plane.({left - 8, left + 8}, {1.38, 1.75}), "p-art"}
@@ -558,6 +578,23 @@ defmodule DIYWeb.Cutaway do
       end
 
     [{plane.({a, b}, {0.0, 0.1}), "p-baseboard"} | window ++ picture]
+  end
+
+  # True when a wall of a room can have a picture at a part of it (inches,
+  # along the side). A garage, a laundry and an attic have no picture. No
+  # item stands in front of a picture (4 feet from the wall at most).
+  defp art?(room, side, items, {u0, u1}) do
+    name = String.downcase(room.name)
+    {line, _range} = edge(room.plan, side)
+
+    not Enum.any?(~w(garage laundry attic), &String.contains?(name, &1)) and
+      not Enum.any?(items, fn item ->
+        box = Layout.item_box(item)
+        plan = %{box | x: room.plan.x + box.x, y: room.plan.y + box.y}
+        {c, d} = along(plan, side)
+        {near, _far} = across_range(plan, side)
+        c < u1 and u0 < d and near < line + 48
+      end)
   end
 
   ## The rooms
@@ -704,7 +741,7 @@ defmodule DIYWeb.Cutaway do
   ## The furniture
 
   @doc """
-  A piece of furniture of a room (`DIYWeb.Decor.pieces/2`), on a floor at a
+  A piece of furniture of a room (`DIYWeb.Decor.pieces/3`), on a floor at a
   height (meters), for a camera. It is a fixed object: a tap goes through
   it to the floor of the room.
   """
@@ -736,6 +773,7 @@ defmodule DIYWeb.Cutaway do
     %{
       id: "decor-" <> id,
       kind: :fixture,
+      room: room.id,
       loose: flat?,
       box: {x0, y0, z0, x1, y1, z1},
       key: key,
@@ -1007,6 +1045,7 @@ defmodule DIYWeb.Cutaway do
           data-in={object.kind == :item && object.room}
           data-at={object.kind == :item && object.at}
           data-of={object.kind == :wall && Map.get(object, :room)}
+          data-with={object.kind == :fixture && Map.get(object, :room)}
         >
           <title :if={object.kind == :item}>{object.name}</title>
           <polygon :for={{points, class} <- object.polys} points={points} class={class} />

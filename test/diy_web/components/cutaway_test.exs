@@ -354,19 +354,27 @@ defmodule DIYWeb.CutawayTest do
     assert classes.("ground-#{kitchen}-y1-0") == ~w(p-wall-r p-wall-l p-wall-t)
     assert classes.("ground-#{kitchen}-x0-0") == ~w(p-wall-r p-wall-l p-wall-t p-baseboard)
 
-    # A long wall (the back of the living room) also has a picture at the
-    # left of its window.
+    # A long wall also has a picture at the left of its window, as at the
+    # back of Bedroom 1. In the living room, the lamp stands in front of
+    # that place: no picture. A garage has no picture.
     living = room(build, "Living room")
 
-    assert ["p-frame", "p-art"] ==
-             for(
-               %{kind: :wall, room: ^living, id: id} = w <- ground.objects,
-               id == "ground-#{living}-y0-0",
-               {_points, class} <- w.polys,
-               class in ~w(p-frame p-art),
-               do: class
-             )
-             |> Enum.take(-2)
+    art = fn build, index, room ->
+      level = Enum.at(Cutaway.view(build).levels, index)
+      for %{kind: :wall, room: ^room} = w <- level.objects, {_p, "p-art"} <- w.polys, do: w.id
+    end
+
+    bed = room(build, "Bedroom 1")
+    assert art.(build, 1, bed) == ["f2-#{bed}-y0-0"]
+    assert art.(build, 0, living) == []
+    assert art.(build, 0, room(build, "Garage")) == []
+
+    # The lamp and the TV at the front of the room: the picture comes.
+    items =
+      for i <- build.items,
+          do: if(i.type in ~w(lights tv), do: %{i | at: %{i.at | y: 200}}, else: i)
+
+    assert art.(%{build | items: items}, 0, living) == ["ground-#{living}-y0-0"]
 
     # A short high wall has its baseboard, but no window.
     small = %{kitchen_room(build) | plan: %{kitchen_room(build).plan | w: 40}}
@@ -508,22 +516,29 @@ defmodule DIYWeb.CutawayTest do
 
   test "each piece of furniture paints from the back at each turn: a depth check" do
     camera = Camera.house()
-    # A ball of leaves looks to the camera at the turn 0 only: a piece with
-    # leaves stays at the turn 0 on the plan.
-    leaves = ~w(plant tree bush dresser)
 
-    for name <- Decor.names(), turn <- if(name in leaves, do: [0], else: 0..3) do
+    # All the models: the pieces of large rooms of each name that the app
+    # knows, with no item.
+    rooms =
+      for name <- ~w(Bedroom Living Kitchen Bathroom Garage Laundry Attic Office),
+          do: %{name: name, place: :indoor, plan: %{x: 0, y: 0, w: 400, d: 400}}
+
+    yard = %{name: "Backyard", place: :outdoor, plan: %{x: 0, y: 0, w: 400, d: 400}}
+
+    models =
+      for(room <- [yard | rooms], {model, _x, _y, _turn} <- Decor.pieces(room, []), do: model)
+      |> Enum.uniq()
+
+    assert length(models) == 22
+
+    # A ball of leaves (or a rug) looks to the camera at the turn 0 only. A
+    # piece with leaves stays at the turn 0 on the plan.
+    for model <- models,
+        turn <- if(Enum.any?(model, &match?({:face, _, nil, _}, &1)), do: [0], else: 0..3) do
       frame = %{at: {0, 0, 0}, turn: turn, camera: camera}
-
-      polys =
-        for {:poly, corners, _class} <- Shapes.placed_model(Decor.model(name), frame), do: corners
-
-      assert depth_faults(polys, camera, 0.01) == [], "#{name} at turn #{turn}"
+      polys = for {:poly, corners, _class} <- Shapes.placed_model(model, frame), do: corners
+      assert depth_faults(polys, camera, 0.01) == [], "#{inspect(hd(model))} at turn #{turn}"
     end
-
-    frame = %{at: {0, 0, 0}, turn: 0, camera: camera}
-    counter = Shapes.placed_model(Decor.model({"counter", 60}), frame)
-    assert depth_faults(for({:poly, corners, _} <- counter, do: corners), camera, 0.01) == []
   end
 
   test "the furniture is on the plan: fixed, with no tap, and a rug under the pieces" do
@@ -541,6 +556,8 @@ defmodule DIYWeb.CutawayTest do
     # A tap goes through the furniture to the floor: no data of an item.
     html = html(build)
     assert html =~ ~s(id="plan-fixture-decor-#{living}-0" class="p-fixture")
+    # A piece moves with its room in a drag (the hook).
+    assert html =~ ~r/id="plan-fixture-decor-#{living}-0"[^>]*data-with="#{living}"/
     refute html =~ ~r/id="plan-fixture-decor-[^"]+"[^>]*data-item/
   end
 

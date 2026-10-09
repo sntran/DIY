@@ -315,6 +315,8 @@ function setup({storage = new Map(), chosen = true, width = 400, height = 800, w
   slope.bbox = {x: 50, y: 0, width: 50, height: 20}
   const fridgeG = add({"data-item": "i1", "data-in": "r1", "data-at": "18 15"}, ground)
   const fridge = add({}, fridgeG)
+  // A table of the kitchen (furniture).
+  const tableG = add({"data-with": "r1"}, ground)
   // Floor 2, over floor 1: a bedroom with its wall, and a lamp in it.
   const upper = add({id: "plan-f2", "data-box": "0 -100 150 80"}, svg)
   const bedroom = add({"data-room": "r4", "data-plan": "0 0 100 100", "data-origin": "0 -100"}, upper)
@@ -408,7 +410,7 @@ function setup({storage = new Map(), chosen = true, width = 400, height = 800, w
   return {
     hook, svg, root, kitchen, living, roof, fridge, fridgeG, kitchenG, empty, selection, outlineEl, handles, labels,
     pushed, pointer, storage, setUnder: (list) => (under = list), win, timers, hint, wallFace, slab,
-    zoomIn, zoomOut, fitButton, focus, focusF2, listItem, listRoom, other, bedroom, upper,
+    zoomIn, zoomOut, fitButton, focus, focusF2, listItem, listRoom, other, tableG, bedroom, upper,
   }
 }
 
@@ -788,14 +790,16 @@ test("an item goes to the room under the center of its space, not under the poin
 })
 
 test("the chosen room moves with its items, and a wall moves with its handle", () => {
-  const {hook, pointer, pushed, kitchen, kitchenG, fridgeG, selection, outlineEl, handles} = setup()
+  const {hook, pointer, pushed, kitchen, kitchenG, fridgeG, tableG, selection, outlineEl, handles} = setup()
   pointer("pointerdown", 1, 100, 100, kitchen)
   pointer("pointermove", 1, 100 + 2 * HOUSE[0] * 12, 100 + 2 * HOUSE[1] * 12)
-  for (const el of [kitchenG, fridgeG, selection]) assert.equal(el.getAttribute("transform"), along(12))
+  // The furniture of the room moves too.
+  for (const el of [kitchenG, fridgeG, tableG, selection]) assert.equal(el.getAttribute("transform"), along(12))
   pointer("pointerup", 1, 100, 100)
   assert.deepEqual(pushed, [["move_room", {id: "r1", dx: 12, dy: 0}]])
   hook.replies.pop()()
   assert.equal(kitchenG.getAttribute("transform"), null)
+  assert.equal(tableG.getAttribute("transform"), null)
 
   pointer("pointerdown", 1, 100, 100, handles.x1)
   pointer("pointermove", 1, 100 + 2 * HOUSE[0] * 24, 100 + 2 * HOUSE[1] * 24)
