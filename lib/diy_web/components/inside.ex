@@ -66,7 +66,7 @@ defmodule DIYWeb.Inside do
       <div :if={"plan" not in @build.hints} id="plan-hint" class="alert alert-info text-sm">
         <.icon name="hero-hand-raised" class="size-6" />
         <span>
-          Drag an item to move it. Tap an item to open it. Tap a room to change it. Pinch, use Ctrl and the mouse wheel, or use the buttons to zoom.
+          Drag an item to move it. Tap an item to open it. Tap a room to change it. Pinch or use the buttons to zoom.
         </span>
         <button type="button" phx-click="hint" phx-value-hint="plan" class="btn btn-sm">OK</button>
       </div>

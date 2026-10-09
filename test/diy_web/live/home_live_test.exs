@@ -4,6 +4,7 @@ defmodule DIYWeb.HomeLiveTest do
   import Phoenix.LiveViewTest
 
   alias DIY.{Build, House, Stubs}
+  alias DIYWeb.Format
 
   setup do
     Stubs.weather()
@@ -418,6 +419,54 @@ defmodule DIYWeb.HomeLiveTest do
     assert html =~ "Cooling"
     assert html =~ "(typical)"
     assert html =~ "for its age"
+  end
+
+  test "the chart of the bill: a button for each month gives its dollars", %{conn: conn} do
+    view = open(conn, ~p"/", house())
+    settle(view)
+    months = :sys.get_state(view.pid).socket.assigns.bill.months
+    now = Date.utc_today().month
+    # A month that is not this month.
+    other = rem(now, 12) + 1
+
+    line = fn n ->
+      "#{Enum.at(months, n - 1).name}: #{Format.money(Enum.at(months, n - 1).cost)}"
+    end
+
+    # The line starts with this month. Each button tells its month and its
+    # dollars to a screen reader.
+    assert has_element?(view, "#bill-month[aria-live=polite]", line.(now))
+    assert has_element?(view, ~s(#chart-#{now}[aria-pressed="true"]))
+
+    assert has_element?(
+             view,
+             ~s(#chart-#{other}[aria-label="#{line.(other)}"][aria-pressed="false"])
+           )
+
+    view |> element("#chart-#{other}") |> render_click()
+    assert has_element?(view, "#bill-month", line.(other))
+    assert has_element?(view, ~s(#chart-#{other}[aria-pressed="true"] .bg-primary))
+    assert has_element?(view, ~s(#chart-#{now}[aria-pressed="false"]))
+
+    # A month that is not a month: no change.
+    render_click(view, "bill_month", %{"month" => "13"})
+    assert has_element?(view, "#bill-month", line.(other))
+
+    # A new build starts again with this month.
+    view |> element("#chart-#{other}") |> render_click()
+    render_patch(view, ~p"/settings")
+
+    file =
+      file_input(view, "#import", :build_file, [
+        %{name: "build.json", content: Build.export(house()), type: "application/json"}
+      ])
+
+    render_upload(file, "build.json")
+    assert :sys.get_state(view.pid).socket.assigns.bill_month == nil
+
+    render_click(view, "bill_month", %{"month" => "#{other}"})
+    view |> element("#restart") |> render_click()
+    assert :sys.get_state(view.pid).socket.assigns.bill_month == nil
   end
 
   test "the price of the last bill of the person", %{conn: conn} do

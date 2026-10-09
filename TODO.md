@@ -90,12 +90,11 @@ other faults are in the next pull requests.
 - No CPAP in the list of the items, and no note for a medical device.
 - The permit notes name Dallas and New Braunfels, not the city of the
   user.
-- The bar chart of the bill gives no dollars, and a tap does nothing.
 - The labels of the rooms in the picture. Some rooms have no name in the
   view of all the house. The tab of the floor is not marked.
 - The handles of a zone of the van cover its name.
 - Words that a person with no skill does not know: GVWR, GAWR, LRA,
-  DC-DC, LiFePO4, ABYC E-11, degree day, "Ctrl and the mouse wheel".
+  DC-DC, LiFePO4, ABYC E-11, degree day.
 - The page Bill is the math of the model, not the parts of a real bill.
   The exercise of the lesson wants an EFL file on the phone.
 - In the picture of the rooms, the van can cover the garage and the name

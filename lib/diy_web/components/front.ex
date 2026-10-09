@@ -16,6 +16,7 @@ defmodule DIYWeb.Front do
   attr :weather, :map, required: true
   attr :market, :map, required: true
   attr :scene, :map, required: true, doc: "the parts of the picture (`DIYWeb.Scene.parts/1`)"
+  attr :bill_month, :integer, default: nil, doc: "the month that the person chose on the chart"
 
   def front(assigns) do
     {:ok, place} = Zip.lookup(assigns.build.zip)
@@ -37,7 +38,14 @@ defmodule DIYWeb.Front do
 
       <.house scene={@scene} />
 
-      <.bill estimate={@estimate} bill={@bill} price={@price} weather={@weather} build={@build} />
+      <.bill
+        estimate={@estimate}
+        bill={@bill}
+        price={@price}
+        weather={@weather}
+        build={@build}
+        month={@bill_month}
+      />
 
       <.gas
         :if={@estimate.ready && @estimate.therms > 0}
@@ -83,6 +91,7 @@ defmodule DIYWeb.Front do
   attr :price, :map, required: true
   attr :weather, :map, required: true
   attr :build, :map, required: true
+  attr :month, :integer, default: nil
 
   # The bill estimate, or why it is not there yet.
   defp bill(assigns) do
@@ -99,7 +108,7 @@ defmodule DIYWeb.Front do
         <% not @estimate.ready -> %>
           <p class="opacity-70">The page gets the weather history of your ZIP code from NASA.</p>
         <% true -> %>
-          <.numbers estimate={@estimate} bill={@bill} price={@price} build={@build} />
+          <.numbers estimate={@estimate} bill={@bill} price={@price} build={@build} month={@month} />
       <% end %>
     </div>
     """
@@ -110,6 +119,10 @@ defmodule DIYWeb.Front do
   attr :price, :map, required: true
   attr :build, :map, required: true
 
+  attr :month, :integer,
+    default: nil,
+    doc: "the month of the line over the chart, else this month"
+
   # The money comes from the bill: the power from the grid, at the prices
   # of the house (DIY.Bill).
   defp numbers(assigns) do
@@ -117,7 +130,8 @@ defmodule DIYWeb.Front do
       assigns
       |> assign(:cents, assigns.price.cents)
       |> assign(:power, assigns.build.power)
-      |> assign(:month, Enum.at(assigns.bill.months, Date.utc_today().month - 1))
+      |> assign(:month, assigns.month || Date.utc_today().month)
+      |> then(&assign(&1, :line, Enum.at(&1.bill.months, &1.month - 1)))
 
     ~H"""
     <div>
@@ -132,12 +146,12 @@ defmodule DIYWeb.Front do
       </p>
     </div>
     <p :if={@estimate.fit} id="bill-fit" class="text-sm">{fit_text(@estimate)}</p>
-    <p id="bill-month" class="text-sm">
-      {@month.name}: {Format.money(@month.cost)} (between {Format.money(@month.cost_low)} and {Format.money(
-        @month.cost_high
+    <p id="bill-month" class="text-sm" aria-live="polite">
+      {@line.name}: {Format.money(@line.cost)} (between {Format.money(@line.cost_low)} and {Format.money(
+        @line.cost_high
       )})
     </p>
-    <DIYWeb.Front.chart bill={@bill} />
+    <DIYWeb.Front.chart bill={@bill} month={@month} />
     <.bill_form :if={@price.kind != :user} build={@build}>
       <p class="text-sm">
         <span class="font-semibold">Is this near your bill?</span>
@@ -343,44 +357,54 @@ defmodule DIYWeb.Front do
     """
   end
 
-  @doc "A bar for each month of a bill (`DIY.Bill`), with the range as a line."
+  @doc """
+  A bar for each month of a bill (`DIY.Bill`), with the range as a line.
+  Each month is a button. A tap or the keyboard gives the month in the
+  line over the chart. The bar of that month is darker.
+  """
   attr :bill, :map, required: true
+  attr :month, :integer, default: nil, doc: "the month of the line over the chart (1 to 12)"
 
   def chart(assigns) do
     top = Enum.max(Enum.map(assigns.bill.months, & &1.high)) |> max(1)
-    scale = fn kwh -> 100 * kwh / top end
+    scale = fn kwh -> Float.round(max(100 * kwh / top, 0.0), 1) end
     assigns = assign(assigns, :scale, scale)
 
     ~H"""
-    <svg
-      viewBox="0 0 360 130"
-      class="w-full"
-      role="img"
-      aria-label="The bill of each month, from January to December, with its range."
+    <div
+      id="chart"
+      role="group"
+      aria-label="The bill of each month, from January to December, with its range"
+      class="flex h-32 gap-0.5"
     >
-      <g :for={{m, i} <- Enum.with_index(@bill.months)}>
-        <rect
-          x={8 + i * 29}
-          y={110 - @scale.(m.kwh)}
-          width="20"
-          height={@scale.(m.kwh)}
-          class="fill-primary/70"
-        >
-          <title>{m.name}: {Format.money(m.cost)}</title>
-        </rect>
-        <line
-          x1={18 + i * 29}
-          x2={18 + i * 29}
-          y1={110 - @scale.(m.high)}
-          y2={110 - @scale.(m.low)}
-          class="stroke-base-content/60"
-          stroke-width="2"
-        />
-        <text x={18 + i * 29} y="124" font-size="10" text-anchor="middle" class="fill-base-content">
+      <button
+        :for={{m, n} <- Enum.with_index(@bill.months, 1)}
+        type="button"
+        id={"chart-#{n}"}
+        phx-click="bill_month"
+        phx-value-month={n}
+        aria-pressed={to_string(n == @month)}
+        aria-label={"#{m.name}: #{Format.money(m.cost)}"}
+        class="flex-1 flex flex-col items-center rounded cursor-pointer focus-visible:outline-2 focus-visible:outline-primary"
+      >
+        <span class="relative w-full flex-1">
+          <span
+            class={[
+              "absolute bottom-0 inset-x-1 rounded-t-sm",
+              if(n == @month, do: "bg-primary", else: "bg-primary/80")
+            ]}
+            style={"height: #{@scale.(m.kwh)}%"}
+          />
+          <span
+            class="absolute left-1/2 w-0.5 -ml-px bg-base-content/60"
+            style={"bottom: #{@scale.(m.low)}%; height: #{@scale.(m.high - m.low)}%"}
+          />
+        </span>
+        <span aria-hidden="true" class={["text-xs", n == @month && "font-bold underline"]}>
           {String.first(m.name)}
-        </text>
-      </g>
-    </svg>
+        </span>
+      </button>
+    </div>
     """
   end
 

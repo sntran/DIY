@@ -290,6 +290,20 @@ async function build(context, name) {
   await page.waitForSelector("#market:has-text('Oncor')", { timeout: 30000 })
   await check(page, `${name} front`)
 
+  // The chart of the bill: a click on a month gives its dollars in the
+  // line over the chart. The keyboard on the next month does it too.
+  const names = ["January", "February", "March", "April", "May", "June", "July",
+    "August", "September", "October", "November", "December"]
+  const first = new Date().getUTCMonth() === 0 ? 2 : 1
+  await page.click(`#chart-${first}`)
+  await page.waitForSelector(`#chart-${first}[aria-pressed=true]`)
+  assert.match(await page.textContent("#bill-month"), new RegExp(`${names[first - 1]}: \\$`))
+  await page.focus(`#chart-${first + 1}`)
+  await page.keyboard.press("Enter")
+  await page.waitForSelector(`#chart-${first + 1}[aria-pressed=true]`)
+  assert.match(await page.textContent("#bill-month"), new RegExp(`${names[first]}: \\$`))
+  await check(page, `${name} front, a month of the chart`)
+
   await page.click("#go-in")
   await page.waitForSelector("#plan-svg")
   await page.click("#plan-hint button")

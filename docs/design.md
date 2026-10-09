@@ -161,6 +161,11 @@ The front of the house helps a person with no skill in power:
 
 - It tells what a kWh is, what retail choice is, and what the delivery
   charges are.
+- A bar chart gives the bill of each month, with its range. Each month
+  is a button. A tap or the keyboard gives the dollars of that month in
+  the line over the chart. A screen reader reads it. The line starts
+  with this month. The dollars are not on the bars: on a phone, 12
+  labels are too small to read.
 - It asks for the last bill: its total in dollars, its kWh and its month.
   The total divided by the kWh is the price of the plan (`my_bill`). A
   person who thinks that the bill is wrong usually has a price that is
