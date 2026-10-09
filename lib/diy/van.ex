@@ -21,19 +21,28 @@ defmodule DIY.Van do
 
   ## The power budget
 
-  For each month, the items use some Wh in one day: the power of each item
-  for its hours (a fan in the warm months, a heater in the cold months).
-  An item on an outlet of 120 V takes its power through the inverter: the
-  app counts 90% for the inverter (the data sheets of inverters give 85% to
-  94%). The day gets power from the sun (the panels in full sun for the
-  hours of the sun of NASA POWER at the house, at 80%, as `DIY.Power`), and
-  from the alternator charger when the engine runs (its amps at the
-  voltage of the batteries: 12.8 V for each 12 V). The batteries keep
-  power: a lithium battery (LiFePO4) gives 90% of its label, a lead acid
-  or AGM battery 50% (it lasts longer when it gives only half), and a
-  power station 95% (`DIY.Power`). The app does not count the loss of
-  the outlets of a station (`DIY.Power` counts 92% for a house): an item
-  on 120 V loses 10% in the inverter.
+  For each month, the items use some Wh in one day. Each item uses its
+  power for its hours: a fan in the warm months, a heater in the cold
+  months. A 12 V fridge uses more in a hot month (`fridge_factor/1`). An
+  item on an outlet of 120 V takes its power through the inverter. The app
+  counts 90% for the inverter (the data sheets of inverters give 85% to
+  94%).
+
+  The day gets power from the sun and from the engine:
+
+  - The panels give 80% of their watts in full sun, for the hours of the
+    sun of NASA POWER at the house (as `DIY.Power`).
+  - The alternator charger gives its amps when the engine runs, at the
+    voltage of the batteries (12.8 V for each 12 V).
+
+  The batteries keep power:
+
+  - A lithium battery (LiFePO4) gives 90% of its label.
+  - A lead acid or AGM battery gives 50%: it lasts longer when it gives
+    only half.
+  - A power station gives 95% (`DIY.Power`). The app does not count the
+    loss of the outlets of a station (`DIY.Power` counts 92% for a
+    house). An item on 120 V loses 10% in the inverter.
 
   The days off the grid: the batteries, divided by the power that the day
   uses more than it gets. When the sun and the engine give more than the
@@ -178,7 +187,8 @@ defmodule DIY.Van do
     months =
       for m <- 1..12 do
         sun = climate && climate.months[m].sun
-        use = items |> Enum.map(fn {_zone, item} -> wh_day(item, m) end) |> Enum.sum()
+        t = climate && climate.months[m].t
+        use = items |> Enum.map(fn {_zone, item} -> wh_day(item, m, t) end) |> Enum.sum()
         solar = if sun, do: panels * sun * DIY.Power.derate(), else: 0.0
         net = use - solar - drive
 
@@ -226,24 +236,51 @@ defmodule DIY.Van do
 
   defp storage(_item), do: 0.0
 
-  @doc "The Wh that an item uses in one day of a month."
-  def wh_day(%{type: "van_fridge", params: p}, _month), do: p["wh_day"] / 1
+  # The label of a 12 V fridge gives its use near 77 °F (25 °C) around it,
+  # with 41 °F (5 °C) inside. This is the usual test of the data sheets. A
+  # fridge works against the heat that comes in through its walls. This
+  # heat is in proportion to the difference between the air around it and
+  # its inside. The van has the mean air outside: a simple model of the
+  # app.
+  @label_f 77
+  @fridge_f 41
 
-  def wh_day(%{type: "stove", params: %{"fuel" => "induction"} = p}, _month),
+  @doc """
+  The Wh that an item uses in one day of a month. `t` is the mean
+  temperature outside in that month (°F), or nil with no weather. With no
+  weather, a 12 V fridge uses the Wh of its label.
+  """
+  def wh_day(item, month, t \\ nil)
+
+  def wh_day(%{type: "van_fridge", params: p}, _month, t) when is_number(t),
+    do: p["wh_day"] * fridge_factor(t)
+
+  def wh_day(%{type: "van_fridge", params: p}, _month, _t), do: p["wh_day"] / 1
+
+  def wh_day(item, month, _t), do: day_use(item, month)
+
+  @doc """
+  The factor of the use of a 12 V fridge in a van at a mean temperature
+  (°F). It is never under 1: a person in the van keeps it warm, and the
+  budget of a battery must be on the safe side.
+  """
+  def fridge_factor(t), do: max((t - @fridge_f) / (@label_f - @fridge_f), 1.0)
+
+  defp day_use(%{type: "stove", params: %{"fuel" => "induction"} = p}, _month),
     do: p["watts"] * p["minutes"] / 60 / @inverter
 
-  def wh_day(%{type: "water_pump", params: p}, _month), do: p["watts"] * p["minutes"] / 60
+  defp day_use(%{type: "water_pump", params: p}, _month), do: p["watts"] * p["minutes"] / 60
 
-  def wh_day(%{type: type, params: p}, month) when type in ["van_fan", "diesel_heater"],
+  defp day_use(%{type: type, params: p}, month) when type in ["van_fan", "diesel_heater"],
     do: if(month in Catalog.season_months(p["season"]), do: p["watts"] * p["hours"], else: 0.0)
 
-  def wh_day(%{type: "van_lights", params: p}, _month), do: p["watts"] * p["hours"]
+  defp day_use(%{type: "van_lights", params: p}, _month), do: p["watts"] * p["hours"]
 
-  def wh_day(%{type: "devices", params: p}, _month),
+  defp day_use(%{type: "devices", params: p}, _month),
     do: p["watts"] * p["hours"] / if(p["outlet"] == "ac", do: @inverter, else: 1)
 
-  def wh_day(%{type: "inverter", params: p}, _month), do: p["idle_w"] * p["hours"]
-  def wh_day(_item, _month), do: 0.0
+  defp day_use(%{type: "inverter", params: p}, _month), do: p["idle_w"] * p["hours"]
+  defp day_use(_item, _month), do: 0.0
 
   @doc """
   The safety notes of a van, where they apply:
