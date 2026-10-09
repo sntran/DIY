@@ -533,10 +533,10 @@ defmodule DIY.Power do
   stations, and the panels that charge a station, are one part: they work
   together. Each other item is a part alone. A part has its items, its
   price, the savings that it adds to the plan, and its payback. It also
-  has the years that it lasts: the shortest life of its items. So a battery of 8 years
-  does not decide the payback of panels of 25 years on the grid. The
-  savings that a part adds are the savings of the plan, less the savings
-  of the plan with no such part.
+  has the years that it lasts: the shortest life of its items. So a
+  battery of 8 years does not decide the payback of panels of 25 years on
+  the grid. The savings that a part adds are the savings of the plan, less
+  the savings of the plan with no such part.
   """
   def whatif(%Build{} = build, today, today_estimate, plan_estimate, climate, cents) do
     planned = Enum.filter(build.items, & &1.planned)

@@ -313,15 +313,16 @@ defmodule DIYWeb.PowerLiveTest do
     refute has_element?(view, "#parts")
     refute render(view) =~ ~r/it pays back in [\d.]+ years\./
 
-    # With a transfer switch, there are two parts. The plan as one is not
-    # judged on the life of the battery.
+    # With a transfer switch, there are two parts. Each part has its own
+    # line. The switch has no life, so the plan as one has the life of the
+    # battery.
     {build, _id} = add(build, "Garage", "transfer_switch", %{"cost" => "600"})
     view = open(conn, ~p"/power", flag(build, "transfer_switch", :planned))
 
     assert has_element?(
              view,
              "#parts li",
-             "Power station and Solar panels ($2,300): they add"
+             "Power station and solar panels ($2,300): they add"
            )
 
     assert view |> element("#parts") |> render() |> String.split("<li") |> length() == 3
@@ -380,6 +381,10 @@ defmodule DIYWeb.PowerLiveTest do
     assert has_element?(view, "#plan-permit")
     assert render(view) =~ "cannot run all their items at the same time"
     refute render(view) =~ "A different reason"
+    # The sheet of the AC gives the overload, not hours.
+    render_patch(view, ~p"/inside?item=#{item(view, "ac").id}")
+    assert has_element?(view, "#item-power", "need more watts than the stations give")
+    render_patch(view, ~p"/power")
     # Today the house has no station: no warning of today.
     refute has_element?(view, "#today-backfeed")
     # The front shows a mark of the problem.

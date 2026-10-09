@@ -433,7 +433,8 @@ year, and the years of the payback, next to the years that the equipment
 lasts. A payback after that time is not a payback. With one price at all
 hours, the weather of 10 years changes the two bills the same way. Then
 the two ends of the range of the savings are the same, and the page gives
-one number. With a price at night, the page gives the range.
+one number. With a price at night, the two ends can differ: then the
+page gives the range.
 
 With two parts of equipment or more, each part has its own line
 (`parts`). The planned stations and the panels that charge a station are

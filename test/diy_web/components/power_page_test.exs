@@ -20,7 +20,7 @@ defmodule DIYWeb.PowerPageTest do
     }
 
     assert PowerPage.part_text(two) ==
-             "Power station and Solar panels ($1,000): they add $100 of savings in one year. They pay back in 20.0 years: after a life of near 8 years."
+             "Power station and solar panels ($1,000): they add $100 of savings in one year. They pay back in 20.0 years: after a life of near 8 years."
 
     assert PowerPage.part_text(%{two | payback: nil}) =~
              "they add no savings. On savings alone, they do not pay back. The reason is the backup in an outage."

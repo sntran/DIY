@@ -94,8 +94,15 @@ defmodule DIYWeb.PowerPage do
   def outage_text(power, whatif) do
     power = top(power, whatif)
 
-    if low_month(power) do
-      "In an outage, the stations#{if whatif, do: " of the plan"} run their items for #{low_text(power)}."
+    cond do
+      is_nil(low_month(power)) ->
+        nil
+
+      :overload in Power.warnings(power) ->
+        "In an outage, the items on the stations need more watts than the stations give."
+
+      true ->
+        "In an outage, the stations#{if whatif, do: " of the plan"} run their items for #{low_text(power)}."
     end
   end
 
@@ -360,9 +367,14 @@ defmodule DIYWeb.PowerPage do
   defp words([item]),
     do: %{name: Catalog.name(item), adds: "it adds", does: "it does", pays: "It pays"}
 
-  defp words(items),
+  defp words([first | rest]),
     do: %{
-      name: Enum.map_join(items, " and ", &Catalog.name/1),
+      name:
+        Enum.map_join(
+          [Catalog.name(first) | Enum.map(rest, &String.downcase(Catalog.name(&1)))],
+          " and ",
+          & &1
+        ),
       adds: "they add",
       does: "they do",
       pays: "They pay"
