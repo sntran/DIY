@@ -5,7 +5,7 @@ defmodule DIYWeb.CutawayTest do
   import Phoenix.LiveViewTest
 
   alias DIY.{Build, Catalog, House}
-  alias DIYWeb.{Camera, Cutaway}
+  alias DIYWeb.{Camera, Cutaway, Decor}
   alias DIYWeb.Icon.Shapes
 
   defp house(floors \\ 2) do
@@ -354,6 +354,28 @@ defmodule DIYWeb.CutawayTest do
     assert classes.("ground-#{kitchen}-y1-0") == ~w(p-wall-r p-wall-l p-wall-t)
     assert classes.("ground-#{kitchen}-x0-0") == ~w(p-wall-r p-wall-l p-wall-t p-baseboard)
 
+    # A long wall also has a picture at the left of its window, as at the
+    # back of Bedroom 1. In the living room, the lamp stands in front of
+    # that place: no picture. A garage has no picture.
+    living = room(build, "Living room")
+
+    art = fn build, index, room ->
+      level = Enum.at(Cutaway.view(build).levels, index)
+      for %{kind: :wall, room: ^room} = w <- level.objects, {_p, "p-art"} <- w.polys, do: w.id
+    end
+
+    bed = room(build, "Bedroom 1")
+    assert art.(build, 1, bed) == ["f2-#{bed}-y0-0"]
+    assert art.(build, 0, living) == []
+    assert art.(build, 0, room(build, "Garage")) == []
+
+    # The lamp and the TV at the front of the room: the picture comes.
+    items =
+      for i <- build.items,
+          do: if(i.type in ~w(lights tv), do: %{i | at: %{i.at | y: 200}}, else: i)
+
+    assert art.(%{build | items: items}, 0, living) == ["ground-#{living}-y0-0"]
+
     # A short high wall has its baseboard, but no window.
     small = %{kitchen_room(build) | plan: %{kitchen_room(build).plan | w: 40}}
     rooms = Enum.map(build.rooms, &if(&1.id == kitchen, do: small, else: &1))
@@ -491,6 +513,53 @@ defmodule DIYWeb.CutawayTest do
 
   defp overlap?({ax0, ay0, ax1, ay1}, {bx0, by0, bx1, by1}),
     do: ax0 < bx1 - 0.01 and bx0 < ax1 - 0.01 and ay0 < by1 - 0.01 and by0 < ay1 - 0.01
+
+  test "each piece of furniture paints from the back at each turn: a depth check" do
+    camera = Camera.house()
+
+    # All the models: the pieces of large rooms of each name that the app
+    # knows, with no item.
+    rooms =
+      for name <- ~w(Bedroom Living Kitchen Bathroom Garage Laundry Attic Office),
+          do: %{name: name, place: :indoor, plan: %{x: 0, y: 0, w: 400, d: 400}}
+
+    yard = %{name: "Backyard", place: :outdoor, plan: %{x: 0, y: 0, w: 400, d: 400}}
+
+    models =
+      for(room <- [yard | rooms], {model, _x, _y, _turn} <- Decor.pieces(room, []), do: model)
+      |> Enum.uniq()
+
+    assert length(models) == 22
+
+    # A ball of leaves (or a rug) looks to the camera at the turn 0 only. A
+    # piece with leaves stays at the turn 0 on the plan.
+    for model <- models,
+        turn <- if(Enum.any?(model, &match?({:face, _, nil, _}, &1)), do: [0], else: 0..3) do
+      frame = %{at: {0, 0, 0}, turn: turn, camera: camera}
+      polys = for {:poly, corners, _class} <- Shapes.placed_model(model, frame), do: corners
+      assert depth_faults(polys, camera, 0.01) == [], "#{inspect(hd(model))} at turn #{turn}"
+    end
+  end
+
+  test "the furniture is on the plan: fixed, with no tap, and a rug under the pieces" do
+    build = house()
+    [ground | _] = Cutaway.view(build).levels
+    living = room(build, "Living room")
+    decor = for %{kind: :fixture, id: "decor-" <> id} = o <- ground.objects, do: {id, o}
+    assert Enum.any?(decor, fn {id, _o} -> String.starts_with?(id, living <> "-") end)
+
+    # The rug of the living room paints before the table on it.
+    ids = Enum.map(ground.objects, & &1.id)
+    index = fn id -> Enum.find_index(ids, &(&1 == id)) end
+    assert index.("decor-#{living}-0") < index.("decor-#{living}-2")
+
+    # A tap goes through the furniture to the floor: no data of an item.
+    html = html(build)
+    assert html =~ ~s(id="plan-fixture-decor-#{living}-0" class="p-fixture")
+    # A piece moves with its room in a drag (the hook).
+    assert html =~ ~r/id="plan-fixture-decor-#{living}-0"[^>]*data-with="#{living}"/
+    refute html =~ ~r/id="plan-fixture-decor-[^"]+"[^>]*data-item/
+  end
 
   test "each kind and each model of van paint from the back at each turn: a depth check" do
     m = 0.0254
@@ -705,12 +774,22 @@ defmodule DIYWeb.CutawayTest do
       # is right. The order is for the items that fit in their rooms.
       big = MapSet.new(for item <- build.items, not fits?(build, item), do: item.id)
 
+      # A flat piece (a rug) lies on its floor, and it paints first. A part
+      # that stands on that floor behind it does not cover it on the screen.
       for level <- view.levels do
-        indexed = level.objects |> Enum.reject(&MapSet.member?(big, &1.id)) |> Enum.with_index()
+        indexed =
+          level.objects
+          |> Enum.reject(&MapSet.member?(big, &1.id))
+          |> Enum.map(&{&1, screen(&1)})
+          |> Enum.with_index()
 
-        for {a, i} <- indexed, {b, j} <- indexed, i < j, cover?(a, b) do
+        for {{a, sa}, i} <- indexed,
+            {{b, sb}, j} <- indexed,
+            i < j,
+            not on_floor?(a, b),
+            cover?(sa, sb) do
           refute behind?(b.box, a.box) and not behind?(a.box, b.box),
-                 "#{b.id} is behind #{a.id}, but it paints after it: #{inspect({b.box, a.box, screen(b), screen(a)})}"
+                 "#{b.id} is behind #{a.id}, but it paints after it: #{inspect({b.box, a.box, sb, sa})}"
         end
       end
     end
@@ -731,11 +810,13 @@ defmodule DIYWeb.CutawayTest do
     do: ax1 <= bx0 + 1.0e-6 or ay1 <= by0 + 1.0e-6 or az1 <= bz0 + 1.0e-6
 
   # True when the boxes of two objects on the screen overlap.
-  defp cover?(a, b) do
-    {ax0, ay0, ax1, ay1} = screen(a)
-    {bx0, by0, bx1, by1} = screen(b)
-    ax0 < bx1 - 0.01 and bx0 < ax1 - 0.01 and ay0 < by1 - 0.01 and by0 < ay1 - 0.01
-  end
+  defp cover?({ax0, ay0, ax1, ay1}, {bx0, by0, bx1, by1}),
+    do: ax0 < bx1 - 0.01 and bx0 < ax1 - 0.01 and ay0 < by1 - 0.01 and by0 < ay1 - 0.01
+
+  # True when a is flat (2 cm high at most), and b stands on its floor or
+  # over it.
+  defp on_floor?(%{box: {_, _, az0, _, _, az1}}, %{box: {_, _, bz0, _, _, _}}),
+    do: az1 - az0 <= 0.02 and bz0 >= az0 - 1.0e-6
 
   defp screen(object) do
     {xs, ys} =

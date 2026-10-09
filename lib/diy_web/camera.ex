@@ -159,8 +159,8 @@ defmodule DIYWeb.Camera do
 
   @doc """
   Objects in the order of the paint, from the back to the front. They are
-  the walls and the items of a plan (`DIYWeb.Cutaway`), or the parts of a
-  model (`DIYWeb.Icon.Shapes`). An object has an `id`, a `box` in the world
+  the walls, the furniture and the items of a plan (`DIYWeb.Cutaway`), or
+  the parts of a model (`DIYWeb.Icon.Shapes`). An object has an `id`, a `box` in the world
   (`{x0, y0, z0, x1, y1, z1}`), a `key`, `loose`, and its `polys`
   (`{corners, class}`).
 
@@ -168,8 +168,9 @@ defmodule DIYWeb.Camera do
   back comes first. Its box is on the far side of the other box along x,
   y or z. (The eye is at the large x, y and z.) And the other box is not
   on the far side of it. Else the one with the smaller key (the depth of its
-  center, `depth/2`) comes first. A loose object comes by its key only: it
-  is an item that is larger than its room, and it goes through walls.
+  center, `depth/2`) comes first. A loose object comes by its key only. It
+  is an item that is larger than its room (it goes through walls), or a
+  flat rug. A part that stands behind a rug does not cover it.
   Three boxes can each be behind the next one (a cycle). Then the box with
   the fewest boxes before it comes first.
   """

@@ -367,6 +367,7 @@
 .p-shadow-1 { stop-color: var(--p-shadow); stop-opacity: 0.16 }
 .p-shadow-2 { stop-color: var(--p-shadow); stop-opacity: 0 }
 .p-frame { fill: var(--p-frame) } .p-pane { fill: var(--p-pane) } .p-baseboard { fill: var(--p-baseboard) }
+.p-art { fill: var(--c-rug-t) }
 
 /* The warm colors of the items on the plan of the house, as in a drawn
    picture: by day, and at night (the dark mode). The outlines are brown, as
@@ -383,6 +384,11 @@
   --c-cloth-t: #b9b2cf; --c-cloth-l: #a199bd; --c-cloth-r: #867ea3;
   --c-copper-t: #e3a46f; --c-copper-l: #c98250; --c-copper-r: #a6653a;
   --c-pink-t: #efc4c8; --c-pink-l: #e0a7ad; --c-pink-r: #c48890;
+  --c-sage-t: #b4c2a6; --c-sage-l: #9aab8c; --c-sage-r: #7f9073;
+  --c-linen-t: #f6efe2; --c-linen-l: #e9dfcd; --c-linen-r: #d1c4ac;
+  --c-rug-t: #9aa0c9; --c-rug-l: #8389b6; --c-rug-r: #6c719c;
+  --c-leaf-t: #7fae63; --c-leaf-l: #62924c; --c-leaf-r: #4b7539;
+  --c-clay-t: #d4875f; --c-clay-l: #bb6d45; --c-clay-r: #985535;
   --c-shade-t: #fff1cc; --c-shade-l: #f8dc98; --c-shade-r: #e9c26a;
   --c-screen: #2f3440; --c-glass: #b7cdd6; --c-line: #6e5d50; --c-ink: rgb(64 44 32 / 0.6);
   --c-wall-top: #fbf5ec; --c-wall-low: #f1dcc2; --c-side-top: #eadfcd; --c-side-low: #dcc5a8;
@@ -400,6 +406,11 @@
     --c-cloth-t: #898090; --c-cloth-l: #796f84; --c-cloth-r: #675d73;
     --c-copper-t: #a47650; --c-copper-l: #93603c; --c-copper-r: #7c4d2d;
     --c-pink-t: #ac8c8b; --c-pink-l: #a27879; --c-pink-r: #906466;
+    --c-sage-t: #858a75; --c-sage-l: #747b64; --c-sage-r: #626953;
+    --c-linen-t: #b1a89c; --c-linen-l: #a89d8e; --c-linen-r: #998c79;
+    --c-rug-t: #74748c; --c-rug-l: #65657f; --c-rug-r: #56556e;
+    --c-leaf-t: #627d48; --c-leaf-l: #4f6b39; --c-leaf-r: #40572d;
+    --c-clay-t: #9b6346; --c-clay-l: #8a5235; --c-clay-r: #73422a;
     --c-shade-t: #b7a98e; --c-shade-l: #b29b6b; --c-shade-r: #a88a4d;
     --c-screen: #1d2027; --c-glass: #4c5e6b; --c-line: #2e2520; --c-ink: rgb(20 12 8 / 0.7);
     --c-wall-top: #6d5747; --c-wall-low: #9c7350; --c-side-top: #5a473a; --c-side-low: #7d5c41;
@@ -417,6 +428,11 @@
   --c-cloth-t: #898090; --c-cloth-l: #796f84; --c-cloth-r: #675d73;
   --c-copper-t: #a47650; --c-copper-l: #93603c; --c-copper-r: #7c4d2d;
   --c-pink-t: #ac8c8b; --c-pink-l: #a27879; --c-pink-r: #906466;
+  --c-sage-t: #858a75; --c-sage-l: #747b64; --c-sage-r: #626953;
+  --c-linen-t: #b1a89c; --c-linen-l: #a89d8e; --c-linen-r: #998c79;
+  --c-rug-t: #74748c; --c-rug-l: #65657f; --c-rug-r: #56556e;
+  --c-leaf-t: #627d48; --c-leaf-l: #4f6b39; --c-leaf-r: #40572d;
+  --c-clay-t: #9b6346; --c-clay-l: #8a5235; --c-clay-r: #73422a;
   --c-shade-t: #b7a98e; --c-shade-l: #b29b6b; --c-shade-r: #a88a4d;
   --c-screen: #1d2027; --c-glass: #4c5e6b; --c-line: #2e2520; --c-ink: rgb(20 12 8 / 0.7);
   --c-wall-top: #6d5747; --c-wall-low: #9c7350; --c-side-top: #5a473a; --c-side-low: #7d5c41;
@@ -445,6 +461,16 @@
 .cutaway-house .i-pink-m1 { fill: color-mix(in oklab, var(--c-pink-l) 75%, var(--c-pink-r)) } .cutaway-house .i-pink-m2 { fill: color-mix(in oklab, var(--c-pink-l) 50%, var(--c-pink-r)) } .cutaway-house .i-pink-m3 { fill: color-mix(in oklab, var(--c-pink-l) 25%, var(--c-pink-r)) }
 .cutaway-house .i-shade-t { fill: var(--c-shade-t) } .cutaway-house .i-shade-l { fill: var(--c-shade-l) } .cutaway-house .i-shade-r { fill: var(--c-shade-r) }
 .cutaway-house .i-shade-m1 { fill: color-mix(in oklab, var(--c-shade-l) 75%, var(--c-shade-r)) } .cutaway-house .i-shade-m2 { fill: color-mix(in oklab, var(--c-shade-l) 50%, var(--c-shade-r)) } .cutaway-house .i-shade-m3 { fill: color-mix(in oklab, var(--c-shade-l) 25%, var(--c-shade-r)) }
+.cutaway-house .i-sage-t { fill: var(--c-sage-t) } .cutaway-house .i-sage-l { fill: var(--c-sage-l) } .cutaway-house .i-sage-r { fill: var(--c-sage-r) }
+.cutaway-house .i-sage-m1 { fill: color-mix(in oklab, var(--c-sage-l) 75%, var(--c-sage-r)) } .cutaway-house .i-sage-m2 { fill: color-mix(in oklab, var(--c-sage-l) 50%, var(--c-sage-r)) } .cutaway-house .i-sage-m3 { fill: color-mix(in oklab, var(--c-sage-l) 25%, var(--c-sage-r)) }
+.cutaway-house .i-linen-t { fill: var(--c-linen-t) } .cutaway-house .i-linen-l { fill: var(--c-linen-l) } .cutaway-house .i-linen-r { fill: var(--c-linen-r) }
+.cutaway-house .i-linen-m1 { fill: color-mix(in oklab, var(--c-linen-l) 75%, var(--c-linen-r)) } .cutaway-house .i-linen-m2 { fill: color-mix(in oklab, var(--c-linen-l) 50%, var(--c-linen-r)) } .cutaway-house .i-linen-m3 { fill: color-mix(in oklab, var(--c-linen-l) 25%, var(--c-linen-r)) }
+.cutaway-house .i-rug-t { fill: var(--c-rug-t) } .cutaway-house .i-rug-l { fill: var(--c-rug-l) } .cutaway-house .i-rug-r { fill: var(--c-rug-r) }
+.cutaway-house .i-rug-m1 { fill: color-mix(in oklab, var(--c-rug-l) 75%, var(--c-rug-r)) } .cutaway-house .i-rug-m2 { fill: color-mix(in oklab, var(--c-rug-l) 50%, var(--c-rug-r)) } .cutaway-house .i-rug-m3 { fill: color-mix(in oklab, var(--c-rug-l) 25%, var(--c-rug-r)) }
+.cutaway-house .i-leaf-t { fill: var(--c-leaf-t) } .cutaway-house .i-leaf-l { fill: var(--c-leaf-l) } .cutaway-house .i-leaf-r { fill: var(--c-leaf-r) }
+.cutaway-house .i-leaf-m1 { fill: color-mix(in oklab, var(--c-leaf-l) 75%, var(--c-leaf-r)) } .cutaway-house .i-leaf-m2 { fill: color-mix(in oklab, var(--c-leaf-l) 50%, var(--c-leaf-r)) } .cutaway-house .i-leaf-m3 { fill: color-mix(in oklab, var(--c-leaf-l) 25%, var(--c-leaf-r)) }
+.cutaway-house .i-clay-t { fill: var(--c-clay-t) } .cutaway-house .i-clay-l { fill: var(--c-clay-l) } .cutaway-house .i-clay-r { fill: var(--c-clay-r) }
+.cutaway-house .i-clay-m1 { fill: color-mix(in oklab, var(--c-clay-l) 75%, var(--c-clay-r)) } .cutaway-house .i-clay-m2 { fill: color-mix(in oklab, var(--c-clay-l) 50%, var(--c-clay-r)) } .cutaway-house .i-clay-m3 { fill: color-mix(in oklab, var(--c-clay-l) 25%, var(--c-clay-r)) }
 .cutaway-house .i-screen { fill: var(--c-screen) } .cutaway-house .i-glass { fill: var(--c-glass) } .cutaway-house .i-line { fill: var(--c-line) }
 .cutaway-house :is(.i-face, .i-outline) { stroke: var(--c-ink); stroke-width: 0.8 }
 @media (prefers-color-scheme: dark) {
