@@ -163,7 +163,7 @@ defmodule DIYWeb.VanPage do
           </li>
         </ul>
         <p class="text-xs opacity-80">
-          The cab has the people, and the bed has the gear. Each zone has a typical place from the front axle to the rear axle. The bed and the electrical bay are over the rear axle. A truck scale gives the real weight of each axle.
+          The people sit at the middle of the cab, and the gear is at the middle of the bed. The place of each item on the plan of the van gives its weight on each axle. A truck scale gives the real weight of each axle.
         </p>
       </details>
     </div>

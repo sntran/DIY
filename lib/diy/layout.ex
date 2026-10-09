@@ -369,7 +369,9 @@ defmodule DIY.Layout do
   place. An item with no place goes to a free place in its room, and an
   item out of its room comes back in. When no room of the house has a
   plan (a new house, or a build of an older version), the app makes the
-  draft. A zone of a van and an item in a van have no plan.
+  draft. The zones of a van keep their plans when the plans are good,
+  else they get the draft of the van (`van_draft/2`). The shell of a van
+  and its items have no plan.
   """
   def fill(%{house: nil} = build), do: build
 

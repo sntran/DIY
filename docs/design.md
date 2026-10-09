@@ -618,6 +618,40 @@ lesson use only the rooms and the items of the house
 (`DIY.Build.house_view/1`). The van has an estimate of 0 kWh in the
 house: its batteries and its power are its own.
 
+### The inside of the van at scale
+
+The page Van shows the van cut open, as the page Rooms shows the house
+(`DIYWeb.VanCutaway`, with the rules in `DIY.Layout`). The van has two
+layers: its floor, and its roof over it with a gap.
+
+- The plan of a van comes from its model (`DIY.Catalog.van_size/1`): the
+  cargo area and the cab in front of it. `x` goes across the van, from
+  its left side (the side of the driver). `y` goes along the van, from
+  the doors at the back to the cab.
+- The draft (`DIY.Layout.van_draft/2`). From the doors at the back: the
+  bed, the electrical bay, the living area and the galley, each across
+  the van. The cab is at the front, and the roof of the van is over all
+  of it. The shell has no plan: its items are materials.
+- The rules are the rules of the house. No two zones of a layer overlap,
+  each zone stays in the van, and each item is in its zone. The cab and
+  the roof of the van are fixed: they do not move, and they have no
+  handles. An item does not go between the house and a van.
+- The picture: the walls of the van, cut at the height of a table on the
+  left side and at the back, and near the floor on the right side. The
+  right side has the opening of the sliding door. The picture also shows
+  the wheel wells, the wheels, the seats, the dash, the steering wheel,
+  the hood and the bumper. A swivel seat (an item) takes the place of the
+  seat that it is on.
+- The shell gives the materials: a floor of wood, walls with panels, and
+  pink insulation in the cut of the walls.
+- The model of each van (`DIYWeb.Icon.Shapes.van/1`) has the nose, the
+  hood, the windshield and the roof of its brand. The ProMaster, the
+  Transit and the Sprinter look different in the yard and in the garage.
+- A drag moves an item, also to a different zone. A tap on a zone
+  chooses it. Its bar has the buttons that move it, and its sheet gives
+  its size. A list of the zones and their items is for a screen reader
+  and a keyboard. In the list, the arrow keys move an item or a zone.
+
 ### The two budgets
 
 `DIY.Van` gives the two budgets of a van, and the page shows them as the
@@ -629,12 +663,15 @@ The weight budget:
   weight. The items take it, with the water of the tanks (8.34 lb for
   each gallon, USGS), the people (in the cab) and the gear (under the
   bed).
-- Each zone has a typical place from the front axle (0) to the rear axle
-  (1): cab 0.1, galley 0.4, living area 0.55, roof and shell 0.5,
-  electrical bay 0.95, bed 1.0. The part of the weight of a zone on the
-  rear axle is its place (a lever). The rest is on the front axle.
+- Each item has its place along the van, on the plan of the van. The
+  part of its weight on the rear axle comes from that place, the front
+  axle and the wheelbase of the model (`DIY.Van.lever/2`). The rest is on
+  the front axle. An item behind the rear axle takes some weight off the
+  front axle.
+- The people sit at the middle of the cab, and the gear is at the middle
+  of the bed. An item of the shell is at the middle of the van.
 - The page shows the van in all, each axle against its rating (GAWR),
-  and the weight of each zone. The places are a simple model of the app.
+  and the weight of each zone. The places on the plan are a simple model.
   A truck scale gives the real weight of each axle.
 
 The power budget, for each month:
