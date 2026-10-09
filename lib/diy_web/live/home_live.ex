@@ -390,9 +390,16 @@ defmodule DIYWeb.HomeLive do
   def handle_event("price", %{"price" => price}, socket) when is_binary(price) do
     result =
       case Float.parse(String.trim(price)) do
-        _ when price == "" -> Build.set_price(socket.assigns.build, nil)
-        {cents, ""} -> Build.set_price(socket.assigns.build, cents)
-        _ -> {:error, :price}
+        # With no price of a bill, the app also forgets the kWh of the bill.
+        _ when price == "" ->
+          {:ok, build} = Build.set_bill(socket.assigns.build, nil)
+          Build.set_price(build, nil)
+
+        {cents, ""} ->
+          Build.set_price(socket.assigns.build, cents)
+
+        _ ->
+          {:error, :price}
       end
 
     case result do
@@ -407,15 +414,25 @@ defmodule DIYWeb.HomeLive do
 
   # The price of the last bill of the person: its total divided by its kWh.
   # A price out of 3¢ to 100¢ is not a price of a bill: the page asks the
-  # person to check the two numbers.
-  def handle_event("my_bill", %{"dollars" => dollars, "kwh" => kwh}, socket)
+  # person to check the two numbers. With the month of the bill, the
+  # estimate also fits the kWh of the bill (`DIY.Estimate.fit/2`), and the
+  # page tells the fit under the bill.
+  def handle_event("my_bill", %{"dollars" => dollars, "kwh" => kwh} = values, socket)
       when is_binary(dollars) and is_binary(kwh) do
     with {total, ""} when total > 0 and total <= 100_000 <- Float.parse(typed(dollars)),
          {kwh, ""} when kwh >= 1 and kwh <= 1_000_000 <- Float.parse(typed(kwh)) do
       cents = total / kwh * 100
+      month = parse_int(values["month"])
 
       if cents >= 3 and cents <= 100 do
         {:ok, build} = Build.set_price(socket.assigns.build, cents)
+
+        # The bill of a house that the person plans is of another home: it
+        # gives only the price. With no month, the app forgets the old bill.
+        bill = if build.door != "planning", do: %{month: month, kwh: kwh}
+
+        {:ok, build} =
+          with {:error, :bill} <- Build.set_bill(build, bill), do: Build.set_bill(build, nil)
 
         {:noreply,
          socket

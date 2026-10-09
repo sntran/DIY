@@ -77,6 +77,16 @@ defmodule DIY.BuildTest do
     assert {:ok, %{price: 14.5}} = Build.set_price(build, 14.5)
     assert {:ok, %{price: 14.0}} = Build.set_price(build, 14)
     assert {:ok, %{price: nil}} = Build.set_price(build, nil)
+
+    # The kWh of a real bill and its month.
+    assert {:ok, %{bill: %{month: 7, kwh: 1150.0}}} =
+             Build.set_bill(build, %{month: 7, kwh: 1150})
+
+    assert {:ok, %{bill: nil}} = Build.set_bill(build, nil)
+
+    for bad <- [%{month: 13, kwh: 1000}, %{month: 7, kwh: 0}, %{month: nil, kwh: 1}, "July"],
+        do: assert(Build.set_bill(build, bad) == {:error, :bill})
+
     assert Build.set_price(build, 0) == {:error, :price}
     assert Build.set_price(build, 500) == {:error, :price}
     assert Build.set_price(build, "14") == {:error, :price}
@@ -236,6 +246,8 @@ defmodule DIY.BuildTest do
     assert bad.(%{"zip" => "00000"}) == {:error, :zip}
     assert bad.(%{"market" => %{"choice" => 1}}) == {:error, :market}
     assert bad.(%{"price" => "cheap"}) == {:error, :price}
+    assert bad.(%{"bill" => %{"month" => 0, "kwh" => 1000}}) == {:error, :bill}
+    assert bad.(%{"bill" => "July"}) == {:error, :bill}
     assert bad.(%{"house" => %{"size" => 5}}) == {:error, :house}
     assert bad.(%{"house" => [1]}) == {:error, :house}
     assert bad.(%{"rooms" => "kitchen"}) == {:error, :rooms}
@@ -292,6 +304,11 @@ defmodule DIY.BuildTest do
           heat <- member_of(Build.heats()),
           lot <- one_of([constant(nil), integer(100..100_000)]),
           price <- one_of([constant(nil), float(min: 1.0, max: 50.0)]),
+          bill <-
+            one_of([
+              constant(nil),
+              fixed_map(%{month: integer(1..12), kwh: float(min: 1.0, max: 5000.0)})
+            ]),
           market <-
             one_of([
               constant(nil),
@@ -312,6 +329,7 @@ defmodule DIY.BuildTest do
       {:ok, build} = Build.choose_door(Build.new(), "my_house")
       {:ok, build} = Build.set_zip(build, "75070")
       {:ok, build} = Build.set_price(build, price)
+      {:ok, build} = Build.set_bill(build, bill)
       build = if market, do: Build.set_market(build, market), else: build
       build = Build.put_house(build, house, rooms, items)
 

@@ -3,6 +3,7 @@ defmodule DIY.EstimateTest do
   use ExUnitProperties
 
   alias DIY.{Build, Catalog, Estimate, House, Stubs, Weather}
+  alias DIYWeb.{Format, Front}
 
   # The weather of Plano, Texas, 2016 to 2025 (a real answer of NASA POWER).
   defp climate do
@@ -502,6 +503,152 @@ defmodule DIY.EstimateTest do
       assert low >= 1.0
       assert Estimate.air_factor(type, %{around: true, t: warm}) >= low
     end
+  end
+
+  test "a real bill fits the model: the estimate of its month is the bill" do
+    climate = climate()
+    plain = Estimate.run(build(), climate)
+    july = Enum.at(plain.months, 6).kwh
+    assert plain.fit == nil
+
+    fit = fn build, month, kwh ->
+      {:ok, build} = Build.set_bill(build, %{month: month, kwh: kwh})
+      Estimate.run(build, climate)
+    end
+
+    # A bill under the model: a factor under 1, and the estimate of July is
+    # the bill. The other months change with the same factor.
+    low = fit.(build(), 7, july * 0.7)
+    assert low.fit.factor < 1 and low.fit.result == :fit
+    assert low.fit.before == july
+    assert_in_delta Enum.at(low.months, 6).kwh, july * 0.7, july * 0.005
+    assert Enum.at(low.months, 7).kwh < Enum.at(plain.months, 7).kwh
+    assert_in_delta low.ua.ua, plain.ua.ua * low.fit.factor, 1.0e-6
+
+    assert Front.fit_text(low) ==
+             "The app changed its model to fit your bill of July: #{Format.kwh(july * 0.7)}. Before, the estimate of July was #{Format.kwh(july)}."
+
+    # A bill over the model: a factor over 1.
+    high = fit.(build(), 7, july * 1.3)
+    assert high.fit.factor > 1
+    assert_in_delta Enum.at(high.months, 6).kwh, july * 1.3, july * 0.005
+
+    # The math tells the factor in a separate sentence.
+    ac = Enum.find(build().items, &(&1.type == "ac"))
+
+    assert Enum.any?(
+             Estimate.explain(ac, 7, low),
+             &(&1 =~
+                 ". The app also multiplies by #{:erlang.float_to_binary(low.fit.factor, decimals: 2)} to fit your bill of July.")
+           )
+
+    refute Enum.any?(Estimate.explain(ac, 7, plain), &(&1 =~ "to fit your bill"))
+
+    # Too low a bill: the factor 0.25, and the page tells the least
+    # estimate of the month.
+    small = fit.(build(), 7, 10)
+    assert small.fit.result == :limit and small.fit.factor < 0.26
+    assert_in_delta Enum.at(small.months, 6).kwh, small.fit.after, 1.0
+
+    assert Front.fit_text(small) ==
+             "Your bill of July is 10 kWh, but the estimate of July cannot be less than #{Format.kwh(small.fit.after)}. Before, the estimate of July was #{Format.kwh(july)}. Check the items and the numbers of the bill."
+
+    # Too high a bill: the AC runs at its capacity before the factor 4. The
+    # factor is the least one that gives the most kWh, so the other months
+    # change less.
+    large = fit.(build(), 7, 100_000)
+    assert large.fit.result == :limit and large.fit.factor < 4.0
+    assert_in_delta Enum.at(large.months, 6).kwh, large.fit.after, 1.0
+
+    {:ok, top} = Build.set_bill(build(), %{month: 7, kwh: 100_000})
+    {:ok, top} = Build.update_house(top, %{size: 8000})
+    assert Enum.at(Estimate.run(top, climate).months, 6).kwh < large.fit.after * 1.02
+    assert Front.fit_text(large) =~ "cannot be more than #{Format.kwh(large.fit.after)}."
+
+    # An AC at its capacity at the factor 1: a bill over the model keeps
+    # the factor 1, and the estimate does not go down.
+    old = build(%{size: 4000, year: 1975, floors: 1})
+    full = Enum.at(Estimate.run(old, climate).months, 6).kwh
+    over = fit.(old, 7, full * 1.05)
+    assert %{factor: 1.0, result: :limit, after: ^full} = over.fit
+    assert Enum.at(over.months, 6).kwh == full
+
+    assert Front.fit_text(over) ==
+             "Your bill of July is #{Format.kwh(full * 1.05)}, but the estimate of July cannot be more than #{Format.kwh(full)}. Check the items and the numbers of the bill."
+
+    # A bill in 2% of the model keeps the model.
+    near = fit.(build(), 7, july * 1.015)
+    assert %{factor: 1.0, result: :fit, after: ^july} = near.fit
+
+    # A small AC at its capacity at the factor 0.25 too: a bill under the
+    # model keeps the factor 1. So the winter does not change.
+    tiny = build(%{size: 4000, year: 1975, floors: 1, heat: "electric"})
+    ac = Enum.find(tiny.items, &(&1.type == "ac"))
+    {:ok, tiny} = Build.update_item(tiny, ac.id, %{"tons" => "1"})
+    tiny_plain = Estimate.run(tiny, climate)
+    tiny_july = Enum.at(tiny_plain.months, 6).kwh
+    under = fit.(tiny, 7, tiny_july * 0.9)
+    assert %{factor: 1.0, result: :limit} = under.fit
+    assert under.kwh == tiny_plain.kwh
+    refute Front.fit_text(under) =~ "Before"
+
+    # A mild month (April), and the winter of a house with gas heat: the
+    # model stays. The page names the month with the most cooling.
+    for month <- [4, 1] do
+      mild = fit.(build(), month, 700)
+      assert %{factor: 1.0, result: :mild, best: 8} = mild.fit
+      assert mild.kwh == plain.kwh
+      assert Front.fit_text(mild) =~ "a small part of the bill, so the app keeps its model: "
+      assert Front.fit_text(mild) =~ ". The bill of August can change the model."
+    end
+
+    # A planned item does not change the fit: it is not in the bill.
+    backyard = room(build(), "Backyard")
+    {:ok, planned, pump} = Build.add_item(build(), backyard, "ac")
+    {:ok, planned} = Build.update_item(planned, pump, %{"heat_pump" => "true", "tons" => "3"})
+    {:ok, planned} = Build.flag_item(planned, pump, :planned, true)
+    assert fit.(planned, 7, july * 0.7).fit.factor == low.fit.factor
+  end
+
+  test "a bill fits a house with heat strips, and not a house with solar panels or no item" do
+    climate = climate()
+
+    fit = fn build, month, kwh ->
+      {:ok, build} = Build.set_bill(build, %{month: month, kwh: kwh})
+      Estimate.run(build, climate)
+    end
+
+    # A small heat pump and heat strips: the kWh of January increase fast
+    # with the factor, and the fit still gives the bill.
+    {strips, _id} = add(build(%{heat: "heat_pump"}), "Attic", "heat_strips", %{"kw" => "10"})
+    ac = Enum.find(strips.items, &(&1.type == "ac"))
+    {:ok, strips} = Build.update_item(strips, ac.id, %{"tons" => "2"})
+
+    for kwh <- [2_827, 3_533] do
+      january = fit.(strips, 1, kwh)
+      assert january.fit.result == :fit
+      assert_in_delta Enum.at(january.months, 0).kwh, kwh, kwh * 0.02
+    end
+
+    # Solar panels: the bill does not show all the use.
+    {solar, _id} = add(build(), "Roof", "solar_panels", %{"watts" => "6000", "to" => "grid"})
+    sun = fit.(solar, 7, 800)
+    assert %{factor: 1.0, result: :solar} = sun.fit
+    assert Front.fit_text(sun) =~ "Your solar panels give a part of your power"
+
+    # No item of today: no heat and no cooling, and no month can fit.
+    empty =
+      Enum.reduce(build().items, build(), &elem(Build.flag_item(&2, &1.id, :planned, true), 1))
+
+    none = fit.(empty, 7, 800)
+    assert %{factor: 1.0, result: :mild, best: nil} = none.fit
+
+    assert Front.fit_text(none) ==
+             "In your home, the heat and the cooling are a small part of each bill, so the app keeps its model: 0 kWh in July."
+
+    # A house that the person plans: the bill is of another home.
+    {:ok, plan} = Build.set_bill(build(%{}, "planning"), %{month: 7, kwh: 900})
+    assert %{ready: true, fit: nil} = Estimate.run(plan, climate)
   end
 
   test "the format of a number" do

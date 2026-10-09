@@ -20,6 +20,10 @@ defmodule DIY.Estimate do
   the house. For heating, the sun and the people help, so the factor is 60%
   of the cooling factor. A meter file (phase 2) replaces this model.
 
+  A real bill (`build.bill`: its kWh and its month) fits the model. A
+  factor of UA gives the kWh of the bill in its month, with the mean
+  weather of that month (`fit/2`).
+
   - An AC uses `BTU ÷ (SEER2 × 1,000)` kWh. A heat pump uses
     `BTU ÷ (HSPF2 × 1,000)` kWh. Electric heat uses `BTU ÷ 3,412` kWh.
   - An AC, a heat pump and electric heat give at most their size for 85%
@@ -105,13 +109,139 @@ defmodule DIY.Estimate do
 
   @doc """
   The UA of a house (BTU in one hour, for each °F) for cooling, with the
-  factors that give it, and the UA for heat (60% of it).
+  factors that give it. It also gives the UA for heat (60% of it). `fit`
+  is the factor of a real bill (`fit/2`).
   """
-  def ua(%{size: size, year: year, floors: floors}) do
+  def ua(%{size: size, year: year, floors: floors}, fit \\ 1.0) do
     age = Enum.find_value(@ua, @ua_new, fn {before, factor} -> if year < before, do: factor end)
     floor = Map.fetch!(@floors, floors)
-    ua = size * age * floor
-    %{ua: ua, size: size, age: age, floor: floor, heat: ua * @heating}
+    ua = size * age * floor * fit
+    %{ua: ua, size: size, age: age, floor: floor, fit: fit, heat: ua * @heating}
+  end
+
+  # The limits of the factor of a bill: a house with 4 times less, or 4
+  # times more heat through its walls than the model.
+  @fit_range {0.25, 4.0}
+  # A month gives a fit when the heat and the cooling are 40% or more of
+  # its kWh in the model. In a milder month, the other items decide the
+  # bill, and a small error of the model gives a large factor.
+  @fit_part 0.4
+  # The fit gives the kWh of the bill to 2%.
+  @fit_close 0.02
+
+  @doc """
+  The fit of the model to a real bill (`build.bill`). It is nil with no
+  bill, and in a house that the person plans: the bill is of another
+  home. The `result`:
+
+  - `:fit`: the factor of UA gives the kWh of the bill in its month, with
+    the mean weather of that month. `before` is the estimate of the month
+    with no fit.
+  - `:limit`: no factor in 0.25 to 4 gives the bill. The factor is the
+    nearest one. For a bill that is more than the items can use, it is
+    the least factor of 1 or more that gives the most kWh. So an AC at
+    its capacity at the factor 1 keeps the factor 1. For a bill that is
+    less than the items can use, it is the largest factor of 1 or less
+    that gives the least kWh.
+
+  A bill in 2% of the model keeps the factor 1 (`:fit`).
+  - `:mild`: the heat and the cooling are less than 40% of the kWh of the
+    month in the model. The bill does not show them, so the factor is 1.
+    `best` is the month with the largest part of heat and cooling, if
+    this part is 40% or more. A house with gas heat has a mild power bill
+    in the winter too.
+  - `:solar`: solar panels give a part of the power, so the bill does not
+    show all the use. The factor is 1.
+
+  Only the items of today count (not the planned items). The kWh of the
+  month do not decrease when the factor increases, so a bisection finds
+  the factor. An AC at its capacity gives no more kWh.
+  """
+  def fit(%{bill: nil}, _climate), do: nil
+  def fit(%{door: "planning"}, _climate), do: nil
+
+  def fit(%{bill: %{month: m, kwh: kwh}} = build, climate) do
+    today = Build.today(build)
+    base = ua(build.house).ua
+
+    month = fn n, factor ->
+      weather = Map.fetch!(climate.months, n)
+      days = Enum.at(@days, n - 1)
+
+      items_kwh(
+        today,
+        base * factor,
+        weather.cdd,
+        weather.hdd,
+        weather.t,
+        climate.t_year,
+        days,
+        n
+      )
+    end
+
+    fit = %{factor: 1.0, month: m, kwh: kwh}
+    model = month.(m, 1.0)
+    before = total(model)
+
+    cond do
+      Enum.any?(today.items, &(&1.type == "solar_panels")) ->
+        Map.merge(fit, %{result: :solar, before: before})
+
+      not big?(model) ->
+        best =
+          1..12
+          |> Enum.map(&{&1, month.(&1, 1.0)})
+          |> Enum.filter(fn {_n, items} -> big?(items) end)
+          |> Enum.max_by(fn {_n, items} -> hvac(items) / total(items) end, fn -> {nil, nil} end)
+          |> elem(0)
+
+        Map.merge(fit, %{result: :mild, before: before, best: best})
+
+      true ->
+        kwh_at = &total(month.(m, &1))
+        {low, high} = @fit_range
+
+        # A bill over the model gives a factor of 1 or more, and a bill
+        # under it a factor of 1 or less. When the items cannot get to the
+        # bill, the goal is the most (or the least) kWh that they can use.
+        factor =
+          cond do
+            abs(kwh - before) <= @fit_close * kwh ->
+              1.0
+
+            kwh > before ->
+              least(kwh_at, min(kwh, kwh_at.(high) * (1 - @fit_close / 2)), 1.0, high)
+
+            true ->
+              least(kwh_at, max(kwh, kwh_at.(low) * (1 + @fit_close / 2)), low, 1.0)
+          end
+
+        after_fit = kwh_at.(factor)
+        result = if abs(after_fit - kwh) <= @fit_close * kwh, do: :fit, else: :limit
+        %{fit | factor: factor} |> Map.merge(%{result: result, before: before, after: after_fit})
+    end
+  end
+
+  # The heat and the cooling are a large part of the kWh of a month.
+  defp big?(items), do: hvac(items) > 0 and hvac(items) >= @fit_part * total(items)
+
+  defp hvac(items), do: part(items, :cooling) + part(items, :heating)
+
+  # The least factor in low to high that gives the goal, or high: `fun`
+  # does not decrease.
+  defp least(fun, goal, low, high) do
+    if fun.(low) >= goal, do: low, else: bisect(fun, goal, low, high, 20)
+  end
+
+  defp bisect(_fun, _goal, _low, high, 0), do: high
+
+  defp bisect(fun, goal, low, high, steps) do
+    mid = (low + high) / 2
+
+    if fun.(mid) >= goal,
+      do: bisect(fun, goal, low, mid, steps - 1),
+      else: bisect(fun, goal, mid, high, steps - 1)
   end
 
   @doc """
@@ -145,7 +275,9 @@ defmodule DIY.Estimate do
   defp cooling?(_item), do: false
 
   defp estimate(build, climate) do
-    %{ua: ua} = ua(build.house)
+    fit = fit(build, climate)
+    factor = if fit, do: fit.factor, else: 1.0
+    %{ua: ua} = ua(build.house, factor)
 
     run = fn cdd, hdd, weather, days, month ->
       items_kwh(build, ua, cdd, hdd, weather.t, climate.t_year, days, month)
@@ -213,7 +345,8 @@ defmodule DIY.Estimate do
     %{
       ready: true,
       missing: [],
-      ua: ua(build.house),
+      ua: ua(build.house, factor),
+      fit: fit,
       months: months,
       kwh: kwh,
       low: low,
@@ -831,11 +964,18 @@ defmodule DIY.Estimate do
     %{ua: ua, size: size, age: age, floor: floor} = estimate.ua
 
     [
-      "The house gains #{fmt(ua)} BTU in one hour for each °F hotter outside: #{fmt(size)} sq ft × #{age} for its age × #{floor} for its floors.",
+      "The house gains #{fmt(ua)} BTU in one hour for each °F hotter outside: #{fmt(size)} sq ft × #{age} for its age × #{floor} for its floors.#{fit_text(estimate)}",
       "#{m.name} has #{number_text(m.cdd)} °F-days of cooling: the mean of #{estimate.climate.first} to #{estimate.climate.last} (NASA POWER).",
       "#{fmt(ua)} × #{number_text(m.cdd)} × 24 hours#{share_text(share)} = #{fmt(data.cool_btu)} BTU of cooling."
     ]
   end
+
+  @doc "The factor of a real bill in the math, as a sentence, or nothing."
+  def fit_text(%{fit: %{result: result, factor: factor, month: m}}) when result in [:fit, :limit],
+    do:
+      " The app also multiplies by #{:erlang.float_to_binary(factor / 1, decimals: 2)} to fit your bill of #{Enum.at(@month_names, m - 1)}."
+
+  def fit_text(_estimate), do: ""
 
   # The steps of the heat of the house for an item.
   defp heating(m, btu, estimate, share) do

@@ -80,6 +80,7 @@ defmodule DIY.Build do
             zip: nil,
             market: nil,
             price: nil,
+            bill: nil,
             house: nil,
             rooms: [],
             items: [],
@@ -112,6 +113,8 @@ defmodule DIY.Build do
           turn: 0..3,
           size: %{w: pos_integer(), d: pos_integer(), h: pos_integer()} | nil
         }
+  @typedoc "The kWh of a real bill, and the month of the bill (1 to 12)."
+  @type bill :: %{month: 1..12, kwh: float()}
   @type house :: %{
           size: pos_integer(),
           year: pos_integer(),
@@ -127,6 +130,7 @@ defmodule DIY.Build do
           zip: String.t() | nil,
           market: map() | nil,
           price: float() | nil,
+          bill: bill() | nil,
           house: house() | nil,
           rooms: [room()],
           items: [item()],
@@ -234,6 +238,16 @@ defmodule DIY.Build do
     do: {:ok, change(build, &%{&1 | price: price / 1})}
 
   def set_price(_build, _price), do: {:error, :price}
+
+  @doc """
+  Sets the kWh of a real bill and the month of the bill, or clears them
+  with `nil`. The estimate fits its heat and its cooling to the bill
+  (`DIY.Estimate`).
+  """
+  @spec set_bill(t(), bill() | nil) :: {:ok, t()} | {:error, :bill}
+  def set_bill(build, bill) do
+    with {:ok, bill} <- bill(bill), do: {:ok, change(build, &%{&1 | bill: bill})}
+  end
 
   @doc """
   Puts a house with its rooms and items: a preset of `DIY.House`. Each room
@@ -823,6 +837,7 @@ defmodule DIY.Build do
       "zip" => build.zip,
       "market" => build.market,
       "price" => build.price,
+      "bill" => build.bill,
       "house" => build.house,
       "rooms" => Enum.map(build.rooms, &%{&1 | place: Atom.to_string(&1.place)}),
       "items" => build.items,
@@ -858,6 +873,7 @@ defmodule DIY.Build do
          {:ok, zip} <- zip(map["zip"]),
          {:ok, market} <- market(map["market"]),
          {:ok, price} <- price(map["price"]),
+         {:ok, bill} <- bill(map["bill"]),
          {:ok, house} <- house(map["house"]),
          {:ok, rooms} <- rooms(map["rooms"], house),
          {:ok, items} <- items(map["items"], rooms),
@@ -877,6 +893,7 @@ defmodule DIY.Build do
          zip: zip,
          market: market,
          price: price,
+         bill: bill,
          house: house,
          rooms: rooms,
          items: items,
@@ -980,6 +997,20 @@ defmodule DIY.Build do
   defp price(nil), do: {:ok, nil}
   defp price(price) when is_number(price) and price > 0 and price <= 200, do: {:ok, price / 1}
   defp price(_price), do: {:error, :price}
+
+  # A build of an older version has no bill.
+  defp bill(nil), do: {:ok, nil}
+
+  defp bill(bill) when is_map(bill) do
+    with month when month in 1..12 <- get(bill, :month),
+         kwh when is_number(kwh) and kwh >= 1 and kwh <= 1_000_000 <- get(bill, :kwh) do
+      {:ok, %{month: month, kwh: kwh / 1}}
+    else
+      _ -> {:error, :bill}
+    end
+  end
+
+  defp bill(_bill), do: {:error, :bill}
 
   defp house(nil), do: {:ok, nil}
 

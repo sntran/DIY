@@ -161,10 +161,15 @@ The front of the house helps a person with no skill in power:
 
 - It tells what a kWh is, what retail choice is, and what the delivery
   charges are.
-- It asks for the last bill: its total in dollars and its kWh. The total
-  divided by the kWh is the price of the plan (`my_bill`). The form shows
-  until the user gives a price. A person who thinks that the bill is
-  wrong usually has a price that is not the typical price.
+- It asks for the last bill: its total in dollars, its kWh and its month.
+  The total divided by the kWh is the price of the plan (`my_bill`). A
+  person who thinks that the bill is wrong usually has a price that is
+  not the typical price. The kWh and the month fit the estimate (see the
+  estimate). After the bill, the form stays closed under "Type the
+  numbers of my bill", and one line tells the fit. A play test found
+  that the kWh of the bill went nowhere, and that the form went away.
+  For a house that the person plans, the bill is of another home: it
+  gives only the price.
 - With no camper van, a card tells that a van goes in the driveway, and
   adds one with one tap. With a van, a card has a link to the build of
   each van.
@@ -275,6 +280,40 @@ one decimal, so that a step adds up on the page. For each item in each
 month, a test reads the math as the page shows it: each step gives the
 value of its numbers (as the page rounds them), the result of a
 step goes into the next one, and the last step gives the kWh of the item.
+
+A real bill fits the model (`DIY.Estimate.fit/2`). The heat that goes
+through the walls is the part of the model with the most doubt, so the
+bill changes UA:
+
+- The factor of UA gives the kWh of the bill in its month, with the mean
+  weather of that month. The kWh of a month do not decrease when the
+  factor increases, so a bisection finds the factor. A bill over the
+  model gives a factor of 1 or more, and a bill under it a factor of 1
+  or less. An AC at its capacity gives no more kWh. When the bill is
+  more than the items can use, the factor is the least one that gives
+  the most kWh.
+- Only the items of today count: a planned item is not in the bill.
+- The factor stays in 0.25 to 4. When no factor gives the bill, the page
+  tells the nearest estimate of the month. It asks the user to check the
+  items and the numbers of the bill.
+- In a mild month, the heat and the cooling are less than 40% of the kWh
+  of the model. Then the other items decide the bill: an error of 20% in
+  the other items gives an error of 30% in the factor. So the factor
+  stays 1, and the page names the month of the year with the largest
+  part of heat and cooling. A house with gas heat has a mild power bill
+  in the winter too.
+- With solar panels, the bill does not show all the use, so the factor
+  stays 1.
+- A house can have a heat pump and no heat strips in the app. Then a
+  winter bill can give a large factor, and a large estimate of the
+  summer. The real house probably has heat strips. The bill of a hot
+  month gives a better fit.
+- The weather of one month changes from year to year, but the fit uses
+  the mean weather. In Plano, the °F-days of cooling of July go from 18%
+  under the mean to 33% over it. The range of the estimate does not show
+  this doubt.
+- The math of each item tells the factor, and the page "How the app gets
+  your bill" too.
 
 The price of one kWh: the price that the user gives, else the median of
 Power to Choose in a Texas area with retail choice, else the average of
