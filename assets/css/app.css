@@ -490,16 +490,16 @@
   :root:not([data-theme=light]) .p-glow { display: inline }
 }
 [data-theme=dark] .p-glow { display: inline }
-/* The items of the house that run have small, slow loops: a flame
-   flickers, a small light blinks, and a hot coil glows. A planned item does not
-   run: it has no loop. With "reduce motion", no part moves. */
+/* The items of the house that run have small, slow loops: the flame of a
+   furnace flickers, and a hot coil glows (the classes i-fire and i-coil).
+   Each loop stops after 4.8 seconds (WCAG 2.2.2), at its first state. A
+   planned item does not run: it has no loop. With "reduce motion", no
+   part moves. */
 @media (prefers-reduced-motion: no-preference) {
-  .cutaway-house .p-item:not(.p-planned) .i-flame { animation: p-flicker 1.6s ease-in-out infinite alternate }
-  .cutaway-house .p-item:not(.p-planned) .i-led { animation: p-blink 4s step-end infinite }
-  .cutaway-house .p-item:not(.p-planned) .i-hot { animation: p-warm 2.4s ease-in-out infinite alternate }
+  .cutaway-house .p-item:not(.p-planned) .i-fire { animation: p-flicker 1.2s ease-in-out 4 alternate }
+  .cutaway-house .p-item:not(.p-planned) .i-coil { animation: p-warm 2.4s ease-in-out 2 alternate }
 }
-@keyframes p-flicker { 0% { opacity: 1 } 35% { opacity: 0.72 } 60% { opacity: 0.95 } 100% { opacity: 0.62 } }
-@keyframes p-blink { 0% { opacity: 1 } 90% { opacity: 0.3 } }
+@keyframes p-flicker { 0% { opacity: 1 } 40% { opacity: 0.75 } 70% { opacity: 0.9 } 100% { opacity: 0.65 } }
 @keyframes p-warm { from { opacity: 1 } to { opacity: 0.7 } }
 /* The van cut open (DIYWeb.VanCutaway): its walls (bare or with panels),
    the insulation in their cut, its floor, the mat of the cab, its roof. */

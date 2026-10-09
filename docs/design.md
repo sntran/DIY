@@ -1389,11 +1389,12 @@ its turn. A length is in inches.
     in the picture.
   - At night (the dark mode), the colors are darker, and the floor of each
     room inside has the warm light of a lamp (`p-glow`).
-  - The items that run have small, slow loops. The flame of a furnace
-    flickers, a small light (an LED) blinks, and the coils of heat strips
-    and of a space heater glow. A planned item does not run: it has no
-    loop. With "reduce motion" in the
-    settings of the device, no part moves (WCAG 2.2, 2.3.3).
+  - The items that run have small, slow loops when the page opens. The
+    flame of a furnace flickers, and the coils of heat strips and of a
+    space heater glow (the classes `i-fire` and `i-coil`). Each loop stops
+    after 4.8 seconds, at its first state (WCAG 2.2.2). A planned item does
+    not run: it has no loop. With "reduce motion" in the settings of the
+    device, no part moves. A tail light of a car or of a van has no loop.
   - The furniture of a room (`DIYWeb.Decor`), as in the drawn picture. A
     word in the name of a room gives its pieces, in capital letters or
     not:
@@ -1410,19 +1411,19 @@ its turn. A length is in inches.
 
     Each piece has its place: against the back wall, in the middle, or at
     the front. A piece is 4 inches from the walls, and 8 inches from the
-    edge of a yard. A counter is 1 inch from the back wall. In a kitchen, counters fill the back wall between the
-    items. A piece does not show when it touches an item under its top,
-    or a piece before it. The camera looks down to the back and to the
-    left. So a piece also hides the floor behind it and at its left (its
-    shadow). A piece does not show when its shadow hides more than a
-    quarter of an item at the middle of the height of the item. This is
-    also true for an item of a different room of the layer. So the items
-    show, and the person can tap them. A piece can hide more of the lower
-    part of a tall item. A rug is flat: it paints
-    first, and the pieces and the items stand on it. The furniture is for
-    the eyes only. It uses no power, and a tap goes through it to the
-    floor of the room. It moves with its room in a drag. The leaves of a
-    plant or a tree are discs that look to the camera.
+    edge of a yard. A counter is 1 inch from the back wall. In a kitchen,
+    counters fill the back wall between the items. A piece does not show
+    when it touches an item under its top, or a piece before it. The camera
+    looks down to the back and to the left. So a piece also hides the floor
+    behind it and at its left (its shadow). A piece does not show when its
+    shadow hides more than a quarter of an item at the middle of the height
+    of the item. This is also true for an item of a different room of the
+    layer. So the items show, and the person can tap them. A piece can hide
+    more of the lower part of a tall item. A rug is flat: it paints first,
+    and the pieces and the items stand on it. The furniture is for the eyes
+    only. It uses no power, and a tap goes through it to the floor of the
+    room. It moves with its room in a drag. The leaves of a plant or a tree
+    are discs that look to the camera.
   - A long wall has a picture in a frame at the left of its window. A
     garage, a laundry and an attic have no picture, and no picture is
     behind an item (4 feet from the wall at most).
