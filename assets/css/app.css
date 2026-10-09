@@ -104,9 +104,10 @@
 
 /* This file is for your main application CSS */
 
-/* The isometric pictures (DIYWeb.Scene): the colors of the day (light mode)
+/* The pictures (DIYWeb.Scene): the colors of the day (light mode)
    and of the night (dark mode). Each face of a box has a class for its top
-   (-t), its left (-l, in the light) and its right (-r, in the shade). */
+   (-t), its face in the light (-l) and its face in the shade (-r). The
+   camera tells which face is in the light (DIYWeb.Camera). */
 .scene {
   --s-sky1: #cfe6fb; --s-sky2: #f4f8fc; --s-sun: #fcd34d;
   --s-grass1: #9ccc72; --s-grass2: #6fae55; --s-turf-l: #5f9a48; --s-turf-r: #4d833b;
@@ -214,8 +215,8 @@
 .s-plan-line { fill: none; stroke: #e0ecff; stroke-width: 0.8 }
 @media (prefers-reduced-motion: reduce) { .s-flow { animation: none } }
 
-/* The icons of the items (DIYWeb.Icon): a material has a top (-t), a lit
-   left face (-l) and a right face in the shade (-r). */
+/* The icons of the items (DIYWeb.Icon): a material has a top (-t), a face
+   in the light (-l) and a face in the shade (-r). */
 .i-face { stroke: rgb(31 35 40 / 0.35); stroke-width: 0.75; stroke-linejoin: round; vector-effect: non-scaling-stroke }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme=light]) .i-face { stroke: rgb(255 255 255 / 0.22) }

@@ -5,16 +5,15 @@ defmodule DIY.Layout do
 
   - A room of the house has a `plan`: `%{x, y, w, d}`. The point `x`, `y`
     is the back corner of the room: the corner far from a person who looks
-    at the picture. `w` goes along `x` (to the right and to the front), and
-    `d` along `y` (to the left and to the front). All the levels use the
-    same `x` and `y`: a room on floor 2 is above the room on floor 1 at the
-    same point.
+    at the picture. `w` goes along `x` (to the right), and `d` along `y`
+    (to the front). All the levels use the same `x` and `y`: a room on
+    floor 2 is above the room on floor 1 at the same point.
   - An item in a room of the house has `at`: `%{x, y}`, the back corner of
     the item in its room. It has `turn`: 0 to 3, a quarter turn each time.
     It has `size`: `%{w, d, h}`, or `nil` for the typical size of its kind
     (`DIY.Catalog.size/1`).
   - A zone of a van has a plan in the van. `x` goes across the van (from
-    its left side), and `y` along it, from the doors at the back. The cab
+    its right side), and `y` along it, from the doors at the back. The cab
     is the zone at the front of the cargo area (`van_box/1`). The roof of
     the van is a layer of its own. The shell (the insulation, the walls
     and the floor) has no plan: its items are the materials of the van,

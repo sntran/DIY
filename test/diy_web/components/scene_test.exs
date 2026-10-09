@@ -5,7 +5,7 @@ defmodule DIYWeb.SceneTest do
   import Phoenix.LiveViewTest
 
   alias DIY.{Build, House}
-  alias DIYWeb.{Iso, Scene}
+  alias DIYWeb.{Camera, Scene}
 
   defp house(floors \\ 2) do
     {house, rooms, items} =
@@ -37,9 +37,9 @@ defmodule DIYWeb.SceneTest do
     assert Scene.label(Scene.parts(house())) == "a house with 2 floors, an AC"
 
     # Three floors: a taller picture.
-    [_, tall] = Regex.run(~r/viewBox="0 (-?[\d.]+)/, picture(house(3)))
-    [_, short] = Regex.run(~r/viewBox="0 (-?[\d.]+)/, html)
-    assert elem(Float.parse(tall), 0) < elem(Float.parse(short), 0)
+    [_x, _y, _w, tall] = box(picture(house(3)))
+    [_x, _y, _w, short] = box(html)
+    assert tall > short
   end
 
   test "the equipment of the house, and the flows of its power" do
@@ -235,10 +235,21 @@ defmodule DIYWeb.SceneTest do
     end
   end
 
-  test "the box of a picture holds the front corner of the lot" do
-    [_x, y, _w, h] = box(picture(house()))
-    {_x, corner} = Iso.at({152.0, 92.0}, {19.0, 13.5, -1.2})
-    assert y + h >= corner
+  test "the box of a picture holds the lot, and the sun is in its sky" do
+    html = picture(house())
+    [x, y, w, h] = box(html)
+
+    # The four corners of the bottom of the lot.
+    for corner <- [{-3.0, -2.5, -1.2}, {19.0, -2.5, -1.2}, {19.0, 13.5, -1.2}, {-3.0, 13.5, -1.2}] do
+      {sx, sy} = Camera.at(Camera.house(), {0, 0}, corner)
+      assert sx >= x and sx <= x + w and sy >= y and sy <= y + h
+    end
+
+    [_, cx, cy] =
+      Regex.run(~r/<circle cx="(-?[\d.]+)" cy="(-?[\d.]+)" r="14" class="s-sun"/, html)
+
+    {cx, cy} = {elem(Float.parse(cx), 0), elem(Float.parse(cy), 0)}
+    assert cx - 14 > x and cy - 14 > y and cy + 14 <= y + 44
   end
 
   defp box(html) do

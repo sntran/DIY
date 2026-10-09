@@ -628,11 +628,11 @@ layers: its floor, and its roof over it with a gap.
   cargo area and the cab in front of it. `y` goes along the van, from the
   doors at the back to the cab. `x` goes across the van, from its right
   side (the side of the sliding door).
-- The axes of the pictures show a mirror image of the real world
-  (`DIYWeb.Iso`). For a house, this has no effect. For a van, the right
-  side is at x = 0, far from the eye. The left side (the side of the
-  driver) is near the eye. A test checks the side of the driver and of
-  the sliding door.
+- The camera of a van (`DIYWeb.Camera.van/0`) is at its left side (the
+  side of the driver), a little to its front (to the cab). The right side
+  is at x = 0, far from the eye. The cab is at the left of the screen, and
+  the doors at the back are at the right. A test checks the side of the
+  driver and of the sliding door.
 - The draft (`DIY.Layout.van_draft/2`). From the doors at the back: the
   bed, the electrical bay, the living area and the galley, each across
   the van. The cab is at the front, and the roof of the van is over all
@@ -644,9 +644,10 @@ layers: its floor, and its roof over it with a gap.
   the zones the draft again. An item does not go between the house and a
   van. `specs/VanPlan.tla` checks the box of the van and the place of the
   cab. Two faults show that these rules matter.
-- The picture shows the walls of the van. The right side and the doors
-  at the back are cut at the height of a table. The left side is cut
-  near the floor. The right side has the opening of the sliding door.
+- The picture shows the walls of the van. The right side has the full
+  height of the cargo area, with the opening of the sliding door. The
+  doors at the back are cut on a slope: full at the right side, and near
+  the floor at the left side. The left side is cut near the floor.
   The picture also shows the wheel wells, the wheels, the seats, the
   dash, the steering wheel, the hood and the bumper. These fixed parts
   do not take a tap: a tap goes to the zone under them. A swivel seat
@@ -816,10 +817,40 @@ The app takes them; the comparison is open.
 
 ## The pictures
 
-The app draws its pictures in SVG on the server, in the isometric view of
-the games (`DIYWeb.Scene`, with the math in `DIYWeb.Iso`). The front page
-and the page Power show the house on its lot. The page Van shows the van.
-The first page shows a house and a plan.
+The app draws its pictures in SVG on the server (`DIYWeb.Scene`, with the
+math in `DIYWeb.Geometry` and `DIYWeb.Camera`). The front page and the
+page Power show the house on its lot. The page Van shows the van. The
+first page shows a house and a plan.
+
+### The cameras
+
+A camera is far away and has no vanishing point: each part of a picture
+keeps its scale. It has a turn around the vertical axis (the yaw) and
+the angle that it looks down at (the pitch). The app has two cameras:
+
+- The house (yaw 72°, pitch 28°): a dollhouse with no front wall. The
+  camera is in front of the house, a little to its right, and it looks
+  down a little. The house goes along the screen, and its floors go down
+  the screen. An item shows its front, so it looks as it does in a store.
+- The van (yaw 18°, pitch 28°): the camera is at the left side of the
+  van (the side of the driver). The cab is at the left of the screen, and
+  the doors at the back are at the right. The length of the van goes
+  along the screen, so the picture shows what is over each axle.
+
+Why not the isometric view of the games (yaw 45°, pitch 35°)? On a phone,
+an isometric house is a diamond: much of the screen stays empty, and a
+drag moves on a slant. With the dollhouse, the house fills the width of
+the phone. A drag left or right moves an item along the house. A drag
+up or down moves it to the back or to the front. A view straight on (a
+pitch near 0) makes the floor too thin to place an item. A view with a
+vanishing point is not at scale. The owner chose these two cameras from
+screenshots of four cameras on a phone.
+
+For the two cameras, the eye is at the large x, the large y and the
+large z. So a box shows its top, its front (at y + d) and its side (at
+x + w). The order of the paint is the same for the two cameras. The face
+that looks more to the camera is in the light (`-l`), and the other one
+is in the shade (`-r`).
 
 - A picture of the house shows only what the house of today has (with no
   planned item). The picture on the page Van counts the planned items of
@@ -848,20 +879,23 @@ The first page shows a house and a plan.
   (`DIYWeb.Scene.parts/1`, `van_parts/2`). An assign with the same value
   does not change, so the page sends a picture again only when its parts
   change.
-- The point of a box at x, y, z goes to the SVG at (x − y) × 8.66 to the
-  side and (x + y) × 5 − z × 10 down. A step of the same size on x, y and
-  z goes to the same point (a property test checks the math). The code
-  paints each object from the back to the front, in an order that it
+- The math of a camera: a is the yaw, b is the pitch, and s is 12.25 SVG
+  units for each meter. A point at x, y, z goes to the side by
+  s (x sin a − y cos a). It goes down by
+  s ((x cos a + y sin a) sin b − z cos b). A step along the eye goes to
+  the same point (a property test checks the math for each camera). The
+  code paints each object from the back to the front, in an order that it
   sets by hand. The lines of the flows go behind the bushes, the person
   and the cars, and the labels go last.
 - A property test makes random parts of a house: each point of the
   picture is in its box, and each flow and label has its equipment.
 
-Each kind of item has its isometric icon (`DIYWeb.Icon`), in the same
-style. An icon is a few boxes, discs and details of a material (white,
-steel, wood, cloth). The faces have a thin edge, so that a white item
-shows on a light page. The icon is next to the name of the item in these
-places:
+Each kind of item has its icon (`DIYWeb.Icon`), in the same style. The
+camera of the house shows the front of an item. A car and a van show
+their side (the camera of a van). An icon is a few boxes, discs and
+details of a material (white, steel, wood, cloth). The faces have a thin
+edge, so that a white item shows on a light page. The icon is next to
+the name of the item in these places:
 
 - the cards of the zones of a van;
 - the lists to add an item;
@@ -936,14 +970,21 @@ its turn. A length is in inches.
   item on a wall or a ceiling (a mini split, a meter, a switch, a fan)
   has a lift.
 - The shell. Each room has a slab under it, and a yard is on the ground.
-  Each room inside has walls. A wall between two rooms is low. A wall on
-  the outside is high at the back, where no room is behind it, and low
-  at the front. So a wall does not hide the items of a different room.
+  Each room inside has walls, as in a dollhouse. A wall on the outside at
+  the back has its full height (8 feet), where no room or yard is behind
+  it. The wall on the outside at the left end of the house is cut on a
+  slope. It is full at the back of the house, and near the floor at its
+  front. Each other wall is cut near the floor: at the front of a room,
+  between two rooms, and at the right end. The camera is a little to the
+  right, so a high wall between two rooms can hide a part of the room at
+  its left. A wall at the back is low where a room or a yard is behind
+  it, also on a slant. So a wall does not hide the items of a room or of
+  a yard.
 - The picture of an item is its icon at the size of the item
   (`DIYWeb.Icon.Shapes.placed/2`). A turn turns the model, and a face
   that looks away does not show. Solar panels on a roof lie on its slope.
   In a yard, they stand in rows on a rack.
-- The order of the paint (`DIYWeb.Iso.order/1`). A wall or an item that
+- The order of the paint (`DIYWeb.Camera.order/2`). A wall or an item that
   is behind a different one paints first. A box is behind a different box
   when it is on the far side of it along x, y or z. A wall is flat for
   this order. So an item in a room is in front of the walls at the back,
@@ -954,14 +995,22 @@ its turn. A length is in inches.
   SVG while the pointer moves. It sends the change when the pointer
   stops, and the server then draws the plan again. The script has the
   math of the plan and of its inverse, on a floor and on the slopes of a
-  roof. A property test checks that a point goes to the screen and back.
+  roof. It uses the axes of the camera of the SVG (`data-axes`). A
+  property test checks that a point goes to the screen and back. It uses
+  random cameras that look down more than a roof slopes.
   The zoom is in the `viewBox`, which LiveView keeps
   (`JS.ignore_attributes/1`). The tab keeps it in its session storage.
 - The plan is for the eyes. A list of the rooms and of their items gives
   the same facts, with the usage of each item. It shows when it has the
   focus. In the list, the arrow keys move an item or a room (6 inches, or
-  2 feet with Shift). A screen reader hears the new place, from the left
-  wall and from the top wall.
+  2 feet with Shift). Each key moves it as it points on the plan: in the
+  house, the Up key moves it to the back. A screen reader hears the new
+  place, from the left wall and from the back wall. The move buttons of
+  a sheet and of a bar point the same way (`DIYWeb.Camera.arrows/1`).
+- On a phone. A tap on a room chooses it, and the view zooms in to it:
+  its floor, its walls and its items fill the screen. Where the names of
+  two rooms overlap, the name of the larger room shows, and the other one
+  hides until a zoom in.
 - The tests. Property tests check the draft (no overlap) and random
   changes (the rules, and the JSON gives the same plan). A property test
   draws random houses: each point is in the box of the SVG, and each id

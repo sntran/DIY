@@ -98,19 +98,23 @@ defmodule DIYWeb.VanPlanLiveTest do
 
     # On the draft, the zone has no free place next to it: the buttons are
     # disabled (they keep the focus), and the bar says why. They use the
-    # words of a van. A tap on one gives the reason of the server.
-    assert has_element?(
-             view,
-             "#move-room-left[aria-disabled=true][aria-label='Move the zone 6 in to the right side']"
-           )
-
-    assert has_element?(
-             view,
-             "#move-room-up[aria-disabled=true][aria-label='Move the zone 6 in to the back']"
-           )
+    # words of a van. They point as the move goes on the screen: the cab is
+    # at the left, and the right side of the van at the top. A tap on one
+    # gives the reason of the server.
+    for {key, words} <- [
+          {"left", "to the front"},
+          {"up", "to the right side"},
+          {"down", "to the left side"},
+          {"right", "to the back"}
+        ] do
+      assert has_element?(
+               view,
+               "#move-room-#{key}[aria-disabled=true][aria-label='Move the zone 6 in #{words}']"
+             )
+    end
 
     assert has_element?(view, "#move-room-full", "Make it smaller first")
-    html = view |> element("#move-room-up") |> render_click()
+    html = view |> element("#move-room-right") |> render_click()
     assert html =~ "A room or a zone cannot go over a different one."
 
     view |> element("#bar-change") |> render_click()
@@ -122,12 +126,12 @@ defmodule DIYWeb.VanPlanLiveTest do
     |> render_submit()
 
     assert %{w: 48, d: 24} = zone(view, van, :living).plan
-    refute has_element?(view, "#move-room-right[aria-disabled]")
-    assert has_element?(view, "#move-room-left[aria-disabled=true]")
+    refute has_element?(view, "#move-room-down[aria-disabled]")
+    assert has_element?(view, "#move-room-up[aria-disabled=true]")
 
     # The buttons move it in the van; it does not go out of the van.
     x = zone(view, van, :living).plan.x
-    view |> element("#move-room-right") |> render_click()
+    view |> element("#move-room-down") |> render_click()
     assert zone(view, van, :living).plan.x == x + 6
     html = render_hook(view, "nudge_room", %{"id" => living.id, "dx" => 600, "dy" => 0})
     assert html =~ "A zone stays in the van."
@@ -168,7 +172,7 @@ defmodule DIYWeb.VanPlanLiveTest do
     assert_patch(view, ~p"/van?#{[id: van, item: fridge]}")
     assert has_element?(view, "#item-sheet #item-place")
     assert has_element?(view, "#item-where", "from the right side of Galley")
-    assert has_element?(view, "#move-item-down[aria-label='Move the item 6 in to the front']")
+    assert has_element?(view, "#move-item-left[aria-label='Move the item 6 in to the front']")
     view |> element("#turn-item") |> render_click()
     assert item(view, fridge).turn == 1
 

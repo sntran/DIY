@@ -15,12 +15,38 @@ import {
   arrow,
   onSurface,
   unitsOf,
+  focus,
+  overlaps,
   planHook,
 } from "../../assets/js/plan.js"
 
-// The units of one inch (DIYWeb.Cutaway.k/0).
-const K = [0.219964, 0.127, 0.254]
+// The axes of a camera (DIYWeb.Camera.axes/1): the SVG vectors of one inch
+// along x, along y and up, from its yaw and its pitch (degrees).
+const axesOf = (yaw, pitch) => {
+  const [a, b] = [(yaw * Math.PI) / 180, (pitch * Math.PI) / 180]
+  const k = 12.25 * 0.0254
+  return [
+    k * Math.sin(a),
+    k * Math.cos(a) * Math.sin(b),
+    -k * Math.cos(a),
+    k * Math.sin(a) * Math.sin(b),
+    0,
+    -k * Math.cos(b),
+  ]
+}
+// The axes of the two cameras of the app, as the SVG has them.
+const HOUSE = [0.295921, 0.04514, -0.096151, 0.138927, 0.0, -0.274729]
+const VAN = [0.096151, 0.138927, -0.295921, 0.04514, 0.0, -0.274729]
 const near = (a, b, e = 1e-6) => assert.ok(Math.abs(a - b) < e, `${a} is not near ${b}`)
+// A camera that turns and looks down as the cameras of the app do. It looks
+// down more than a roof slopes (5 in 12, 23 degrees): so it sees the two
+// slopes of a roof.
+const cameras = fc.tuple(fc.integer({min: 10, max: 80}), fc.integer({min: 25, max: 80})).map(([y, p]) => axesOf(y, p))
+
+test("the axes of the two cameras", () => {
+  axesOf(72, 28).forEach((n, i) => near(n, HOUSE[i]))
+  axesOf(18, 28).forEach((n, i) => near(n, VAN[i]))
+})
 
 test("the numbers of an attribute, and the surface of a room", () => {
   assert.deepEqual(numbers(" 1 2.5  -3 "), [1, 2.5, -3])
@@ -56,11 +82,11 @@ const surfaces = fc
 const part = (min, max) => fc.double({min, max, noNaN: true})
 const at = (s, u, v) => ({x: s.plan[0] + u * s.plan[2], y: s.plan[1] + v * s.plan[3]})
 
-test("a point goes to the SVG and back, on a floor and on a roof", () => {
+test("a point goes to the SVG and back, on a floor and on a roof, for each camera", () => {
   fc.assert(
-    fc.property(surfaces, part(-0.5, 1.5), part(0, 1), (s, u, v) => {
+    fc.property(cameras, surfaces, part(-0.5, 1.5), part(0, 1), (axes, s, u, v) => {
       const p = at(s, u, v)
-      const back = inverse(forward(p, s, K), s, K)
+      const back = inverse(forward(p, s, axes), s, axes)
       near(back.x, p.x, 1e-6)
       near(back.y, p.y, 1e-6)
     }),
@@ -69,11 +95,11 @@ test("a point goes to the SVG and back, on a floor and on a roof", () => {
 
 test("a point on a surface is on it; a point out of it is not", () => {
   fc.assert(
-    fc.property(surfaces, part(0.01, 0.99), part(0.01, 0.99), (s, u, v) => {
-      assert.ok(onSurface(forward(at(s, u, v), s, K), s, K))
+    fc.property(cameras, surfaces, part(0.01, 0.99), part(0.01, 0.99), (axes, s, u, v) => {
+      assert.ok(onSurface(forward(at(s, u, v), s, axes), s, axes))
       // Out of the surface along x (on its plane).
-      assert.ok(!onSurface(forward(at(s, u + 1, v), s, K), s, K))
-      assert.ok(!onSurface(forward(at(s, u - 1, v), s, K), s, K))
+      assert.ok(!onSurface(forward(at(s, u + 1, v), s, axes), s, axes))
+      assert.ok(!onSurface(forward(at(s, u - 1, v), s, axes), s, axes))
     }),
   )
 })
@@ -86,17 +112,23 @@ test("the units of one pixel: the side that limits the view", () => {
 
 test("a point on each slope of a roof goes to the SVG and back", () => {
   const roof = {origin: [5, -40], plan: [0, 0, 300, 200], rise: 42}
-  for (const point of [{x: 50, y: 30}, {x: 120, y: 170}, {x: 0, y: 100}]) {
-    const back = inverse(forward(point, roof, K), roof, K)
-    near(back.x, point.x)
-    near(back.y, point.y)
-  }
+  for (const axes of [HOUSE, VAN])
+    for (const point of [{x: 50, y: 30}, {x: 120, y: 170}, {x: 0, y: 100}]) {
+      const back = inverse(forward(point, roof, axes), roof, axes)
+      near(back.x, point.x)
+      near(back.y, point.y)
+    }
 })
 
 test("a move on the SVG is a move on the plan", () => {
-  const {dx, dy} = delta(K[0] * 10, K[1] * 10, K)
-  near(dx, 10)
-  near(dy, 0)
+  for (const axes of [HOUSE, VAN]) {
+    const along = delta(axes[0] * 10, axes[1] * 10, axes)
+    near(along.dx, 10)
+    near(along.dy, 0)
+    const across = delta(axes[2] * 7, axes[3] * 7, axes)
+    near(across.dx, 0)
+    near(across.dy, 7)
+  }
 })
 
 test("a wall of a room moves", () => {
@@ -105,7 +137,7 @@ test("a wall of a room moves", () => {
   assert.deepEqual(resize(plan, "x1", 5, 7), [10, 20, 105, 200])
   assert.deepEqual(resize(plan, "y0", 5, 7), [10, 27, 100, 193])
   assert.deepEqual(resize(plan, "y1", 5, 7), [10, 20, 100, 207])
-  assert.equal(outline([0, 0, 10, 10], [1, 2], K), "1.0,2.0 3.2,3.3 1.0,4.5 -1.2,3.3")
+  assert.equal(outline([0, 0, 10, 10], [1, 2], HOUSE), "1.0,2.0 4.0,2.5 3.0,3.8 0.0,3.4")
 })
 
 test("a zoom keeps the point under it, between its two limits", () => {
@@ -116,12 +148,39 @@ test("a zoom keeps the point under it, between its two limits", () => {
   assert.equal(zoom(fit, 0.01, 0, 0, fit).w, 240)
 })
 
-test("the arrow keys", () => {
-  assert.deepEqual(arrow("ArrowRight", false), {dx: 6, dy: 0})
-  assert.deepEqual(arrow("ArrowLeft", true), {dx: -24, dy: 0})
-  assert.deepEqual(arrow("ArrowDown", false), {dx: 0, dy: 6})
-  assert.deepEqual(arrow("ArrowUp", false), {dx: 0, dy: -6})
-  assert.equal(arrow("Enter", false), null)
+test("the arrow keys move as they point on the screen", () => {
+  // The house: x to the right, and y (to the front) down.
+  const house = [1, 0, 0, 1]
+  assert.deepEqual(arrow("ArrowRight", false, house), {dx: 6, dy: 0})
+  assert.deepEqual(arrow("ArrowLeft", true, house), {dx: -24, dy: 0})
+  assert.deepEqual(arrow("ArrowDown", false, house), {dx: 0, dy: 6})
+  assert.deepEqual(arrow("ArrowUp", false, house), {dx: 0, dy: -6})
+  assert.equal(arrow("Enter", false, house), null)
+  // A van: its back (y = 0) to the right, and its left side (x) down.
+  const van = [0, -1, 1, 0]
+  assert.deepEqual(arrow("ArrowRight", false, van), {dx: 0, dy: -6})
+  assert.deepEqual(arrow("ArrowLeft", false, van), {dx: 0, dy: 6})
+  assert.deepEqual(arrow("ArrowUp", true, van), {dx: -24, dy: 0})
+})
+
+test("two boxes overlap, or not", () => {
+  const a = {x: 0, y: 0, width: 10, height: 4}
+  assert.ok(overlaps(a, {x: 9, y: 3, width: 5, height: 5}))
+  assert.ok(!overlaps(a, {x: 10, y: 0, width: 5, height: 5}))
+  assert.ok(!overlaps(a, {x: 0, y: 4, width: 5, height: 5}))
+  assert.ok(!overlaps(a, {x: -6, y: 0, width: 5, height: 5}))
+})
+
+test("a zoom in to a room: the room fills the screen, and a smaller view stays", () => {
+  const view = {x: 0, y: 0, w: 200, h: 400}
+  const same = (a, b) => ["x", "y", "w", "h"].forEach((k) => near(a[k], b[k]))
+  // A wide room on a tall screen: its width limits the view.
+  same(focus(view, {x: 10, y: 10, w: 100, h: 20}, 0.5), {x: 2.5, y: -95, w: 115, h: 230})
+  // A tall room on a wide screen: its height limits the view.
+  same(focus(view, {x: 10, y: 10, w: 10, h: 100}, 1), {x: -42.5, y: 2.5, w: 115, h: 115})
+  // The view shows the room in more detail: it stays.
+  const small = {x: 0, y: 0, w: 50, h: 100}
+  assert.equal(focus(small, {x: 10, y: 10, w: 100, h: 20}, 0.5), small)
 })
 
 // A small DOM: elements with attributes, a parent, classes and listeners.
@@ -133,6 +192,9 @@ class El {
     this.listeners = new Map()
     this.classList = {add: (c) => this.classes.add(c), remove: (c) => this.classes.delete(c)}
     this.style = {props: {}, setProperty: (k, v) => (this.style.props[k] = v)}
+  }
+  getBBox() {
+    return this.bbox || {x: 0, y: 0, width: 0, height: 0}
   }
   getAttribute(name) {
     return name in this.attrs ? this.attrs[name] : null
@@ -166,8 +228,9 @@ class El {
   }
 }
 
-// The page of the plan: a kitchen (chosen, with its outline and handles),
-// a living room, a roof, and a fridge in the kitchen. Then the buttons.
+// The page of the plan. It has a kitchen (chosen, with its outline and
+// handles), a living room with a wall, and a roof. It has a fridge in the
+// kitchen, and three labels. Then the buttons.
 function setup({storage = new Map(), chosen = true, width = 400, height = 800} = {}) {
   const els = []
   const add = (attrs, parent) => {
@@ -175,14 +238,26 @@ function setup({storage = new Map(), chosen = true, width = 400, height = 800} =
     els.push(el)
     return el
   }
-  const svg = add({"data-k": K.join(" "), "data-fit": "0 0 200 400", viewBox: "0 0 200 400"})
+  const svg = add({"data-axes": HOUSE.join(" "), "data-arrows": "1 0 0 1", "data-fit": "0 0 200 400", viewBox: "0 0 200 400"})
   svg.clientWidth = width
   svg.clientHeight = height
   const ground = add({id: "plan-ground", "data-box": "0 100 100 50"}, svg)
   const kitchenG = add({id: "plan-room-r1"}, ground)
   const kitchen = add({"data-room": "r1", "data-plan": "0 0 100 100", "data-origin": "0 0"}, kitchenG)
   const living = add({"data-room": "r2", "data-plan": "100 0 100 100", "data-origin": "0 0"}, ground)
+  living.bbox = {x: 100, y: 50, width: 40, height: 20}
+  const wall = add({"data-of": "r2"}, ground)
+  wall.bbox = {x: 100, y: 30, width: 40, height: 25}
+  const labels = [["20000", 10], ["100", 20], ["50", 60]].map(([rank, x]) => {
+    const label = add({"data-rank": rank}, ground)
+    label.bbox = {x, y: 10, width: 30, height: 6}
+    return label
+  })
   const roof = add({"data-room": "r3", "data-plan": "0 0 200 100", "data-origin": "0 -50", "data-rise": "20"}, ground)
+  roof.bbox = {x: 0, y: 0, width: 50, height: 10}
+  // The front slope of the roof: a second polygon of the same room.
+  const slope = add({"data-room": "r3", "data-plan": "0 0 200 100", "data-origin": "0 -50", "data-rise": "20"}, ground)
+  slope.bbox = {x: 50, y: 0, width: 50, height: 20}
   const fridgeG = add({"data-item": "i1", "data-in": "r1", "data-at": "18 15"}, ground)
   const fridge = add({}, fridgeG)
   const empty = add({}, svg)
@@ -245,7 +320,7 @@ function setup({storage = new Map(), chosen = true, width = 400, height = 800} =
   const pointer = (type, id, x, y, target = empty) =>
     svg.fire(type, {pointerId: id, clientX: x, clientY: y, target, preventDefault() {}})
   return {
-    hook, svg, root, kitchen, living, roof, fridge, fridgeG, kitchenG, empty, selection, outlineEl, handles,
+    hook, svg, root, kitchen, living, roof, fridge, fridgeG, kitchenG, empty, selection, outlineEl, handles, labels,
     pushed, pointer, storage, setUnder: (list) => (under = list),
     zoomIn, zoomOut, fitButton, focus, listItem, listRoom, other,
   }
@@ -295,9 +370,28 @@ test("a drag on an empty place moves the view, and a tap clears the choice", () 
 })
 
 test("a tap chooses a room or opens an item; a tap on a handle does nothing", () => {
-  const {pointer, pushed, living, fridge, handles} = setup()
+  const {hook, pointer, pushed, living, fridge, handles} = setup()
   pointer("pointerdown", 1, 50, 50, living)
   pointer("pointerup", 1, 50, 50)
+  // The view zooms in to the room and its wall: 40 by 40, with a margin,
+  // on a screen of 400 by 800.
+  near(hook.view.w, 46)
+  near(hook.view.h, 92)
+  near(hook.view.x, 120 - 23)
+  near(hook.view.y, 50 - 46)
+  // A page with no size yet: a square view.
+  const none = setup({width: 0, height: 0})
+  none.pointer("pointerdown", 1, 50, 50, none.living)
+  none.pointer("pointerup", 1, 50, 50)
+  near(none.hook.view.w, 46)
+  near(none.hook.view.h, 46)
+  // A roof has two slopes: the zoom shows the two (100 by 20, with a
+  // margin), whatever the slope of the tap.
+  const top = setup()
+  top.pointer("pointerdown", 1, 50, 50, top.roof)
+  top.pointer("pointerup", 1, 50, 50)
+  near(top.hook.view.w, 115)
+  near(top.hook.view.x, 50 - 57.5)
   pointer("pointerdown", 1, 50, 50, fridge)
   pointer("pointerup", 1, 50, 50)
   pointer("pointerdown", 1, 50, 50, handles.x1)
@@ -313,8 +407,8 @@ test("an item goes to the room under the center of its space, not under the poin
   // 40 inches along x: the center stays in the kitchen, but the pointer
   // (on the top of the fridge) is on the living room.
   pointer("pointerdown", 1, 100, 100, fridge)
-  pointer("pointermove", 1, 100 + 2 * K[0] * 40, 100 + 2 * K[1] * 40)
-  assert.equal(fridgeG.getAttribute("transform"), "translate(8.80 5.08)")
+  pointer("pointermove", 1, 100 + 2 * HOUSE[0] * 40, 100 + 2 * HOUSE[1] * 40)
+  assert.equal(fridgeG.getAttribute("transform"), "translate(11.84 1.81)")
   assert.ok(fridgeG.classes.has("p-dragging"))
   setUnder([fridge, living])
   pointer("pointerup", 1, 100, 100)
@@ -328,19 +422,19 @@ test("an item goes to the room under the center of its space, not under the poin
   // 100 inches: the center is in the living room, under the kitchen.
   setUnder([fridge, kitchen])
   pointer("pointerdown", 1, 100, 100, fridge)
-  pointer("pointermove", 1, 100 + 2 * K[0] * 100, 100 + 2 * K[1] * 100)
+  pointer("pointermove", 1, 100 + 2 * HOUSE[0] * 100, 100 + 2 * HOUSE[1] * 100)
   pointer("pointerup", 1, 100, 100)
   assert.deepEqual(pushed[1], ["place_item", {id: "i1", room: "r2", x: 118, y: 15}])
 
   // Far from all the rooms: the room under the pointer, else its own room.
   setUnder([living])
   pointer("pointerdown", 1, 100, 100, fridge)
-  pointer("pointermove", 1, 100 + 2 * K[0] * 900, 100 + 2 * K[1] * 900)
+  pointer("pointermove", 1, 100 + 2 * HOUSE[0] * 900, 100 + 2 * HOUSE[1] * 900)
   pointer("pointerup", 1, 100, 100)
   assert.equal(pushed[2][1].room, "r2")
   setUnder([])
   pointer("pointerdown", 1, 100, 100, fridge)
-  pointer("pointermove", 1, 100 + 2 * K[0] * 900, 100 + 2 * K[1] * 900)
+  pointer("pointermove", 1, 100 + 2 * HOUSE[0] * 900, 100 + 2 * HOUSE[1] * 900)
   pointer("pointerup", 1, 100, 100)
   assert.equal(pushed[3][1].room, "r1")
 })
@@ -348,21 +442,21 @@ test("an item goes to the room under the center of its space, not under the poin
 test("the chosen room moves with its items, and a wall moves with its handle", () => {
   const {hook, pointer, pushed, kitchen, kitchenG, fridgeG, selection, outlineEl, handles} = setup()
   pointer("pointerdown", 1, 100, 100, kitchen)
-  pointer("pointermove", 1, 100 + 2 * K[0] * 12, 100 + 2 * K[1] * 12)
-  for (const el of [kitchenG, fridgeG, selection]) assert.equal(el.getAttribute("transform"), "translate(2.64 1.52)")
+  pointer("pointermove", 1, 100 + 2 * HOUSE[0] * 12, 100 + 2 * HOUSE[1] * 12)
+  for (const el of [kitchenG, fridgeG, selection]) assert.equal(el.getAttribute("transform"), "translate(3.55 0.54)")
   pointer("pointerup", 1, 100, 100)
   assert.deepEqual(pushed, [["move_room", {id: "r1", dx: 12, dy: 0}]])
   hook.replies.pop()()
   assert.equal(kitchenG.getAttribute("transform"), null)
 
   pointer("pointerdown", 1, 100, 100, handles.x1)
-  pointer("pointermove", 1, 100 + 2 * K[0] * 24, 100 + 2 * K[1] * 24)
-  assert.equal(outlineEl.getAttribute("points"), outline([0, 0, 124, 100], [0, 0], K))
-  assert.equal(handles.x1.getAttribute("transform"), "translate(5.28 3.05)")
+  pointer("pointermove", 1, 100 + 2 * HOUSE[0] * 24, 100 + 2 * HOUSE[1] * 24)
+  assert.equal(outlineEl.getAttribute("points"), outline([0, 0, 124, 100], [0, 0], HOUSE))
+  assert.equal(handles.x1.getAttribute("transform"), "translate(7.10 1.08)")
   pointer("pointerup", 1, 100, 100)
   assert.deepEqual(pushed[1], ["size_room", {id: "r1", edge: "x1", dx: 24, dy: 0}])
   hook.replies.pop()()
-  assert.equal(outlineEl.getAttribute("points"), outline([0, 0, 100, 100], [0, 0], K))
+  assert.equal(outlineEl.getAttribute("points"), outline([0, 0, 100, 100], [0, 0], HOUSE))
   assert.equal(handles.x1.getAttribute("transform"), null)
 })
 
@@ -439,6 +533,28 @@ test("the arrow keys move an item or a room of the list", () => {
     ["nudge_item", {id: "i1", dx: 6, dy: 0}],
     ["nudge_room", {id: "r1", dx: 0, dy: -24}],
   ])
+})
+
+test("the label of a larger room shows; a label over it hides until a zoom in", () => {
+  const {hook, labels} = setup()
+  assert.deepEqual(labels.map((l) => l.style.visibility), ["", "hidden", ""])
+  // The server draws the SVG again: the labels come again, and hide again.
+  for (const label of labels) label.style.visibility = ""
+  labels[1].bbox = {x: 45, y: 10, width: 10, height: 6}
+  hook.updated()
+  assert.deepEqual(labels.map((l) => l.style.visibility), ["", "", ""])
+  // A pan keeps the scale: the labels stay as they are.
+  labels[1].style.visibility = "hidden"
+  hook.show({...hook.view, x: hook.view.x + 5})
+  assert.equal(labels[1].style.visibility, "hidden")
+  // A zoom in: the labels are smaller on the SVG. So the label of the small
+  // room shows again, next to the label of the large room.
+  labels[1].bbox = {x: 20, y: 10, width: 30, height: 6}
+  hook.show({...hook.view, w: hook.view.w / 2, h: hook.view.h / 2})
+  assert.equal(labels[1].style.visibility, "hidden")
+  for (const label of labels) label.bbox = {...label.bbox, width: 8, height: 2}
+  hook.show({...hook.view, w: hook.view.w / 2, h: hook.view.h / 2})
+  assert.deepEqual(labels.map((l) => l.style.visibility), ["", "", ""])
 })
 
 test("the hook goes: it removes its listeners", () => {

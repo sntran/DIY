@@ -52,8 +52,8 @@ defmodule DIYWeb.VanCutawayTest do
       {build, van} = van(model)
       [floor, _roof] = view(build, van).levels
       objects = Map.new(floor.objects, &{&1.id, &1})
-      # The axes show a mirror image (DIYWeb.Iso): the left side of the van
-      # is at the large x, near the eye.
+      # The left side of the van is at the large x, near the eye of the
+      # camera of a van (DIYWeb.Geometry).
       half = Catalog.van_size(model).cargo_width * m / 2
       assert elem(objects["van-wheel"].box, 0) > half
       assert elem(objects["van-seat-driver"].box, 0) > half

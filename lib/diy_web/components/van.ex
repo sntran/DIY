@@ -443,7 +443,7 @@ defmodule DIYWeb.VanPage do
         step={6}
         what="the zone"
         van
-        blocked={Inside.blocked(@build, @zone.id, 6)}
+        blocked={Inside.blocked(@build, @zone.id, 6, true)}
       />
     </div>
     """
@@ -507,7 +507,7 @@ defmodule DIYWeb.VanPage do
       class="sr-only focus-within:not-sr-only focus-within:card focus-within:card-border focus-within:p-3"
     >
       <p class="text-sm">
-        The arrow keys move the item or the zone that has the focus: 6 inches, or 2 feet with Shift. On the plan, the right side of the van is at the top left. The Left key moves it to the right side of the van, and the Up key to the back.
+        The arrow keys move the item or the zone that has the focus: 6 inches, or 2 feet with Shift. On the plan, the cab is at the left, and the right side of the van is at the top. The Left key moves it to the front of the van, and the Up key to its right side.
       </p>
       <ul>
         <li :for={zone <- @zones} id={"zone-#{zone.id}"}>

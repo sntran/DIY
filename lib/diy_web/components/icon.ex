@@ -1,6 +1,8 @@
 defmodule DIYWeb.Icon do
   @moduledoc """
-  The isometric icon of each kind of item (`DIYWeb.Icon.Shapes`), in SVG.
+  The icon of each kind of item (`DIYWeb.Icon.Shapes`), in SVG. The camera
+  of the house shows the front of an item. A car and a van show their side
+  (the camera of a van, `DIYWeb.Camera`).
 
   The root layout has a sprite (`sprite/1`): the shapes of each kind one
   time, in a group with the id `icon-TYPE`. An icon (`item/1`) is a small
@@ -14,26 +16,29 @@ defmodule DIYWeb.Icon do
   use DIYWeb, :html
 
   alias DIY.Catalog
+  alias DIYWeb.Camera
   alias DIYWeb.Icon.Shapes
-  alias DIYWeb.Iso
 
   # The box and the SVG of the shapes of each kind.
   @icons Map.new(Catalog.kinds(), fn %{type: type} ->
-           shapes = Shapes.shapes(type)
+           camera = if type in ["camper_van", "ev"], do: Camera.van(), else: Camera.house()
+           shapes = Shapes.shapes(type, camera)
 
            points =
-             for {:poly, corners, _class} <- shapes, corner <- corners, do: Iso.at({0, 0}, corner)
+             for {:poly, corners, _class} <- shapes,
+                 corner <- corners,
+                 do: Camera.at(camera, {0, 0}, corner)
 
            {xs, ys} = Enum.unzip(points)
            {x0, x1} = Enum.min_max(xs)
            {y0, y1} = Enum.min_max(ys)
            size = max(x1 - x0, y1 - y0) + 2
            {cx, cy} = {(x0 + x1) / 2, (y0 + y1) / 2}
-           view = Enum.map_join([cx - size / 2, cy - size / 2, size, size], " ", &Iso.round1/1)
+           view = Enum.map_join([cx - size / 2, cy - size / 2, size, size], " ", &Camera.round1/1)
 
            svg =
              Enum.map_join(shapes, fn {:poly, corners, class} ->
-               ~s(<polygon points="#{Iso.points({0, 0}, corners)}" class="#{class}"/>)
+               ~s(<polygon points="#{Camera.points(camera, {0, 0}, corners)}" class="#{class}"/>)
              end)
 
            {type, {view, svg}}
