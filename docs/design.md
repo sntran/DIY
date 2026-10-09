@@ -1001,7 +1001,7 @@ its turn. A length is in inches.
   build of an older version gets the draft when it loads.
 - The person changes the plan. A drag moves an item, also to a different
   room. A tap opens an item. A tap on a room, on one of its walls or on
-  the edge of its floor (its slab) chooses the room. The chosen room has
+  the edge of its slab chooses the room. The chosen room has
   an outline and a handle on each wall. Its bar (under the plan) has its
   size and its buttons. A drag on the chosen room moves it with its
   items, and a drag on a handle moves a wall. A drag on an empty place
