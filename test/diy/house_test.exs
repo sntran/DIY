@@ -29,6 +29,22 @@ defmodule DIY.HouseTest do
     end
   end
 
+  test "a bedroom for each person: 2 in a small house, 3 in a medium house, 4 in a large one" do
+    bedrooms = fn size, floors ->
+      {_house, rooms, items} =
+        House.preset(%{size: size, year: 2005, floors: floors, heat: "gas", lot: nil})
+
+      people = Enum.find(items, &(&1.type == "water_heater")).params["people"]
+      names = for room <- rooms, String.starts_with?(room.name, "Bedroom"), do: room.name
+      {length(names), people}
+    end
+
+    assert bedrooms.(1200, 1) == {2, 2}
+    assert bedrooms.(1800, 2) == {3, 3}
+    assert bedrooms.(2500, 2) == {4, 4}
+    assert bedrooms.(3500, 3) == {4, 4}
+  end
+
   test "the heat gives the heater, and the fuel of the water heater and of the stove" do
     assert item(%{heat: "gas"}, "furnace")
     assert item(%{heat: "gas"}, "water_heater").params["fuel"] == "gas"

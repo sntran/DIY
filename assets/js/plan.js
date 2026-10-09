@@ -2,10 +2,10 @@
 // person moves the items and the rooms with a pointer (a finger or a
 // mouse). Two fingers, Ctrl and the mouse wheel, or the buttons zoom. A
 // drag on an empty place moves the picture. When the picture shows all the
-// house, a finger that moves up or down scrolls the page. A tap on an item
-// opens it. A tap on a room, on a wall or on the edge of a slab chooses the
-// room. The room then has handles on its walls, and the view zooms in to
-// it. In the list of the rooms (for a keyboard and a screen reader), the
+// house, a finger that moves up or down scrolls the page, and the page
+// glides when the finger lifts. A tap on an item opens it. A tap on a
+// room, on a wall or on the edge of a slab chooses the room. The room then
+// has handles on its walls, and the view zooms in to it. In the list of the rooms (for a keyboard and a screen reader), the
 // arrow keys move an item or a room.
 //
 // The server draws the SVG. This script only moves parts of it while the
@@ -211,6 +211,20 @@ const SLOP = 5
 const HANDLE = 24
 // The view stays for each plan (the house, and each van) in the tab.
 const KEY = "plan-view:"
+// A page that a finger scrolls keeps its speed after the finger lifts, and
+// slows down. It keeps this part of its speed for each 16 ms. It stops
+// under 0.02 pixels for each ms. A finger that stops for more than 50 ms
+// before it lifts gives no glide. A frame counts at most 50 ms: after a
+// pause of the page, the glide does not jump.
+const FRICTION = 0.95
+const STOP = 0.02
+const STILL = 50
+const FRAME = 50
+// The speed of the finger: this part of the speed of the last move, and
+// the rest of the speed of the moves before it.
+const LAST = 0.8
+// The events that stop a glide, on all the page.
+const HALT = ["pointerdown", "wheel", "keydown"]
 
 export const planHook = {
   mounted() {
@@ -238,6 +252,7 @@ export const planHook = {
   },
 
   destroyed() {
+    this.stopGlide()
     this.window().clearTimeout(this.hintTimer)
     for (const [type, fun] of Object.entries(this.listeners)) this.svg.removeEventListener(type, fun)
     this.el.removeEventListener("click", this.onClick)
@@ -364,6 +379,11 @@ export const planHook = {
   },
 
   down(e) {
+    // A finger that stops a glide does not tap: as on a page that the
+    // browser scrolls.
+    const halted = Boolean(this.gliding) || this.halted === e
+    this.halted = null
+    this.stopGlide()
     this.pointers.set(e.pointerId, {x: e.clientX, y: e.clientY})
     this.svg.setPointerCapture(e.pointerId)
     if (this.pointers.size === 2) {
@@ -386,7 +406,7 @@ export const planHook = {
       [kind, el] = ["room", room]
     // A finger on a view of all the house scrolls the page up or down.
     const scroll = kind === "pan" && e.pointerType === "touch" && this.whole()
-    this.drag = {kind, el, room, x: e.clientX, y: e.clientY, last: e.clientY, scroll, view: this.view, moved: false}
+    this.drag = {kind, el, room, x: e.clientX, y: e.clientY, last: e.clientY, scroll, view: this.view, moved: false, t: e.timeStamp, v: 0, halted}
   },
 
   move(e) {
@@ -406,6 +426,11 @@ export const planHook = {
 
     if (drag.scroll) {
       this.window().scrollBy(0, drag.last - e.clientY)
+      // The speed of the finger, in pixels for each ms, with the speed of
+      // the moves before it.
+      const dt = e.timeStamp - drag.t
+      if (dt > 0) drag.v = LAST * ((drag.last - e.clientY) / dt) + (1 - LAST) * drag.v
+      drag.t = e.timeStamp
       drag.last = e.clientY
     } else if (drag.kind === "pan") {
       // The view moves with the pointer: the start point stays under it.
@@ -461,7 +486,8 @@ export const planHook = {
     if (drag && drag.kind === "pinch" && this.pointers.size >= 2) return
     this.drag = null
     if (!drag || drag.kind === "pinch") return
-    if (!drag.moved) return this.tap(drag)
+    if (!drag.moved) return drag.halted ? undefined : this.tap(drag)
+    if (drag.scroll && e.timeStamp - drag.t <= STILL) return this.glide(drag.v)
     if (drag.kind === "item") this.dropItem(drag, e)
     else if (drag.kind === "room") this.send("move_room", {id: drag.el.getAttribute("data-room"), ...this.inches(drag)}, drag)
     else if (drag.kind === "handle")
@@ -479,6 +505,49 @@ export const planHook = {
   cancel(e) {
     this.pointers.delete(e.pointerId)
     this.reset()
+  },
+
+  // The page keeps the speed of the finger, and slows down, as a page that
+  // the browser scrolls. Each frame scrolls the page by the exact distance
+  // of the time since the frame before it. So the glide is the same at
+  // each rate of frames. A touch, the wheel or a key on the page stops it,
+  // and also a page that goes out of view.
+  glide(v) {
+    if (Math.abs(v) < STOP) return
+    const win = this.window()
+    const token = {}
+    this.gliding = token
+    this.onHalt = (e) => {
+      // The same event comes to the plan after the window: so the plan
+      // knows that this press stopped the glide.
+      if (e.type === "pointerdown") this.halted = e
+      this.stopGlide()
+    }
+    for (const type of HALT) win.addEventListener(type, this.onHalt, {capture: true, passive: true})
+    this.el.ownerDocument.addEventListener("visibilitychange", this.onHalt)
+    const k = Math.log(FRICTION) / 16
+    let last = null
+    const frame = (t) => {
+      if (this.gliding !== token) return
+      if (last !== null) {
+        const dt = Math.min(t - last, FRAME)
+        const left = Math.exp(k * dt)
+        win.scrollBy(0, (v * (left - 1)) / k)
+        v *= left
+      }
+      last = t
+      if (Math.abs(v) < STOP) this.stopGlide()
+      else win.requestAnimationFrame(frame)
+    }
+    win.requestAnimationFrame(frame)
+  },
+
+  stopGlide() {
+    if (!this.gliding) return
+    this.gliding = null
+    const win = this.window()
+    for (const type of HALT) win.removeEventListener(type, this.onHalt, {capture: true})
+    this.el.ownerDocument.removeEventListener("visibilitychange", this.onHalt)
   },
 
   // A drag that stops: the moved elements go back. The server draws them

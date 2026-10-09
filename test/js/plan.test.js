@@ -332,6 +332,9 @@ function setup({storage = new Map(), chosen = true, width = 400, height = 800, w
   const win = {
     scrolls: [],
     scrollBy: (x, y) => win.scrolls.push([x, y]),
+    on: {},
+    addEventListener: (type, fun) => (win.on[type] = fun),
+    removeEventListener: (type, fun) => win.on[type] === fun && delete win.on[type],
     setTimeout: (fun, ms) => timers.push([fun, ms]) && timers.length,
     clearTimeout: (id) => id && (timers[id - 1][0] = () => {}),
     sessionStorage:
@@ -346,7 +349,13 @@ function setup({storage = new Map(), chosen = true, width = 400, height = 800, w
           }
         : {getItem: (k) => storage.get(k) ?? null, setItem: (k, v) => storage.set(k, v)},
   }
-  const doc = {defaultView: win, elementsFromPoint: () => under}
+  const doc = {
+    defaultView: win,
+    elementsFromPoint: () => under,
+    on: {},
+    addEventListener: (type, fun) => (doc.on[type] = fun),
+    removeEventListener: (type, fun) => doc.on[type] === fun && delete doc.on[type],
+  }
   const root = new El({id: "plan"})
   root.id = "plan"
   root.ownerDocument = doc
@@ -505,6 +514,137 @@ test("a finger scrolls the page when the view shows all the house", () => {
   pointer("pointermove", 2, 140, 300, undefined, "touch")
   near(hook.view.x, 20)
   assert.equal(win.scrolls.length, 3)
+})
+
+// A plan with a glide: a flick of the finger, and the frames of the page.
+const glider = () => {
+  const plan = setup({chosen: false})
+  const frames = []
+  plan.win.requestAnimationFrame = (fun) => frames.push(fun)
+  const touch = (type, y, t, id = 1, target = plan.empty) =>
+    plan.svg.fire(type, {pointerId: id, clientX: 100, clientY: y, target, pointerType: "touch", timeStamp: t, preventDefault() {}})
+  // 10 pixels in 16 ms, then 20 pixels in 16 ms: near 1.1 pixels for each
+  // ms.
+  const flick = (t = 0) => {
+    touch("pointerdown", 300, t)
+    touch("pointermove", 290, t + 16)
+    touch("pointermove", 270, t + 32)
+    touch("pointerup", 270, t + 40)
+  }
+  // The frames, each `step` ms, until the glide stops: the pixels of each
+  // frame.
+  const run = (step = 16, from = 1000) => {
+    const start = plan.win.scrolls.length
+    let t = from
+    while (frames.length) frames.shift()((t += step))
+    return plan.win.scrolls.slice(start).map(([, y]) => y)
+  }
+  return {...plan, frames, touch, flick, run}
+}
+
+test("a finger that scrolls the page and lifts: the page glides and slows down", () => {
+  const {hook, win, root, frames, flick, run} = glider()
+  flick()
+  assert.equal(frames.length, 1)
+  assert.ok(win.on.pointerdown && win.on.wheel && win.on.keydown && root.ownerDocument.on.visibilitychange)
+  frames.shift()(1000)
+  frames.shift()(1016)
+  // The distance of 16 ms at a speed that falls 5% in 16 ms.
+  near(win.scrolls.at(-1)[1], (1.1 * 16 * 0.05) / -Math.log(0.95))
+  const glide = run(16, 1016)
+  // Each frame scrolls less than the frame before it, and the glide stops.
+  assert.ok(glide.length > 20)
+  assert.ok(glide.every((y, i) => i === 0 || y < glide[i - 1]))
+  assert.equal(hook.gliding, null)
+  assert.deepEqual(win.on, {})
+  assert.deepEqual(root.ownerDocument.on, {})
+})
+
+test("the glide is the same at each rate of frames, and a long pause does not jump", () => {
+  // The pixels of the glide in 320 ms: the flick itself scrolls 2 times.
+  const glide = (step) => {
+    const plan = glider()
+    plan.flick()
+    for (let t = 0; t <= 320; t += step) plan.frames.shift()(t)
+    return plan.win.scrolls.slice(2).reduce((sum, [, y]) => sum + y, 0)
+  }
+  near(glide(8), glide(32))
+  assert.ok(glide(8) > 100)
+
+  // A pause of 5 s counts as one frame of 50 ms.
+  const paused = glider()
+  paused.flick()
+  paused.frames.shift()(0)
+  paused.frames.shift()(5000)
+  assert.ok(paused.win.scrolls.at(-1)[1] < 1.1 * 50)
+})
+
+test("a touch, the wheel, a key or a hidden page stops a glide; a tap that stops it does not tap", () => {
+  // A finger on the plan: the glide stops, and the tap does not open the
+  // fridge.
+  const plan = glider()
+  plan.flick()
+  // The window has the event first, then the plan has the same event.
+  const press = {type: "pointerdown", pointerId: 3, clientX: 100, clientY: 300, target: plan.fridge, pointerType: "touch", timeStamp: 100, preventDefault() {}}
+  plan.win.on.pointerdown(press)
+  assert.equal(plan.hook.gliding, null)
+  assert.deepEqual(plan.win.on, {})
+  plan.svg.fire("pointerdown", press)
+  plan.touch("pointerup", 300, 110, 3, plan.fridge)
+  assert.deepEqual(plan.pushed, [])
+  // The next tap opens it.
+  plan.touch("pointerdown", 300, 200, 4, plan.fridge)
+  plan.touch("pointerup", 300, 210, 4, plan.fridge)
+  assert.equal(plan.pushed.at(-1)[0], "open_item")
+  // A frame after the stop does nothing.
+  const scrolls = plan.win.scrolls.length
+  plan.run()
+  assert.equal(plan.win.scrolls.length, scrolls)
+
+  // A press out of the plan stops the glide. A later tap on the plan, with
+  // the same pointer, taps.
+  const outside = glider()
+  outside.flick()
+  outside.win.on.pointerdown({type: "pointerdown", pointerId: 1})
+  outside.touch("pointerdown", 300, 500, 1, outside.fridge)
+  outside.touch("pointerup", 300, 510, 1, outside.fridge)
+  assert.equal(outside.pushed.at(-1)[0], "open_item")
+
+  // With no event on the window (a touch that comes first on the plan),
+  // the plan stops the glide too, with no tap.
+  const first = glider()
+  first.flick()
+  first.touch("pointerdown", 300, 100, 5, first.fridge)
+  first.touch("pointerup", 300, 110, 5, first.fridge)
+  assert.deepEqual(first.pushed, [])
+
+  // The wheel, a key, and a page out of view.
+  for (const stop of [(p) => p.win.on.wheel({type: "wheel"}), (p) => p.win.on.keydown({type: "keydown"}), (p) => p.root.ownerDocument.on.visibilitychange({type: "visibilitychange"})]) {
+    const other = glider()
+    other.flick()
+    stop(other)
+    assert.equal(other.hook.gliding, null)
+    assert.equal(other.hook.halted, null)
+  }
+
+  // The plan goes away during a glide.
+  const gone = glider()
+  gone.flick()
+  gone.hook.destroyed()
+  const before = gone.win.scrolls.length
+  gone.run()
+  assert.equal(gone.win.scrolls.length, before)
+  assert.deepEqual(gone.win.on, {})
+
+  // A finger that stops before it lifts, and a slow finger: no glide.
+  const still = glider()
+  still.touch("pointerdown", 300, 3000)
+  still.touch("pointermove", 260, 3016)
+  still.touch("pointerup", 260, 3100)
+  still.touch("pointerdown", 300, 4000)
+  still.touch("pointermove", 294, 5000)
+  still.touch("pointerup", 294, 5010)
+  assert.equal(still.frames.length, 0)
 })
 
 test("a finger on an item, or on the chosen room, moves it: the page does not scroll", () => {

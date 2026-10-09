@@ -46,7 +46,7 @@ defmodule DIY.House do
   """
   @spec preset(DIY.Build.house()) :: {DIY.Build.house(), [map()], [map()]}
   def preset(house) do
-    {house, rooms(house.floors), items(house)}
+    {house, rooms(house), items(house)}
   end
 
   @doc """
@@ -54,20 +54,27 @@ defmodule DIY.House do
   items. The estimate shows when the house has an AC.
   """
   @spec scratch(DIY.Build.house()) :: {DIY.Build.house(), [map()], [map()]}
-  def scratch(house), do: {house, rooms(house.floors), []}
+  def scratch(house), do: {house, rooms(house), []}
 
-  defp rooms(floors) do
+  # A bedroom for each person of the house (`people/1`). The bathroom
+  # comes after the second bedroom: the draft then gives the bedrooms
+  # better shapes.
+  defp rooms(%{floors: floors, size: size}) do
     bedrooms_floor = if floors == 1, do: "f1", else: "f2"
+
+    {first, rest} =
+      for(n <- 1..people(size), do: room(:"bedroom#{n}", "Bedroom #{n}", bedrooms_floor, :indoor))
+      |> Enum.split(2)
 
     [
       room(:roof, "Roof", "roof", :roof),
       room(:attic, "Attic", "roof", :indoor)
     ] ++
       if(floors == 3, do: [room(:game, "Game room", "f3", :indoor)], else: []) ++
+      first ++
+      [room(:bathroom, "Bathroom", bedrooms_floor, :indoor)] ++
+      rest ++
       [
-        room(:bedroom1, "Bedroom 1", bedrooms_floor, :indoor),
-        room(:bedroom2, "Bedroom 2", bedrooms_floor, :indoor),
-        room(:bathroom, "Bathroom", bedrooms_floor, :indoor),
         room(:kitchen, "Kitchen", "f1", :indoor),
         room(:living, "Living room", "f1", :indoor),
         room(:laundry, "Laundry", "f1", :indoor),

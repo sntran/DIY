@@ -50,6 +50,12 @@ defmodule DIYWeb.LessonPage do
         <p class="text-sm">
           Your usage is not flat through the year. A plan that is cheap at 1,000 kWh can cost more in a 2,000 kWh summer month or in a 600 kWh spring month. The app shows the math of each bill for your months. You choose: the app does not pick a plan, and it does not rank plans.
         </p>
+        <p :if={@step == 1 and @build.lesson < 4} class="text-sm">
+          Do you know how to read a bill?
+          <button type="button" id="skip-lesson" phx-click="lesson" phx-value-step="4" class="link">
+            Go to the worksheet
+          </button>
+        </p>
       </div>
 
       <nav aria-label="The steps of the lesson" class="flex flex-wrap gap-1">

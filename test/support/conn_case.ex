@@ -37,10 +37,10 @@ defmodule DIYWeb.ConnCase do
 
   @doc """
   Waits until the page has the answers of the weather and of the market
-  (no request is open), for 2 seconds at most. A fixed sleep fails when
+  (no request is open), for 10 seconds at most. A fixed sleep fails when
   the computer is slow.
   """
-  def settle(view, tries \\ 100) do
+  def settle(view, tries \\ 500) do
     assigns = :sys.get_state(view.pid).socket.assigns
 
     if tries > 0 and :loading in [assigns.weather.status, assigns.market.status] do

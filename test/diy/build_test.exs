@@ -84,7 +84,7 @@ defmodule DIY.BuildTest do
 
   test "a preset gives the rooms and the typical items, with new ids" do
     build = preset()
-    assert length(build.rooms) == 11
+    assert length(build.rooms) == 12
     assert Enum.all?(build.items, & &1.typical)
     ids = Enum.map(build.rooms, & &1.id) ++ Enum.map(build.items, & &1.id)
     assert ids == Enum.uniq(ids)

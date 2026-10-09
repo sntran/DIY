@@ -81,8 +81,5 @@ A play test in the role of a neighbor with no skill in power (October
 2026) gave these ideas. The fixes of the other findings are in #16 and
 the next pull requests.
 
-- "Am I on a good plan?" The app does not rank plans, and the lesson
-  comes before the worksheet. A person with little time may want the
-  worksheet first.
-- A medium house of 2 floors gets 2 bedrooms. Many such houses have 3.
-- A finger that scrolls the page over the plan has no momentum.
+- "Am I on a good plan?" The app does not rank plans (honesty rule 4).
+  The owner decides if the worksheet must rank them.
