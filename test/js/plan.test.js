@@ -274,7 +274,7 @@ class El {
 // the kitchen, and three labels. Floor 2 has a bedroom. Then the buttons.
 // With `start`, it is the house: it shows one layer at a time. With no
 // `start`, it is the van: the tab of a layer makes the others pale.
-function setup({storage = new Map(), chosen = true, width = 400, height = 800, withHint = true, start} = {}) {
+function setup({storage = new Map(), chosen = true, width = 400, height = 800, withHint = true, start, open} = {}) {
   const els = []
   const add = (attrs, parent) => {
     const el = new El(attrs, parent)
@@ -287,6 +287,7 @@ function setup({storage = new Map(), chosen = true, width = 400, height = 800, w
     "data-fit": "0 0 200 400",
     viewBox: "0 0 200 400",
     ...(start && {"data-start": start}),
+    ...(open && {"data-open": open}),
   })
   svg.clientWidth = width
   svg.clientHeight = height
@@ -930,6 +931,32 @@ test("a room that the person chooses in the list shows: its layer comes, and the
   outlineEl.setAttribute("data-outline", "r9")
   hook.updated()
   outlineEl.removeAttribute("data-outline")
+  hook.updated()
+  assert.equal(svg.getAttribute("data-dim"), "ground")
+})
+
+test("an item with an open sheet shows: its layer comes, also after a move to a different layer", () => {
+  // The lamp on floor 2 is open when the page starts: floor 2 comes.
+  const first = setup({start: "ground", chosen: false, open: "i2"})
+  assert.equal(first.svg.getAttribute("data-dim"), "f2")
+
+  // The fridge on floor 1 is open: the view stays.
+  const {hook, svg, fridgeG, upper} = setup({start: "ground", chosen: false, open: "i1"})
+  assert.equal(svg.getAttribute("data-dim"), "ground")
+  // The same item: the person can show a different layer.
+  hook.dim("f2")
+  hook.updated()
+  assert.equal(svg.getAttribute("data-dim"), "f2")
+  hook.dim("ground")
+  // The sheet moves the fridge to a room of floor 2: floor 2 comes.
+  fridgeG.parentNode = upper
+  hook.updated()
+  assert.equal(svg.getAttribute("data-dim"), "f2")
+  // An item that is not on the plan, and no open item.
+  svg.setAttribute("data-open", "i9")
+  hook.dim("ground")
+  hook.updated()
+  svg.removeAttribute("data-open")
   hook.updated()
   assert.equal(svg.getAttribute("data-dim"), "ground")
 })

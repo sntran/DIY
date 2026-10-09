@@ -68,6 +68,11 @@ defmodule DIYWeb.CutawayTest do
     assert length(Regex.scan(~r/data-handle="/, html)) == 4
     assert html =~ ~s(data-outline=)
     refute html(build) =~ "data-outline"
+
+    # The item with an open sheet: its layer shows (the hook).
+    refute html =~ "data-open"
+    view = Cutaway.view(build)
+    assert render_component(&Cutaway.cutaway/1, view: view, open: "i16") =~ ~s(data-open="i16")
   end
 
   test "the slab under each room of the house has the id of its room" do
@@ -221,10 +226,23 @@ defmodule DIYWeb.CutawayTest do
     # The dishwasher at the back: the low part starts at the back corner. It
     # stays on the line between the two rooms: it does not go past the
     # corner, as a wall on the outside does.
-    assert [{0, low, 0.25}, {low, 294, 0.75}] =
-             parts.(move.(build, "dishwasher", kitchen, %{x: 120, y: 0}), living, "x0")
-
+    corner = move.(build, "dishwasher", kitchen, %{x: 120, y: 0})
+    assert [{0, low, 0.25}, {low, 294, 0.75}] = parts.(corner, living, "x0")
     assert low > 24
+
+    # The face of the low part and the face of the part of 75 cm are on the
+    # same plane. So on the screen, the two parts have a corner in common.
+    [low_part, high_part] =
+      for(
+        level <- Cutaway.view(corner).levels,
+        %{kind: :wall, room: ^living, id: id} = w <- level.objects,
+        id =~ "-x0-",
+        do: w
+      )
+      |> Enum.sort_by(fn %{box: {_, y0, _, _, _, _}} -> y0 end)
+
+    corners = fn w -> MapSet.new(for {points, _} <- w.polys, p <- String.split(points), do: p) end
+    refute MapSet.disjoint?(corners.(low_part), corners.(high_part))
 
     # The computer of the bedroom against the wall of the bathroom.
     assert [{0, 50, 0.75}, {50, low, 0.25}, {low, 144, 0.75}] =

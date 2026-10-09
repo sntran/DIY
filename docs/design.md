@@ -1312,7 +1312,8 @@ its turn. A length is in inches.
   room on a layer that hides is not chosen now. In the van, the other
   layers are pale, and a tap on a zone of a different layer ends it. The
   button "Show all the house" (or "Show all the van") ends it. The tab of
-  the layer that shows is pressed (`aria-pressed`).
+  the layer that shows is pressed (`aria-pressed`): it has a gray fill and
+  a bar under it.
 - A drop. The center of the space of the item on the floor moves with
   the pointer. The item goes to the room that has this center. The script
   tries its own room first, then the rooms of the layer under the pointer,
@@ -1409,6 +1410,8 @@ its turn. A length is in inches.
   floor 1 fill the screen, and the other layers hide. The tab of a layer,
   or a tap on a room, also hides the other layers. A room that the person
   chooses in the list, or that an arrow key moves, also shows its layer.
+  So does an item with an open sheet, also after the sheet moves it to a
+  room of a different layer (`data-open`).
   While one layer shows, the view stays in the box of that layer. So on a
   phone, the floor is in the middle of the screen. The button "Show all
   the house" shows all the layers.

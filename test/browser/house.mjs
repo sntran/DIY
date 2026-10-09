@@ -392,6 +392,15 @@ async function build(context, name) {
   await check(page, `${name} a room on floor 2`)
   await page.click("#room-bar a[aria-label=Close]")
   await page.waitForSelector("#room-bar", { state: "detached" })
+  // The list opens the computer on floor 2 while floor 1 shows: floor 2
+  // comes.
+  await page.click("button[data-focus=ground]")
+  await page.waitForSelector("#plan-svg[data-dim=ground]")
+  await follow(page, 'a[id^="item-"]:has-text("Computer")')
+  await page.waitForSelector("#item-sheet")
+  await page.waitForSelector("#plan-svg[data-dim=f2]")
+  await page.click("#item-sheet .btn-ghost[aria-label=Close]")
+  await page.waitForSelector("#item-sheet", { state: "detached" })
 
   await follow(page, 'a[id^="add-"][aria-label="Add an item to Kitchen"]')
   await page.waitForSelector("#add-sheet")

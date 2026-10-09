@@ -77,7 +77,7 @@ defmodule DIYWeb.Inside do
             :for={level <- Enum.reverse(@view.levels)}
             type="button"
             data-focus={level.id}
-            class="btn btn-sm btn-ghost shrink-0 px-2 aria-pressed:bg-base-300"
+            class="btn btn-sm btn-ghost shrink-0 px-2 aria-pressed:bg-base-300 aria-pressed:shadow-[inset_0_-3px_0_var(--color-base-content)]"
           >
             {level.name}
           </button>
@@ -88,7 +88,7 @@ defmodule DIYWeb.Inside do
           "relative overflow-hidden rounded-box border border-base-300",
           if(@chosen, do: "h-[calc(100dvh-22rem)]", else: "h-[calc(100dvh-17rem)]")
         ]}>
-          <Cutaway.cutaway view={@view} selected={@chosen && @chosen.id} />
+          <Cutaway.cutaway view={@view} selected={@chosen && @chosen.id} open={@item} />
           <.zoom all="Show all the house" />
         </div>
         <div :if={!@chosen} class="flex justify-end">

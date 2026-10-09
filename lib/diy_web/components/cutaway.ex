@@ -27,13 +27,15 @@ defmodule DIYWeb.Cutaway do
   The page moves the items and the rooms with a script (the hook Plan,
   `assets/js/plan.js`). The SVG gives the script what it needs:
 
-  - the SVG: `data-axes`, `data-arrows`, `data-fit` and `data-start`.
+  - the SVG: `data-axes`, `data-arrows`, `data-fit`, `data-start` and
+    `data-open`.
     `data-axes` has the SVG vectors of one inch along `x`, along `y`, and
     up (`DIYWeb.Camera.axes/1`). `data-arrows` has the steps of the plan
     for a move to the right and down (`DIYWeb.Camera.arrows/1`).
     `data-fit` is the box of all the layers. `data-start` is the layer of
     the first view (floor 1): the house fills the screen, and the other
-    layers hide. With `data-start`, one layer shows at a time;
+    layers hide. With `data-start`, one layer shows at a time.
+    `data-open` is the item with an open sheet: its layer shows;
   - each surface of a room: `data-room`, `data-plan` (`x y w d`, inches)
     and `data-origin`. The origin is the SVG point of the plan point 0, 0
     on the surface of the room. A roof also has `data-rise`: the height of
@@ -856,6 +858,7 @@ defmodule DIYWeb.Cutaway do
 
   attr :view, :map, required: true, doc: "the layers and the camera (`view/1`)"
   attr :selected, :string, default: nil, doc: "the id of the room that the user chose"
+  attr :open, :string, default: nil, doc: "the id of the item with an open sheet"
 
   @doc """
   The SVG of the cut-open house. The hook Plan moves, zooms, and sends the
@@ -884,9 +887,10 @@ defmodule DIYWeb.Cutaway do
       viewBox={@fit}
       data-fit={@fit}
       data-start={@start}
+      data-open={@open}
       data-axes={@axes}
       data-arrows={@arrows}
-      class={["cutaway block w-full h-full touch-none select-none", @start && "cutaway-house"]}
+      class={"cutaway block w-full h-full touch-none select-none" <> if(@start, do: " cutaway-house", else: "")}
       aria-hidden="true"
       phx-mounted={JS.ignore_attributes(["viewBox", "style", "data-dim"])}
     >

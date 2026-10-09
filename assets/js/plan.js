@@ -199,6 +199,8 @@ export function clamp(view, fit) {
 
 // The id of the layer of an element of the plan.
 const layerOf = (el) => el.closest("[data-box]").getAttribute("id").replace("plan-", "")
+// A room or an item, and its layer, as a text; or null.
+const placeOf = (el) => (el ? `${el.getAttribute("data-room") || el.getAttribute("data-item")} ${layerOf(el)}` : null)
 
 // The view as the text of a viewBox.
 const box = (view) => [view.x, view.y, view.w, view.h].map((n) => n.toFixed(2)).join(" ")
@@ -245,6 +247,7 @@ export const planHook = {
     if (first) this.dim(layer)
     this.show(saved || first || this.fit())
     this.chosen = null
+    this.opened = null
     this.reveal()
 
     this.listeners = {
@@ -345,16 +348,20 @@ export const planHook = {
     this.reveal()
   },
 
-  // A room that the person chooses (also in the list) shows: when it is on
-  // a layer that hides, the view zooms in to it. Only a new choice moves
-  // the view.
+  // A room that the person chooses, or an item with an open sheet, shows
+  // (also from the list or a sheet). When it is on a layer that hides, the
+  // view zooms in to the room, or its layer shows. Only a new choice, or a
+  // move to a different layer, moves the view.
   reveal() {
     const outline = this.svg.querySelector("[data-outline]")
-    const id = outline ? outline.getAttribute("data-outline") : null
-    if (id === this.chosen) return
-    this.chosen = id
-    const room = id && this.surface(id)
-    if (room && this.hidden(room)) this.zoomTo(room)
+    const room = outline && this.surface(outline.getAttribute("data-outline"))
+    const open = this.svg.getAttribute("data-open")
+    const item = open && this.svg.querySelector(`[data-item="${open}"]`)
+    const [chosen, opened] = [placeOf(room), placeOf(item)]
+    if (chosen !== this.chosen && room && this.hidden(room)) this.zoomTo(room)
+    else if (opened !== this.opened && item && this.hidden(item)) this.showLayer(layerOf(item))
+    this.chosen = chosen
+    this.opened = opened
   },
 
   // True when an element is on a layer that hides (the house).
