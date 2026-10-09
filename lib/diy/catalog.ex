@@ -1090,8 +1090,8 @@ defmodule DIY.Catalog do
     "van_fridge" => {16, 25, 19},
     # No source: a stove of two burners.
     "stove" => {22, 16, 4},
-    # No source: a sink in a cabinet.
-    "sink" => {24, 18, 36},
+    # No source: a sink in a cabinet of 36 in, with a faucet of 8 in.
+    "sink" => {24, 18, 44},
     # No source: a tank of about 20 gallons.
     "water_tank" => {24, 15, 14},
     # Shurflo 4008: 8.1 by 4.9 by 4.3 in (retailer listings).

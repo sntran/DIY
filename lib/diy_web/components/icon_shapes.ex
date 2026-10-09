@@ -259,14 +259,23 @@ defmodule DIYWeb.Icon.Shapes do
       outline = Enum.map(run, low) ++ Enum.map(Enum.reverse(run), high)
       [{:poly, outline, "i-#{material}-m2"}] ++ body ++ [{:poly, outline, "i-outline"}] ++ ends
     else
-      middle = fn corners -> Geometry.scale(Enum.reduce(corners, &Geometry.add/2), 1 / 4) end
+      # The plane of the loop in the world: the axis is one of x, y and z.
+      {ax, ay, az} = at(turn, lift(axis, {0, 0}, 1))
+      k = Enum.find_index([ax, ay, az], &(abs(&1) > 1.0e-9))
+      plane = &Tuple.delete_at(&1, k)
+      middle = fn i -> Geometry.scale(Geometry.add(low.(i), high.(i + 1)), 0.5) end
 
-      sorted =
-        for {:poly, corners, class} <-
-              Enum.sort_by(body, &Camera.depth(camera, middle.(elem(&1, 1)))),
-            do: {:poly, corners, class <> " i-face"}
+      sides =
+        for {i, true, _normal} <- faces,
+            do: {i, {plane.(low.(i)), plane.(low.(i + 1))}}
 
-      sorted ++ ends
+      sides = Enum.sort_by(sides, fn {i, _side} -> Camera.depth(camera, middle.(i)) end)
+      polys = Map.new(body, fn {:poly, [a | _] = corners, class} -> {a, {corners, class}} end)
+
+      for i <- paint_order(sides, plane.(camera.eye)) do
+        {corners, class} = polys[low.(i)]
+        {:poly, corners, class <> " i-face"}
+      end ++ ends
     end
   end
 
@@ -280,6 +289,49 @@ defmodule DIYWeb.Icon.Shapes do
     if n == nil or Camera.shows?(camera, n),
       do: [{:poly, Enum.map(corners, &at(point, &1)), light(class, n, camera)}],
       else: []
+  end
+
+  # The order of the paint of the sides of a prism that show: from the far
+  # one to the near one. The order is on the plane of the loop, where the
+  # eye looks along e. A side is behind a different side when, at a point that
+  # both cover (across e), it is farther along e. The sides come in the
+  # order of the depth of their middles, and a side that nothing is in
+  # front of keeps this order.
+  defp paint_order(sides, {ex, ey}) do
+    across = fn {x, y} -> ex * y - ey * x end
+    along = fn {x, y} -> ex * x + ey * y end
+
+    depth_at = fn {a, b}, c ->
+      t = (c - across.(a)) / (across.(b) - across.(a))
+      along.(a) + t * (along.(b) - along.(a))
+    end
+
+    span = fn {a, b} -> Enum.min_max([across.(a), across.(b)]) end
+
+    # The pairs {far, near}.
+    pairs =
+      for {i, si} <- sides,
+          {j, sj} <- sides,
+          i < j,
+          {{a0, a1}, {b0, b1}} = {span.(si), span.(sj)},
+          {lo, hi} = {max(a0, b0), min(a1, b1)},
+          hi - lo > 1.0e-9 do
+        c = (lo + hi) / 2
+        if depth_at.(si, c) < depth_at.(sj, c), do: {i, j}, else: {j, i}
+      end
+
+    sort_far_first(Enum.map(sides, &elem(&1, 0)), pairs)
+  end
+
+  # The next side to paint is the first one that has no side behind it
+  # that is still to paint. When a number is not exact, each side can have
+  # one. Then the next side is the first one with the fewest.
+  defp sort_far_first([], _pairs), do: []
+
+  defp sort_far_first(keys, pairs) do
+    behind = fn k -> Enum.count(pairs, fn {far, near} -> near == k and far in keys end) end
+    next = Enum.min_by(keys, behind)
+    [next | sort_far_first(List.delete(keys, next), pairs)]
   end
 
   # A loop (counterclockwise) is convex when each turn from a side to the
@@ -314,23 +366,24 @@ defmodule DIYWeb.Icon.Shapes do
   # A box of a material.
   defp box(corner, size, material), do: [{:box, corner, size, material}]
 
-  # A rectangle on the front face (y = y) of a box, from x, z.
-  defp front({x, y, z}, {w, h}, class),
+  # A rectangle on the front face (y = y) of a box, from x, z. It is a
+  # little out of the face (1 cm, or less on a small item).
+  defp front({x, y, z}, {w, h}, class, out \\ 0.01),
     do:
-      {:face, Geometry.on_plane({x, y + 0.01, z}, {1, 0, 0}, {0, 0, 1}, {0, 0}, {w, h}),
-       {0, 1, 0}, class}
+      {:face, Geometry.on_plane({x, y + out, z}, {1, 0, 0}, {0, 0, 1}, {0, 0}, {w, h}), {0, 1, 0},
+       class}
 
   # A rectangle on the side face (x = x) of a box, from y, z.
-  defp side({x, y, z}, {d, h}, class),
+  defp side({x, y, z}, {d, h}, class, out \\ 0.01),
     do:
-      {:face, Geometry.on_plane({x + 0.01, y, z}, {0, 1, 0}, {0, 0, 1}, {0, 0}, {d, h}),
-       {1, 0, 0}, class}
+      {:face, Geometry.on_plane({x + out, y, z}, {0, 1, 0}, {0, 0, 1}, {0, 0}, {d, h}), {1, 0, 0},
+       class}
 
   # A rectangle on a top (z = z), from x, y.
-  defp top({x, y, z}, {w, d}, class),
+  defp top({x, y, z}, {w, d}, class, out \\ 0.01),
     do:
-      {:face, Geometry.on_plane({x, y, z + 0.01}, {1, 0, 0}, {0, 1, 0}, {0, 0}, {w, d}),
-       {0, 0, 1}, class}
+      {:face, Geometry.on_plane({x, y, z + out}, {1, 0, 0}, {0, 1, 0}, {0, 0}, {w, d}), {0, 0, 1},
+       class}
 
   # A disc on the top or on the front.
   defp disc(center, :top, r, class),
@@ -473,7 +526,7 @@ defmodule DIYWeb.Icon.Shapes do
         front({0.04, d, 0.03}, {w - 0.08, 0.012}, "i-line")
       ] ++
       for(k <- 0..4, do: disc({0.12 + k * 0.13, d + 0.014, 0.85}, :front, 0.022, "i-steel-t")) ++
-      box({0.1, d, 0.66}, {w - 0.2, 0.04, 0.03}, "steel")
+      box({0.1, d + 0.012, 0.66}, {w - 0.2, 0.038, 0.03}, "steel")
   end
 
   # A microwave: a steel body, the door with its window, and the keys with
@@ -516,21 +569,24 @@ defmodule DIYWeb.Icon.Shapes do
   # A water heater: a round tank on its foot, with its cap and its label.
   # Two pipes are on its top, and the relief valve is on its side.
   def model("water_heater") do
-    {r, h} = {0.27, 1.42}
+    {c, r, h} = {0.2795, 0.27, 1.35}
 
-    cylinder({0.28, 0.28, 0}, 0.24, 0.05, "gray") ++
-      cylinder({0.28, 0.28, 0.05}, r, h, "white") ++
-      cylinder({0.28, 0.28, 0.05 + h}, 0.23, 0.04, "gray") ++
-      cylinder({0.18, 0.28, 0.09 + h}, 0.025, 0.14, "copper") ++
-      cylinder({0.38, 0.28, 0.09 + h}, 0.025, 0.14, "copper") ++
+    cylinder({c, c, 0}, 0.24, 0.04, "gray") ++
+      cylinder({c, c, 0.04}, r, h, "white") ++
+      cylinder({c, c, 0.04 + h}, 0.23, 0.04, "gray") ++
+      cylinder({c - 0.1, c, 0.08 + h}, 0.025, 0.14, "copper") ++
+      cylinder({c + 0.1, c, 0.08 + h}, 0.025, 0.14, "copper") ++
       [
         face(
-          for({x, z} <- [{0.2, 0.75}, {0.36, 0.75}, {0.36, 1.0}, {0.2, 1.0}], do: {x, 0.553, z}),
+          for(
+            {x, z} <- [{c - 0.08, 0.7}, {c + 0.08, 0.7}, {c + 0.08, 0.95}, {c - 0.08, 0.95}],
+            do: {x, c + r + 0.003, z}
+          ),
           {0, 1, 0},
           "i-shade-t i-face"
         )
       ] ++
-      box({0.55, 0.25, 1.25}, {0.05, 0.06, 0.06}, "copper")
+      box({c + r, c - 0.03, 1.15}, {0.01, 0.06, 0.06}, "copper")
   end
 
   # The AC outside: a steel box with round corners on a pad. The grille of
@@ -572,18 +628,18 @@ defmodule DIYWeb.Icon.Shapes do
   # louvers, and the lower door has the window of the flame and a label.
   # The flue goes up from the back of its top.
   def model("furnace") do
-    {w, d, h} = {0.46, 0.71, 0.84}
+    {w, d, h} = {0.46, 0.7, 0.72}
 
     rbox({0, 0, 0}, {w, d, h}, 0.012, "steel") ++
-      cylinder({w / 2, 0.16, h}, 0.07, 0.16, "gray") ++
+      cylinder({w / 2, 0.16, h}, 0.07, 0.12, "gray") ++
       [
-        front({0.02, d, 0.45}, {w - 0.04, 0.37}, "i-steel-t"),
-        front({0.02, d, 0.03}, {w - 0.04, 0.4}, "i-steel-t")
+        front({0.02, d, 0.39}, {w - 0.04, 0.31}, "i-steel-t"),
+        front({0.02, d, 0.03}, {w - 0.04, 0.34}, "i-steel-t")
       ] ++
-      for(k <- 0..5, do: front({0.08, d + 0.002, 0.56 + k * 0.035}, {w - 0.16, 0.012}, "i-line")) ++
+      for(k <- 0..4, do: front({0.08, d + 0.002, 0.47 + k * 0.035}, {w - 0.16, 0.012}, "i-line")) ++
       [
-        front({0.17, d + 0.002, 0.24}, {0.12, 0.06}, "i-flame"),
-        front({0.06, d + 0.002, 0.08}, {0.12, 0.07}, "i-white-t")
+        front({0.17, d + 0.002, 0.2}, {0.12, 0.06}, "i-flame"),
+        front({0.06, d + 0.002, 0.07}, {0.12, 0.07}, "i-white-t")
       ]
   end
 
@@ -611,16 +667,16 @@ defmodule DIYWeb.Icon.Shapes do
   # A smart meter: the glass dome of the meter on its base, with its
   # display and its ring.
   def model("smart_meter") do
-    {w, d, h} = {0.25, 0.15, 0.36}
+    {w, h, f} = {0.25, 0.36, 0.142}
 
     rbox({0, 0, 0}, {w, 0.07, h}, 0.02, "gray") ++
-      tube({w / 2, 0.07, 0.17}, 0.105, 0.04, :y, "steel") ++
-      tube({w / 2, 0.11, 0.17}, 0.09, d - 0.11, :y, "white") ++
+      tube({w / 2, 0.07, 0.17}, 0.105, 0.03, :y, "steel") ++
+      tube({w / 2, 0.1, 0.17}, 0.09, f - 0.1, :y, "white") ++
       [
-        disc({w / 2, d + 0.002, 0.17}, :front, 0.08, "i-glass"),
-        front({w / 2 - 0.045, d + 0.002, 0.17}, {0.09, 0.035}, "i-black"),
-        front({w / 2 - 0.035, d + 0.004, 0.18}, {0.05, 0.015}, "i-led"),
-        disc({w / 2 - 0.03, d + 0.004, 0.22}, :front, 0.025, "i-shine")
+        disc({w / 2, f + 0.002, 0.17}, :front, 0.08, "i-glass"),
+        front({w / 2 - 0.045, f, 0.17}, {0.09, 0.035}, "i-black", 0.004),
+        front({w / 2 - 0.035, f, 0.18}, {0.05, 0.015}, "i-led", 0.006),
+        disc({w / 2 - 0.03, f + 0.006, 0.22}, :front, 0.025, "i-shine")
       ]
   end
 
@@ -637,7 +693,7 @@ defmodule DIYWeb.Icon.Shapes do
   def model("tv") do
     {w, h} = {1.12, 0.6}
 
-    box({0.36, 0.0, 0}, {0.4, 0.2, 0.02}, "dark") ++
+    box({0.36, 0.0, 0}, {0.4, 0.25, 0.02}, "dark") ++
       box({0.53, 0.06, 0.02}, {0.06, 0.04, 0.1}, "dark") ++
       box({0, 0.1, 0.12}, {w, 0.035, h}, "dark") ++
       [
@@ -658,11 +714,11 @@ defmodule DIYWeb.Icon.Shapes do
   def model("computer") do
     d = 0.41
 
-    box({0.2, 0.02, 0}, {0.21, 0.14, 0.012}, "dark") ++
+    box({0.2, 0.0, 0}, {0.21, 0.14, 0.012}, "dark") ++
       box({0.28, 0.04, 0.012}, {0.05, 0.03, 0.14}, "dark") ++
-      box({0.005, 0.07, 0.12}, {0.6, 0.025, 0.37}, "dark") ++
+      box({0.005, 0.07, 0.12}, {0.6, 0.025, 0.388}, "dark") ++
       [
-        front({0.015, 0.095, 0.135}, {0.58, 0.34}, "i-screen"),
+        front({0.015, 0.095, 0.135}, {0.58, 0.358}, "i-screen"),
         face(
           for(
             {x, z} <- [{0.1, 0.135}, {0.22, 0.135}, {0.36, 0.475}, {0.24, 0.475}],
@@ -677,17 +733,17 @@ defmodule DIYWeb.Icon.Shapes do
         k <- 0..3,
         do: top({0.08, 0.235 + k * 0.028, 0.008}, {0.38, 0.016}, "i-dark-t")
       ) ++
-      rbox({0.52, d - 0.12, 0}, {0.06, 0.1, 0.03}, 0.025, "white")
+      rbox({0.52, d - 0.11, 0}, {0.06, 0.104, 0.03}, 0.025, "white")
   end
 
-  # A ceiling fan: five blades under the motor, the bowl of its light under
+  # A ceiling fan: four blades under the motor, the bowl of its light under
   # them, and the rod up to the canopy on the ceiling.
   def model("ceiling_fan") do
     {c, z} = {0.66, 0.07}
 
     blades =
-      for k <- 0..4 do
-        a = 2 * :math.pi() * k / 5 + 0.3
+      for k <- 0..3 do
+        a = :math.pi() * k / 2
 
         along = fn t, s ->
           {c + t * :math.cos(a) - s * :math.sin(a), c + t * :math.sin(a) + s * :math.cos(a), z}
@@ -695,9 +751,9 @@ defmodule DIYWeb.Icon.Shapes do
 
         corners = [
           along.(0.12, -0.04),
-          along.(0.6, -0.065),
-          along.(0.64, 0.0),
-          along.(0.6, 0.065),
+          along.(0.62, -0.065),
+          along.(0.66, 0.0),
+          along.(0.62, 0.065),
           along.(0.12, 0.04)
         ]
 
@@ -708,21 +764,21 @@ defmodule DIYWeb.Icon.Shapes do
       blades ++
       cylinder({c, c, 0.07}, 0.11, 0.1, "steel") ++
       cylinder({c, c, 0.17}, 0.012, 0.09, "steel") ++
-      cylinder({c, c, 0.26}, 0.06, 0.04, "steel")
+      cylinder({c, c, 0.26}, 0.06, 0.045, "steel")
   end
 
   # A power strip: a white body with round corners, six outlets on its top,
-  # a red switch, and its cord.
+  # and a red switch.
   def model("always_on") do
-    {w, d, h} = {0.46, 0.15, 0.06}
+    {w, d, h} = {0.46, 0.15, 0.064}
 
     rbox({0, 0, 0}, {w, d, h}, 0.02, "white") ++
       for(
         k <- 0..5,
         part <- [
-          top({0.04 + k * 0.062, 0.035, h}, {0.045, 0.08}, "i-gray-t"),
-          top({0.05 + k * 0.062, 0.06, h + 0.002}, {0.006, 0.025}, "i-black"),
-          top({0.068 + k * 0.062, 0.06, h + 0.002}, {0.006, 0.025}, "i-black")
+          top({0.04 + k * 0.062, 0.035, h}, {0.045, 0.08}, "i-gray-t", 0.002),
+          top({0.05 + k * 0.062, 0.06, h}, {0.006, 0.025}, "i-black", 0.004),
+          top({0.068 + k * 0.062, 0.06, h}, {0.006, 0.025}, "i-black", 0.004)
         ],
         do: part
       ) ++
@@ -742,7 +798,7 @@ defmodule DIYWeb.Icon.Shapes do
       cylinder({0.5, d / 2, 0.025}, 0.095, 0.2, "blue") ++
       cylinder({0.5, d / 2, 0.225}, 0.1, 0.03, "dark") ++
       [disc({0.5, d / 2, 0.257}, :top, 0.075, "i-glass")] ++
-      cylinder({0.35, d / 2, 0.18}, 0.03, 0.1, "white")
+      cylinder({0.35, d / 2, 0.186}, 0.03, 0.09, "white")
   end
 
   # A tower heater: a white body with round corners on its foot. Its front
@@ -766,7 +822,7 @@ defmodule DIYWeb.Icon.Shapes do
   # A power station: a body with round corners, with two handles on its
   # top. Its dark front has its screen and its outlets. Its side has vents.
   def model("power_station") do
-    {w, d, h} = {0.64, 0.28, 0.41}
+    {w, d, h} = {0.625, 0.265, 0.41}
 
     box({0.04, 0.03, 0}, {w - 0.08, d - 0.06, 0.02}, "dark") ++
       rbox({0, 0, 0.02}, {w, d, h - 0.05}, 0.03, "steel") ++
@@ -814,21 +870,21 @@ defmodule DIYWeb.Icon.Shapes do
   # A transfer switch: a gray box with round corners. Its window shows two
   # rows of breakers, and the big red handle is at its right.
   def model("transfer_switch") do
-    {w, d, h} = {0.38, 0.18, 0.51}
+    {w, d, h} = {0.38, 0.13, 0.46}
 
-    cylinder({w / 2, 0.08, h}, 0.025, 0.06, "gray") ++
+    cylinder({w / 2, 0.06, h}, 0.025, 0.048, "gray") ++
       rbox({0, 0, 0}, {w, d, h}, 0.02, "gray") ++
       [
-        front({0.03, d, 0.03}, {w - 0.04, h - 0.06}, "i-steel-t"),
-        front({0.05, d + 0.002, 0.2}, {0.22, 0.25}, "i-black")
+        front({0.03, d, 0.03}, {0.24, h - 0.06}, "i-steel-t", 0.003),
+        front({0.05, d, 0.18}, {0.2, 0.22}, "i-black", 0.005)
       ] ++
       for(
         row <- 0..1,
         col <- 0..3,
-        do: front({0.07 + col * 0.05, d + 0.004, 0.24 + row * 0.11}, {0.03, 0.06}, "i-steel-l")
+        do: front({0.065 + col * 0.045, d, 0.2 + row * 0.1}, {0.03, 0.06}, "i-steel-l", 0.007)
       ) ++
-      [front({0.05, d + 0.002, 0.06}, {0.14, 0.08}, "i-white-t")] ++
-      box({0.3, d, 0.24}, {0.045, 0.06, 0.16}, "red")
+      [front({0.05, d, 0.06}, {0.14, 0.08}, "i-white-t", 0.005)] ++
+      box({0.3, d, 0.2}, {0.045, 0.048, 0.16}, "red")
   end
 
   # An electric car: the side profile of a crossover across its width. The
@@ -909,13 +965,25 @@ defmodule DIYWeb.Icon.Shapes do
            ),
            face(
              for(
-               {x, z} <- [{0.1, 0.86}, {w - 0.1, 0.86}, {w - 0.1, 0.94}, {0.1, 0.94}],
+               {x, z} <- [{0.1, 0.62}, {w - 0.1, 0.62}, {w - 0.1, 0.74}, {0.1, 0.74}],
                do: {x, -0.004, z}
              ),
              {0, -1, 0},
-             "i-hot"
+             "i-black"
            )
-         ] ++ sides}
+         ] ++
+         for(
+           x <- [0.12, w - 0.47],
+           do:
+             face(
+               for(
+                 {dx, z} <- [{0.0, 0.64}, {0.35, 0.64}, {0.35, 0.72}, {0.0, 0.72}],
+                 do: {x + dx, -0.006, z}
+               ),
+               {0, -1, 0},
+               "i-hot"
+             )
+         ) ++ sides}
     ]
   end
 
@@ -927,34 +995,37 @@ defmodule DIYWeb.Icon.Shapes do
   def model("swivel_seat") do
     {w, d} = {0.66, 0.66}
 
-    cylinder({w / 2, d / 2, 0}, 0.24, 0.06, "dark") ++
-      cylinder({w / 2, d / 2, 0.06}, 0.08, 0.14, "dark") ++
-      rbox({0.06, 0.06, 0.2}, {0.54, 0.58, 0.14}, 0.07, "cloth") ++
-      rbox({0.08, 0.04, 0.34}, {0.5, 0.15, 0.52}, 0.06, "cloth") ++
-      rbox({0.2, 0.06, 0.86}, {0.26, 0.11, 0.16}, 0.05, "cloth") ++
-      box({0.09, 0.19, 0.5}, {0.06, 0.36, 0.05}, "dark") ++
-      box({w - 0.15, 0.19, 0.5}, {0.06, 0.36, 0.05}, "dark")
+    cylinder({w / 2, d / 2 + 0.02, 0}, 0.24, 0.06, "dark") ++
+      cylinder({w / 2, d / 2 + 0.02, 0.06}, 0.08, 0.14, "dark") ++
+      rbox({0.0, 0.04, 0.2}, {w, d - 0.04, 0.14}, 0.07, "cloth") ++
+      rbox({0.04, 0.0, 0.34}, {w - 0.08, 0.15, 0.52}, 0.06, "cloth") ++
+      rbox({0.2, 0.02, 0.86}, {0.26, 0.11, 0.156}, 0.05, "cloth") ++
+      box({0.06, 0.15, 0.5}, {0.06, 0.36, 0.05}, "dark") ++
+      box({w - 0.12, 0.15, 0.5}, {0.06, 0.36, 0.05}, "dark")
   end
 
   # A DC to DC charger: a dark body with round corners and fins on its top.
   # It has its label, and the red and black cables at its end.
   def model("dc_charger") do
-    {w, d, h} = {0.18, 0.08, 0.13}
+    {w, d, h} = {0.138, 0.073, 0.124}
 
-    rbox({0, 0, 0}, {w, d, h}, 0.01, "dark") ++
-      for(k <- 0..4, do: top({0.015 + k * 0.034, 0.01, h}, {0.012, d - 0.02}, "i-gray-t")) ++
+    rbox({0, 0, 0}, {w, d, h}, 0.008, "dark") ++
+      for(
+        k <- 0..3,
+        do: top({0.012 + k * 0.034, 0.008, h}, {0.012, d - 0.016}, "i-gray-t", 0.002)
+      ) ++
       [
-        front({0.03, d, 0.04}, {0.12, 0.05}, "i-white-t"),
-        front({0.04, d + 0.002, 0.075}, {0.025, 0.01}, "i-led")
+        front({0.02, d, 0.035}, {0.1, 0.05}, "i-white-t", 0.002),
+        front({0.03, d, 0.07}, {0.02, 0.008}, "i-led", 0.003)
       ] ++
-      tube({w, 0.025, 0.03}, 0.008, 0.05, :x, "red") ++
-      tube({w, 0.055, 0.03}, 0.008, 0.05, :x, "dark")
+      tube({w, 0.022, 0.03}, 0.007, 0.04, :x, "red") ++
+      tube({w, 0.051, 0.03}, 0.007, 0.04, :x, "dark")
   end
 
   # A fridge of 12 V: a gray chest with round corners, and a dark lid with
   # its handle. The panel with its display is on the front.
   def model("van_fridge") do
-    {w, d, h} = {0.41, 0.64, 0.48}
+    {w, d, h} = {0.41, 0.605, 0.48}
 
     rbox({0, 0, 0}, {w, d, h - 0.08}, 0.04, "gray") ++
       rbox({0, 0, h - 0.08}, {w, d, 0.08}, 0.04, "dark") ++
@@ -1006,14 +1077,14 @@ defmodule DIYWeb.Icon.Shapes do
         top({0.12, 0.14, h + 0.002}, {w - 0.24, 0.22}, "i-steel-l"),
         disc({w / 2, 0.25, h + 0.004}, :top, 0.02, "i-dark-t")
       ] ++
-      cylinder({w / 2, 0.06, h}, 0.018, 0.22, "steel") ++
-      tube({w / 2, 0.078, h + 0.2}, 0.014, 0.09, :y, "steel")
+      cylinder({w / 2, 0.06, h}, 0.018, 0.2, "steel") ++
+      tube({w / 2, 0.078, h + 0.18}, 0.014, 0.09, :y, "steel")
   end
 
   # A tank of fresh water: a white tank with round corners, the line of the
   # water in it, its cap, and its fittings.
   def model("water_tank") do
-    {w, d, h} = {0.61, 0.38, 0.36}
+    {w, d, h} = {0.57, 0.37, 0.326}
 
     rbox({0, 0, 0}, {w, d, h}, 0.05, "white") ++
       [
@@ -1025,16 +1096,17 @@ defmodule DIYWeb.Icon.Shapes do
       tube({w, 0.26, 0.05}, 0.015, 0.04, :x, "white")
   end
 
-  # A water pump: the motor lies along x, the pump head is black, and the
-  # two fittings are blue.
+  # A water pump: the motor lies along x, and the pump head is black. The
+  # fitting of the water in is at its back, and the fitting of the water out
+  # is at its front. The two fittings are blue.
   def model("water_pump") do
-    d = 0.13
+    {d, c} = {0.127, 0.054}
 
-    box({0.02, 0.02, 0}, {0.16, d - 0.04, 0.01}, "dark") ++
-      tube({0.0, d / 2, 0.055}, 0.045, 0.11, :x, "steel") ++
-      tube({0.11, d / 2, 0.055}, 0.04, 0.05, :x, "dark") ++
-      tube({0.135, 0.0, 0.07}, 0.012, 0.024, :y, "blue") ++
-      tube({0.135, d - 0.024, 0.07}, 0.012, 0.024, :y, "blue")
+    box({0.02, 0.02, 0}, {0.16, d - 0.04, 0.004}, "dark") ++
+      tube({0.0, d / 2, c}, 0.05, 0.14, :x, "steel") ++
+      tube({0.14, d / 2, c}, 0.045, 0.063, :x, "dark") ++
+      tube({0.17, 0.0, 0.07}, 0.012, d / 2 - 0.045, :y, "blue") ++
+      tube({0.17, d / 2 + 0.045, 0.07}, 0.012, d / 2 - 0.045, :y, "blue")
   end
 
   # A counter: a cabinet with a dark toe kick, two drawers and two doors
@@ -1096,7 +1168,7 @@ defmodule DIYWeb.Icon.Shapes do
   # A window of a van: a black frame with round corners, the glass with a
   # shine, and its two latches.
   def model("window") do
-    {w, d, h} = {0.91, 0.05, 0.61}
+    {w, d, h} = {0.91, 0.043, 0.61}
     glass = for {z, x} <- rounded({0.05, 0.05}, {h - 0.1, w - 0.1}, 0.05), do: {x, d + 0.004, z}
 
     rslab(:y, {0, 0}, {h, w}, 0.08, 0, d, "dark") ++
@@ -1110,63 +1182,60 @@ defmodule DIYWeb.Icon.Shapes do
           {0, 1, 0},
           "i-shine"
         ),
-        front({0.2, d, 0.02}, {0.08, 0.02}, "i-gray-l"),
-        front({w - 0.28, d, 0.02}, {0.08, 0.02}, "i-gray-l")
+        front({0.2, d, 0.02}, {0.08, 0.02}, "i-gray-l", 0.008),
+        front({w - 0.28, d, 0.02}, {0.08, 0.02}, "i-gray-l", 0.008)
       ]
   end
 
-  # Lights of a van: three round lights on a strip, each with its bulb.
+  # Lights of a van: three round lights, each with its bulb.
   def model("van_lights") do
-    {w, d} = {0.3, 0.1}
-
-    rbox({0, 0.03, 0}, {w, d - 0.06, 0.006}, 0.02, "white") ++
-      for(
-        x <- [0.05, 0.15, 0.25],
-        part <-
-          cylinder({x, d / 2, 0}, 0.04, 0.018, "steel") ++
-            [disc({x, d / 2, 0.02}, :top, 0.03, "i-bulb")],
-        do: part
-      )
+    for(
+      x <- [0.052, 0.152, 0.252],
+      part <-
+        cylinder({x, 0.051, 0}, 0.05, 0.023, "steel") ++
+          [disc({x, 0.051, 0.025}, :top, 0.036, "i-bulb")],
+      do: part
+    )
   end
 
   # The devices: a laptop with its keyboard, its pad and its screen, and a
   # phone with its screen.
   def model("devices") do
-    {w, d} = {0.32, 0.22}
+    w = 0.27
 
-    rbox({0, 0.03, 0}, {w, d, 0.015}, 0.01, "gray") ++
+    rbox({0, 0.06, 0}, {w, 0.19, 0.015}, 0.01, "gray") ++
       [
-        top({0.02, 0.1, 0.015}, {w - 0.04, 0.1}, "i-dark-t"),
-        top({w / 2 - 0.05, 0.2, 0.015}, {0.1, 0.045}, "i-gray-r"),
+        top({0.015, 0.075, 0.015}, {w - 0.03, 0.09}, "i-dark-t", 0.001),
+        top({w / 2 - 0.045, 0.18, 0.015}, {0.09, 0.055}, "i-gray-r", 0.001),
         face(
-          [{0, 0.03, 0.015}, {w, 0.03, 0.015}, {w, -0.02, 0.22}, {0, -0.02, 0.22}],
+          [{0, 0.06, 0.015}, {w, 0.06, 0.015}, {w, 0.0, 0.25}, {0, 0.0, 0.25}],
           nil,
           "i-dark-l"
         ),
         face(
           [
-            {0.015, 0.032, 0.03},
-            {w - 0.015, 0.032, 0.03},
-            {w - 0.015, -0.013, 0.21},
-            {0.015, -0.013, 0.21}
+            {0.012, 0.063, 0.03},
+            {w - 0.012, 0.063, 0.03},
+            {w - 0.012, 0.006, 0.24},
+            {0.012, 0.006, 0.24}
           ],
-          {0, 1, 0.24},
+          {0, 1, 0.26},
           "i-screen"
         )
       ] ++
-      rbox({0.34, 0.14, 0}, {0.07, 0.14, 0.01}, 0.012, "dark") ++
-      [top({0.345, 0.148, 0.01}, {0.06, 0.124}, "i-screen")]
+      rbox({0.29, 0.12, 0}, {0.066, 0.13, 0.01}, 0.012, "dark") ++
+      [top({0.295, 0.128, 0.01}, {0.056, 0.114}, "i-screen", 0.001)]
   end
 
   # A diesel heater: the round body lies along x, with its two end caps and
   # the pipe of its exhaust.
   def model("diesel_heater") do
-    d = 0.13
+    r = 0.0635
 
-    tube({0.0, d / 2, 0.065}, 0.06, 0.02, :x, "dark") ++
-      tube({0.02, d / 2, 0.065}, 0.06, 0.2, :x, "red") ++
-      tube({0.22, d / 2, 0.065}, 0.06, 0.03, :x, "dark") ++
-      tube({0.25, d / 2, 0.065}, 0.025, 0.05, :x, "steel")
+    tube({0.0, r, r}, r, 0.02, :x, "dark") ++
+      tube({0.02, r, r}, r, 0.2, :x, "red") ++
+      tube({0.22, r, r}, r, 0.03, :x, "dark") ++
+      tube({0.25, r, r}, 0.025, 0.055, :x, "steel")
   end
 
   # A CO alarm: a round white body with a dome, its vents and its light.
@@ -1174,15 +1243,18 @@ defmodule DIYWeb.Icon.Shapes do
     c = 0.065
 
     cylinder({c, c, 0}, 0.064, 0.03, "white") ++
-      cylinder({c, c, 0.03}, 0.045, 0.015, "white") ++
-      for(k <- 0..2, do: top({c - 0.03, c - 0.012 + k * 0.012, 0.045}, {0.06, 0.005}, "i-line")) ++
-      [disc({c + 0.035, c + 0.035, 0.032}, :top, 0.006, "i-led")]
+      cylinder({c, c, 0.03}, 0.045, 0.02, "white") ++
+      for(
+        k <- 0..2,
+        do: top({c - 0.03, c - 0.012 + k * 0.012, 0.05}, {0.06, 0.005}, "i-line", 0.001)
+      ) ++
+      [disc({c + 0.052, c, 0.031}, :top, 0.006, "i-led")]
   end
 
   # A bed on its platform: the platform has drawers, and the mattress has
   # round corners, a duvet and two pillows.
   def model("bed_platform") do
-    {w, d, h} = {1.52, 1.91, 0.61}
+    {w, d} = {1.52, 1.89}
 
     box({0, 0, 0}, {w, d, 0.36}, "wood") ++
       for(
@@ -1193,10 +1265,10 @@ defmodule DIYWeb.Icon.Shapes do
         ],
         do: part
       ) ++
-      rbox({0.02, 0.02, 0.36}, {w - 0.04, d - 0.04, h - 0.4}, 0.08, "white") ++
-      rbox({0.02, 0.6, h - 0.04}, {w - 0.04, d - 0.62, 0.04}, 0.08, "cloth") ++
-      rbox({0.12, 0.08, h - 0.04}, {0.58, 0.36, 0.1}, 0.08, "white") ++
-      rbox({w - 0.7, 0.08, h - 0.04}, {0.58, 0.36, 0.1}, 0.08, "white")
+      rbox({0.02, 0.02, 0.36}, {w - 0.04, d - 0.04, 0.15}, 0.08, "white") ++
+      rbox({0.02, 0.6, 0.51}, {w - 0.04, d - 0.62, 0.03}, 0.08, "cloth") ++
+      rbox({0.12, 0.08, 0.51}, {0.58, 0.36, 0.1}, 0.08, "white") ++
+      rbox({w - 0.7, 0.08, 0.51}, {0.58, 0.36, 0.1}, 0.08, "white")
   end
 
   # Storage: a cabinet of three drawers, each with a bar for a handle.
@@ -1219,7 +1291,7 @@ defmodule DIYWeb.Icon.Shapes do
   # light of its charge. Its top has the handle, and the red and black
   # terminals.
   def model("van_battery") do
-    {w, d, h} = {0.33, 0.18, 0.23}
+    {w, d, h} = {0.33, 0.166, 0.204}
 
     rbox({0, 0, 0}, {w, d, h}, 0.015, "dark") ++
       [
@@ -1235,7 +1307,7 @@ defmodule DIYWeb.Icon.Shapes do
   # An inverter and charger: a blue body with round corners, its window with
   # a display and lights, its switch, and the fins on its side.
   def model("inverter") do
-    {w, d, h} = {0.25, 0.23, 0.36}
+    {w, d, h} = {0.244, 0.217, 0.356}
 
     rbox({0, 0, 0}, {w, d, h}, 0.02, "blue") ++
       [
@@ -1248,28 +1320,21 @@ defmodule DIYWeb.Icon.Shapes do
       for(k <- 0..5, do: side({w, 0.03, 0.05 + k * 0.045}, {d - 0.06, 0.012}, "i-line"))
   end
 
-  # A shore power inlet: a square plate with round corners, the round
-  # socket with its three pins, and its yellow lid.
+  # A shore power inlet: a square plate with round corners, and the round
+  # socket in its yellow ring, with its three pins.
   def model("shore_power") do
     {w, d, h} = {0.15, 0.08, 0.15}
 
     rslab(:y, {0, 0}, {h, w}, 0.02, 0, 0.02, "gray") ++
       tube({w / 2, 0.02, 0.07}, 0.05, d - 0.03, :y, "gray") ++
-      [disc({w / 2, d - 0.008, 0.07}, :front, 0.04, "i-black")] ++
+      [
+        disc({w / 2, d - 0.009, 0.07}, :front, 0.047, "i-flame"),
+        disc({w / 2, d - 0.008, 0.07}, :front, 0.038, "i-black")
+      ] ++
       for(
         {x, z} <- [{-0.015, 0.08}, {0.015, 0.08}, {0.0, 0.055}],
         do: disc({w / 2 + x, d - 0.006, z}, :front, 0.006, "i-steel-t")
-      ) ++
-      [
-        face(
-          for(
-            {x, z} <- [{0.02, 0.12}, {w - 0.02, 0.12}, {w - 0.02, 0.14}, {0.02, 0.14}],
-            do: {x, d, z}
-          ),
-          {0, 1, 0},
-          "i-flame"
-        )
-      ]
+      )
   end
 
   # Solar panels on the roof of a van: the frame with round corners, the
@@ -1301,14 +1366,19 @@ defmodule DIYWeb.Icon.Shapes do
   # The walls of a van: boards of light wood (shiplap), with the line of
   # each joint.
   def model("walls") do
-    {w, d, h} = {1.22, 0.05, 0.91}
+    {w, d, h} = {1.22, 0.046, 0.91}
 
     box({0, 0, 0}, {w, d, h}, "light-wood") ++
-      for(k <- 1..5, do: front({0, d, k * h / 6}, {w, 0.01}, "i-line")) ++
+      for(k <- 1..5, do: front({0, d, k * h / 6}, {w, 0.01}, "i-line", 0.004)) ++
       for(
         k <- 0..5,
         do:
-          front({if(rem(k, 2) == 0, do: 0.4, else: 0.8), d, k * h / 6}, {0.008, h / 6}, "i-line")
+          front(
+            {if(rem(k, 2) == 0, do: 0.4, else: 0.8), d, k * h / 6},
+            {0.008, h / 6},
+            "i-line",
+            0.004
+          )
       )
   end
 
@@ -1318,10 +1388,16 @@ defmodule DIYWeb.Icon.Shapes do
     {w, d, h} = {1.22, 1.22, 0.025}
 
     box({0, 0, 0}, {w, d, h}, "light-wood") ++
-      for(k <- 1..7, do: top({0, k * d / 8, h}, {w, 0.008}, "i-line")) ++
+      for(k <- 1..7, do: top({0, k * d / 8, h}, {w, 0.008}, "i-line", 0.001)) ++
       for(
         k <- 0..7,
-        do: top({if(rem(k, 2) == 0, do: 0.4, else: 0.8), k * d / 8, h}, {0.008, d / 8}, "i-line")
+        do:
+          top(
+            {if(rem(k, 2) == 0, do: 0.4, else: 0.8), k * d / 8, h},
+            {0.008, d / 8},
+            "i-line",
+            0.001
+          )
       )
   end
 

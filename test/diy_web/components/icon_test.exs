@@ -55,6 +55,21 @@ defmodule DIYWeb.IconTest do
     end
   end
 
+  test "the model of each kind has the size of the kind, so the plan does not squash it" do
+    # On the plan, solar panels are a rack or a part of a roof
+    # (`DIYWeb.Cutaway`). A camper van has the size of its model
+    # (`DIY.Layout.size/1`).
+    for kind <- Catalog.kinds(), kind.type not in ["solar_panels", "camper_van"] do
+      {w, d, h} = Catalog.size(kind.type)
+      {{x0, y0, z0}, {x1, y1, z1}} = Shapes.bounds(Shapes.model(kind.type))
+
+      for {model, inches} <- [{x1 - x0, w}, {y1 - y0, d}, {z1 - z0, h}] do
+        assert abs(model / (inches * 0.0254) - 1) <= 0.05,
+               "#{kind.type}: #{Float.round(model, 3)} m for #{inches} in"
+      end
+    end
+  end
+
   test "a loop round a rectangle with round corners" do
     near? = fn {a, b}, {c, d} -> abs(a - c) < 1.0e-9 and abs(b - d) < 1.0e-9 end
 
@@ -176,8 +191,9 @@ defmodule DIYWeb.IconTest do
     end
   end
 
-  test "a loop that is not convex paints its faces from the far one to the near one, each with its edge" do
-    # A loop in the shape of an L.
+  test "a loop that is not convex: each face has its edge, and the prism has no shape under its faces" do
+    # A loop in the shape of an L. The order of the paint is in the depth
+    # check of the cutaway tests.
     loop = [{0, 0}, {1, 0}, {1, 0.3}, {0.3, 0.3}, {0.3, 1}, {0, 1}]
 
     for turn <- 0..3, camera <- [Camera.house(), Camera.van()] do
@@ -193,10 +209,6 @@ defmodule DIYWeb.IconTest do
 
       for {:poly, _corners, class} <- body,
           do: assert(class =~ ~r/^i-white-(l|m1|m2|m3|r) i-face$/)
-
-      middle = fn corners -> Geometry.scale(Enum.reduce(corners, &Geometry.add/2), 1 / 4) end
-      depths = for {:poly, corners, _class} <- body, do: Camera.depth(camera, middle.(corners))
-      assert depths == Enum.sort(depths)
     end
   end
 
@@ -213,6 +225,12 @@ defmodule DIYWeb.IconTest do
     # the back and up.
     glass = for {:face, _corners, {0, ny, nz}, "i-glass-dark"} <- details, do: {ny > 0, nz > 0}
     assert Enum.sort(glass) == [{false, true}, {true, true}]
+
+    # The two tail lights are on the back of the body, from 0.36 m to
+    # 0.84 m high.
+    lights = for {:face, corners, {0, -1, 0}, "i-hot"} <- details, do: corners
+    assert length(lights) == 2
+    for corners <- lights, {_x, y, z} <- corners, do: assert(y < 0 and z > 0.36 and z < 0.84)
 
     # A tire is at each axle (0.95 m and 3.85 m from the back), on each
     # side.

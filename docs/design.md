@@ -872,9 +872,9 @@ It gets one of three steps between the light and the shade (`-m1`,
 - The house has the details of a real house. Its walls and the walls of
   the garage have lap siding: a line every 30 cm. The front of the roof
   has rows of shingles, and its eave has a gutter with a downspout. Each
-  window has two bars and a sill. The door has two panels, and the door
-  of the garage has panels and a row of windows. The car is the model of
-  the kind "ev": the same car as in the plan of the house.
+  square window has two bars and a sill. The door has two panels, and the
+  door of the garage has panels and a row of windows. The car is the model
+  of the kind "ev": the same car as in the plan of the house.
 - A flow shows only where the power goes in the model (`DIY.Power`). The
   grid goes to the meter. The panels go to the stations, or to the house
   or the meter on a grid-tie inverter. The stations go to the switch of
@@ -958,7 +958,7 @@ on a light page.
   - the car has the profile of a crossover, its glass, its doors and its
     wheels;
   - a pool pump has its motor, and a strainer with a clear lid;
-  - a ceiling fan has five blades, its light and its rod;
+  - a ceiling fan has four blades, its light and its rod;
   - a sink has its cabinet, its basin and its faucet;
   - a bed has its drawers, its mattress, a duvet and two pillows;
   - a battery has its label, its handle and its terminals.

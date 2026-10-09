@@ -172,6 +172,28 @@ defmodule DIYWeb.SceneTest do
       assert length(Regex.scan(~r/class="s-shingle"/, html)) == 11
       assert length(Regex.scan(~r/class="s-inset"/, html)) == 2
       assert html =~ "s-gdoor" == garage?
+
+      # The windows: floor 1 has 3 on the front (and the door). Each other
+      # floor has 4 on the front, and each floor has 2 on the side. Each
+      # square window has its frame, two bars and a sill (4 parts of the
+      # frame), and its glass. The door and the door of the garage have a
+      # frame, and the round window of the gable has a ring.
+      count = &length(Regex.scan(~r/class="#{&1}"/, html))
+      {front, side} = {3 + 4 * (floors - 1), 2 * floors}
+      garage = if garage?, do: 1, else: 0
+      assert count.("s-frame") == 4 * front + 1 + garage
+      assert count.("s-frame-r") == 4 * side + 1
+
+      # The glass: the windows, the door, the gable, the meter, and the
+      # row of 4 windows of the garage door. The garage door has 3 lines
+      # across and 3 lines up.
+      assert count.("s-glass") == front + side + 3 + 4 * garage
+      assert count.("s-gline") == 6 * garage
+
+      # The trim: the 3 edges of the roof, and 3 faces of each box. The
+      # boxes are the roof of the door, the gutter, the downspout, and the
+      # edge of the roof of the garage.
+      assert length(Regex.scan(~r/class="s-fascia-[lrt]"/, html)) == 3 + 3 * (3 + garage)
     end
   end
 
