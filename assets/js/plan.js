@@ -2,19 +2,20 @@
 // person moves the items and the rooms with a pointer (a finger or a
 // mouse). Two fingers, the wheel or the buttons zoom. A drag on an empty
 // place moves the picture. A tap on an item opens it, and a tap on a room
-// chooses it: the room then has handles on its walls. In the list of the
-// rooms (for a keyboard and a screen reader), the arrow keys move an item
-// or a room.
+// chooses it: the room then has handles on its walls, and the view zooms
+// in to it. In the list of the rooms (for a keyboard and a screen reader),
+// the arrow keys move an item or a room.
 //
 // The server draws the SVG. This script only moves parts of it while the
 // pointer moves, and then sends the change: the server then draws it again.
 //
 // The math. A point of the plan is x, y in inches, on the surface of a
-// room. It goes to the SVG with the units of one inch (data-k: kx, ky, kz).
-// It also uses the origin of the surface (data-origin: the SVG point of
+// room. It goes to the SVG with the axes of the camera (data-axes: the SVG
+// vectors of one inch along x, along y and up, DIYWeb.Camera.axes/1). It
+// also uses the origin of the surface (data-origin: the SVG point of
 // 0, 0):
-//   sx = ox + kx (x - y)
-//   sy = oy + ky (x + y) - kz z
+//   sx = ox + ax x + bx y + cx z
+//   sy = oy + ay x + by y + cy z
 // A floor is flat (z = 0). A roof (data-rise) has a ridge along x, at the
 // middle of its depth. On a roof, z is 0 at the eaves and the rise at the
 // ridge.
@@ -41,35 +42,42 @@ export function heightAt(surface, y) {
 }
 
 // The SVG point of a point of the plan on a surface.
-export function forward(point, surface, k) {
-  const [kx, ky, kz] = k
+export function forward(point, surface, axes) {
+  const [ax, ay, bx, by, cx, cy] = axes
   const [ox, oy] = surface.origin
   const z = heightAt(surface, point.y)
-  return {x: ox + kx * (point.x - point.y), y: oy + ky * (point.x + point.y) - kz * z}
+  return {x: ox + ax * point.x + bx * point.y + cx * z, y: oy + ay * point.x + by * point.y + cy * z}
+}
+
+// The x, y of a move on the SVG (u, v), with the SVG vectors of one inch
+// along x (a) and along y (b): it solves u = ax x + bx y, v = ay x + by y.
+function solve(u, v, [ax, ay], [bx, by]) {
+  const det = ax * by - bx * ay
+  return {x: (u * by - bx * v) / det, y: (ax * v - ay * u) / det}
 }
 
 // The point of the plan on a surface under an SVG point.
-export function inverse(svg, surface, k) {
-  const [kx, ky, kz] = k
+export function inverse(svg, surface, axes) {
+  const [ax, ay, bx, by, cx, cy] = axes
   const [ox, oy] = surface.origin
-  const a = (svg.x - ox) / kx
-  const b = (svg.y - oy) / ky
-  if (!surface.rise) return {x: (a + b) / 2, y: (b - a) / 2}
+  const [u, v] = [svg.x - ox, svg.y - oy]
+  if (!surface.rise) return solve(u, v, [ax, ay], [bx, by])
 
-  // On a roof: the front slope (from the ridge to the front), else the
-  // back slope. q is the part of z in the SVG y.
+  // On a roof, z goes with y: z = z0 + m y on each slope. So a slope is a
+  // plane with the vector b + m c along y, from the point z0 c. The front
+  // slope goes from the ridge to the front; else the point is on the back
+  // slope.
   const [, py, , d] = surface.plan
   const ridge = py + d / 2
   const m = surface.rise / (d / 2)
-  const q = kz / ky
-  const front = (b + q * (surface.rise + m * ridge) - a) / (2 + q * m)
-  const y = front >= ridge ? front : (b + q * (surface.rise - m * ridge) - a) / (2 - q * m)
-  return {x: a + y, y}
+  const slope = (z0, k) => solve(u - cx * z0, v - cy * z0, [ax, ay], [bx + k * cx, by + k * cy])
+  const front = slope(surface.rise + m * ridge, -m)
+  return front.y >= ridge ? front : slope(surface.rise - m * ridge, m)
 }
 
 // True when the point of the plan under an SVG point is on a surface.
-export function onSurface(svg, surface, k) {
-  const p = inverse(svg, surface, k)
+export function onSurface(svg, surface, axes) {
+  const p = inverse(svg, surface, axes)
   const [x, y, w, d] = surface.plan
   return p.x >= x && p.x <= x + w && p.y >= y && p.y <= y + d
 }
@@ -81,11 +89,10 @@ export function unitsOf(view, width, height) {
 }
 
 // A move on the SVG as a move on a flat plan, in inches.
-export function delta(dsx, dsy, k) {
-  const [kx, ky] = k
-  const a = dsx / kx
-  const b = dsy / ky
-  return {dx: (a + b) / 2, dy: (b - a) / 2}
+export function delta(dsx, dsy, axes) {
+  const [ax, ay, bx, by] = axes
+  const {x, y} = solve(dsx, dsy, [ax, ay], [bx, by])
+  return {dx: x, dy: y}
 }
 
 // The plan of a room after a move of one of its walls. x0 and y0 are the
@@ -105,7 +112,7 @@ export function resize(plan, edge, dx, dy) {
 }
 
 // The SVG points of the corners of a plan on a flat surface.
-export function outline(plan, origin, k) {
+export function outline(plan, origin, axes) {
   const [x, y, w, d] = plan
   const surface = {origin, plan, rise: 0}
   return [
@@ -114,7 +121,7 @@ export function outline(plan, origin, k) {
     [x + w, y + d],
     [x, y + d],
   ]
-    .map(([px, py]) => forward({x: px, y: py}, surface, k))
+    .map(([px, py]) => forward({x: px, y: py}, surface, axes))
     .map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`)
     .join(" ")
 }
@@ -127,17 +134,39 @@ export function zoom(view, factor, px, py, fit) {
   return {x: px - (px - view.x) / f, y: py - (py - view.y) / f, w, h: view.h / f}
 }
 
-// The move of an arrow key, in inches: 6, or 24 with Shift. Right and left
-// go along x, down and up along y.
-export function arrow(key, shift) {
+// The move of an arrow key, in inches: 6, or 24 with Shift. The key moves
+// the item as it points on the screen. The arrows of the camera
+// (data-arrows: rx ry dx dy, DIYWeb.Camera.arrows/1) are the steps of the
+// plan for a move to the right and for a move down the screen.
+export function arrow(key, shift, arrows) {
   const step = shift ? 24 : 6
+  const [rx, ry, dx, dy] = arrows
   const moves = {
-    ArrowRight: [step, 0],
-    ArrowLeft: [-step, 0],
-    ArrowDown: [0, step],
-    ArrowUp: [0, -step],
+    ArrowRight: [rx, ry],
+    ArrowLeft: [-rx, -ry],
+    ArrowDown: [dx, dy],
+    ArrowUp: [-dx, -dy],
   }
-  return moves[key] ? {dx: moves[key][0], dy: moves[key][1]} : null
+  // (+ 0 makes a -0 a 0.)
+  return moves[key] ? {dx: moves[key][0] * step + 0, dy: moves[key][1] * step + 0} : null
+}
+
+// True when two boxes ({x, y, width, height}) overlap.
+export function overlaps(a, b) {
+  return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+}
+
+// The view that shows a box of the SVG (a room) on a screen of a shape
+// (w / h): the box with a margin, at the middle. A view that shows it in
+// more detail stays: a tap does not zoom out.
+export function focus(view, box, shape) {
+  const margin = 1.15
+  let w = box.w * margin
+  let h = box.h * margin
+  if (w / h < shape) w = h * shape
+  else h = w / shape
+  if (w >= view.w) return view
+  return {x: box.x + box.w / 2 - w / 2, y: box.y + box.h / 2 - h / 2, w, h}
 }
 
 // The view as the text of a viewBox.
@@ -155,7 +184,8 @@ const KEY = "plan-view:"
 export const planHook = {
   mounted() {
     this.svg = this.el.querySelector("svg")
-    this.k = numbers(this.svg.getAttribute("data-k"))
+    this.axes = numbers(this.svg.getAttribute("data-axes"))
+    this.arrows = numbers(this.svg.getAttribute("data-arrows"))
     this.pointers = new Map()
     this.drag = null
     const saved = this.saved()
@@ -202,6 +232,11 @@ export const planHook = {
     }
   },
 
+  // The server draws the SVG again: its labels show again.
+  updated() {
+    this.declutter()
+  },
+
   // Shows a view: the viewBox, and the size of the labels and the handles
   // on the screen (the same at each zoom).
   show(view) {
@@ -211,10 +246,30 @@ export const planHook = {
     this.svg.style.setProperty("--p-label", `${(12 * units).toFixed(3)}px`)
     // A handle is 24 pixels wide: the smallest target of WCAG 2.2 (2.5.8).
     this.svg.style.setProperty("--p-handle", `${(12 * units).toFixed(3)}px`)
+    // After a zoom, the labels have a new size on the SVG.
+    if (units !== this.labelUnits) {
+      this.labelUnits = units
+      this.declutter()
+    }
     try {
       this.el.ownerDocument.defaultView.sessionStorage.setItem(KEY + this.el.id, box(view))
     } catch (_error) {
       // A page with no storage keeps the view only while it is open.
+    }
+  },
+
+  // Where two labels overlap, the label of the larger room shows
+  // (data-rank), and the other one hides until a zoom in.
+  declutter() {
+    const labels = [...this.svg.querySelectorAll("[data-rank]")].sort(
+      (a, b) => Number(b.getAttribute("data-rank")) - Number(a.getAttribute("data-rank")),
+    )
+    const shown = []
+    for (const label of labels) {
+      label.style.visibility = ""
+      const box = label.getBBox()
+      if (shown.some((other) => overlaps(other, box))) label.style.visibility = "hidden"
+      else shown.push(box)
     }
   },
 
@@ -307,9 +362,9 @@ export const planHook = {
     const outlineEl = this.svg.querySelector("[data-outline]")
     const plan = numbers(outlineEl.getAttribute("data-plan"))
     const origin = numbers(outlineEl.getAttribute("data-origin"))
-    const {dx, dy} = delta(sdx, sdy, this.k)
+    const {dx, dy} = delta(sdx, sdy, this.axes)
     const edge = handle.getAttribute("data-handle")
-    outlineEl.setAttribute("points", outline(resize(plan, edge, dx, dy), origin, this.k))
+    outlineEl.setAttribute("points", outline(resize(plan, edge, dx, dy), origin, this.axes))
     handle.setAttribute("transform", `translate(${sdx.toFixed(2)} ${sdy.toFixed(2)})`)
   },
 
@@ -367,22 +422,36 @@ export const planHook = {
       const outlineEl = this.svg.querySelector("[data-outline]")
       const plan = numbers(outlineEl.getAttribute("data-plan"))
       const origin = numbers(outlineEl.getAttribute("data-origin"))
-      outlineEl.setAttribute("points", outline(plan, origin, this.k))
+      outlineEl.setAttribute("points", outline(plan, origin, this.axes))
     }
   },
 
   inches(drag) {
-    const {dx, dy} = delta(drag.sdx, drag.sdy, this.k)
-    return {dx: Math.round(dx), dy: Math.round(dy)}
+    const {dx, dy} = delta(drag.sdx, drag.sdy, this.axes)
+    return {dx: Math.round(dx) + 0, dy: Math.round(dy) + 0}
   },
 
-  // A tap: an item opens; a room is chosen; the empty place clears the
-  // choice.
+  // A tap: an item opens; a room is chosen, and the view zooms in to it;
+  // the empty place clears the choice.
   tap(drag) {
     if (drag.kind === "handle") return
     if (drag.kind === "item") return this.pushEvent("open_item", {id: drag.el.getAttribute("data-item")})
     const id = drag.room ? drag.room.getAttribute("data-room") : ""
+    if (drag.room) this.zoomTo(drag.room)
     this.pushEvent("select_room", {id})
+  },
+
+  // The view zooms in to a room: its floor, its items and its walls.
+  zoomTo(room) {
+    const id = room.getAttribute("data-room")
+    const parts = [room, ...this.svg.querySelectorAll(`[data-in="${id}"], [data-of="${id}"]`)]
+    const boxes = parts.map((el) => el.getBBox())
+    const x = Math.min(...boxes.map((b) => b.x))
+    const y = Math.min(...boxes.map((b) => b.y))
+    const w = Math.max(...boxes.map((b) => b.x + b.width)) - x
+    const h = Math.max(...boxes.map((b) => b.y + b.height)) - y
+    const shape = (this.svg.clientWidth || 1) / (this.svg.clientHeight || 1)
+    this.show(focus(this.view, {x, y, w, h}, shape))
   },
 
   // An item that the person drops: the center of its space on the floor
@@ -395,13 +464,13 @@ export const planHook = {
   dropItem(drag, e) {
     const own = this.surface(drag.el.getAttribute("data-in"))
     const [cx, cy] = numbers(drag.el.getAttribute("data-at"))
-    const start = forward({x: cx, y: cy}, surfaceOf(own), this.k)
+    const start = forward({x: cx, y: cy}, surfaceOf(own), this.axes)
     const point = {x: start.x + drag.sdx, y: start.y + drag.sdy}
     const under = this.roomAt(e.clientX, e.clientY)
     const layers = [under && under.closest("[data-box]"), own.closest("[data-box]")]
     const rooms = layers.filter(Boolean).flatMap((layer) => [...layer.querySelectorAll("[data-room]")])
-    const target = [own, ...rooms].find((el) => onSurface(point, surfaceOf(el), this.k)) || under || own
-    const center = inverse(point, surfaceOf(target), this.k)
+    const target = [own, ...rooms].find((el) => onSurface(point, surfaceOf(el), this.axes)) || under || own
+    const center = inverse(point, surfaceOf(target), this.axes)
     this.send(
       "place_item",
       {
@@ -445,7 +514,7 @@ export const planHook = {
   // The arrow keys on an item or a room of the list.
   key(e) {
     const el = e.target.closest ? e.target.closest("[data-nudge], [data-nudge-room]") : null
-    const move = arrow(e.key, e.shiftKey)
+    const move = arrow(e.key, e.shiftKey, this.arrows)
     if (!el || !move) return
     e.preventDefault()
     const item = el.getAttribute("data-nudge")
