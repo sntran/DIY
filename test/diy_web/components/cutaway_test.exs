@@ -308,6 +308,75 @@ defmodule DIYWeb.CutawayTest do
     refute html =~ ~r/class="p-tex [^"]*" data-/
   end
 
+  test "the items that run have small loops: only in the house, and they stop" do
+    css = File.read!("assets/css/app.css")
+
+    # The loops are in the house, for an item that is not planned, and only
+    # when the person does not ask for less motion. Each loop stops after 5
+    # seconds at most, at its first state (an even count of runs).
+    [loops] =
+      for [_, block] <-
+            Regex.scan(~r/@media \(prefers-reduced-motion: no-preference\) \{(.*?)\n\}/s, css),
+          block =~ "cutaway-house",
+          do: block
+
+    for part <- ~w(i-fire i-coil) do
+      [_, time, count] =
+        Regex.run(
+          ~r/\.cutaway-house \.#{part} \{ animation: var\(--p-[a-z]+, none\) ([\d.]+)s [\w-]+ (\d+) alternate \}/,
+          loops
+        )
+
+      assert String.to_float(time) * String.to_integer(count) <= 5
+      assert rem(String.to_integer(count), 2) == 0
+      refute String.replace(css, loops, "") =~ ".#{part} { animation:"
+    end
+
+    # A loop runs only in the layer that shows: the name of its animation is
+    # there. So a loop starts when the person opens the tab of its layer.
+    for id <- ~w(ground f2 f3 attic roof) do
+      assert loops =~
+               ".cutaway-house[data-dim=#{id}] > #plan-#{id} .p-item:not(.p-planned)"
+    end
+
+    assert loops =~ ".cutaway-house:not([data-dim]) .p-item:not(.p-planned)"
+    assert loops =~ "{ --p-fire: p-flicker; --p-coil: p-warm }"
+
+    # Only the flame of a furnace and the hot coils have a loop: not a tail
+    # light of a car or of a van.
+    m = 0.0254
+    frame = %{at: {0, 0, 0}, turn: 0, camera: Camera.house()}
+
+    looped =
+      for type <- Catalog.types(),
+          {w, d, h} = Catalog.size(type),
+          {:poly, _corners, class} <-
+            Shapes.placed(type, Map.put(frame, :size, {w * m, d * m, h * m})),
+          class =~ ~r/i-fire|i-coil/,
+          uniq: true,
+          do: type
+
+    assert Enum.sort(looped) == ~w(furnace heat_strips space_heater)
+
+    for {model, _name, _numbers, _source} <- Catalog.van_models(),
+        {:poly, _corners, class} <- Shapes.placed_model(Shapes.van(model), frame),
+        do: refute(class =~ ~r/i-fire|i-coil/)
+
+    # On the plan, the flame of the furnace is a part of its item (a group
+    # with the class p-item).
+    build = house()
+    furnace = Enum.find(build.items, &(&1.type == "furnace")).id
+
+    assert [{_points, "i-flame i-fire"}] =
+             for(
+               level <- Cutaway.view(build).levels,
+               %{kind: :item, id: ^furnace} = object <- level.objects,
+               {_p, class} = poly <- object.polys,
+               class =~ "i-fire",
+               do: poly
+             )
+  end
+
   test "a soft shadow under an item on a floor, and none under an item on a wall" do
     build = house()
     kitchen = room(build, "Kitchen")

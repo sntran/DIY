@@ -638,7 +638,7 @@ defmodule DIYWeb.Icon.Shapes do
       ] ++
       for(k <- 0..4, do: front({0.08, d + 0.002, 0.47 + k * 0.035}, {w - 0.16, 0.012}, "i-line")) ++
       [
-        front({0.17, d + 0.002, 0.2}, {0.12, 0.06}, "i-flame"),
+        front({0.17, d + 0.002, 0.2}, {0.12, 0.06}, "i-flame i-fire"),
         front({0.06, d + 0.002, 0.07}, {0.12, 0.07}, "i-white-t")
       ]
   end
@@ -655,7 +655,7 @@ defmodule DIYWeb.Icon.Shapes do
       ] ++
       for(
         k <- 0..6,
-        do: front({0.12 + k * 0.1, d + 0.002, 0.13}, {0.035, 0.35}, "i-hot")
+        do: front({0.12 + k * 0.1, d + 0.002, 0.13}, {0.035, 0.35}, "i-hot i-coil")
       ) ++
       for(
         k <- 0..1,
@@ -821,7 +821,7 @@ defmodule DIYWeb.Icon.Shapes do
       [front({0.05, d - 0.02, 0.1}, {w - 0.1, 0.4}, "i-black")] ++
       for(
         k <- 0..6,
-        do: front({0.06, d - 0.018, 0.12 + k * 0.053}, {w - 0.12, 0.022}, "i-hot")
+        do: front({0.06, d - 0.018, 0.12 + k * 0.053}, {w - 0.12, 0.022}, "i-hot i-coil")
       ) ++
       [
         top({0.06, 0.05, h}, {w - 0.12, 0.06}, "i-dark-t"),
