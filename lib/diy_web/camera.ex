@@ -12,9 +12,9 @@ defmodule DIYWeb.Camera do
     a little. The house goes along the screen, and its floors go down the
     screen. An item shows its front.
   - `van/0`: a van with no wall on its left side. The camera is at the
-    left side of the van (the side of the driver, at the large x), a
-    little to its back. The cab is at the left of the screen, and the
-    doors at the back are at the right.
+    left side of the van (the side of the driver, at the large x). It is
+    a little to the front of the van (to the cab). The cab is at the left
+    of the screen, and the doors at the back are at the right.
 
   The eye is at the large x, the large y and the large z of the world, for
   the two cameras. So a box shows its top, its front (at `y + d`) and its
@@ -59,7 +59,7 @@ defmodule DIYWeb.Camera do
       eye: {ca * cb, sa * cb, sb},
       ground: {ca, sa},
       # The face of a box that looks more to the camera.
-      lit: if(yaw >= 45, do: :front, else: :side)
+      lit: if(sa >= ca, do: :front, else: :side)
     }
   end
 

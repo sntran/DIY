@@ -894,7 +894,7 @@ defmodule DIYWeb.Scene do
         {:poly, across.({y, high}, {cab, high}), "s-van-t"},
         {:poly, across.({cab, high}, {y + 4.8, 2.5}), "s-van-t"}
       ] ++
-      van_roof({x, y}, parts) ++
+      van_roof({x, y}, parts, camera) ++
       [
         {:poly, across.({y + 5.3, 1.6}, {y + 4.8, 2.5}), "s-vglass"},
         {:poly, across.({nose, 1.45}, {y + 5.3, 1.6}), "s-van-t"},
@@ -904,7 +904,7 @@ defmodule DIYWeb.Scene do
   end
 
   # The panels on the roof of a van (two in a row), and its fan.
-  defp van_roof({x, y}, parts) do
+  defp van_roof({x, y}, parts, camera) do
     panels =
       if parts.solar > 0 do
         for i <- 0..(count(parts.solar, @van_panel_w, 4) - 1) do
@@ -918,7 +918,7 @@ defmodule DIYWeb.Scene do
 
     fan =
       if parts.fan,
-        do: faces(Geometry.box({x + 0.75, y + 3.4, @van_h}, {0.6, 0.6, 0.18}), "s-ac"),
+        do: faces(Geometry.box({x + 0.75, y + 3.4, @van_h}, {0.6, 0.6, 0.18}), "s-ac", camera),
         else: []
 
     panels ++ fan

@@ -6,8 +6,8 @@ defmodule DIYWeb.VanCutaway do
   and the same hook moves the items and the zones.
 
   The plan of the van is `DIY.Layout.van_box/1`. `x` goes across the van,
-  from its left side (the side of the driver). `y` goes along it, from the
-  doors at the back to the cab. The zones (`DIY.Catalog.zones/0`) are the
+  from its right side (the side of the sliding door). `y` goes along it,
+  from the doors at the back to the cab. The zones (`DIY.Catalog.zones/0`) are the
   rooms of the van. The cab and the roof of the van are fixed: they have
   no handles.
 

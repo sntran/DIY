@@ -7,11 +7,12 @@ defmodule DIYWeb.Cutaway do
   its size. Each item shows at its place, its size and its turn
   (`DIY.Layout`).
 
-  The walls on the outside at the back have their full height. The walls
-  at the two sides of a room are cut on a slope. They are full at the back
-  of the house, and near the floor at its front. The walls at the front of
-  a room are cut near the floor. So the camera sees each room and its
-  items.
+  The walls on the outside at the back have their full height. The wall
+  on the outside at the left end of the house is cut on a slope. It is full
+  at the back of the house, and near the floor at its front. The other
+  walls are cut near the floor: at the front of a room, between two rooms,
+  and at the right end. A wall is also cut near the floor where a room or
+  a yard is behind it. So the camera sees each room and its items.
 
   The page moves the items and the rooms with a script (the hook Plan,
   `assets/js/plan.js`). The SVG gives the script what it needs:
@@ -193,7 +194,7 @@ defmodule DIYWeb.Cutaway do
 
     high = if id == "attic", do: @attic, else: @full
     inside = Enum.filter(rooms, &(&1.place == :indoor))
-    walls = walls(id, inside, fn room -> {floor_z.(room), high} end, camera)
+    walls = walls(id, {inside, rooms}, fn room -> {floor_z.(room), high} end, camera)
     {lot(id, rooms, house, camera), slabs, walls}
   end
 
@@ -232,29 +233,30 @@ defmodule DIYWeb.Cutaway do
         "p-slab"
       )
 
-  # The walls of the rooms of a layer: on each side of each room. A wall
-  # between two rooms stands on the line between them. Only the room at
-  # its back draws it (the eye is at the large x and y). `base` gives the
-  # floor of a room and the full height of a wall (meters).
+  # The walls of the rooms inside of a layer: on each side of each room. A
+  # wall between two rooms stands on the line between them. Only the room
+  # at its back draws it (the eye is at the large x and y). The rooms of the
+  # layer (with the yards) tell where a wall has a room behind it. `base`
+  # gives the floor of a room and the full height of a wall (meters).
   #
-  # The cut of a wall comes from its side (`cut/2`). A wall at the back of
-  # a room can be on the outside, with no room of the layer behind it.
-  # Then it has its full height. Else it is cut near the floor. A wall at
-  # the front is cut near the floor. A wall at a side of a room is cut on a
-  # slope (`slope/3`). It is full at the back of the rooms of the layer,
-  # and near the floor at their front.
-  defp walls(id, rooms, base, camera) do
+  # The cut of a wall comes from its side (`cut/2`). A wall on the outside
+  # can have no room of the layer behind it (the kind `:high`). At the back,
+  # such a wall has its full height. At the far side, it is cut on a slope
+  # (`slope/3`). It is full at the back of the rooms of the layer, and near
+  # the floor at their front. Each other wall is cut near the floor. A high
+  # wall between two rooms, or at the near side, hides a part of a room.
+  defp walls(id, {rooms, all}, base, camera) do
     span = depth_span(rooms, camera)
 
     for room <- rooms,
         side <- ~w(x0 y0 x1 y1),
-        {{a, b, kind}, i} <- Enum.with_index(spans(room, side, rooms)) do
+        {{a, b, kind}, i} <- Enum.with_index(spans(room, side, rooms, all)) do
       {floor, high} = base.(room)
 
       height =
         case {cut(side, camera), kind} do
           {:back, :high} -> {high, high}
-          {:side, _kind} -> :slope
+          {:far, :high} -> :slope
           _low -> {@low, @low}
         end
 
@@ -266,22 +268,26 @@ defmodule DIYWeb.Cutaway do
 
   @doc """
   The cut of the wall on a side of a plan (`x0`, `y0`, `x1` or `y1`) for a
-  camera. It is `:back`, `:front` or `:side`. The back is the side far
-  from the eye, and the front is the side near the eye. A side is to the
-  left or to the right of the screen.
+  camera: `:back`, `:front`, `:far` or `:near`. The back and the front are
+  on the axis to the eye (`DIYWeb.Camera.depth_axis/1`). The far side and
+  the near side are on the other axis. For the house, the far side is the
+  left, and the near side is the right.
   """
   def cut(side, camera) do
     case {Camera.depth_axis(camera), side} do
       {:y, "y0"} -> :back
       {:y, "y1"} -> :front
+      {:y, "x0"} -> :far
+      {:y, "x1"} -> :near
       {:x, "x0"} -> :back
       {:x, "x1"} -> :front
-      _other -> :side
+      {:x, "y0"} -> :far
+      {:x, "y1"} -> :near
     end
   end
 
   # The range of the rooms of a layer along the axis to the eye (inches).
-  # It gives the back and the front of the slope of the walls at the sides.
+  # It gives the back and the front of the slope of a wall at a side.
   defp depth_span([], _camera), do: {0, 1}
 
   defp depth_span(rooms, camera) do
@@ -305,15 +311,18 @@ defmodule DIYWeb.Cutaway do
   end
 
   # The parts of a side of a room, in inches along the side. Each part has
-  # its kind: :high, :low, or :shared (a low wall between two rooms).
-  defp spans(room, side, rooms) do
+  # its kind: :high, :low, or :shared (a low wall between two rooms inside).
+  # A part is :high when no room of the layer (`all`, with the yards) is
+  # behind it.
+  defp spans(room, side, rooms, all) do
     others = Enum.reject(rooms, &(&1.id == room.id))
     {line, range} = edge(room.plan, side)
     touch = for o <- others, across(o.plan, side) == line, do: along(o.plan, side)
     back? = side in ~w(x0 y0)
+    behind = behind(Enum.reject(all, &(&1.id == room.id)), side, line)
 
     for {a, b, shared?} <- split(range, touch),
-        part <- span(a, b, shared?, back?, behind(others, side, line)),
+        part <- span(a, b, shared?, back?, behind),
         do: part
   end
 

@@ -309,7 +309,7 @@ async function build(context, name) {
   await page.waitForFunction(([s, at]) => document.querySelector(s).getAttribute("data-at") !== at, [tv, tvAt])
     .catch(() => assert.fail(`${name}: the TV moves with a drag`))
 
-  // A tap on the kitchen chooses it. The handle of its back wall moves the
+  // A tap on the kitchen chooses it. The handle of its left wall moves the
   // wall.
   const kitchen = `polygon[data-room="${await roomId(page, "Kitchen")}"]`
   await page.mouse.click(...Object.values(center(await page.locator(kitchen).boundingBox())))
@@ -318,7 +318,7 @@ async function build(context, name) {
   const plan = await page.getAttribute(kitchen, "data-plan")
   await drag(page, center(await page.locator('circle[data-handle="x0"]').boundingBox()), -26, -15)
   await page.waitForFunction(([s, p]) => document.querySelector(s).getAttribute("data-plan") !== p, [kitchen, plan])
-    .catch(() => assert.fail(`${name}: the back wall of the kitchen moves with its handle`))
+    .catch(() => assert.fail(`${name}: the left wall of the kitchen moves with its handle`))
   // The living room is next to the kitchen. So the button that moves the
   // kitchen to it cannot move, but it keeps the focus, and the page says
   // why.

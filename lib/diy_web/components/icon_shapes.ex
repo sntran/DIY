@@ -10,9 +10,9 @@ defmodule DIYWeb.Icon.Shapes do
   have the class `i-face`: a thin edge, so that a white item shows on a
   light page.
 
-  The unit is near a meter, and the front of an item looks to the left (y).
+  The unit is near a meter, and the front of an item looks to y.
   A model (`model/1`) is a list of parts. A part at the back paints first
-  (`parts/2`). Where no part is behind another, the order of the model
+  (`parts/3`). Where no part is behind another, the order of the model
   stays. The parts:
 
   - `{:box, corner, size, material}`: a box.
@@ -366,9 +366,12 @@ defmodule DIYWeb.Icon.Shapes do
   end
 
   # A cylinder that stands at a center. It shows the near half of its body
-  # (a part in the light and a part in the shade), and its top. A point of the ring
-  # is on the near half when it goes to the eye on the ground (`gx`, `gy`).
-  # The screen shows its part along the ground to the right (gy, -gx).
+  # (a part in the light and a part in the shade), and its top. A point of
+  # the ring is on the near half when it goes to the eye on the ground
+  # (`gx`, `gy`). The screen shows its part along the ground to the right
+  # (gy, -gx). The part in the light is on the side of the face in the
+  # light of a box. For the camera of the house, it is on the left (the
+  # front). For the camera of a van, it is on the right (the side).
   defp draw_one({:cyl, {x, y, z} = center, r, h, material}, %{point: point, camera: camera}) do
     {cx, cy, _cz} = at(point, center)
     {gx, gy} = camera.ground
@@ -391,7 +394,8 @@ defmodule DIYWeb.Icon.Shapes do
       {:poly, lower ++ upper, "i-#{material}-#{face} i-face"}
     end
 
-    [half.(-1, "l"), half.(1, "r"), {:poly, ring.(z + h), "i-#{material}-t i-face"}]
+    {left, right} = if camera.lit == :front, do: {"l", "r"}, else: {"r", "l"}
+    [half.(-1, left), half.(1, right), {:poly, ring.(z + h), "i-#{material}-t i-face"}]
   end
 
   # A face shows when it looks to the eye of the camera. A face with no

@@ -95,8 +95,10 @@ export function delta(dsx, dsy, axes) {
   return {dx: x, dy: y}
 }
 
-// The plan of a room after a move of one of its walls. x0 and y0 are the
-// walls at the back, and x1 and y1 are the walls at the front.
+// The plan of a room after a move of one of its walls. x0 and x1 are the
+// walls at the small x and at the large x. y0 and y1 are the walls at the
+// small y and at the large y. In the house, x0 is the left wall and y0 the
+// back wall.
 export function resize(plan, edge, dx, dy) {
   const [x, y, w, d] = plan
   switch (edge) {
@@ -441,11 +443,12 @@ export const planHook = {
     this.pushEvent("select_room", {id})
   },
 
-  // The view zooms in to a room: its floor, its items and its walls.
+  // The view zooms in to a room: all the surfaces of its floor (a roof has
+  // three), its items and its walls.
   zoomTo(room) {
     const id = room.getAttribute("data-room")
-    const parts = [room, ...this.svg.querySelectorAll(`[data-in="${id}"], [data-of="${id}"]`)]
-    const boxes = parts.map((el) => el.getBBox())
+    const parts = this.svg.querySelectorAll(`[data-room="${id}"], [data-in="${id}"], [data-of="${id}"]`)
+    const boxes = [...parts].map((el) => el.getBBox())
     const x = Math.min(...boxes.map((b) => b.x))
     const y = Math.min(...boxes.map((b) => b.y))
     const w = Math.max(...boxes.map((b) => b.x + b.width)) - x

@@ -50,9 +50,9 @@ defmodule DIYWeb.CutawayTest do
   test "the surfaces of the rooms, with the data for the hook" do
     build = house()
     html = html(build, room(build, "Kitchen"))
-    {{ax, ay}, {bx, by}, {cx, cy}} = Camera.axes(Camera.house())
-    axes = Enum.map_join([ax, ay, bx, by, cx, cy], " ", &Float.round(&1, 6))
-    assert html =~ ~s(data-axes="#{axes}")
+    # The axes of the camera of the house: test/js/plan.test.js has the same
+    # numbers.
+    assert html =~ ~s(data-axes="0.295921 0.04514 -0.096151 0.138927 0.0 -0.274729")
     assert html =~ ~s(data-arrows="1 0 0 1")
     assert html =~ ~s(class="p-floor p-tile p-chosen")
     assert html =~ ~s(data-plan="0 0 144 294")
@@ -65,10 +65,10 @@ defmodule DIYWeb.CutawayTest do
     refute html(build) =~ "data-outline"
   end
 
-  test "the cut of the walls: full at the back, on a slope at the sides, low at the front" do
+  test "the cut of the walls: full at the back, on a slope at the far end, else low" do
     cut = fn camera -> for side <- ~w(x0 y0 x1 y1), do: Cutaway.cut(side, camera) end
-    assert cut.(Camera.house()) == [:side, :back, :side, :front]
-    assert cut.(Camera.van()) == [:back, :side, :front, :side]
+    assert cut.(Camera.house()) == [:far, :back, :near, :front]
+    assert cut.(Camera.van()) == [:back, :far, :front, :near]
 
     # A slope: the full height at the back of the span, low at its front,
     # and the same out of the span.
@@ -100,6 +100,33 @@ defmodule DIYWeb.CutawayTest do
 
     assert Enum.at(p1, 1) - Enum.at(p4, 1) > Enum.at(p2, 1) - Enum.at(p3, 1)
     assert Enum.at(p2, 1) - Enum.at(p3, 1) > 0
+
+    # The wall between the kitchen and the living room is low. A high wall
+    # there hides a part of the kitchen: the camera is a little to the
+    # right.
+    living = room(build, "Living room")
+
+    assert [0.25] ==
+             for(
+               %{kind: :wall, room: ^living, id: id} = w <- ground.objects,
+               id =~ "-x0-",
+               do: height.(w)
+             )
+             |> Enum.uniq()
+
+    # A yard behind the kitchen. The wall at the back of the kitchen is then
+    # low, so it does not hide the items of the yard.
+    yard = Enum.find(build.rooms, &(&1.name == "Backyard"))
+    behind = %{yard | plan: %{yard.plan | x: 0, y: -400, w: 144, d: 300}}
+    rooms = Enum.map(build.rooms, &if(&1.id == yard.id, do: behind, else: &1))
+    [ground | _] = Cutaway.view(%{build | rooms: rooms}).levels
+
+    assert [0.25] ==
+             for(
+               %{kind: :wall, room: ^kitchen, id: id} = w <- ground.objects,
+               id =~ "-y0-",
+               do: height.(w)
+             )
   end
 
   test "the materials of the floors" do

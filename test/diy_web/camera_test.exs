@@ -115,6 +115,44 @@ defmodule DIYWeb.CameraTest do
     end
   end
 
+  property "the face in the light looks more to the eye than the face in the shade" do
+    check all(c <- any_camera()) do
+      {ex, ey, _ez} = c.eye
+      {lit, shade} = if ey >= ex, do: {{0, 1, 0}, {1, 0, 0}}, else: {{1, 0, 0}, {0, 1, 0}}
+      assert Camera.light(c, lit) == "l"
+      assert Camera.light(c, shade) == "r"
+      assert Geometry.dot(c.eye, lit) >= Geometry.dot(c.eye, shade)
+    end
+  end
+
+  test "a box and a cylinder have their part in the light on the same side of the screen" do
+    model = [{:box, {0, 0, 0}, {1, 1, 1}, "white"}, {:cyl, {2.5, 0.5, 0}, 0.5, 1, "white"}]
+
+    for c <- [Camera.house(), Camera.van()] do
+      polys = DIYWeb.Icon.Shapes.placed_model(model, %{at: {0, 0, 0}, turn: 0, camera: c})
+
+      # The middle of the screen x of the polygons of a light (l or r). The
+      # box is at x < 2 in the world, and the cylinder is at x >= 2.
+      middle = fn light, part? ->
+        xs =
+          for {:poly, corners, class} <- polys,
+              class =~ "i-white-#{light} ",
+              Enum.all?(corners, fn {x, _y, _z} -> part?.(x) end),
+              {x, y, z} <- corners,
+              do: elem(Camera.at(c, {0, 0}, {x, y, z}), 0)
+
+        Enum.sum(xs) / length(xs)
+      end
+
+      box = fn x -> x <= 1.0 end
+      cylinder = fn x -> x >= 2.0 end
+
+      assert middle.("l", box) < middle.("r", box) ==
+               middle.("l", cylinder) < middle.("r", cylinder),
+             "#{c.name}: the light of the cylinder"
+    end
+  end
+
   test "the three faces of a box, and a box with a top on a slope" do
     box = Geometry.box({1, 2, 3}, {4, 5, 6})
     assert {1, 2, 9} in box.top and {5, 7, 9} in box.top

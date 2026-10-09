@@ -254,6 +254,10 @@ function setup({storage = new Map(), chosen = true, width = 400, height = 800} =
     return label
   })
   const roof = add({"data-room": "r3", "data-plan": "0 0 200 100", "data-origin": "0 -50", "data-rise": "20"}, ground)
+  roof.bbox = {x: 0, y: 0, width: 50, height: 10}
+  // The front slope of the roof: a second polygon of the same room.
+  const slope = add({"data-room": "r3", "data-plan": "0 0 200 100", "data-origin": "0 -50", "data-rise": "20"}, ground)
+  slope.bbox = {x: 50, y: 0, width: 50, height: 20}
   const fridgeG = add({"data-item": "i1", "data-in": "r1", "data-at": "18 15"}, ground)
   const fridge = add({}, fridgeG)
   const empty = add({}, svg)
@@ -381,6 +385,13 @@ test("a tap chooses a room or opens an item; a tap on a handle does nothing", ()
   none.pointer("pointerup", 1, 50, 50)
   near(none.hook.view.w, 46)
   near(none.hook.view.h, 46)
+  // A roof has two slopes: the zoom shows the two (100 by 20, with a
+  // margin), whatever the slope of the tap.
+  const top = setup()
+  top.pointer("pointerdown", 1, 50, 50, top.roof)
+  top.pointer("pointerup", 1, 50, 50)
+  near(top.hook.view.w, 115)
+  near(top.hook.view.x, 50 - 57.5)
   pointer("pointerdown", 1, 50, 50, fridge)
   pointer("pointerup", 1, 50, 50)
   pointer("pointerdown", 1, 50, 50, handles.x1)
@@ -536,6 +547,14 @@ test("the label of a larger room shows; a label over it hides until a zoom in", 
   labels[1].style.visibility = "hidden"
   hook.show({...hook.view, x: hook.view.x + 5})
   assert.equal(labels[1].style.visibility, "hidden")
+  // A zoom in: the labels are smaller on the SVG. So the label of the small
+  // room shows again, next to the label of the large room.
+  labels[1].bbox = {x: 20, y: 10, width: 30, height: 6}
+  hook.show({...hook.view, w: hook.view.w / 2, h: hook.view.h / 2})
+  assert.equal(labels[1].style.visibility, "hidden")
+  for (const label of labels) label.bbox = {...label.bbox, width: 8, height: 2}
+  hook.show({...hook.view, w: hook.view.w / 2, h: hook.view.h / 2})
+  assert.deepEqual(labels.map((l) => l.style.visibility), ["", "", ""])
 })
 
 test("the hook goes: it removes its listeners", () => {

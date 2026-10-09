@@ -629,10 +629,10 @@ layers: its floor, and its roof over it with a gap.
   doors at the back to the cab. `x` goes across the van, from its right
   side (the side of the sliding door).
 - The camera of a van (`DIYWeb.Camera.van/0`) is at its left side (the
-  side of the driver), a little to its back. The right side is at x = 0,
-  far from the eye. The cab is at the left of the screen, and the doors
-  at the back are at the right. A test checks the side of the driver and
-  of the sliding door.
+  side of the driver), a little to its front (to the cab). The right side
+  is at x = 0, far from the eye. The cab is at the left of the screen, and
+  the doors at the back are at the right. A test checks the side of the
+  driver and of the sliding door.
 - The draft (`DIY.Layout.van_draft/2`). From the doors at the back: the
   bed, the electrical bay, the living area and the galley, each across
   the van. The cab is at the front, and the roof of the van is over all
@@ -883,16 +883,17 @@ is in the shade (`-r`).
   units for each meter. A point at x, y, z goes to the side by
   s (x sin a − y cos a). It goes down by
   s ((x cos a + y sin a) sin b − z cos b). A step along the eye goes to
-  the same point (a property test checks the math for each camera). The code paints each object from the back to the front, in
-  an order that it sets by hand. The lines of the flows go behind the
-  bushes, the person and the cars, and the labels go last.
+  the same point (a property test checks the math for each camera). The
+  code paints each object from the back to the front, in an order that it
+  sets by hand. The lines of the flows go behind the bushes, the person
+  and the cars, and the labels go last.
 - A property test makes random parts of a house: each point of the
   picture is in its box, and each flow and label has its equipment.
 
 Each kind of item has its icon (`DIYWeb.Icon`), in the same style. The
 camera of the house shows the front of an item. A car and a van show
-their side (the camera of a van). An icon is a few boxes, discs and details of a material (white,
-steel, wood, cloth). The faces have a thin edge, so that a white item
+their side (the camera of a van). An icon is a few boxes, discs and
+details of a material (white, steel, wood, cloth). The faces have a thin edge, so that a white item
 shows on a light page. The icon is next to the name of the item in these
 places:
 
@@ -970,12 +971,13 @@ its turn. A length is in inches.
   has a lift.
 - The shell. Each room has a slab under it, and a yard is on the ground.
   Each room inside has walls, as in a dollhouse. A wall on the outside at
-  the back has its full height (8 feet), where no room is behind it. The
-  walls at the two sides of a room are cut on a slope. They are full at
-  the back of the house, and near the floor at its front. A wall at the
-  front of a room, or between a room and the room behind it, is cut near
-  the floor.
-  So a wall does not hide the items of a room.
+  the back has its full height (8 feet), where no room or yard is behind
+  it. The wall on the outside at the left end of the house is cut on a
+  slope. It is full at the back of the house, and near the floor at its
+  front. Each other wall is cut near the floor: at the front of a room,
+  between two rooms, and at the right end. The camera is a little to the
+  right, so a high wall between two rooms hides a part of the room at its
+  left. So a wall does not hide the items of a room or of a yard.
 - The picture of an item is its icon at the size of the item
   (`DIYWeb.Icon.Shapes.placed/2`). A turn turns the model, and a face
   that looks away does not show. Solar panels on a roof lie on its slope.
