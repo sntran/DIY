@@ -65,7 +65,7 @@ defmodule DIYWeb.SceneTest do
     assert html =~ "s-flow-sun"
     assert html =~ "s-flow-battery"
     assert html =~ "s-water"
-    assert html =~ "s-car-l"
+    assert html =~ ~s(class="i-red-)
 
     assert Scene.label(Scene.parts(build)) ==
              "a house with 2 floors, solar panels on the roof, solar panels in the yard, " <>
@@ -145,6 +145,33 @@ defmodule DIYWeb.SceneTest do
         assert html =~
                  ~r/#{Regex.escape(at)} scale\([\d.]+\)">\s*<rect[^>]*><\/rect>\s*<text[^>]*>#{name} /
       end
+    end
+  end
+
+  test "the picture of a house has lap siding, rows of shingles, and the panels of its door" do
+    for floors <- 1..3, garage? <- [true, false] do
+      build = house(floors)
+
+      build =
+        if garage?,
+          do: build,
+          else: elem(Build.delete_room(build, room(build, "Garage")), 1)
+
+      html = picture(build)
+      parts = Scene.parts(build)
+      assert parts.garage == garage?
+
+      # A line of siding is every 30 cm over the base, on the front and the
+      # side of the house. The garage (2.8 m high) has them too.
+      lines = fn h -> 2 * floor((h - 0.45) / 0.3) end
+      siding = lines.(floors * 3.0) + if(garage?, do: lines.(2.8), else: 0)
+      assert length(Regex.scan(~r/class="s-siding"/, html)) == siding
+
+      # A row of shingles is every 40 cm up the front of the roof. The door
+      # has two panels.
+      assert length(Regex.scan(~r/class="s-shingle"/, html)) == 11
+      assert length(Regex.scan(~r/class="s-inset"/, html)) == 2
+      assert html =~ "s-gdoor" == garage?
     end
   end
 
@@ -318,7 +345,7 @@ defmodule DIYWeb.SceneTest do
       end
 
       # No label covers the van or the car.
-      for object <- ["i-white", "s-car"],
+      for object <- ["i-white", "i-red"],
           box = screen_box(html, object),
           box != nil,
           label <- Enum.chunk_every(chips(html), 4) do
@@ -332,9 +359,10 @@ defmodule DIYWeb.SceneTest do
                (parts.roof.grid + parts.yard.grid > 0 or
                   (parts.stations != [] and parts.roof.station + parts.yard.station > 0))
 
-      # The van is the only white part of the picture.
+      # The van is the only white part of the picture, and the car is the
+      # only red part.
       assert html =~ ~s(class="i-white-) == (parts.van != nil)
-      assert html =~ "s-car-l" == parts.car
+      assert html =~ ~s(class="i-red-) == parts.car
     end
   end
 

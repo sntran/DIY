@@ -141,5 +141,89 @@ defmodule DIYWeb.IconTest do
     end
   end
 
+  property "a tube along x or y: its shape, its faces, its edge, and the end that looks to the camera" do
+    check all(
+            turn <- integer(0..3),
+            camera <- member_of([Camera.house(), Camera.van()]),
+            axis <- member_of([:x, :y])
+          ) do
+      loop =
+        for k <- 0..23,
+            a = 2 * :math.pi() * k / 24,
+            do: {0.3 + 0.2 * :math.cos(a), 0.3 + 0.2 * :math.sin(a)}
+
+      model = [{:prism, axis, loop, 0.0, 1.0, "white"}]
+      polys = Shapes.placed_model(model, %{at: {0, 0, 0}, turn: turn, camera: camera})
+
+      [{:poly, shape, "i-white-m2"} | rest] = polys
+      {body, [{:poly, edge, "i-outline"}, {:poly, cap, cap_class}]} = Enum.split(rest, -2)
+      assert shape == edge
+      assert cap_class =~ ~r/^i-white-(l|m1|m2|m3|r) i-face$/
+
+      for {:poly, [a, b, _c, d], _class} <- body do
+        normal =
+          cross(Geometry.add(b, Geometry.scale(a, -1)), Geometry.add(d, Geometry.scale(a, -1)))
+
+        assert Camera.shows?(camera, normal)
+      end
+
+      # The end is at the end of the tube that is nearer to the eye.
+      {cx, _cy, _cz} = hd(cap)
+      along = if Enum.all?(cap, &(abs(elem(&1, 0) - cx) < 1.0e-9)), do: 0, else: 1
+      values = Enum.map(edge, &elem(&1, along))
+      near = if elem(camera.eye, along) > 0, do: Enum.max(values), else: Enum.min(values)
+      for point <- cap, do: assert_in_delta(elem(point, along), near, 1.0e-9)
+    end
+  end
+
+  test "a loop that is not convex paints its faces from the far one to the near one, each with its edge" do
+    # A loop in the shape of an L.
+    loop = [{0, 0}, {1, 0}, {1, 0.3}, {0.3, 0.3}, {0.3, 1}, {0, 1}]
+
+    for turn <- 0..3, camera <- [Camera.house(), Camera.van()] do
+      polys =
+        Shapes.placed_model([{:prism, loop, 0.0, 0.5, "white"}], %{
+          at: {0, 0, 0},
+          turn: turn,
+          camera: camera
+        })
+
+      {body, [{:poly, _top, "i-white-t i-face"}]} = Enum.split(polys, -1)
+      assert body != []
+
+      for {:poly, _corners, class} <- body,
+          do: assert(class =~ ~r/^i-white-(l|m1|m2|m3|r) i-face$/)
+
+      middle = fn corners -> Geometry.scale(Enum.reduce(corners, &Geometry.add/2), 1 / 4) end
+      depths = for {:poly, corners, _class} <- body, do: Camera.depth(camera, middle.(corners))
+      assert depths == Enum.sort(depths)
+    end
+  end
+
+  test "the electric car: the profile of its body, its glass, and its wheels" do
+    [{:group, [{:prism, :x, _profile, 0.0, w, "red"} | details]}] = Shapes.model("ev")
+    {{_x0, y0, z0}, {_x1, y1, z1}} = Shapes.bounds(Shapes.model("ev"))
+
+    # The size of the kind: 73 by 186 by 57 inches.
+    assert_in_delta w, 73 * 0.0254, 0.01
+    assert_in_delta y1 - y0, 186 * 0.0254, 0.01
+    assert_in_delta z1 - z0, 57 * 0.0254, 0.01
+
+    # The windshield looks to the front and up, and the back window looks to
+    # the back and up.
+    glass = for {:face, _corners, {0, ny, nz}, "i-glass-dark"} <- details, do: {ny > 0, nz > 0}
+    assert Enum.sort(glass) == [{false, true}, {true, true}]
+
+    # A tire is at each axle (0.95 m and 3.85 m from the back), on each
+    # side.
+    tires =
+      for {:face, corners, {sign, 0, 0}, "i-black"} <- details, length(corners) == 24 do
+        ys = Enum.map(corners, &elem(&1, 1))
+        {sign, Float.round((Enum.min(ys) + Enum.max(ys)) / 2, 6)}
+      end
+
+    assert Enum.sort(tires) == [{-1, 0.95}, {-1, 3.85}, {1, 0.95}, {1, 3.85}]
+  end
+
   defp cross({a, b, c}, {d, e, f}), do: {b * f - c * e, c * d - a * f, a * e - b * d}
 end

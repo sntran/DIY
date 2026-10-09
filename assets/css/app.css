@@ -127,8 +127,6 @@
   --s-ac-l: #d8dce2; --s-ac-r: #b7bdc6; --s-ac-t: #eceef2; --s-fan: #6b7280;
   --s-station-l: #3a3f47; --s-station-r: #2a2e35; --s-station-t: #50565f; --s-screen: #34d399;
   --s-shirt-l: #f97316; --s-shirt-r: #c2410c; --s-skin: #f2c39b;
-  --s-car-l: #e5484d; --s-car-r: #b8363a; --s-car-t: #f06a6e; --s-tire: #23262b; --s-hub: #9aa0aa;
-  --s-lamp: #fff3c4; --s-vglass: #8fb7d6;
   --s-shadow: rgb(30 41 59 / 0.28);
   --s-chip: rgb(15 23 42 / 0.82); --s-chip-text: #ffffff; --s-chip-line: transparent;
   --s-grid: #60a5fa; --s-sunflow: #f59e0b; --s-battery: #22c55e;
@@ -143,7 +141,6 @@
     --s-frame: #cfc9be; --s-frame-r: #a49e93; --s-glass1: #fde68a; --s-glass2: #f59e0b;
     --s-leaf-l: #3b6e35; --s-leaf-r: #2a5226; --s-bush: #335f2e; --s-drive: #6b6a66; --s-rim: #8a857c;
     --s-water: #2f6f93; --s-gdoor: #a8a296; --s-gline: #8a847a;
-    --s-vglass: #2b3a52;
     --s-shadow: rgb(0 0 0 / 0.4);
     --s-ac-l: #9ca3ad; --s-ac-r: #7d8590; --s-ac-t: #b3b9c2;
     --s-meter-l: #8a909a; --s-meter-r: #6f757f; --s-meter-t: #a0a6af;
@@ -159,7 +156,6 @@
   --s-frame: #cfc9be; --s-frame-r: #a49e93; --s-glass1: #fde68a; --s-glass2: #f59e0b;
   --s-leaf-l: #3b6e35; --s-leaf-r: #2a5226; --s-bush: #335f2e; --s-drive: #6b6a66; --s-rim: #8a857c;
   --s-water: #2f6f93; --s-gdoor: #a8a296; --s-gline: #8a847a;
-  --s-vglass: #2b3a52;
   --s-shadow: rgb(0 0 0 / 0.4);
   --s-ac-l: #9ca3ad; --s-ac-r: #7d8590; --s-ac-t: #b3b9c2;
   --s-meter-l: #8a909a; --s-meter-r: #6f757f; --s-meter-t: #a0a6af;
@@ -195,9 +191,10 @@
 .s-station-l { fill: var(--s-station-l) } .s-station-r { fill: var(--s-station-r) } .s-station-t { fill: var(--s-station-t) }
 .s-screen { fill: var(--s-screen) }
 .s-shirt-l { fill: var(--s-shirt-l) } .s-shirt-r { fill: var(--s-shirt-r) } .s-skin { fill: var(--s-skin) }
-.s-car-l { fill: var(--s-car-l) } .s-car-r { fill: var(--s-car-r) } .s-car-t { fill: var(--s-car-t) }
-.s-tire { fill: var(--s-tire) } .s-hub { fill: var(--s-hub) } .s-lamp { fill: var(--s-lamp) }
-.s-vglass { fill: var(--s-vglass) }
+/* The details of the house: the lines of the lap siding and of the
+   shingles, and the panels of the door. They are a shade over the color
+   under them, so they work by day and by night. */
+.s-siding { fill: rgb(31 35 40 / 0.08) } .s-shingle { fill: rgb(0 0 0 / 0.22) } .s-inset { fill: rgb(0 0 0 / 0.16) }
 .s-shadow { fill: var(--s-shadow) }
 .s-chip { fill: var(--s-chip); stroke: var(--s-chip-line); stroke-width: 1 } .s-chip-bad { fill: #b91c1c } .s-chip-good { fill: #15803d }
 .s-chip-sun { fill: #b45309 }

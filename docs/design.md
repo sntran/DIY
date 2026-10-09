@@ -869,6 +869,12 @@ It gets one of three steps between the light and the shade (`-m1`,
   The stations have their extra batteries. The picture also shows the
   switch of the panel, the meter, the pole of the grid, the AC, the pool,
   the car, and the van with its panels and its fan.
+- The house has the details of a real house. Its walls and the walls of
+  the garage have lap siding: a line every 30 cm. The front of the roof
+  has rows of shingles, and its eave has a gutter with a downspout. Each
+  window has two bars and a sill. The door has two panels, and the door
+  of the garage has panels and a row of windows. The car is the model of
+  the kind "ev": the same car as in the plan of the house.
 - A flow shows only where the power goes in the model (`DIY.Power`). The
   grid goes to the meter. The panels go to the stations, or to the house
   or the meter on a grid-tie inverter. The stations go to the switch of
@@ -936,12 +942,26 @@ on a light page.
   normal, so the shape has a soft light. The sides have no edge between
   them. Under them is the silhouette of the sides that show, and over
   them its edge (`i-outline`).
-- The appliances have the details of a real model. Some examples:
+- A prism can also lie along x or y. A tube is a motor or a pipe, and a
+  slab with round corners is the frame of a window.
+- The loop of a prism can be not convex: for example, the side profile
+  of the car. Then a part of the prism can hide a different part. Its
+  faces paint from the far one to the near one, and each face has its
+  edge.
+- Each kind has the details of a real model, at the size of the kind.
+  Some examples:
   - a fridge has its doors and its handles;
   - a range has its knobs and the window of its oven;
   - a microwave has its window and its keys;
   - a water heater has its pipes;
-  - an AC has the grille of its fan.
+  - an AC has the grille of its fan;
+  - the car has the profile of a crossover, its glass, its doors and its
+    wheels;
+  - a pool pump has its motor, and a strainer with a clear lid;
+  - a ceiling fan has five blades, its light and its rod;
+  - a sink has its cabinet, its basin and its faucet;
+  - a bed has its drawers, its mattress, a duvet and two pillows;
+  - a battery has its label, its handle and its terminals.
 
 The icon is next to the name of the item in these places:
 

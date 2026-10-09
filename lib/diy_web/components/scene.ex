@@ -627,19 +627,52 @@ defmodule DIYWeb.Scene do
       {:poly, base.front, "s-base-l"},
       {:poly, base.side, "s-base-r"}
     ] ++
+      siding({0.0, 0.0}, {@w, @d}, h) ++
       bands(parts) ++
       windows(parts) ++
       door() ++
+      faces(Geometry.box({@w - 0.14, @d + 0.02, 0.0}, {0.08, 0.08, h - 0.3}), "s-fascia") ++
       [{:poly, [{@w, 0.0, h}, {@w, @d, h}, {@w, ridge, top}], "s-wall-r"}] ++
       gable_window(h, ridge) ++
       [
         {:poly, fascia(Enum.at(back, 2), Enum.at(back, 1)), "s-fascia-r"},
-        {:poly, front, "s-roof"},
+        {:poly, front, "s-roof"}
+      ] ++
+      shingles(h, ridge) ++
+      [
         {:poly, fascia(Enum.at(front, 1), Enum.at(front, 2)), "s-fascia-r"},
         {:poly, fascia(Enum.at(front, 0), Enum.at(front, 1)), "s-fascia-l"}
       ] ++
+      faces(Geometry.box({-0.4, @d + @eave - 0.04, h - 0.34}, {@w + 0.4, 0.14, 0.12}), "s-fascia") ++
       roof_panels(parts, h, ridge) ++
       [{:line, [{-0.4, ridge, top}, {@w, ridge, top}], "s-ridge"}]
+  end
+
+  # The lap siding of the two walls that show (the front and the side): a
+  # line every 30 cm over the base. The walls are from a corner, with a
+  # size and a height.
+  defp siding({x, y}, {w, d}, h) do
+    for k <- 1..floor((h - 0.45) / 0.3),
+        z = 0.35 + k * 0.3,
+        {corner, along, length, class} <- [
+          {{x, y + d, z}, {1, 0, 0}, w, "s-siding"},
+          {{x + w, y, z}, {0, 1, 0}, d, "s-siding"}
+        ],
+        do: {:poly, Geometry.on_plane(corner, along, {0, 0, 1}, {0, 0}, {length, 0.03}), class}
+  end
+
+  # The rows of shingles on the front of the roof: a line every 40 cm up
+  # its slope.
+  defp shingles(h, ridge) do
+    slope = {0.0, -(@d + @eave - ridge), @rise}
+    length = :math.sqrt(elem(slope, 1) ** 2 + @rise ** 2)
+    up = Geometry.scale(slope, 1 / length)
+    eave = {-0.4, @d + @eave, h + 0.005}
+
+    for k <- 1..floor(length / 0.4 - 0.5),
+        do:
+          {:poly, Geometry.on_plane(eave, {1, 0, 0}, up, {0, k * 0.4}, {@w + 0.4, 0.035}),
+           "s-shingle"}
   end
 
   # The edge of a roof plane, from a to b, down.
@@ -668,8 +701,9 @@ defmodule DIYWeb.Scene do
   defp spots(_floor),
     do: [{:front, 1.0}, {:front, 2.75}, {:front, 4.65}, {:front, 7.0}, {:side, 1.4}, {:side, 4.6}]
 
-  # A window: its frame, its glass, and its bar. On the front wall it is at
-  # y = @d, from x = at; on the side wall at x = @w, from y = at.
+  # A window: its frame, its glass, its two bars, and its sill. On the front
+  # wall it is at y = @d, from x = at; on the side wall at x = @w, from
+  # y = at.
   defp window({:front, at}, z), do: window({at, @d, z}, {1, 0, 0}, "s-frame")
   defp window({:side, at}, z), do: window({@w, at, z}, {0, 1, 0}, "s-frame-r")
 
@@ -679,7 +713,9 @@ defmodule DIYWeb.Scene do
     [
       {:poly, plane.({-0.1, -0.1}, {1.5, 1.6}), frame},
       {:poly, plane.({0.0, 0.0}, {1.3, 1.4}), "s-glass"},
-      {:poly, plane.({0.62, 0.0}, {0.06, 1.4}), frame}
+      {:poly, plane.({0.62, 0.0}, {0.06, 1.4}), frame},
+      {:poly, plane.({0.0, 0.67}, {1.3, 0.05}), frame},
+      {:poly, plane.({-0.18, -0.18}, {1.66, 0.1}), frame}
     ]
   end
 
@@ -691,13 +727,15 @@ defmodule DIYWeb.Scene do
     ]
   end
 
-  # The door, its roof, and its step.
+  # The door with its panels and its glass, its roof, and its step.
   defp door do
     plane = &Geometry.on_plane({4.7, @d, 0.0}, {1, 0, 0}, {0, 0, 1}, &1, &2)
 
     [
       {:poly, plane.({-0.12, 0.0}, {1.34, 2.32}), "s-frame"},
       {:poly, plane.({0.0, 0.0}, {1.1, 2.2}), "s-door"},
+      {:poly, plane.({0.15, 0.2}, {0.8, 0.42}), "s-inset"},
+      {:poly, plane.({0.15, 0.75}, {0.8, 0.42}), "s-inset"},
       {:poly, plane.({0.15, 1.3}, {0.8, 0.6}), "s-glass"},
       {:poly, plane.({0.86, 1.0}, {0.1, 0.1}), "s-knob"}
     ] ++
@@ -731,7 +769,8 @@ defmodule DIYWeb.Scene do
   # at most `max`.
   defp count(watts, size, max), do: watts |> div(size) |> max(1) |> min(max)
 
-  # The garage: a box with a flat roof, and its door.
+  # The garage: a box with a flat roof and lap siding, and its door with its
+  # panels and a row of windows.
   defp garage(%{garage: false}), do: []
 
   defp garage(_parts) do
@@ -744,11 +783,16 @@ defmodule DIYWeb.Scene do
       {:poly, body.front, "s-wall-l"},
       {:poly, body.side, "s-wall-r"},
       {:poly, base.front, "s-base-l"},
-      {:poly, base.side, "s-base-r"},
-      {:poly, plane.({-0.1, 0.0}, {4.2, 2.35}), "s-frame"},
-      {:poly, plane.({0.0, 0.0}, {4.0, 2.2}), "s-gdoor"}
+      {:poly, base.side, "s-base-r"}
     ] ++
+      siding({x, y}, {w, d}, h) ++
+      [
+        {:poly, plane.({-0.1, 0.0}, {4.2, 2.35}), "s-frame"},
+        {:poly, plane.({0.0, 0.0}, {4.0, 2.2}), "s-gdoor"}
+      ] ++
       for(k <- 1..3, do: {:poly, plane.({0.0, k * 0.55}, {4.0, 0.04}), "s-gline"}) ++
+      for(k <- 1..3, do: {:poly, plane.({k * 1.0 - 0.02, 0.0}, {0.04, 2.2}), "s-gline"}) ++
+      for(k <- 0..3, do: {:poly, plane.({0.2 + k * 1.0, 1.72}, {0.6, 0.28}), "s-glass"}) ++
       faces(Geometry.box({x - 0.05, y - 0.05, h}, {w + 0.1, d + 0.1, 0.2}), "s-fascia")
   end
 
@@ -823,53 +867,15 @@ defmodule DIYWeb.Scene do
     ]
   end
 
-  # An electric car in the drive (on the right of a van).
+  # An electric car in the drive, on the right of a van. It is the model of
+  # the kind "ev" (`DIYWeb.Icon.Shapes`), from the back corner of its body.
   defp car(%{car: false}), do: []
 
   defp car(parts) do
     {x, y} = if parts.van, do: {13.0, 7.5}, else: {11.8, 8.2}
-    l = 4.5
-
-    roof = [
-      {x + 0.2, y + 1.5, 1.5},
-      {x + 1.6, y + 1.5, 1.5},
-      {x + 1.6, y + 3.0, 1.5},
-      {x + 0.2, y + 3.0, 1.5}
-    ]
-
-    side = [
-      {x + 1.8, y + 1.1, 0.98},
-      {x + 1.8, y + 3.5, 0.98},
-      {x + 1.6, y + 3.0, 1.5},
-      {x + 1.6, y + 1.5, 1.5}
-    ]
-
-    shield = [
-      {x + 0.1, y + 3.5, 0.98},
-      {x + 1.8, y + 3.5, 0.98},
-      {x + 1.6, y + 3.0, 1.5},
-      {x + 0.2, y + 3.0, 1.5}
-    ]
-
-    wheels(x + 1.8, [y + 0.9, y + l - 0.9], 0.34) ++
-      faces(Geometry.box({x, y, 0.28}, {1.8, l, 0.7}), "s-car") ++
-      [{:poly, side, "s-vglass"}, {:poly, shield, "s-vglass"}, {:poly, roof, "s-car-t"}] ++
-      lights({x, y + l, 0.6}, 1.8)
-  end
-
-  # The wheels on the side at the right, at x.
-  defp wheels(x, ys, r) do
-    for y <- ys,
-        {radius, class} <- [{r, "s-tire"}, {r * 0.5, "s-hub"}],
-        do: {:poly, Geometry.circle({x + 0.02, y, r}, {0, 1, 0}, {0, 0, 1}, radius), class}
-  end
-
-  # The lights at the front of a car or a van.
-  defp lights({x, y, z}, w) do
-    for s <- [0.15, w - 0.45] do
-      {:poly, Geometry.on_plane({x, y + 0.01, z}, {1, 0, 0}, {0, 0, 1}, {s, 0.0}, {0.3, 0.14}),
-       "s-lamp"}
-    end
+    model = Shapes.model("ev")
+    {{mx, _my, _mz}, _high} = Shapes.bounds(model)
+    Shapes.placed_model(model, %{at: {x + mx, y, 0.0}, turn: 0, camera: Camera.house()})
   end
 
   # A camper van of its model (`DIYWeb.Icon.VanShapes`), from the back
