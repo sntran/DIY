@@ -233,7 +233,13 @@ async function van(page, name) {
   // The house shows the station as away, and the bill of the house stays.
   await page.click("nav >> text=Rooms")
   await page.waitForSelector('[id^="away-"]:has-text("in the van now")', { state: "attached" })
-  await page.click("nav >> text=Van")
+  // The bar has no part Van: the list of the rooms opens the van (with the
+  // keyboard).
+  const bar = page.locator("nav[aria-label='The parts of your build']")
+  assert.equal(await bar.getByText("Van", { exact: true }).count(), 0, `${name}: the bar has no part Van`)
+  await page.focus('[id^="away-"]')
+  await page.keyboard.press("Enter")
+  await page.waitForSelector("#van-stations")
   await page.click('#van-stations button:has-text("Bring it home")')
   await page.waitForSelector("#van-stations:has-text('at home')")
 }

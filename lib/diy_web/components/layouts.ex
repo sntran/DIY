@@ -16,7 +16,6 @@ defmodule DIYWeb.Layouts do
   attr :action, :atom, default: nil, doc: "the part that shows"
   attr :power, :boolean, default: false, doc: "show the part Power (DIYWeb.PowerPage)"
   attr :plans, :boolean, default: false, doc: "show the part Plans (DIYWeb.LessonPage)"
-  attr :van, :boolean, default: false, doc: "show the part Van (DIYWeb.VanPage)"
   attr :saved, :boolean, default: true, doc: "the device has the last change"
   slot :inner_block, required: true
 
@@ -49,8 +48,8 @@ defmodule DIYWeb.Layouts do
       </.link>
       <.link
         patch={~p"/inside"}
-        class={[@action == :inside && "dock-active"]}
-        aria-current={@action == :inside && "page"}
+        class={[@action in [:inside, :van] && "dock-active"]}
+        aria-current={rooms_current(@action)}
       >
         <.icon name="hero-squares-2x2" class="size-5" /><span class="dock-label">Rooms</span>
       </.link>
@@ -78,14 +77,6 @@ defmodule DIYWeb.Layouts do
         <.icon name="hero-document-text" class="size-5" /><span class="dock-label">Plans</span>
       </.link>
       <.link
-        :if={@van}
-        patch={~p"/van"}
-        class={[@action == :van && "dock-active"]}
-        aria-current={@action == :van && "page"}
-      >
-        <.icon name="hero-truck" class="size-5" /><span class="dock-label">Van</span>
-      </.link>
-      <.link
         patch={~p"/settings"}
         class={[@action == :settings && "dock-active"]}
         aria-current={@action == :settings && "page"}
@@ -100,4 +91,11 @@ defmodule DIYWeb.Layouts do
     </div>
     """
   end
+
+  # A van is a part of the house: its page is in the part Rooms. On the page
+  # of a van, the link Rooms is the current part (aria-current "true"), but
+  # it is not the current page ("page").
+  defp rooms_current(:inside), do: "page"
+  defp rooms_current(:van), do: "true"
+  defp rooms_current(_action), do: nil
 end

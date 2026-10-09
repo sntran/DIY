@@ -601,7 +601,14 @@ the lines do not keep.
 
 A camper van is a small house on wheels, so it uses the same builder. A
 van is an item of the house (in the driveway or in the garage), and it
-opens its own build: the page Van.
+opens its own build: the page Van. Not each person has a van, so the bar
+at the bottom has no part Van. The page Van is a part of the rooms. The
+van item in the list of the rooms opens its sheet. The button "Open the
+build of the van" of the sheet opens the page Van. A station of the house
+can be in the van. Then the page Power and the list of the rooms also
+have a link to the page Van. On the page Van, the part Rooms of the bar
+is the current part. A link at the top goes back to the van in the
+rooms.
 
 ### The zones
 
