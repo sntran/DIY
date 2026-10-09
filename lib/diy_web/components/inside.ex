@@ -1,19 +1,22 @@
 defmodule DIYWeb.Inside do
   @moduledoc """
-  The inside of the house: one room at a time. The rooms of a floor are in
-  a row: a swipe to the left or to the right goes to the next room. The
-  floors are in a column: a swipe up or down goes to a different floor.
-  The browser does the swipe (CSS scroll snap), with no script. Links do
-  the same for a keyboard.
+  The inside of the house: the plan at scale (`DIYWeb.Cutaway`). The house
+  is cut open: each floor is a layer, from the ground up to the roof. Each
+  item stands at its place in its room. The person drags an item to move
+  it, also to a different room. A tap on an item opens it, and a tap on a
+  room chooses it. A chosen room has handles on its walls, and a bar with
+  its size and its buttons. The hook Plan (`assets/js/plan.js`) does the
+  drag and the zoom. The sheets have buttons that move an item or a room
+  with no drag.
 
-  Each room shows its name, its floor and dots for its place in the row.
-  Outside (the backyard, the garage, the driveway) and the roof are rooms
-  too.
+  The plan is for the eyes. A list of the rooms and their items gives the
+  same facts to a screen reader and to a keyboard. It shows when it has
+  the focus. In the list, the arrow keys move an item or a room.
   """
   use DIYWeb, :html
 
-  alias DIY.{Build, Catalog, Estimate}
-  alias DIYWeb.{Format, Icon}
+  alias DIY.{Build, Catalog, Estimate, Layout}
+  alias DIYWeb.{Cutaway, Format, Icon}
 
   @place_names %{indoor: "Inside", outdoor: "Outside", roof: "On the roof"}
 
@@ -24,13 +27,23 @@ defmodule DIYWeb.Inside do
   attr :estimate, :map, required: true, doc: "the estimate with the planned items"
   attr :bill, :map, default: nil, doc: "the bill of today (DIY.Bill)"
   attr :price, :map, required: true
+  attr :view, :map, required: true, doc: "the layers of the plan (`DIYWeb.Cutaway.view/1`)"
   attr :item, :string, default: nil
   attr :add, :string, default: nil
+  attr :room, :string, default: nil, doc: "the room that the person chose"
+  attr :sheet, :string, default: nil, doc: "\"room\" (change the room) or \"new_room\""
   attr :item_error, :string, default: nil
+  attr :status, :string, default: nil, doc: "a text for a screen reader after a move"
   attr :away, :list, default: [], doc: "the stations of the house in a van: {item, van}"
 
   def inside(assigns) do
-    assigns = assign(assigns, :levels, Build.levels(assigns.build.house.floors))
+    room =
+      case assigns.room && Build.room(assigns.build, assigns.room) do
+        {:ok, room} -> room
+        _none -> nil
+      end
+
+    assigns = assign(assigns, chosen: room, levels: Build.levels(assigns.build.house.floors))
 
     ~H"""
     <section id="inside" class="space-y-2">
@@ -46,46 +59,78 @@ defmodule DIYWeb.Inside do
         </.link>
       </div>
 
-      <%!-- The hint is in a fixed element: #levels must not move (assets/js/scroll.js). --%>
-      <div id="hints">
-        <div :if={"swipe" not in @build.hints} id="swipe-hint" class="alert alert-info">
-          <.icon name="hero-arrows-right-left" class="size-6" />
-          <span>Swipe left or right for the next room. Swipe up or down for a different floor.</span>
-          <button type="button" phx-click="hint" phx-value-hint="swipe" class="btn btn-sm">OK</button>
-        </div>
+      <div :if={"plan" not in @build.hints} id="plan-hint" class="alert alert-info text-sm">
+        <.icon name="hero-hand-raised" class="size-6" />
+        <span>
+          Drag an item to move it. Tap an item to open it. Tap a room to change it. Pinch or use the buttons to zoom.
+        </span>
+        <button type="button" phx-click="hint" phx-value-hint="plan" class="btn btn-sm">OK</button>
       </div>
 
-      <div
-        id="levels"
-        phx-hook="ScrollStart"
-        data-start="level-f1"
-        class="relative h-[calc(100dvh-13rem)] overflow-y-auto snap-y snap-mandatory overscroll-contain rounded-box"
-      >
-        <section
-          :for={{level, l} <- Enum.with_index(@levels)}
-          id={"level-#{level}"}
-          class="min-h-full snap-start py-2"
-          aria-label={Build.level_name(level)}
-        >
-          <div class="flex items-center justify-between px-1">
-            <h2 class="font-semibold">{Build.level_name(level)}</h2>
-            <span class="flex gap-1 text-sm">
-              <a
-                :if={l > 0}
-                href={"#level-#{Enum.at(@levels, l - 1)}"}
-                class="btn btn-sm btn-square btn-ghost"
-                aria-label="The level above"
-              ><.icon name="hero-chevron-up" class="size-4" /></a>
-              <a
-                :if={l < length(@levels) - 1}
-                href={"#level-#{Enum.at(@levels, l + 1)}"}
-                class="btn btn-sm btn-square btn-ghost"
-                aria-label="The level below"
-              ><.icon name="hero-chevron-down" class="size-4" /></a>
-            </span>
+      <div id="house-plan" phx-hook="Plan" class="space-y-2">
+        <div class="flex items-center gap-2 overflow-x-auto pb-1">
+          <button
+            :for={level <- Enum.reverse(@view.levels)}
+            type="button"
+            data-focus={level.id}
+            class="btn btn-sm btn-ghost shrink-0 px-2"
+          >
+            {level.name}
+          </button>
+        </div>
+
+        <%!-- With a chosen room, the plan is shorter: its bar shows under it. --%>
+        <div class={[
+          "relative overflow-hidden rounded-box border border-base-300",
+          if(@chosen, do: "h-[calc(100dvh-22rem)]", else: "h-[calc(100dvh-14rem)]")
+        ]}>
+          <Cutaway.cutaway view={@view} selected={@chosen && @chosen.id} />
+          <div class="absolute top-2 right-2 flex flex-col gap-2">
+            <button
+              type="button"
+              data-zoom="in"
+              class="btn btn-sm btn-square shadow"
+              aria-label="Zoom in"
+            >
+              <.icon name="hero-plus" class="size-4" />
+            </button>
+            <button
+              type="button"
+              data-zoom="out"
+              class="btn btn-sm btn-square shadow"
+              aria-label="Zoom out"
+            >
+              <.icon name="hero-minus" class="size-4" />
+            </button>
+            <button
+              type="button"
+              data-zoom="fit"
+              class="btn btn-sm btn-square shadow"
+              aria-label="Show all the house"
+            >
+              <.icon name="hero-arrows-pointing-out" class="size-4" />
+            </button>
           </div>
-          <.row build={@build} level={level} estimate={@estimate} price={@price} away={@away} />
-        </section>
+          <.link
+            :if={!@chosen}
+            patch={~p"/inside?#{[sheet: "new_room"]}"}
+            id="add-room"
+            class="btn btn-sm btn-primary absolute bottom-2 right-2"
+          >
+            <.icon name="hero-plus" class="size-4" /> Add a room
+          </.link>
+        </div>
+
+        <.room_bar :if={@chosen} room={@chosen} />
+
+        <.list
+          build={@build}
+          levels={@levels}
+          estimate={@estimate}
+          price={@price}
+          away={@away}
+        />
+        <p id="plan-status" class="sr-only" aria-live="polite">{@status}</p>
       </div>
 
       <.item_sheet
@@ -100,180 +145,266 @@ defmodule DIYWeb.Inside do
         :if={@add && match?({:ok, _}, Build.room(@build, @add))}
         room={elem(Build.room(@build, @add), 1)}
       />
+      <.room_sheet :if={@chosen && @sheet == "room"} room={@chosen} />
+      <.new_room_sheet :if={@sheet == "new_room"} levels={@levels} />
     </section>
     """
   end
 
-  attr :build, :map, required: true
-  attr :level, :string, required: true
-  attr :estimate, :map, required: true
-  attr :price, :map, required: true
-  attr :away, :list, default: []
+  attr :room, :map, required: true
 
-  # The rooms of a level, in a row, and a card to add a room. A station of
-  # the house in a van shows in its room, as away.
-  defp row(assigns) do
-    rooms = Build.rooms_on(assigns.build, assigns.level)
-    assigns = assign(assigns, rooms: rooms, place_names: @place_names)
-
+  # The bar of the chosen room: its name, its size, and its buttons.
+  defp room_bar(assigns) do
     ~H"""
-    <div class="flex snap-x snap-mandatory overflow-x-auto gap-3 pb-2">
-      <article
-        :for={{room, i} <- Enum.with_index(@rooms)}
-        id={"room-#{room.id}"}
-        class="card card-border bg-base-100 snap-center shrink-0 w-[85%] p-4 space-y-3"
-        aria-label={room.name}
-      >
-        <header class="flex items-start justify-between gap-2">
-          <div>
-            <h3 class="text-lg font-bold">{room.name}</h3>
-            <p class="text-xs opacity-70">
-              {Build.level_name(room.level)} · {@place_names[room.place]}
-            </p>
-          </div>
-          <p class="flex gap-1 pt-2">
-            <span class="sr-only">Room {i + 1} of {length(@rooms)}</span>
-            <span
-              :for={j <- 0..(length(@rooms) - 1)}
-              aria-hidden="true"
-              class={["size-2 rounded-full", if(i == j, do: "bg-primary", else: "bg-base-300")]}
-            />
+    <div id="room-bar" class="card card-border bg-base-100 p-3 gap-2">
+      <div class="flex items-center gap-2">
+        <div class="grow min-w-0">
+          <p class="font-semibold truncate">{@room.name}</p>
+          <p class="text-xs opacity-70">
+            {Build.level_name(@room.level)} · {feet(@room.plan.w)} by {feet(@room.plan.d)}
           </p>
-        </header>
-
-        <ul class="grid grid-cols-2 gap-2">
-          <li :for={item <- Build.items_in(@build, room.id)}>
-            <.link
-              patch={~p"/inside?#{[item: item.id]}"}
-              id={"item-#{item.id}"}
-              class={[
-                "card p-2 h-full hover:bg-base-200",
-                cond do
-                  item.planned -> "border-2 border-dashed border-primary"
-                  item.typical -> "border border-dashed border-base-300"
-                  true -> "card-border"
-                end
-              ]}
-            >
-              <Icon.item type={item.type} />
-              <span class="text-sm font-semibold leading-tight">{Catalog.name(item)}</span>
-              <span :if={@estimate.ready} class="text-xs opacity-80">
-                {Format.kwh(@estimate.items[item.id].year / 12)} · {Format.money(
-                  Format.cost(@estimate.items[item.id].year / 12, @price.cents)
-                )} a month
-              </span>
-              <span :if={item.typical} class="text-xs opacity-60">Typical</span>
-              <span :if={item.planned} class="text-xs font-semibold">Plan</span>
-              <span :if={item.backup and station?(@build)} class="text-xs">
-                <.icon name="hero-battery-100" class="size-4" /> On the station
-              </span>
-            </.link>
-          </li>
-          <li :for={{item, van} <- @away} :if={item.home == room.id}>
-            <.link
-              patch={~p"/van?#{[id: van.id]}"}
-              id={"away-#{item.id}"}
-              class="card border border-dashed border-base-300 p-2 h-full hover:bg-base-200"
-            >
-              <Icon.item type={item.type} />
-              <span class="text-sm font-semibold leading-tight">{Catalog.name(item)}</span>
-              <span class="text-xs">In the van now</span>
-            </.link>
-          </li>
-          <li>
-            <.link
-              patch={~p"/inside?#{[add: room.id]}"}
-              id={"add-#{room.id}"}
-              class="card card-border border-dashed p-2 h-full items-center justify-center hover:bg-base-200"
-              aria-label={"Add an item to #{room.name}"}
-            >
-              <.icon name="hero-plus" class="size-6" />
-              <span class="text-sm">Add</span>
-            </.link>
-          </li>
-        </ul>
-
-        <footer class="flex items-center justify-between text-sm">
-          <span>
-            <a
-              :if={i > 0}
-              href={"#room-#{Enum.at(@rooms, i - 1).id}"}
-              class="btn btn-sm btn-square btn-ghost"
-              aria-label="The room before"
-            ><.icon name="hero-chevron-left" class="size-4" /></a>
-            <a
-              :if={i < length(@rooms) - 1}
-              href={"#room-#{Enum.at(@rooms, i + 1).id}"}
-              class="btn btn-sm btn-square btn-ghost"
-              aria-label="The next room"
-            ><.icon name="hero-chevron-right" class="size-4" /></a>
-          </span>
-          <details class="dropdown dropdown-end">
-            <summary class="btn btn-sm btn-ghost">Change the room</summary>
-            <div class="dropdown-content z-10 card card-border bg-base-100 p-3 w-64 space-y-2">
-              <form id={"rename-#{room.id}"} phx-submit="rename_room" class="flex gap-2">
-                <input type="hidden" name="room_id" value={room.id} />
-                <label for={"name-#{room.id}"} class="sr-only">The name of the room</label>
-                <input
-                  id={"name-#{room.id}"}
-                  name="name"
-                  value={room.name}
-                  class="input input-sm"
-                  maxlength="40"
-                />
-                <button class="btn btn-sm">Rename</button>
-              </form>
-              <button
-                type="button"
-                id={"delete-#{room.id}"}
-                phx-click="delete_room"
-                phx-value-id={room.id}
-                data-confirm={"Remove #{room.name} and its items?"}
-                class="btn btn-sm btn-error btn-outline w-full"
-              >
-                Remove the room
-              </button>
-            </div>
-          </details>
-        </footer>
-      </article>
-
-      <article class="card card-border border-dashed snap-center shrink-0 w-[85%] p-4">
-        <form id={"new-room-#{@level}"} phx-submit="add_room" class="space-y-2">
-          <h3 class="font-semibold">Add a room on this level</h3>
-          <input type="hidden" name="room[level]" value={@level} />
-          <label class="block">
-            <span class="text-sm">Name</span>
-            <input
-              name="room[name]"
-              class="input input-sm w-full"
-              maxlength="40"
-              placeholder="Office"
-              required
-            />
-          </label>
-          <label class="block">
-            <span class="text-sm">Place</span>
-            <select name="room[place]" class="select select-sm w-full">
-              <option
-                :for={{place, name} <- @place_names}
-                value={place}
-                selected={default_place(@level) == place}
-              >
-                {name}
-              </option>
-            </select>
-          </label>
-          <button class="btn btn-sm">Add the room</button>
-        </form>
-      </article>
+        </div>
+        <.link
+          patch={~p"/inside?#{[add: @room.id, room: @room.id]}"}
+          id="bar-add"
+          class="btn btn-sm btn-primary"
+          aria-label={"Add an item to #{@room.name}"}
+        >
+          <.icon name="hero-plus" class="size-4" /> Item
+        </.link>
+        <.link
+          patch={~p"/inside?#{[room: @room.id, sheet: "room"]}"}
+          id="bar-change"
+          class="btn btn-sm"
+        >
+          Change
+        </.link>
+        <.link patch={~p"/inside"} class="btn btn-sm btn-ghost btn-square" aria-label="Close">
+          <.icon name="hero-x-mark" class="size-4" />
+        </.link>
+      </div>
+      <.moves id="move-room" event="nudge_room" target={@room.id} step={24} what="the room" />
     </div>
     """
   end
 
-  defp default_place("outside"), do: :outdoor
-  defp default_place("roof"), do: :roof
-  defp default_place(_level), do: :indoor
+  @doc """
+  The place of an item in its room, in words. The left wall is the wall
+  that the Left key goes to. The top wall is the wall of the Up key.
+  """
+  def where(item, room),
+    do:
+      "#{feet(item.at.x)} from the left wall of #{room.name}, #{feet(item.at.y)} from the top wall."
+
+  @doc "A length in inches as feet and inches, for example 12 ft 6 in."
+  def feet(inches) do
+    case {div(inches, 12), rem(inches, 12)} do
+      {0, in_} -> "#{in_} in"
+      {ft, 0} -> "#{ft} ft"
+      {ft, in_} -> "#{ft} ft #{in_} in"
+    end
+  end
+
+  attr :build, :map, required: true
+  attr :levels, :list, required: true
+  attr :estimate, :map, required: true
+  attr :price, :map, required: true
+  attr :away, :list, default: []
+
+  # The rooms and their items, as a list: for a screen reader, and for a
+  # keyboard (it shows when it has the focus). The arrow keys move an item
+  # or a room (the hook Plan).
+  defp list(assigns) do
+    assigns = assign(assigns, :place_names, @place_names)
+
+    ~H"""
+    <section
+      id="plan-list"
+      aria-label="The rooms and their items"
+      class="sr-only focus-within:not-sr-only focus-within:card focus-within:card-border focus-within:p-3"
+    >
+      <p class="text-sm">
+        The arrow keys move the item or the room that has the focus: 6 inches, or 2 feet with Shift. The Left key moves it to the left wall, and the Up key to the top wall.
+      </p>
+      <section :for={level <- @levels} id={"list-#{level}"}>
+        <h2 class="font-semibold">{Build.level_name(level)}</h2>
+        <ul>
+          <li :for={room <- Build.rooms_on(@build, level)} id={"room-#{room.id}"}>
+            <h3>
+              {room.name} ({@place_names[room.place]}, {feet(room.plan.w)} by {feet(room.plan.d)})
+            </h3>
+            <ul>
+              <li>
+                <.link
+                  patch={~p"/inside?#{[room: room.id]}"}
+                  id={"choose-#{room.id}"}
+                  data-nudge-room={room.id}
+                  class="link"
+                >
+                  Choose {room.name}
+                </.link>
+              </li>
+              <li :for={item <- Build.items_in(@build, room.id)}>
+                <.link
+                  patch={~p"/inside?#{[item: item.id]}"}
+                  id={"item-#{item.id}"}
+                  data-nudge={item.id}
+                  class="link"
+                >
+                  {Catalog.name(item)}{item_note(item, @estimate, @price)}
+                </.link>
+              </li>
+              <li :for={{item, van} <- @away} :if={item.home == room.id}>
+                <.link patch={~p"/van?#{[id: van.id]}"} id={"away-#{item.id}"} class="link">
+                  {Catalog.name(item)}: in the van now
+                </.link>
+              </li>
+              <li>
+                <.link
+                  patch={~p"/inside?#{[add: room.id]}"}
+                  id={"add-#{room.id}"}
+                  class="link"
+                  aria-label={"Add an item to #{room.name}"}
+                >
+                  Add an item
+                </.link>
+              </li>
+            </ul>
+          </li>
+        </ul>
+      </section>
+      <.link patch={~p"/inside?#{[sheet: "new_room"]}"} class="link">Add a room</.link>
+    </section>
+    """
+  end
+
+  # The usage, the cost and the flags of an item, as a text.
+  defp item_note(item, estimate, price) do
+    usage =
+      if estimate.ready,
+        do:
+          ": #{Format.kwh(estimate.items[item.id].year / 12)}, #{Format.money(Format.cost(estimate.items[item.id].year / 12, price.cents))} a month",
+        else: ""
+
+    flags =
+      [item.typical && "typical", item.planned && "a plan", item.backup && "on the station"]
+      |> Enum.filter(& &1)
+      |> Enum.map_join("", &", #{&1}")
+
+    usage <> flags
+  end
+
+  attr :room, :map, required: true
+
+  # The sheet of a room: its name, its size, and its removal.
+  defp room_sheet(assigns) do
+    ~H"""
+    <.sheet id="room-sheet" title={@room.name} close={~p"/inside?#{[room: @room.id]}"}>
+      <form id={"rename-#{@room.id}"} phx-submit="rename_room" class="flex items-end gap-2">
+        <input type="hidden" name="room_id" value={@room.id} />
+        <label class="grow">
+          <span class="text-sm font-semibold">Name</span>
+          <input
+            id={"name-#{@room.id}"}
+            name="name"
+            value={@room.name}
+            class="input input-sm w-full"
+            maxlength="40"
+          />
+        </label>
+        <button class="btn btn-sm">Rename</button>
+      </form>
+
+      <form id={"size-#{@room.id}"} phx-submit="room_size" class="space-y-2">
+        <input type="hidden" name="room_id" value={@room.id} />
+        <p class="text-sm font-semibold">Size, in feet</p>
+        <div class="flex items-end gap-2">
+          <label>
+            <span class="text-xs">Width</span>
+            <input
+              name="w"
+              type="number"
+              step="any"
+              min={Layout.min_room() / 12}
+              max={Layout.max_room() / 12}
+              inputmode="decimal"
+              value={Format.value(Float.round(@room.plan.w / 12, 2))}
+              class="input input-sm w-24"
+            />
+          </label>
+          <label>
+            <span class="text-xs">Depth</span>
+            <input
+              name="d"
+              type="number"
+              step="any"
+              min={Layout.min_room() / 12}
+              max={Layout.max_room() / 12}
+              inputmode="decimal"
+              value={Format.value(Float.round(@room.plan.d / 12, 2))}
+              class="input input-sm w-24"
+            />
+          </label>
+          <button class="btn btn-sm">Set the size</button>
+        </div>
+        <p class="text-xs opacity-70">
+          The walls at the front move. On the plan, the handles on the walls move them too.
+        </p>
+      </form>
+
+      <button
+        type="button"
+        id={"delete-#{@room.id}"}
+        phx-click="delete_room"
+        phx-value-id={@room.id}
+        data-confirm={"Remove #{@room.name} and its items?"}
+        class="btn btn-sm btn-error btn-outline"
+      >
+        Remove the room
+      </button>
+    </.sheet>
+    """
+  end
+
+  attr :levels, :list, required: true
+
+  # The sheet of a new room: the app puts it in a free place.
+  defp new_room_sheet(assigns) do
+    assigns = assign(assigns, :place_names, @place_names)
+
+    ~H"""
+    <.sheet id="new-room-sheet" title="Add a room">
+      <form id="new-room" phx-submit="add_room" class="space-y-2">
+        <label class="block">
+          <span class="text-sm">Name</span>
+          <input
+            name="room[name]"
+            class="input input-sm w-full"
+            maxlength="40"
+            placeholder="Office"
+            required
+          />
+        </label>
+        <label class="block">
+          <span class="text-sm">Floor</span>
+          <select name="room[level]" class="select select-sm w-full">
+            <option :for={level <- @levels} value={level} selected={level == "f1"}>
+              {Build.level_name(level)}
+            </option>
+          </select>
+        </label>
+        <label class="block">
+          <span class="text-sm">Place</span>
+          <select name="room[place]" class="select select-sm w-full">
+            <option :for={{place, name} <- @place_names} value={place}>{name}</option>
+          </select>
+        </label>
+        <p class="text-xs opacity-70">The room goes to a free place. Then drag it where it is.</p>
+        <button class="btn btn-sm btn-primary">Add the room</button>
+      </form>
+    </.sheet>
+    """
+  end
 
   attr :build, :map, required: true
   attr :item, :map, required: true
@@ -289,7 +420,17 @@ defmodule DIYWeb.Inside do
     rooms = Enum.filter(assigns.build.rooms, &(&1.place in kind.places))
     van = Enum.any?(assigns.build.items, &(&1.type == "camper_van"))
     features = if van, do: kind.features, else: kind.features -- @van_features
-    assigns = assign(assigns, kind: kind, room: room, rooms: rooms, van: van, features: features)
+    {pw, pd} = Layout.panel()
+
+    assigns =
+      assign(assigns,
+        kind: kind,
+        room: room,
+        rooms: rooms,
+        van: van,
+        features: features,
+        panel: "#{pw} by #{pd}"
+      )
 
     ~H"""
     <.sheet id="item-sheet" title={Catalog.name(@item)} icon={@item.type}>
@@ -379,6 +520,64 @@ defmodule DIYWeb.Inside do
         </label>
       </form>
 
+      <div :if={@item.at} id="item-place" class="space-y-2 rounded-box bg-base-200 p-3">
+        <p class="text-sm font-semibold">Its place, its size and its turn</p>
+        <.moves id="move-item" event="nudge_item" target={@item.id} step={6} what="the item" />
+        <p id="item-where" class="text-sm" aria-live="polite">{where(@item, @room)}</p>
+        <p :if={@item.type == "solar_panels"} class="text-xs opacity-70">
+          The watts give the size of the array: {@panel} inches for each panel of 400 W.
+        </p>
+        <form
+          :if={@item.type != "solar_panels"}
+          id="size-form"
+          phx-submit="item_size"
+          class="flex flex-wrap items-end gap-2"
+        >
+          <input type="hidden" name="item_id" value={@item.id} />
+          <label :for={{key, label, value} <- size_fields(@item)}>
+            <span class="block text-xs">{label}</span>
+            <input
+              name={key}
+              type="number"
+              min="1"
+              max={Layout.max_size()}
+              step="1"
+              inputmode="numeric"
+              value={value}
+              class="input input-sm w-20"
+            />
+          </label>
+          <button class="btn btn-sm">Set the size</button>
+        </form>
+        <p :if={@item.type != "solar_panels"} class="text-xs opacity-70">
+          In inches.{if @item.size,
+            do: " You gave this size.",
+            else: " The typical size of this kind: give the size of your item."}
+        </p>
+        <div class="flex gap-2">
+          <button
+            type="button"
+            id="turn-item"
+            phx-click="turn_item"
+            phx-value-id={@item.id}
+            class="btn btn-sm"
+          >
+            <.icon name="hero-arrow-path" class="size-4" /> Turn it
+          </button>
+          <button
+            :if={@item.size}
+            type="button"
+            id="typical-size"
+            phx-click="item_size"
+            phx-value-item_id={@item.id}
+            phx-value-typical="true"
+            class="btn btn-sm btn-ghost"
+          >
+            The typical size
+          </button>
+        </div>
+      </div>
+
       <button
         type="button"
         id="delete-item"
@@ -395,6 +594,53 @@ defmodule DIYWeb.Inside do
       </button>
     </.sheet>
     """
+  end
+
+  attr :id, :string, required: true
+  attr :event, :string, required: true, doc: "nudge_item or nudge_room"
+  attr :target, :string, required: true, doc: "the id of the item or of the room"
+  attr :step, :integer, required: true, doc: "inches for each tap"
+  attr :what, :string, required: true
+
+  # Four buttons that move an item or a room: for a person who does not
+  # drag (WCAG 2.2, 2.5.7). Each arrow points as the move goes on the
+  # plan. The left wall is at the top left, and the top wall is at the top
+  # right.
+  defp moves(assigns) do
+    assigns =
+      assign(assigns,
+        buttons: [
+          {"left", -assigns.step, 0, "hero-arrow-up-left", "to the left wall"},
+          {"up", 0, -assigns.step, "hero-arrow-up-right", "to the top wall"},
+          {"down", 0, assigns.step, "hero-arrow-down-left", "away from the top wall"},
+          {"right", assigns.step, 0, "hero-arrow-down-right", "away from the left wall"}
+        ]
+      )
+
+    ~H"""
+    <div id={@id} class="flex items-center gap-1" role="group" aria-label={"Move #{@what}"}>
+      <span class="text-xs mr-1">Move {@what}:</span>
+      <button
+        :for={{key, dx, dy, icon, text} <- @buttons}
+        type="button"
+        id={"#{@id}-#{key}"}
+        phx-click={@event}
+        phx-value-id={@target}
+        phx-value-dx={dx}
+        phx-value-dy={dy}
+        class="btn btn-sm btn-square"
+        aria-label={"Move #{@what} #{feet(@step)} #{text}"}
+      >
+        <.icon name={icon} class="size-4" />
+      </button>
+    </div>
+    """
+  end
+
+  # The fields of the size of an item: its width, its depth and its height.
+  defp size_fields(item) do
+    {w, d, h} = Layout.size(item)
+    [{"w", "Width", w}, {"d", "Depth", d}, {"h", "Height", h}]
   end
 
   # True when the house has a power station (a planned one too).

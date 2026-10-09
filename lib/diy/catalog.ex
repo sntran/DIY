@@ -974,6 +974,136 @@ defmodule DIY.Catalog do
 
   @by_type Map.new(@kinds, &{&1.type, &1})
 
+  # The typical size of an item of each kind, in inches. The width is from
+  # its left to its right, and the depth from its back to its front. The
+  # third number is its height. The front is the side that a person uses. For solar panels, it
+  # is one panel (`DIY.Layout.size/1` gives the size of the array).
+  #
+  # The source of each size is next to it: the spec sheet of a common
+  # model (rounded to the inch), or a standard size. "No source" is a size
+  # for the plan only: the item sheet asks for the size of the real item.
+  @sizes %{
+    # Goodman GSX140361, 3 tons: 29 by 29 by 32 1/2 in (distributor listing).
+    "ac" => {29, 29, 33},
+    # Mitsubishi MSZ-GL12NA: 31 7/16 by 9 1/8 by 11 5/8 in (Mitsubishi spec sheet).
+    "mini_split" => {31, 9, 12},
+    # Goodman GM9S800804BN, 80,000 BTU: 17 1/2 by 28 by 33 3/8 in (distributor listing).
+    "furnace" => {18, 28, 33},
+    # No source: heat strips are in an air handler.
+    "heat_strips" => {48, 24, 24},
+    # No source: a meter and its socket box.
+    "smart_meter" => {10, 6, 14},
+    # Rheem PROG50-40N RH62, 50 gallons: 21 1/2 in across, 61 1/2 in high (distributor listing).
+    "water_heater" => {22, 22, 62},
+    # LG LRFXS2503S: 32 3/4 by 33 (with the handles) by 69 7/8 in (retailer listings).
+    "fridge" => {33, 33, 70},
+    # Frigidaire FFCL1542AW, 14.8 cu ft: 55 3/4 by 29 9/16 by 32 1/2 in (Best Buy).
+    "freezer" => {56, 30, 33},
+    # A range is 30 in wide: the cutout of most counters. No source for the depth and the height.
+    "range" => {30, 28, 47},
+    # Panasonic NN-SN966S: 23 7/8 by 19 7/16 by 14 in (Panasonic spec table).
+    "microwave" => {24, 19, 14},
+    # A dishwasher goes under a counter: an opening of 24 in. No source for the depth and the height.
+    "dishwasher" => {24, 24, 34},
+    # LG WM4000HWA: 27 by 30 1/4 by 39 in (LG spec sheet).
+    "washer" => {27, 30, 39},
+    # No source: the size of the washer (a dryer of the same line).
+    "dryer" => {27, 30, 39},
+    # No source: a floor lamp.
+    "lights" => {16, 16, 60},
+    # Samsung UN50CU7000, 50 in, on its stand: 44 by 9.9 by 28.3 in (P.C. Richard).
+    "tv" => {44, 10, 28},
+    # No source: a screen and a keyboard on a desk.
+    "computer" => {24, 16, 20},
+    # No source: the blades of a fan of 52 in, a common size.
+    "ceiling_fan" => {52, 52, 12},
+    # No source: a router and its power supply.
+    "always_on" => {18, 6, 3},
+    # Hayward SP2610X15: 25 1/8 by 7 7/8 by 10 7/8 in (Pool360).
+    "pool_pump" => {25, 8, 11},
+    # No source: a tower heater.
+    "space_heater" => {10, 7, 25},
+    # EcoFlow DELTA Pro: 25 by 11.2 by 16.4 in (retailer listings).
+    "power_station" => {25, 11, 16},
+    # One panel of 400 W (`DIY.Layout`): 1134 by 1722 mm, 108 half cells.
+    "solar_panels" => {45, 68, 2},
+    # Generac RXSW100A3, 100 A: 14.6 by 7.1 by 20 in (Greentech Renewables).
+    "transfer_switch" => {15, 7, 20},
+    # Tesla Model 3 (2024): 1849 mm wide (no mirrors), 4720 mm long, 1441 mm high (CarExpert).
+    "ev" => {73, 186, 57},
+    # The Mercedes-Benz Sprinter 170 in, high roof (the van models above).
+    "camper_van" => {80, 274, 110},
+    # No source: a seat of a van on a swivel base.
+    "swivel_seat" => {26, 26, 40},
+    # Victron Orion-Tr Smart 12/12-30: 186 by 80 by 130 mm (retailer listings).
+    "dc_charger" => {7, 3, 5},
+    # Dometic CFX3 45: 15.7 by 24.8 (no handle) by 18.7 in (retailer listing of the spec).
+    "van_fridge" => {16, 25, 19},
+    # No source: a stove of two burners.
+    "stove" => {22, 16, 4},
+    # No source: a sink in a cabinet.
+    "sink" => {24, 18, 36},
+    # No source: a tank of about 20 gallons.
+    "water_tank" => {24, 15, 14},
+    # Shurflo 4008: 8.1 by 4.9 by 4.3 in (retailer listings).
+    "water_pump" => {8, 5, 4},
+    # No source: a counter that you build.
+    "counter" => {48, 22, 36},
+    # No source: a bench that you build.
+    "bench" => {40, 20, 32},
+    # No source: a table that you build.
+    "van_table" => {28, 20, 28},
+    # MaxxAir MaxxFan Deluxe 7500K: 16 1/2 by 22 1/2 by 5 in (retailer listing).
+    "van_fan" => {17, 23, 5},
+    # No source: a window of a van.
+    "window" => {36, 2, 24},
+    # No source: a strip of lights.
+    "van_lights" => {12, 4, 1},
+    # No source: a laptop and a phone.
+    "devices" => {14, 10, 10},
+    # Webasto Air Top 2000 STC: 310 by 120 by 118 mm (Webasto).
+    "diesel_heater" => {12, 5, 5},
+    # No source: an alarm on a wall.
+    "co_alarm" => {5, 5, 2},
+    # No source: a bed that you build.
+    "bed_platform" => {60, 75, 24},
+    # No source: a cabinet that you build.
+    "storage" => {36, 24, 24},
+    # Battle Born BB10012, 100 Ah: 12 3/4 by 6 7/8 by 9 in (retailer listings).
+    "van_battery" => {13, 7, 9},
+    # Victron MultiPlus 12/3000/120 on a wall: 258 by 218 by 362 mm (retailer listings).
+    "inverter" => {10, 9, 14},
+    # No source: an inlet and its charger.
+    "shore_power" => {6, 3, 6},
+    # One panel of 400 W, as the solar panels of a house.
+    "van_solar" => {45, 68, 2},
+    # No source: a part of the insulation.
+    "insulation" => {48, 24, 6},
+    # No source: a panel of a wall.
+    "walls" => {48, 2, 36},
+    # No source: a part of the floor.
+    "van_floor" => {48, 48, 1},
+    # No source.
+    "other" => {24, 24, 24}
+  }
+
+  for %{type: type} <- @kinds,
+      not Map.has_key?(@sizes, type),
+      do: raise("the kind #{type} has no size")
+
+  # The height of the bottom of an item on a wall or on a ceiling, in
+  # inches. Another item stands on the floor.
+  @lifts %{
+    # No source: high on a wall.
+    "mini_split" => 84,
+    # No source: a meter is near the height of the eyes.
+    "smart_meter" => 48,
+    # No source: on a wall, near the panel.
+    "transfer_switch" => 40,
+    # No source: the blades are 7 ft over the floor.
+    "ceiling_fan" => 84
+  }
+
   @doc "All the kinds, in the order of the list of a new item."
   def kinds, do: @kinds
 
@@ -982,6 +1112,12 @@ defmodule DIY.Catalog do
 
   @doc "The types of all the kinds."
   def types, do: Map.keys(@by_type)
+
+  @doc "The typical size of an item of a type, in inches: `{w, d, h}`."
+  def size(type), do: Map.fetch!(@sizes, type)
+
+  @doc "The height of the bottom of an item of a type above its floor, in inches."
+  def lift(type), do: Map.get(@lifts, type, 0)
 
   @doc "The places of a room: inside, outside, or on the roof."
   def places, do: @places

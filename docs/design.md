@@ -154,17 +154,9 @@ its numbers are a guess of the app. A change of a number, or a tap on
 
 ### The rooms
 
-The page shows one room at a time (`DIYWeb.Inside`). The rooms of a floor
-are in a row, and the floors are in a column, with CSS scroll snap: a
-swipe left or right goes to the next room, and a swipe up or down to a
-different floor. The browser does the swipe, with no script. Links do the
-same for a keyboard. Each room shows its name, its floor and dots. The
-roof, the attic, the garage, the backyard and the driveway are rooms too.
-At the start, the rooms show the first floor (the hook `ScrollStart`).
-
-An element that a patch of LiveView moves loses the place of its scroll.
-So no element before `#levels` in its parent comes and goes: the hint is
-in a fixed element.
+The page Rooms shows the plan of the house at scale (`DIYWeb.Inside`, see
+"The plan at scale" below). The roof, the attic, the garage, the backyard
+and the driveway are rooms too.
 
 An item opens in a sheet over the page (a modal dialog). The hook `Sheet`
 (`assets/js/sheet.js`) closes it with the Escape key, keeps the focus in
@@ -237,13 +229,14 @@ near 10,400 kWh in one year with gas heat, 16,900 with a heat pump, and
 - The pages: `test/diy_web/live/home_live_test.exs`, with the real
   answers of NASA POWER and Power to Choose as stubs.
 - The browser test (`test/browser/house.mjs`): a person builds a house in
-  Chromium, in the light and the dark mode, on a phone and on a desk, and
-  axe-core checks each screen. A swipe goes to the next room and to a
-  different floor, the sheet of an item keeps the focus and closes with
-  the Escape key, a reload keeps the build, a second tab follows the
-  first, and a reconnect restores the build. CI runs the same script
-  against `wrangler dev` too: the VM in workerd, with the real answers of
-  NASA POWER and Power to Choose through `fetch()`.
+  Chromium, in the light and the dark mode, on a phone and on a desk.
+  Axe-core checks each screen. On the plan, a drag moves an item and a
+  wall of a room. In the list of the rooms, an arrow key moves an item.
+  The sheet of an item keeps the focus and closes with the Escape key. A
+  reload keeps the build, a second tab follows the first, and a reconnect
+  restores the build. CI runs the same script against `wrangler dev` too.
+  There, the VM runs in workerd, with the real answers of NASA POWER and
+  Power to Choose through `fetch()`.
 
 ## Real usage (phase 2)
 
@@ -812,7 +805,7 @@ steel, wood, cloth). The faces have a thin edge, so that a white item
 shows on a light page. The icon is next to the name of the item in these
 places:
 
-- the cards of the rooms and of the zones;
+- the cards of the zones of a van;
 - the lists to add an item;
 - the sheet of an item;
 - the list of the items on the page Bill.
@@ -829,3 +822,93 @@ places:
 The bar of the pages uses the icons of Heroicons (MIT), which Phoenix
 gives. The other small signs use them too: the arrows, the close buttons,
 and the checks of the lesson.
+
+## The plan at scale
+
+The page Rooms shows the house cut open, at scale (`DIYWeb.Cutaway`, with
+the rules in `DIY.Layout`). Each floor is a layer, with a gap between the
+layers. The layers are the ground (the lot, the rooms outside and floor
+1), floor 2, floor 3, the attic and the roof. Each room is at its place,
+with its size. Each item is at its place in its room, with its size and
+its turn. A length is in inches.
+
+- The draft. A new house gets a plan from its size: a floor of 3 by 2
+  with the area of one floor. The rooms of a floor are in rows, and a
+  living room gets more space than a bathroom. The garage is on the right
+  of the house (24 by 24 feet). The driveway is in front of the garage
+  (24 by 25 feet). A camper van fits in each. The yard is in front
+  of the house. The first items of a room stand along its back walls. A
+  build of an older version gets the draft when it loads.
+- The person changes the plan. A drag moves an item, also to a different
+  room. A tap opens an item, and a tap chooses a room. The chosen room
+  has an outline and a handle on each wall. Its bar (under the plan) has
+  its size and its buttons. A drag on the chosen room moves it with its
+  items, and a drag on a handle moves a wall. A drag on an empty place
+  moves the view. Two fingers, the wheel or the buttons zoom.
+- A drop. The center of the space of the item on the floor moves with
+  the pointer. The item goes to the room that has this center. The script
+  tries its own room first, then the rooms of the layer under the pointer,
+  then the rooms of its own layer. The pointer does not choose the room:
+  it is on the body of the item, above its space.
+- With no drag. The sheet of an item has buttons that move it (6 inches
+  for each tap), turn it a quarter turn, and give it a size. The sheet
+  tells the new place of the item in words. The bar of a room has buttons
+  that move it (2 feet for each tap): the plan over the bar shows the
+  move. The sheet of a room gives its size in feet. So a person with one
+  finger and no drag can do each change (WCAG 2.2, 2.5.7). A handle is 24
+  pixels wide (2.5.8).
+- The rules (`DIY.Layout.fill/1`, after each change; `specs/Plan.tla`).
+  No two rooms of a layer overlap, and each item is in its room. A room
+  does not move over a different room: the page tells why. When a wall
+  moves, the items keep their place in the house and stay in the room.
+  After a turn or a new size, an item stays in its room. A new item goes
+  to a free place in its room.
+- A new room goes to a free place in the house. When the floor is full,
+  it goes at the back of the house, next to it. A room outside goes on
+  the right of the rooms of the ground.
+- A drag moves a room or a wall on a grid of 6 inches. The sheet of a
+  room takes a size in feet, to the inch.
+- Each kind has a typical size (`DIY.Catalog.size/1`). Next to each size
+  is its source: the spec sheet of a common model, or a standard size.
+  For example, a fridge is the LG LRFXS2503S: 33 by 33 by 70 inches. A
+  size with no source is for the plan only. The sheet of the item asks
+  for the size of the real item.
+- The watts of an array of solar panels give its size. A panel of 400 W
+  is 45 by 68 inches: a module of 108 half cells, 1134 by 1722 mm. An
+  item on a wall or a ceiling (a mini split, a meter, a switch, a fan)
+  has a lift.
+- The shell. Each room has a slab under it, and a yard is on the ground.
+  Each room inside has walls. A wall between two rooms is low. A wall on
+  the outside is high at the back, where no room is behind it, and low
+  at the front. So a wall does not hide the items of a different room.
+- The picture of an item is its icon at the size of the item
+  (`DIYWeb.Icon.Shapes.placed/2`). A turn turns the model, and a face
+  that looks away does not show. Solar panels on a roof lie on its slope.
+  In a yard, they stand in rows on a rack.
+- The order of the paint (`DIYWeb.Iso.order/1`). A wall or an item that
+  is behind a different one paints first. A box is behind a different box
+  when it is on the far side of it along x, y or z. A wall is flat for
+  this order. So an item in a room is in front of the walls at the back,
+  and behind the walls at the front. An item that is larger than its
+  room goes through walls: it paints by its place only. The parts of a
+  model use the same order, so a turned item paints its back part first.
+- The script (the hook Plan, `assets/js/plan.js`) moves the parts of the
+  SVG while the pointer moves. It sends the change when the pointer
+  stops, and the server then draws the plan again. The script has the
+  math of the plan and of its inverse, on a floor and on the slopes of a
+  roof. A property test checks that a point goes to the screen and back.
+  The zoom is in the `viewBox`, which LiveView keeps
+  (`JS.ignore_attributes/1`). The tab keeps it in its session storage.
+- The plan is for the eyes. A list of the rooms and of their items gives
+  the same facts, with the usage of each item. It shows when it has the
+  focus. In the list, the arrow keys move an item or a room (6 inches, or
+  2 feet with Shift). A screen reader hears the new place, from the left
+  wall and from the top wall.
+- The tests. Property tests check the draft (no overlap) and random
+  changes (the rules, and the JSON gives the same plan). A property test
+  draws random houses: each point is in the box of the SVG, and each id
+  is one of a kind. No box paints after a box in front of it. A test
+  checks the same order for the parts of each kind at each turn. TLC
+  checks `specs/Plan.tla`, with the turn and the size of the item. Three
+  faults show that the rules matter. The browser test drags an item and
+  a wall, and moves an item with a key.

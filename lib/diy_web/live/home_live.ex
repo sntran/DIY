@@ -4,9 +4,10 @@ defmodule DIYWeb.HomeLive do
 
   - `/` (`:front`): the two doors, the ZIP code and the preset of a new
     build. Then the front of the house, with the bill estimate.
-  - `/inside` (`:inside`): the rooms, one at a time. A swipe goes to the
-    next room of a floor, or to a different floor. `?item=ID` opens an
-    item, and `?add=ROOM` the list of the items for a room.
+  - `/inside` (`:inside`): the plan of the house at scale, cut open
+    (`DIYWeb.Inside`). `?item=ID` opens an item, `?add=ROOM` the list of
+    the items for a room, and `?room=ROOM` chooses a room. `?sheet=room`
+    changes the chosen room, and `?sheet=new_room` adds a room.
   - `/estimate` (`:estimate`): the math of the estimate, month by month.
   - `/van` (`:van`): the build of a camper van (`?id=ID`), with its zones,
     an item (`?item=ID`) and the items for a zone (`?add=ZONE`).
@@ -30,6 +31,7 @@ defmodule DIYWeb.HomeLive do
     EFL,
     Estimate,
     House,
+    Layout,
     Lesson,
     Market,
     Plan,
@@ -40,7 +42,7 @@ defmodule DIYWeb.HomeLive do
     Weather
   }
 
-  alias DIYWeb.{Device, Format, Scene}
+  alias DIYWeb.{Cutaway, Device, Format, Inside, Scene}
 
   @impl true
   def mount(_params, _session, socket) do
@@ -66,6 +68,10 @@ defmodule DIYWeb.HomeLive do
      |> assign(:van_id, nil)
      |> assign(:scene, nil)
      |> assign(:van_scene, nil)
+     |> assign(:cutaway, nil)
+     |> assign(:room, nil)
+     |> assign(:sheet, nil)
+     |> assign(:status, nil)
      |> allow_upload(:build_file,
        accept: ~w(.json),
        max_entries: 1,
@@ -86,6 +92,8 @@ defmodule DIYWeb.HomeLive do
      |> assign(:item_error, if(item == socket.assigns[:item], do: socket.assigns[:item_error]))
      |> assign(:item, item)
      |> assign(:add, if(sheets?, do: params["add"]))
+     |> assign(:room, params["room"])
+     |> assign(:sheet, params["sheet"])
      |> assign(:van_id, params["id"])
      |> pictures()
      |> assign(:lesson_step, parse_int(params["step"]))
@@ -236,8 +244,132 @@ defmodule DIYWeb.HomeLive do
     place = Enum.find(Catalog.places(), &(Atom.to_string(&1) == place))
 
     case Build.add_room(socket.assigns.build, name, level, place) do
-      {:ok, build, _id} -> {:noreply, put(socket, build)}
-      {:error, reason} -> {:noreply, put_flash(socket, :error, room_error(reason))}
+      {:ok, build, id} ->
+        {:noreply, socket |> put(build) |> push_patch(to: ~p"/inside?#{[room: id]}")}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, room_error(reason))}
+    end
+  end
+
+  # The plan at scale (DIYWeb.Inside, and the hook Plan).
+  def handle_event("select_room", %{"id" => ""}, socket),
+    do: {:noreply, push_patch(socket, to: ~p"/inside")}
+
+  def handle_event("select_room", %{"id" => id}, socket) when is_binary(id),
+    do: {:noreply, push_patch(socket, to: ~p"/inside?#{[room: id]}")}
+
+  def handle_event("open_item", %{"id" => id}, socket) when is_binary(id),
+    do: {:noreply, push_patch(socket, to: ~p"/inside?#{[item: id]}")}
+
+  # An item that the person drops on the plan. x and y are its center on
+  # the plan, in inches. The room is the room of that center (the hook).
+  def handle_event("place_item", %{"id" => id, "room" => room, "x" => x, "y" => y}, socket)
+      when is_number(x) and is_number(y) do
+    build = socket.assigns.build
+
+    with {:ok, item} <- Build.item(build, id),
+         {:ok, %{plan: %{} = plan}} <- Build.room(build, room) do
+      {w, d} = Layout.extent(item)
+      at = %{x: round(x - w / 2) - plan.x, y: round(y - d / 2) - plan.y}
+      plan_result(socket, Build.place_item(build, id, room, at), nil)
+    else
+      _none -> {:noreply, socket}
+    end
+  end
+
+  # A room that moves (dx, dy in inches): its walls stay on a grid of 6
+  # inches.
+  def handle_event("move_room", %{"id" => id, "dx" => dx, "dy" => dy}, socket)
+      when is_number(dx) and is_number(dy) do
+    with {:ok, %{plan: %{} = plan}} <- Build.room(socket.assigns.build, id) do
+      result = Build.move_room(socket.assigns.build, id, plan.x + step(dx), plan.y + step(dy))
+      plan_result(socket, result, nil)
+    else
+      _none -> {:noreply, socket}
+    end
+  end
+
+  # A wall of a room that moves: x0 and y0 at the back, x1 and y1 at the
+  # front.
+  def handle_event("size_room", %{"id" => id, "edge" => edge, "dx" => dx, "dy" => dy}, socket)
+      when is_number(dx) and is_number(dy) do
+    with {:ok, %{plan: %{} = plan}} <- Build.room(socket.assigns.build, id),
+         {:ok, new} <- wall(plan, edge, step(dx), step(dy)) do
+      plan_result(socket, Build.size_room(socket.assigns.build, id, new), nil)
+    else
+      _none -> {:noreply, socket}
+    end
+  end
+
+  # The move buttons (in the sheet of an item, and in the bar of a room)
+  # send the steps as text.
+  def handle_event(event, %{"id" => id, "dx" => dx, "dy" => dy}, socket)
+      when event in ["nudge_item", "nudge_room"] and is_binary(dx) and is_binary(dy) do
+    case {parse_int(dx), parse_int(dy)} do
+      {dx, dy} when is_integer(dx) and is_integer(dy) ->
+        {:noreply, socket} = handle_event(event, %{"id" => id, "dx" => dx, "dy" => dy}, socket)
+        # The sheet of the item shows its new place (`DIYWeb.Inside.where/2`):
+        # the status does not tell it a second time.
+        {:noreply, if(event == "nudge_item", do: assign(socket, :status, nil), else: socket)}
+
+      _none ->
+        {:noreply, socket}
+    end
+  end
+
+  # The arrow keys in the list of the rooms, and the move buttons.
+  def handle_event("nudge_item", %{"id" => id, "dx" => dx, "dy" => dy}, socket)
+      when is_integer(dx) and is_integer(dy) do
+    build = socket.assigns.build
+
+    with {:ok, %{at: %{} = at} = item} <- Build.item(build, id) do
+      result = Build.place_item(build, id, item.room, %{x: at.x + dx, y: at.y + dy})
+      plan_result(socket, result, &item_status(&1, id))
+    else
+      _none -> {:noreply, socket}
+    end
+  end
+
+  def handle_event("nudge_room", %{"id" => id, "dx" => dx, "dy" => dy}, socket)
+      when is_integer(dx) and is_integer(dy) do
+    with {:ok, %{plan: %{} = plan}} <- Build.room(socket.assigns.build, id) do
+      result = Build.move_room(socket.assigns.build, id, plan.x + dx, plan.y + dy)
+      plan_result(socket, result, &room_status(&1, id))
+    else
+      _none -> {:noreply, socket}
+    end
+  end
+
+  def handle_event("turn_item", %{"id" => id}, socket),
+    do: plan_result(socket, Build.turn_item(socket.assigns.build, id), &turn_status(&1, id))
+
+  def handle_event("item_size", %{"item_id" => id, "typical" => "true"}, socket),
+    do: with_build(socket, Build.size_item(socket.assigns.build, id, nil))
+
+  def handle_event("item_size", %{"item_id" => id} = params, socket) do
+    size = Map.new(~w(w d h)a, &{&1, parse_int(params[Atom.to_string(&1)])})
+
+    case Build.size_item(socket.assigns.build, id, size) do
+      {:ok, build} ->
+        {:noreply, put(socket, build)}
+
+      {:error, _reason} ->
+        {:noreply,
+         put_flash(socket, :error, "Give each side in inches, from 1 to #{Layout.max_size()}.")}
+    end
+  end
+
+  # The size of a room from the sheet, in feet: the walls at the front move.
+  def handle_event("room_size", %{"room_id" => id, "w" => w, "d" => d}, socket)
+      when is_binary(w) and is_binary(d) do
+    with {:ok, %{plan: %{} = plan}} <- Build.room(socket.assigns.build, id),
+         {:ok, w} <- inches(w),
+         {:ok, d} <- inches(d) do
+      new = %{plan | w: w, d: d}
+      plan_result(socket, Build.size_room(socket.assigns.build, id, new), nil)
+    else
+      _none -> {:noreply, put_flash(socket, :error, move_error(:plan))}
     end
   end
 
@@ -246,7 +378,10 @@ defmodule DIYWeb.HomeLive do
   end
 
   def handle_event("delete_room", %{"id" => id}, socket) do
-    with_build(socket, Build.delete_room(socket.assigns.build, id))
+    case Build.delete_room(socket.assigns.build, id) do
+      {:ok, build} -> {:noreply, socket |> put(build) |> push_patch(to: ~p"/inside")}
+      {:error, _reason} -> {:noreply, socket}
+    end
   end
 
   def handle_event("price", %{"price" => price}, socket) when is_binary(price) do
@@ -494,6 +629,69 @@ defmodule DIYWeb.HomeLive do
     if Build.van_level?(room.level), do: String.replace_prefix(room.level, "van:", "")
   end
 
+  # The result of a change of the plan: the new build (and a text for a
+  # screen reader), or a message.
+  # A change of the plan: a message that stays from an older change goes.
+  defp plan_result(socket, {:ok, build}, status) do
+    socket = socket |> clear_flash(:error) |> put(build)
+    {:noreply, assign(socket, :status, status && status.(build))}
+  end
+
+  defp plan_result(socket, {:error, reason}, _status),
+    do: {:noreply, put_flash(socket, :error, move_error(reason))}
+
+  defp move_error(:plan),
+    do: "A wall of a room is from 2 to 200 feet long, and a room stays near the house."
+
+  defp move_error(:overlap), do: "A room cannot go over a different room on its floor."
+  defp move_error(:place), do: "This item cannot go in that room."
+
+  # An item or a room that is not on the plan now (it went to a van, or a
+  # different tab removed it).
+  defp move_error(_reason), do: "This item or this room is not on the plan now."
+
+  # A length in feet from the sheet, in inches: from more than 0 to the
+  # largest side of a room.
+  defp inches(feet) do
+    with {feet, ""} <- Float.parse(String.trim(feet)),
+         true <- feet > 0 and feet <= Layout.max_room() / 12 do
+      {:ok, round(feet * 12)}
+    else
+      _other -> :error
+    end
+  end
+
+  # A move in inches on a grid of 6 inches.
+  defp step(inches), do: round(inches / 6) * 6
+
+  # The plan of a room after a move of one of its walls.
+  defp wall(plan, "x0", dx, _dy), do: {:ok, %{plan | x: plan.x + dx, w: plan.w - dx}}
+  defp wall(plan, "x1", dx, _dy), do: {:ok, %{plan | w: plan.w + dx}}
+  defp wall(plan, "y0", _dx, dy), do: {:ok, %{plan | y: plan.y + dy, d: plan.d - dy}}
+  defp wall(plan, "y1", _dx, dy), do: {:ok, %{plan | d: plan.d + dy}}
+  defp wall(_plan, _edge, _dx, _dy), do: :error
+
+  # The texts for a screen reader after an arrow key or a turn. The left
+  # wall is the wall that the Left key goes to, and the top wall is the
+  # wall that the Up key goes to.
+  defp item_status(build, id) do
+    {:ok, item} = Build.item(build, id)
+    {:ok, room} = Build.room(build, item.room)
+
+    "#{Catalog.name(item)}: #{Inside.where(item, room)}"
+  end
+
+  defp turn_status(build, id) do
+    {:ok, item} = Build.item(build, id)
+    {w, d} = Layout.extent(item)
+    "#{Catalog.name(item)} turned. Its space is #{Inside.feet(w)} by #{Inside.feet(d)}."
+  end
+
+  defp room_status(build, id) do
+    {:ok, room} = Build.room(build, id)
+    "#{room.name} moved."
+  end
+
   defp with_build(socket, {:ok, build}), do: {:noreply, put(socket, build)}
   defp with_build(socket, {:error, _reason}), do: {:noreply, socket}
 
@@ -602,6 +800,10 @@ defmodule DIYWeb.HomeLive do
     socket
     |> assign(:scene, Scene.parts(build))
     |> assign(:van_scene, van && Scene.van_parts(build, van))
+    |> assign(
+      :cutaway,
+      if(socket.assigns.live_action == :inside, do: Cutaway.view(Build.house_view(build)))
+    )
   end
 
   defp pictures(socket), do: socket
@@ -766,8 +968,12 @@ defmodule DIYWeb.HomeLive do
               estimate={@full}
               bill={@bill}
               price={@price}
+              view={@cutaway}
               item={@item}
               add={@add}
+              room={@room}
+              sheet={@sheet}
+              status={@status}
               item_error={assigns[:item_error]}
             />
           <% @live_action == :estimate -> %>

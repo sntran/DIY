@@ -34,44 +34,31 @@ async function check(page, name) {
   }
 }
 
-// True when an element is at the center of its row (a room), or at the top
-// of #levels (a level): the snap of the swipe.
-function snapped([selector, axis]) {
-  const el = document.querySelector(selector)
-  const box = el.getBoundingClientRect()
-  const parent = el.parentElement.getBoundingClientRect()
-  return axis === "x"
-    ? Math.abs(box.left + box.width / 2 - (parent.left + parent.width / 2)) < 2
-    : Math.abs(box.top - document.querySelector("#levels").getBoundingClientRect().top) < 2
+// Follows a link of the list of the rooms. The list is for a keyboard and
+// a screen reader: it shows when it has the focus. So the test uses the
+// keyboard, as a person with a keyboard does.
+async function follow(page, selector) {
+  await page.focus(selector)
+  await page.keyboard.press("Enter")
 }
 
-// Waits until #levels and its rows do not scroll for 15 frames: the end of
-// a smooth scroll and of its snap. A step before that end can lose to it.
-async function still(page) {
-  await page.evaluate(() => new Promise((resolve) => {
-    const levels = document.querySelector("#levels")
-    const rows = [...levels.querySelectorAll(".snap-x")]
-    const now = () => [levels.scrollTop, ...rows.map((row) => row.scrollLeft)].join()
-    let last = now()
-    let frames = 0
-    const tick = () => {
-      const next = now()
-      if (next !== last) {
-        last = next
-        frames = 0
-      } else if (++frames >= 15) {
-        return resolve()
-      }
-      requestAnimationFrame(tick)
-    }
-    requestAnimationFrame(tick)
-  }))
+// The id of an item of the plan by its name, and of a room by its name.
+const itemId = (page, name) =>
+  page.evaluate((name) => [...document.querySelectorAll("g[data-item]")]
+    .find((g) => g.querySelector("title").textContent === name).getAttribute("data-item"), name)
+const roomId = (page, name) =>
+  page.evaluate((name) => [...document.querySelectorAll('li[id^="room-"]')]
+    .find((li) => li.querySelector("h3").textContent.trim().startsWith(name)).id.slice(5), name)
+
+// A drag with the mouse, in steps.
+async function drag(page, from, dx, dy) {
+  await page.mouse.move(from.x, from.y)
+  await page.mouse.down()
+  for (let i = 1; i <= 8; i++) await page.mouse.move(from.x + (dx * i) / 8, from.y + (dy * i) / 8)
+  await page.mouse.up()
 }
 
-// The place of #levels and of the hash, for the message of a fault.
-async function where(page) {
-  return page.evaluate(() => `scrollTop ${document.querySelector("#levels").scrollTop}, hash "${location.hash}"`)
-}
+const center = (box) => ({ x: box.x + box.width / 2, y: box.y + box.height / 2 })
 
 // A CSV of Smart Meter Texas: 15-minute reads from July 2024 to June
 // 2025, with more use in the hot and the cold months.
@@ -180,7 +167,7 @@ async function lesson(page, name) {
 async function van(page, name) {
   await page.click("nav >> text=Rooms")
   await page.waitForSelector("#inside")
-  await page.click('a[aria-label="Add an item to Driveway"]')
+  await follow(page, 'a[id^="add-"][aria-label="Add an item to Driveway"]')
   await page.click("#add-camper_van")
   await page.waitForSelector("#item-sheet:has-text('Camper van')")
   await page.click("#open-van")
@@ -206,7 +193,7 @@ async function van(page, name) {
 
   // The house shows the station as away, and the bill of the house stays.
   await page.click("nav >> text=Rooms")
-  await page.waitForSelector('[id^="away-"]:has-text("In the van now")')
+  await page.waitForSelector('[id^="away-"]:has-text("in the van now")', { state: "attached" })
   await page.click("nav >> text=Van")
   await page.click('#van-stations button:has-text("Bring it home")')
   await page.waitForSelector("#van-stations:has-text('at home')")
@@ -256,45 +243,58 @@ async function build(context, name) {
   await check(page, `${name} front`)
 
   await page.click("#go-in")
-  await page.waitForSelector("#inside")
-
-  // The rooms start at the first floor, and stay there after a change.
-  // (Before axe: axe scrolls the containers of the page.)
-  await page.waitForFunction(() => document.querySelector("#levels").scrollTop > 0, null, { timeout: 3000 })
-    .catch(() => assert.fail("the rooms start at the first floor"))
-  const start = await page.$eval("#levels", (el) => el.scrollTop)
-  await page.click("#swipe-hint button")
-  await page.waitForSelector("#swipe-hint", { state: "detached" })
-  assert.equal(await page.$eval("#levels", (el) => el.scrollTop), start, "the rooms stay at the first floor")
+  await page.waitForSelector("#plan-svg")
+  await page.click("#plan-hint button")
+  await page.waitForSelector("#plan-hint", { state: "detached" })
   await check(page, `${name} rooms`)
 
-  // A swipe to the left goes to the next room: the row snaps to it. (A
-  // swipe that is shorter than half of a room snaps back.)
-  await still(page)
-  const rooms = await page.$$eval("#level-f1 article[id^=room-]", (els) => els.map((el) => `#${el.id}`))
-  const first = await page.$eval(rooms[0], (el) => el.getBoundingClientRect())
-  await page.mouse.move(first.x + first.width / 2, first.y + first.height / 2)
-  await page.mouse.wheel(300, 0)
-  await page.waitForFunction(snapped, [rooms[1], "x"], { timeout: 5000 })
-    .catch(async () => assert.fail(`${name}: a swipe to the left snaps to the next room (${await where(page)})`))
-  await still(page)
+  // The plan at scale: the person zooms to the first floor. A drag of the
+  // AC, held at its top: its top is over the house, but its space stays
+  // in the yard. So it moves in the yard, with no message.
+  await page.click("button[data-focus=ground]")
+  const ac = `g[data-item="${await itemId(page, "Central AC")}"]`
+  const [acAt, acIn] = [await page.getAttribute(ac, "data-at"), await page.getAttribute(ac, "data-in")]
+  const acBox = await page.locator(ac).boundingBox()
+  await drag(page, { x: acBox.x + acBox.width / 2, y: acBox.y + 3 }, 10, 6)
+  await page.waitForFunction(([s, at]) => document.querySelector(s).getAttribute("data-at") !== at, [ac, acAt])
+    .catch(() => assert.fail(`${name}: the AC moves with a drag at its top`))
+  assert.equal(await page.getAttribute(ac, "data-in"), acIn, `${name}: the AC stays in the yard`)
+  assert.equal(await page.locator("#flash-error").count(), 0, `${name}: no message after the drag`)
 
-  // A swipe up goes to the level below: #levels snaps to it.
-  await page.mouse.wheel(0, 600)
-  await page.waitForFunction(snapped, ["#level-outside", "y"], { timeout: 5000 })
-    .catch(async () => assert.fail(`${name}: a swipe up snaps to the level below (${await where(page)})`))
-  await still(page)
+  // The person zooms in, and drags the TV from the back wall to the middle
+  // of the living room.
+  await page.click("button[data-zoom=in]")
+  const tv = `g[data-item="${await itemId(page, "TV")}"]`
+  const tvAt = await page.getAttribute(tv, "data-at")
+  await drag(page, center(await page.locator(tv).boundingBox()), -24, 40)
+  await page.waitForFunction(([s, at]) => document.querySelector(s).getAttribute("data-at") !== at, [tv, tvAt])
+    .catch(() => assert.fail(`${name}: the TV moves with a drag`))
 
-  // The links do the same for a keyboard.
-  await page.focus('#level-outside a[aria-label="The level above"]')
+  // A tap on the kitchen chooses it. The handle of its back wall moves the
+  // wall.
+  const kitchen = `polygon[data-room="${await roomId(page, "Kitchen")}"]`
+  await page.mouse.click(...Object.values(center(await page.locator(kitchen).boundingBox())))
+  await page.waitForSelector("#room-bar:has-text('Kitchen')")
+  await check(page, `${name} room`)
+  const plan = await page.getAttribute(kitchen, "data-plan")
+  await drag(page, center(await page.locator('circle[data-handle="x0"]').boundingBox()), -26, -15)
+  await page.waitForFunction(([s, p]) => document.querySelector(s).getAttribute("data-plan") !== p, [kitchen, plan])
+    .catch(() => assert.fail(`${name}: the back wall of the kitchen moves with its handle`))
+  await page.click("#room-bar a[aria-label=Close]")
+  await page.waitForSelector("#room-bar", { state: "detached" })
+
+  // The list of the rooms: the arrow keys move the fridge, and a screen
+  // reader hears where it is.
+  const fridge = 'a[id^="item-"]:has-text("Fridge")'
+  await page.focus(fridge)
+  await page.keyboard.press("ArrowRight")
+  await page.waitForSelector("#plan-status:has-text('Fridge:')", { state: "attached" })
+  await check(page, `${name} list`)
+
   await page.keyboard.press("Enter")
-  await page.waitForFunction(snapped, ["#level-f1", "y"], { timeout: 5000 })
-    .catch(async () => assert.fail(`${name}: the link goes to the level above (${await where(page)})`))
-  await still(page)
-
-  await page.click('a[id^="item-"]:has-text("Fridge")')
   await page.waitForSelector("#item-sheet")
   await check(page, `${name} item`)
+  await page.click("#turn-item")
 
   // The sheet keeps the focus, and the Escape key closes it. The focus goes
   // back to the item.
@@ -306,14 +306,14 @@ async function build(context, name) {
   await page.keyboard.press("Escape")
   await page.waitForSelector("#item-sheet", { state: "detached" })
   assert.match(await page.evaluate(() => document.activeElement.textContent), /Fridge/)
-  await page.click('a[id^="item-"]:has-text("Fridge")')
+  await follow(page, fridge)
   await page.waitForSelector("#item-sheet")
   await page.fill("#item-form input[name='item[kwh_year]']", "700")
   await page.waitForFunction(() => document.querySelector("#item-math")?.textContent.includes("700 kWh"))
   await page.click("#item-sheet .btn-ghost[aria-label=Close]")
   await page.waitForSelector("#item-sheet", { state: "detached" })
 
-  await page.click('a[id^="add-"][aria-label="Add an item to Kitchen"]')
+  await follow(page, 'a[id^="add-"][aria-label="Add an item to Kitchen"]')
   await page.waitForSelector("#add-sheet")
   await check(page, `${name} add`)
   await page.click("#add-freezer")
@@ -354,9 +354,9 @@ for (const colorScheme of ["light", "dark"]) {
     await other.waitForSelector("#inside")
     await page.goto(site + "/inside")
     await connected(page)
-    await other.waitForSelector('a[id^="item-"]')
+    await other.waitForSelector('a[id^="item-"]', { state: "attached" })
     const before = await other.$$eval('a[id^="item-"]', (items) => items.length)
-    await page.click('a[aria-label="Add an item to Backyard"]')
+    await follow(page, 'a[id^="add-"][aria-label="Add an item to Backyard"]')
     await page.click("#add-pool_pump")
     await other.waitForFunction((n) => document.querySelectorAll('a[id^="item-"]').length > n, before)
     await page.waitForSelector("#item-sheet:has-text('Pool pump')")
@@ -394,17 +394,17 @@ for (const colorScheme of ["light", "dark"]) {
     // plans panels on the roof.
     await page.click("nav >> text=Rooms")
     await page.waitForSelector("#inside")
-    await page.click('a[aria-label="Add an item to Laundry"]')
+    await follow(page, 'a[id^="add-"][aria-label="Add an item to Laundry"]')
     await page.click("#add-power_station")
     await page.waitForSelector("#item-sheet:has-text('Power station')")
     await page.click("#item-sheet .btn-ghost[aria-label=Close]")
     await page.waitForSelector("#item-sheet", { state: "detached" })
-    await page.click('a[id^="item-"]:has-text("Fridge")')
+    await follow(page, 'a[id^="item-"]:has-text("Fridge")')
     await page.check("#flags-form input[name=backup][type=checkbox]")
     await page.waitForSelector("#flags-form input[name=backup]:checked")
     await page.click("#item-sheet .btn-ghost[aria-label=Close]")
-    await page.waitForSelector('a[id^="item-"]:has-text("On the station")')
-    await page.click('a[aria-label="Add an item to Roof"]')
+    await page.waitForSelector('a[id^="item-"]:has-text("on the station")', { state: "attached" })
+    await follow(page, 'a[id^="add-"][aria-label="Add an item to Roof"]')
     await page.click("#add-solar_panels")
     await page.waitForSelector("#item-sheet:has-text('Solar panels')")
     await page.check("#flags-form input[name=planned][type=checkbox]")
@@ -412,7 +412,7 @@ for (const colorScheme of ["light", "dark"]) {
     await page.waitForSelector("#flags-form input[name=planned]:checked")
     await check(page, `${name} planned item`)
     await page.click("#item-sheet .btn-ghost[aria-label=Close]")
-    await page.waitForSelector('a[id^="item-"]:has-text("Plan")')
+    await page.waitForSelector('a[id^="item-"]:has-text("a plan")', { state: "attached" })
 
     // The page Bill with a planned item: the house of today, and a note.
     await page.click("nav >> text=Bill")
@@ -433,7 +433,7 @@ for (const colorScheme of ["light", "dark"]) {
 
     // A station that is too small for its items: the warning.
     await page.click("nav >> text=Rooms")
-    await page.click('a[id^="item-"]:has-text("Power station")')
+    await follow(page, 'a[id^="item-"]:has-text("Power station")')
     await page.fill("#item-form input[name='item[output_w]']", "100")
     await page.press("#item-form input[name='item[output_w]']", "Tab")
     await page.waitForFunction(() => document.querySelector("#item-form input[name='item[output_w]']").value === "100")
