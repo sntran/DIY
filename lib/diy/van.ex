@@ -77,6 +77,16 @@ defmodule DIY.Van do
     (size.length - @doors - y - size.front) / size.wheelbase
   end
 
+  @doc """
+  The places of the rear axle and of the front axle on the plan of a van,
+  and of its front (the bumper): `y` in inches, from the doors at the back.
+  """
+  def axles(van) do
+    size = Catalog.van_size(van.params["model"])
+    front = size.length - @doors
+    %{rear: front - size.front - size.wheelbase, front: front - size.front, nose: front}
+  end
+
   # The place along the van of an item: the middle of the item on the plan
   # of its zone. An item of the shell is at the middle of the van.
   defp along(_van, %{at: %{y: y}} = item, %{plan: %{y: zone_y}}) do

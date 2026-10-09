@@ -223,6 +223,7 @@ function setup({storage = new Map(), chosen = true, width = 400, height = 800} =
   }
   const doc = {defaultView: win, elementsFromPoint: () => under}
   const root = new El({id: "plan"})
+  root.id = "plan"
   root.ownerDocument = doc
   root.querySelector = (selector) => (selector === "svg" ? svg : null)
   const zoomIn = new El({"data-zoom": "in"}, root)
@@ -254,9 +255,9 @@ test("the view: the box of the house, or the view that the person had", () => {
   const first = setup()
   assert.equal(first.svg.getAttribute("viewBox"), "0.00 0.00 200.00 400.00")
   assert.equal(first.svg.style.props["--p-label"], "6.000px")
-  assert.equal(first.storage.get("plan-view"), "0.00 0.00 200.00 400.00")
+  assert.equal(first.storage.get("plan-view:plan"), "0.00 0.00 200.00 400.00")
 
-  const again = setup({storage: new Map([["plan-view", "1 2 30 60"]])})
+  const again = setup({storage: new Map([["plan-view:plan", "1 2 30 60"]])})
   assert.deepEqual(again.hook.view, {x: 1, y: 2, w: 30, h: 60})
 
   // With no storage, and with no size yet.

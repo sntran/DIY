@@ -124,7 +124,7 @@ defmodule DIYWeb.PlanLiveTest do
     assert room(view, "Kitchen").plan == %{kitchen.plan | x: -42, y: 0}
 
     html = render_hook(view, "move_room", %{"id" => kitchen.id, "dx" => 100, "dy" => 0})
-    assert html =~ "A room cannot go over a different room on its floor."
+    assert html =~ "A room or a zone cannot go over a different one."
 
     html = render_hook(view, "move_room", %{"id" => kitchen.id, "dx" => 20_000, "dy" => 0})
     assert html =~ "A wall of a room is from 2 to 200 feet long"
@@ -170,7 +170,7 @@ defmodule DIYWeb.PlanLiveTest do
     assert room(view, "Kitchen").plan.x == -6
 
     html = render_hook(view, "nudge_room", %{"id" => kitchen.id, "dx" => 24, "dy" => 0})
-    assert html =~ "A room cannot go over a different room"
+    assert html =~ "A room or a zone cannot go over a different one."
 
     before = build(view)
     render_hook(view, "nudge_item", %{"id" => "i999", "dx" => 6, "dy" => 0})
@@ -238,7 +238,7 @@ defmodule DIYWeb.PlanLiveTest do
     assert %{w: 126, d: 240} = room(view, "Kitchen").plan
 
     html = view |> form("#size-#{kitchen.id}", %{"w" => "30", "d" => "20"}) |> render_submit()
-    assert html =~ "A room cannot go over a different room"
+    assert html =~ "A room or a zone cannot go over a different one."
 
     html = view |> form("#size-#{kitchen.id}", %{"w" => "ten", "d" => "20"}) |> render_submit()
     assert html =~ "A wall of a room is from 2 to 200 feet long"

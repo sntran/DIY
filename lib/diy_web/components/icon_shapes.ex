@@ -80,6 +80,9 @@ defmodule DIYWeb.Icon.Shapes do
     }
   }
 
+  @doc "The height of the hood of a model of a van over the ground, in meters."
+  def hood_height(model), do: elem(Map.get(@profiles, model, @profiles["transit_148"]).hood, 1)
+
   # The bottom of the body, the radius of a wheel (a tire of 30 in), and
   # the depth of a bumper.
   @sill 0.45

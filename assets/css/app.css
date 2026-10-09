@@ -251,6 +251,9 @@
   --p-membrane: #a3abb5; --p-roof-f: #5b6675; --p-roof-b: #465060; --p-gable: #efe9df;
   --p-pad: #dad6cf; --p-edge: rgb(31 35 40 / 0.28); --p-text: #1f2937; --p-halo: #ffffff;
   --p-chosen: #2563eb; --p-sky: #eef5fc;
+  --p-vwall-t: #f4f5f7; --p-vwall-l: #e3e6ea; --p-vwall-r: #c8cdd4;
+  --p-vpanel-t: #f0d3a8; --p-vpanel-l: #e2bd88; --p-vpanel-r: #c9a06a;
+  --p-vinsul: #f9a8d4; --p-vmetal: #c9ced6; --p-vmat: #4b5059; --p-vroof: #f1f3f6;
   background: var(--p-sky);
 }
 @media (prefers-color-scheme: dark) {
@@ -263,6 +266,9 @@
     --p-membrane: #5d646d; --p-roof-f: #3a4350; --p-roof-b: #2c333d; --p-gable: #a49e93;
     --p-pad: #6b6a66; --p-edge: rgb(255 255 255 / 0.22); --p-text: #f3f4f6; --p-halo: #111827;
     --p-chosen: #60a5fa; --p-sky: #0f172a;
+    --p-vwall-t: #9aa1ab; --p-vwall-l: #868d97; --p-vwall-r: #6c727b;
+    --p-vpanel-t: #a88b62; --p-vpanel-l: #937754; --p-vpanel-r: #7a6145;
+    --p-vinsul: #b56a93; --p-vmetal: #5b616b; --p-vmat: #2b2f35; --p-vroof: #8d949e;
   }
 }
 [data-theme=dark] .cutaway {
@@ -274,6 +280,9 @@
   --p-membrane: #5d646d; --p-roof-f: #3a4350; --p-roof-b: #2c333d; --p-gable: #a49e93;
   --p-pad: #6b6a66; --p-edge: rgb(255 255 255 / 0.22); --p-text: #f3f4f6; --p-halo: #111827;
   --p-chosen: #60a5fa; --p-sky: #0f172a;
+  --p-vwall-t: #9aa1ab; --p-vwall-l: #868d97; --p-vwall-r: #6c727b;
+  --p-vpanel-t: #a88b62; --p-vpanel-l: #937754; --p-vpanel-r: #7a6145;
+  --p-vinsul: #b56a93; --p-vmetal: #5b616b; --p-vmat: #2b2f35; --p-vroof: #8d949e;
 }
 .p-lot-t { fill: var(--p-grass-t) } .p-lot-l { fill: var(--p-grass-l) } .p-lot-r { fill: var(--p-grass-r) }
 .p-slab-t { fill: var(--p-slab-t) } .p-slab-l { fill: var(--p-slab-l) } .p-slab-r { fill: var(--p-slab-r) }
@@ -287,6 +296,15 @@
 .p-deck { fill: var(--p-deck) } .p-grass { fill: var(--p-yard) } .p-membrane { fill: var(--p-membrane) }
 .p-roof-f { fill: var(--p-roof-f) } .p-roof-b { fill: var(--p-roof-b) } .p-gable { fill: var(--p-gable) }
 .p-pad { fill: var(--p-pad) }
+/* The van cut open (DIYWeb.VanCutaway): its walls (bare or with panels),
+   the insulation in their cut, its floor, the mat of the cab, its roof. */
+.p-vwall-t { fill: var(--p-vwall-t) } .p-vwall-l { fill: var(--p-vwall-l) } .p-vwall-r { fill: var(--p-vwall-r) }
+.p-vpanel-t { fill: var(--p-vpanel-t) } .p-vpanel-l { fill: var(--p-vpanel-l) } .p-vpanel-r { fill: var(--p-vpanel-r) }
+.p-vinsul-t { fill: var(--p-vinsul) }
+.p-vwall-t, .p-vwall-l, .p-vwall-r, .p-vpanel-t, .p-vpanel-l, .p-vpanel-r, .p-vinsul-t {
+  stroke: var(--p-edge); stroke-width: 0.6; stroke-linejoin: round; vector-effect: non-scaling-stroke
+}
+.p-vmetal { fill: var(--p-vmetal) } .p-vmat { fill: var(--p-vmat) } .p-vroof { fill: var(--p-vroof) }
 .p-chosen { stroke: var(--p-chosen); stroke-width: 2.5 }
 .p-item { cursor: grab }
 .p-planned { opacity: 0.55 }

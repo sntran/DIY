@@ -622,11 +622,12 @@ defmodule DIY.Build do
   @doc """
   Moves a room of the house or a zone of a van: `x` and `y` are its new
   back corner, in inches. Its items go with it. The room must not overlap
-  a room of its layer (`DIY.Layout.layer/1`), and a zone stays in its van.
+  a room of its layer (`DIY.Layout.layer/1`), and a zone stays in its van
+  (else `:van`). The cab and the roof of a van do not move (`:fixed`).
   """
   @spec move_room(t(), String.t(), integer(), integer()) :: {:ok, t()} | {:error, atom()}
   def move_room(build, id, x, y) when is_integer(x) and is_integer(y) do
-    with {:ok, room} <- plan_room(build, id),
+    with {:ok, room} <- movable_room(build, id),
          do: put_room_plan(build, room, %{room.plan | x: x, y: y}, {0, 0})
   end
 
@@ -637,8 +638,16 @@ defmodule DIY.Build do
   """
   @spec size_room(t(), String.t(), plan()) :: {:ok, t()} | {:error, atom()}
   def size_room(build, id, %{x: x, y: y} = plan) do
-    with {:ok, room} <- plan_room(build, id),
+    with {:ok, room} <- movable_room(build, id),
          do: put_room_plan(build, room, plan, {x - room.plan.x, y - room.plan.y})
+  end
+
+  # A room with a plan that moves: not the cab or the roof of a van.
+  defp movable_room(build, id) do
+    case plan_room(build, id) do
+      {:ok, %{place: place}} when place in [:cab, :van_roof] -> {:error, :fixed}
+      other -> other
+    end
   end
 
   # A room or a zone with a plan (not the shell of a van).
@@ -661,8 +670,11 @@ defmodule DIY.Build do
     box = van_box(build, room)
 
     cond do
-      not Layout.valid_plan?(plan) or (box != nil and not Layout.inside?(plan, box)) ->
+      not Layout.valid_plan?(plan) ->
         {:error, :plan}
+
+      box != nil and not Layout.inside?(plan, box) ->
+        {:error, :van}
 
       not Layout.free?(build, room, plan) ->
         {:error, :overlap}

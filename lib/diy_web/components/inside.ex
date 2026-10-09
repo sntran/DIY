@@ -85,32 +85,7 @@ defmodule DIYWeb.Inside do
           if(@chosen, do: "h-[calc(100dvh-22rem)]", else: "h-[calc(100dvh-14rem)]")
         ]}>
           <Cutaway.cutaway view={@view} selected={@chosen && @chosen.id} />
-          <div class="absolute top-2 right-2 flex flex-col gap-2">
-            <button
-              type="button"
-              data-zoom="in"
-              class="btn btn-sm btn-square shadow"
-              aria-label="Zoom in"
-            >
-              <.icon name="hero-plus" class="size-4" />
-            </button>
-            <button
-              type="button"
-              data-zoom="out"
-              class="btn btn-sm btn-square shadow"
-              aria-label="Zoom out"
-            >
-              <.icon name="hero-minus" class="size-4" />
-            </button>
-            <button
-              type="button"
-              data-zoom="fit"
-              class="btn btn-sm btn-square shadow"
-              aria-label="Show all the house"
-            >
-              <.icon name="hero-arrows-pointing-out" class="size-4" />
-            </button>
-          </div>
+          <.zoom all="Show all the house" />
           <.link
             :if={!@chosen}
             patch={~p"/inside?#{[sheet: "new_room"]}"}
@@ -148,6 +123,25 @@ defmodule DIYWeb.Inside do
       <.room_sheet :if={@chosen && @sheet == "room"} room={@chosen} />
       <.new_room_sheet :if={@sheet == "new_room"} levels={@levels} />
     </section>
+    """
+  end
+
+  attr :all, :string, required: true, doc: "the label of the button that shows all the plan"
+
+  @doc "The buttons of the zoom of a plan, at its top right (the hook Plan)."
+  def zoom(assigns) do
+    ~H"""
+    <div class="absolute top-2 right-2 flex flex-col gap-2">
+      <button type="button" data-zoom="in" class="btn btn-sm btn-square shadow" aria-label="Zoom in">
+        <.icon name="hero-plus" class="size-4" />
+      </button>
+      <button type="button" data-zoom="out" class="btn btn-sm btn-square shadow" aria-label="Zoom out">
+        <.icon name="hero-minus" class="size-4" />
+      </button>
+      <button type="button" data-zoom="fit" class="btn btn-sm btn-square shadow" aria-label={@all}>
+        <.icon name="hero-arrows-pointing-out" class="size-4" />
+      </button>
+    </div>
     """
   end
 
@@ -420,17 +414,9 @@ defmodule DIYWeb.Inside do
     rooms = Enum.filter(assigns.build.rooms, &(&1.place in kind.places))
     van = Enum.any?(assigns.build.items, &(&1.type == "camper_van"))
     features = if van, do: kind.features, else: kind.features -- @van_features
-    {pw, pd} = Layout.panel()
 
     assigns =
-      assign(assigns,
-        kind: kind,
-        room: room,
-        rooms: rooms,
-        van: van,
-        features: features,
-        panel: "#{pw} by #{pd}"
-      )
+      assign(assigns, kind: kind, room: room, rooms: rooms, van: van, features: features)
 
     ~H"""
     <.sheet id="item-sheet" title={Catalog.name(@item)} icon={@item.type}>
@@ -520,63 +506,7 @@ defmodule DIYWeb.Inside do
         </label>
       </form>
 
-      <div :if={@item.at} id="item-place" class="space-y-2 rounded-box bg-base-200 p-3">
-        <p class="text-sm font-semibold">Its place, its size and its turn</p>
-        <.moves id="move-item" event="nudge_item" target={@item.id} step={6} what="the item" />
-        <p id="item-where" class="text-sm" aria-live="polite">{where(@item, @room)}</p>
-        <p :if={@item.type == "solar_panels"} class="text-xs opacity-70">
-          The watts give the size of the array: {@panel} inches for each panel of 400 W.
-        </p>
-        <form
-          :if={@item.type != "solar_panels"}
-          id="size-form"
-          phx-submit="item_size"
-          class="flex flex-wrap items-end gap-2"
-        >
-          <input type="hidden" name="item_id" value={@item.id} />
-          <label :for={{key, label, value} <- size_fields(@item)}>
-            <span class="block text-xs">{label}</span>
-            <input
-              name={key}
-              type="number"
-              min="1"
-              max={Layout.max_size()}
-              step="1"
-              inputmode="numeric"
-              value={value}
-              class="input input-sm w-20"
-            />
-          </label>
-          <button class="btn btn-sm">Set the size</button>
-        </form>
-        <p :if={@item.type != "solar_panels"} class="text-xs opacity-70">
-          In inches.{if @item.size,
-            do: " You gave this size.",
-            else: " The typical size of this kind: give the size of your item."}
-        </p>
-        <div class="flex gap-2">
-          <button
-            type="button"
-            id="turn-item"
-            phx-click="turn_item"
-            phx-value-id={@item.id}
-            class="btn btn-sm"
-          >
-            <.icon name="hero-arrow-path" class="size-4" /> Turn it
-          </button>
-          <button
-            :if={@item.size}
-            type="button"
-            id="typical-size"
-            phx-click="item_size"
-            phx-value-item_id={@item.id}
-            phx-value-typical="true"
-            class="btn btn-sm btn-ghost"
-          >
-            The typical size
-          </button>
-        </div>
-      </div>
+      <.place :if={@item.at} item={@item} room={@room} />
 
       <button
         type="button"
@@ -596,17 +526,91 @@ defmodule DIYWeb.Inside do
     """
   end
 
+  attr :item, :map, required: true
+  attr :room, :map, required: true, doc: "the room or the zone of the item"
+
+  @doc """
+  The place of an item on the plan: buttons that move it, its place in
+  words, its size and its turn. It is in the sheet of an item of the house
+  or of a van.
+  """
+  def place(assigns) do
+    {pw, pd} = Layout.panel()
+    assigns = assign(assigns, :panel, "#{pw} by #{pd}")
+
+    ~H"""
+    <div id="item-place" class="space-y-2 rounded-box bg-base-200 p-3">
+      <p class="text-sm font-semibold">Its place, its size and its turn</p>
+      <.moves id="move-item" event="nudge_item" target={@item.id} step={6} what="the item" />
+      <p id="item-where" class="text-sm" aria-live="polite">{where(@item, @room)}</p>
+      <p :if={@item.type == "solar_panels"} class="text-xs opacity-70">
+        The watts give the size of the array: {@panel} inches for each panel of 400 W.
+      </p>
+      <form
+        :if={@item.type != "solar_panels"}
+        id="size-form"
+        phx-submit="item_size"
+        class="flex flex-wrap items-end gap-2"
+      >
+        <input type="hidden" name="item_id" value={@item.id} />
+        <label :for={{key, label, value} <- size_fields(@item)}>
+          <span class="block text-xs">{label}</span>
+          <input
+            name={key}
+            type="number"
+            min="1"
+            max={Layout.max_size()}
+            step="1"
+            inputmode="numeric"
+            value={value}
+            class="input input-sm w-20"
+          />
+        </label>
+        <button class="btn btn-sm">Set the size</button>
+      </form>
+      <p :if={@item.type != "solar_panels"} class="text-xs opacity-70">
+        In inches.{if @item.size,
+          do: " You gave this size.",
+          else: " The typical size of this kind: give the size of your item."}
+      </p>
+      <div class="flex gap-2">
+        <button
+          type="button"
+          id="turn-item"
+          phx-click="turn_item"
+          phx-value-id={@item.id}
+          class="btn btn-sm"
+        >
+          <.icon name="hero-arrow-path" class="size-4" /> Turn it
+        </button>
+        <button
+          :if={@item.size}
+          type="button"
+          id="typical-size"
+          phx-click="item_size"
+          phx-value-item_id={@item.id}
+          phx-value-typical="true"
+          class="btn btn-sm btn-ghost"
+        >
+          The typical size
+        </button>
+      </div>
+    </div>
+    """
+  end
+
   attr :id, :string, required: true
   attr :event, :string, required: true, doc: "nudge_item or nudge_room"
   attr :target, :string, required: true, doc: "the id of the item or of the room"
   attr :step, :integer, required: true, doc: "inches for each tap"
   attr :what, :string, required: true
 
-  # Four buttons that move an item or a room: for a person who does not
-  # drag (WCAG 2.2, 2.5.7). Each arrow points as the move goes on the
-  # plan. The left wall is at the top left, and the top wall is at the top
-  # right.
-  defp moves(assigns) do
+  @doc """
+  Four buttons that move an item or a room: for a person who does not
+  drag (WCAG 2.2, 2.5.7). Each arrow points as the move goes on the plan.
+  The left wall is at the top left, and the top wall is at the top right.
+  """
+  def moves(assigns) do
     assigns =
       assign(assigns,
         buttons: [
