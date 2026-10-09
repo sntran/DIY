@@ -501,6 +501,12 @@ defmodule DIYWeb.HomeLiveTest do
     refute has_element?(view, ~s(#item-form input[name="item[hspf2]"]))
     view |> form("#item-form", %{"item" => %{"heat_pump" => "true"}}) |> render_change()
     assert has_element?(view, ~s(#item-form input[name="item[hspf2]"]))
+
+    # A choice has its note under it: an inlet is not an outlet.
+    laundry = Enum.find(build.rooms, &(&1.name == "Laundry"))
+    {:ok, build, station} = Build.add_item(build, laundry.id, "power_station")
+    view = open(conn, ~p"/inside?#{[item: station]}", build)
+    assert has_element?(view, "#item-form", "It is not an outlet: an electrician installs it.")
   end
 
   test "two items with the same name: the bill gives the room of each one", %{conn: conn} do
@@ -526,6 +532,15 @@ defmodule DIYWeb.HomeLiveTest do
     assert has_element?(view, ~s(#top[data-page="inside::"]))
     render_patch(view, ~p"/plans?step=1")
     assert has_element?(view, ~s(#top[data-page="plans:1:"]))
+
+    # A new van: its sheet opens over the same page, and the key stays.
+    driveway = Enum.find(build.rooms, &(&1.name == "Driveway"))
+    render_patch(view, ~p"/inside")
+    render_click(view, "add_item", %{"room" => driveway.id, "type" => "camper_van"})
+    assert has_element?(view, ~s(#top[data-page="inside::"]))
+    van = Enum.find(build(view).items, &(&1.type == "camper_van"))
+    render_patch(view, ~p"/van?#{[id: van.id]}")
+    assert has_element?(view, ~s(#top[data-page="van::#{van.id}"]))
 
     {:ok, view, _html} = live(conn, ~p"/")
     assert has_element?(view, ~s(#top[data-page="load"]))

@@ -286,12 +286,9 @@ defmodule DIYWeb.Front do
           </p>
         <% true -> %>
           <p class="text-sm">
-            A next small step: see the real use of your house. Your smart meter (outside, on a wall) sends its use to your utility. {if @build.market &&
-                                                                                                                                          @build.market.choice,
-                                                                                                                                        do:
-                                                                                                                                          "The site smartmetertexas.com gives the file of this use.",
-                                                                                                                                        else:
-                                                                                                                                          "The site of your utility gives the file of this use (\"Green Button\" or \"Download My Data\")."} Add the meter here, and open the file in it.
+            A next small step: see the real use of your house. Your smart meter (outside, on a wall) sends its use to your utility. {meter_site(
+              @build
+            )} Add the meter here, and open the file in it.
             <.link :if={@room} patch={~p"/inside?#{[add: @room.id]}"} class="link">Add the meter</.link>
           </p>
       <% end %>
@@ -327,6 +324,15 @@ defmodule DIYWeb.Front do
     </div>
     """
   end
+
+  # The site that gives the file of the meter: Smart Meter Texas in an area
+  # with retail choice, else the site of the utility.
+  defp meter_site(%{market: %{choice: true}}),
+    do: "The site smartmetertexas.com gives the file of this use."
+
+  defp meter_site(_build),
+    do:
+      "The site of your utility gives the file of this use (\"Green Button\" or \"Download My Data\")."
 
   @doc """
   The kWh of an average month from the meter: one year divided by 12, or

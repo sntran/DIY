@@ -54,8 +54,15 @@ defmodule DIY.Catalog.Param do
   # A power that an item uses some minutes in one day.
   def minutes(default), do: int("minutes", "Minutes in one day", "min", default, 0, 1440)
 
-  def choice(key, label, values, default),
-    do: %{key: key, label: label, unit: nil, type: {:choice, values}, default: default, note: nil}
+  def choice(key, label, values, default, note \\ nil),
+    do: %{
+      key: key,
+      label: label,
+      unit: nil,
+      type: {:choice, values},
+      default: default,
+      note: note
+    }
 
   def seasons, do: @seasons
 end
@@ -520,10 +527,10 @@ defmodule DIY.Catalog do
           "It powers",
           [
             {"plug", "Items that plug into it"},
-            {"panel",
-             "Circuits of the house, through an inlet (a connector for a station on the wall of the house, not an outlet: an electrician installs it)"}
+            {"panel", "Circuits of the house, through an inlet"}
           ],
-          "plug"
+          "plug",
+          "An inlet is a connector for a station on the wall of the house. It is not an outlet: an electrician installs it."
         ),
         int(
           "cost",

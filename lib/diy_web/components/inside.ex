@@ -851,6 +851,7 @@ defmodule DIYWeb.Inside do
       <select name={"item[#{@param.key}]"} class="select select-sm w-full">
         <option :for={{key, label} <- @values} value={key} selected={key == @value}>{label}</option>
       </select>
+      <span :if={@param.note} class="block text-xs opacity-70">{@param.note}</span>
     </label>
     """
   end

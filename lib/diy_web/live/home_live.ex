@@ -1149,7 +1149,8 @@ defmodule DIYWeb.HomeLive do
       end
 
     step = if page == :plans, do: lesson_step(assigns.lesson_step, build)
-    "#{page}:#{step}:#{assigns.shown_van}"
+    van = if page == :van, do: assigns.shown_van
+    "#{page}:#{step}:#{van}"
   end
 
   # A number that a person types, with no "$", no commas and no spaces.
