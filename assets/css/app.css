@@ -363,4 +363,12 @@
   vector-effect: non-scaling-stroke; pointer-events: none
 }
 .p-outline { fill: none; stroke: var(--p-chosen); stroke-width: 2; stroke-dasharray: 6 4; vector-effect: non-scaling-stroke; pointer-events: none }
+/* The tab of a layer: the other layers are pale (assets/js/plan.js). The
+   ids of the layers come from DIYWeb.Cutaway.view/1 (the house) and
+   DIYWeb.VanCutaway (the van). */
+.cutaway[data-dim] > g[data-box] { opacity: 0.3; transition: opacity 0.2s }
+.cutaway[data-dim=ground] > #plan-ground, .cutaway[data-dim=f2] > #plan-f2, .cutaway[data-dim=f3] > #plan-f3,
+.cutaway[data-dim=attic] > #plan-attic, .cutaway[data-dim=roof] > #plan-roof, .cutaway[data-dim=floor] > #plan-floor {
+  opacity: 1
+}
 .p-handle { r: var(--p-handle, 2px); fill: var(--p-halo); stroke: var(--p-chosen); stroke-width: 2.5; vector-effect: non-scaling-stroke; cursor: move }
