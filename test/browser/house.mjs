@@ -319,6 +319,14 @@ async function build(context, name) {
   await drag(page, center(await page.locator('circle[data-handle="x0"]').boundingBox()), -26, -15)
   await page.waitForFunction(([s, p]) => document.querySelector(s).getAttribute("data-plan") !== p, [kitchen, plan])
     .catch(() => assert.fail(`${name}: the back wall of the kitchen moves with its handle`))
+  // The living room is next to the kitchen. So the button that moves the
+  // kitchen to it cannot move, but it keeps the focus, and the page says
+  // why.
+  await page.focus("#move-room-right")
+  await page.keyboard.press("Enter")
+  await page.waitForSelector("#flash-error")
+  assert.equal(await page.evaluate(() => document.activeElement.id), "move-room-right",
+    `${name}: the move button keeps the focus`)
   await page.click("#room-bar a[aria-label=Close]")
   await page.waitForSelector("#room-bar", { state: "detached" })
 

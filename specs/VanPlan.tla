@@ -11,15 +11,15 @@
 (* - choose a different model: the box gets a different length.            *)
 (* The rules of the app:                                                   *)
 (* - A zone moves only to a place in the box where no zone is.             *)
-(* - The cab and the roof do not move.                                     *)
-(* - After a change, the fill keeps the plans only when each zone is in    *)
-(*   the box, no two zones overlap, and the cab is at its place. Else      *)
-(*   all the zones get the draft of the model.                             *)
+(* - The cab does not move.                                                *)
+(* - After a change, the fill keeps the plans when these rules hold. Each *)
+(*   zone is in the box, no two zones overlap, and the cab is at its       *)
+(*   place. Else all the zones get the draft of the model.                 *)
 (*                                                                         *)
 (* Two modes have a fault:                                                 *)
 (* - "nobox": a zone moves out of the box (VanPlan.nobox.cfg);             *)
-(* - "nocab": the fill does not check the place of the cab, as before the  *)
-(*   review (VanPlan.nocab.cfg).                                           *)
+(* - "nocab": the fill does not check the place of the cab, so a new      *)
+(*   model keeps the old cab (VanPlan.nocab.cfg).                          *)
 (***************************************************************************)
 EXTENDS Integers
 
@@ -65,9 +65,12 @@ NoOverlap == \A z, w \in Zones : z # w => ~Overlap(plan[z], plan[w])
 \* The cab is at the front of the box.
 CabAtFront == plan["cab"] = Draft(len)["cab"]
 
+\* A stored build can have any plans: the fill makes them whole.
+Stored == [y : 0..5, d : 1..3]
+
 Init ==
   /\ len \in Lengths
-  /\ plan = Draft(len)
+  /\ \E p \in [Zones -> Stored] : plan = Fill(p, len)
 
 \* Move a zone, or give it a new depth (DIY.Build.move_room/4, size_room/3).
 Change(z, p) ==

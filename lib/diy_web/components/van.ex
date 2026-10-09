@@ -341,7 +341,9 @@ defmodule DIYWeb.VanPage do
         <.zone_bar :if={@zone} van={@van} zone={@zone} build={@build} />
         <.shell build={@build} van={@van} />
         <p id="van-size-source" class="text-xs opacity-80">
-          The sizes of the model: {Catalog.van_size(@van.params["model"]).source} The places of the seats, the dash and the wheel wells are for the picture only.
+          The sizes of the model: {Catalog.van_size(@van.params["model"]).source} The depth of the cab ({Inside.feet(
+            DIY.Layout.cab()
+          )}) and the thickness of the doors at the back ({Inside.feet(Van.doors())}) are guesses of the app. The places of the seats, the dash and the wheel wells are for the picture only.
         </p>
         <.list build={@build} van={@van} />
         <p id="plan-status" class="sr-only" aria-live="polite">{@status}</p>

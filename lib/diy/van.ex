@@ -46,6 +46,9 @@ defmodule DIY.Van do
   # of the van starts after them. A guess of the app (no source).
   @doors 3
 
+  @doc "The thickness of the doors at the back of a van, in inches: a guess."
+  def doors, do: @doors
+
   @water_lb 8.34
   @inverter 0.9
   @cell_volts 12.8 / 12

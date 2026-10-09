@@ -634,7 +634,9 @@ defmodule DIYWeb.Inside do
   drag (WCAG 2.2, 2.5.7). Each arrow points as the move goes on the plan.
   The left wall is at the top left, and the top wall is at the top right.
   In a van, the right side of the van is at the top left, and the back is
-  at the top right (`DIYWeb.Iso`). A button that cannot move is disabled.
+  at the top right (`DIYWeb.Iso`). A button that cannot move looks
+  disabled (`aria-disabled`), but it keeps the focus of the keyboard. The
+  server refuses its move, and the page says why.
   """
   def moves(assigns) do
     words =
@@ -672,8 +674,8 @@ defmodule DIYWeb.Inside do
         phx-value-id={@target}
         phx-value-dx={dx}
         phx-value-dy={dy}
-        disabled={key in @blocked}
-        class="btn btn-sm btn-square"
+        aria-disabled={key in @blocked && "true"}
+        class={["btn btn-sm btn-square", key in @blocked && "opacity-40"]}
         aria-label={"Move #{@what} #{feet(@step)} #{text}"}
       >
         <.icon name={icon} class="size-4" />

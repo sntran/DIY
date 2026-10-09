@@ -249,7 +249,7 @@ defmodule DIYWeb.VanCutaway do
   defp cab(size, t, front, van) do
     {cw, dash} = {size.cargo_width, size.cargo_length + Layout.cab()}
     hood = max(0.25, Shapes.hood_height(van.params["model"]) - @floor * @m)
-    wheel = {(cw - 13) * @m, (dash - 3) * @m, 0.62}
+    wheel = {(cw - 13) * @m, (dash - 4) * @m, 0.67}
     tilt = {0, -0.5, 0.866}
 
     [
