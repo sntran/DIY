@@ -387,26 +387,63 @@ defmodule DIYWeb.CutawayTest do
         assert depth_faults(polys, camera) == [], "#{model} at turn #{turn}, #{camera.name}"
       end
 
+      # The margin of the depth is 1% of the largest side of an item (3 cm
+      # at most). Thus the check of a small item is at its scale.
       for type <- Catalog.types() do
         {w, d, h} = Catalog.size(type)
         frame = %{at: {0, 0, 0}, size: {w * m, d * m, h * m}, turn: turn, camera: camera}
         polys = for {:poly, corners, _class} <- Shapes.placed(type, frame), do: corners
-        assert depth_faults(polys, camera) == [], "#{type} at turn #{turn}, #{camera.name}"
+        margin = min(0.03, 0.01 * Enum.max([w, d, h]) * m)
+
+        assert depth_faults(polys, camera, margin) == [],
+               "#{type} at turn #{turn}, #{camera.name}"
       end
+    end
+  end
+
+  test "a prism with a loop that is not convex paints from the back at each turn" do
+    # An L, a C, and a C that lies along x and along y. The arms of the C
+    # are long, so a long side can hide a short one.
+    l = [{0, 0}, {1, 0}, {1, 0.3}, {0.3, 0.3}, {0.3, 1}, {0, 1}]
+
+    c =
+      for {u, v} <- [
+            {-20, -4},
+            {4, -4},
+            {4, -0.5},
+            {0.3, -0.5},
+            {0.3, 0.2},
+            {4, 0.2},
+            {4, 0.5},
+            {-20, 0.5}
+          ],
+          do: {u / 10, v / 10}
+
+    models = [
+      [{:prism, l, 0.0, 0.5, "white"}],
+      [{:prism, c, 0.0, 0.6, "white"}],
+      [{:prism, :x, c, 0.0, 0.6, "white"}],
+      [{:prism, :y, c, 0.0, 0.6, "white"}]
+    ]
+
+    for model <- models, turn <- 0..3, camera <- [Camera.house(), Camera.van()] do
+      frame = %{at: {0, 0, 0}, turn: turn, camera: camera}
+      polys = for {:poly, corners, _class} <- Shapes.placed_model(model, frame), do: corners
+      assert depth_faults(polys, camera, 0.005) == [], "#{inspect(model)} at turn #{turn}"
     end
   end
 
   # The pairs of polygons (in the order of the paint) where the first one
   # is nearer to the eye at a point that both cover. Then the second one
   # paints over it. A larger depth (`DIYWeb.Camera.depth/2`) is nearer.
-  defp depth_faults(polys, camera) do
+  defp depth_faults(polys, camera, margin \\ 0.03) do
     prepared = polys |> Enum.map(&prepare(&1, camera)) |> Enum.with_index()
 
     for {a, i} <- prepared,
         {b, j} <- prepared,
         i < j,
         a.plane && b.plane,
-        nearer?(a, b, camera),
+        nearer?(a, b, camera, margin),
         do: {i, j}
   end
 
@@ -421,7 +458,7 @@ defmodule DIYWeb.CutawayTest do
     }
   end
 
-  defp nearer?(a, b, camera) do
+  defp nearer?(a, b, camera, margin) do
     {ax0, ay0, ax1, ay1} = a.box
     {bx0, by0, bx1, by1} = b.box
     {x0, y0, x1, y1} = {max(ax0, bx0), max(ay0, by0), min(ax1, bx1), min(ay1, by1)}
@@ -431,7 +468,7 @@ defmodule DIYWeb.CutawayTest do
         for(i <- 1..7, j <- 1..7, do: {x0 + (x1 - x0) * i / 8, y0 + (y1 - y0) * j / 8}),
         fn point ->
           in_poly?(point, a.screen) and in_poly?(point, b.screen) and
-            depth(a.plane, point, camera) > depth(b.plane, point, camera) + 0.03
+            depth(a.plane, point, camera) > depth(b.plane, point, camera) + margin
         end
       )
   end

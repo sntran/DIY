@@ -20,6 +20,11 @@ defmodule DIYWeb.Icon.Shapes do
   - `{:prism, loop, z, h, material}`: a prism that stands on a loop of
     points (`{x, y}`, counterclockwise from above), from z to z + h. A
     box with round corners (`rounded/3`) is a prism.
+  - `{:prism, axis, loop, from, length, material}`: a prism along an axis
+    (`:x`, `:y` or `:z`). Its loop is in the plane of the two other axes,
+    counterclockwise when the eye is at the large end of the axis. For
+    `:x`, a point of the loop is `{y, z}`. For `:y`, it is `{z, x}`. For
+    `:z`, it is `{x, y}`. A tube (`tube/5`) is a prism along x or y.
   - `{:face, corners, normal, class}`: a flat part, with the direction
     that it looks to (`nil`: it always shows).
 
@@ -83,6 +88,9 @@ defmodule DIYWeb.Icon.Shapes do
 
         {:prism, loop, z, h, _material} ->
           Enum.flat_map(loop, fn {x, y} -> [{x, y, z}, {x, y, z + h}] end)
+
+        {:prism, axis, loop, from, length, _material} ->
+          Enum.flat_map(loop, &[lift(axis, &1, from), lift(axis, &1, from + length)])
 
         {:face, corners, _normal, _class} ->
           corners
@@ -203,33 +211,34 @@ defmodule DIYWeb.Icon.Shapes do
     draw_one({:prism, loop, z, h, material}, view)
   end
 
-  # A prism: a loop of points on the ground (counterclockwise from above),
-  # from z up to z + h. Each side of the loop is a face, with the light of
-  # its normal (`DIYWeb.Camera.light/2`): so a round shape has a soft
-  # light. The faces have no edge. Under them is the shape of all the faces
-  # that show, and over them its edge (`i-outline`). Then the top.
-  defp draw_one({:prism, loop, z, h, material}, %{point: point, normal: turn, camera: camera}) do
+  # A prism that stands: a prism along z.
+  defp draw_one({:prism, loop, z, h, material}, view),
+    do: draw_one({:prism, :z, loop, z, h, material}, view)
+
+  # A prism along an axis, from `from` to `from + length`. Each side of the
+  # loop is a face, with the light of its normal (`DIYWeb.Camera.light/2`):
+  # so a round shape has a soft light. On a convex loop, the faces have no
+  # edge. Under them is the shape of all the faces that show, and over them
+  # its edge (`i-outline`). A loop that is not convex can hide a part of
+  # itself: for example, the profile of a car. Its faces paint from the far
+  # one to the near one, each with its edge. Then the end that looks to the
+  # camera paints.
+  defp draw_one(
+         {:prism, axis, loop, from, length, material},
+         %{point: point, normal: turn, camera: camera}
+       ) do
     corners = List.to_tuple(loop)
     n = tuple_size(corners)
-
-    lift = fn i, zz ->
-      {x, y} = elem(corners, rem(i, n))
-      at(point, {x, y, zz})
-    end
-
-    low = &lift.(&1, z)
-    high = &lift.(&1, z + h)
+    point_at = fn i, t -> at(point, lift(axis, elem(corners, rem(i, n)), t)) end
+    low = &point_at.(&1, from)
+    high = &point_at.(&1, from + length)
 
     faces =
       for i <- 0..(n - 1) do
-        {{x1, y1}, {x2, y2}} = {elem(corners, i), elem(corners, rem(i + 1, n))}
-        normal = at(turn, {y2 - y1, x1 - x2, 0})
+        {{u1, v1}, {u2, v2}} = {elem(corners, i), elem(corners, rem(i + 1, n))}
+        normal = at(turn, lift(axis, {v2 - v1, u1 - u2}, 0))
         {i, Camera.shows?(camera, normal), normal}
       end
-
-    run = shown_run(faces, n)
-    outline = Enum.map(run, low) ++ Enum.map(Enum.reverse(run), high)
-    top = {:poly, Enum.map(0..(n - 1), high), "i-#{material}-t i-face"}
 
     body =
       for {i, true, normal} <- faces,
@@ -237,7 +246,37 @@ defmodule DIYWeb.Icon.Shapes do
             {:poly, [low.(i), low.(i + 1), high.(i + 1), high.(i)],
              "i-#{material}-#{Camera.light(camera, normal)}"}
 
-    [{:poly, outline, "i-#{material}-m2"}] ++ body ++ [{:poly, outline, "i-outline"}, top]
+    ends =
+      for {corner, sign} <- [{low, -1}, {high, 1}],
+          normal = at(turn, lift(axis, {0, 0}, sign)),
+          Camera.shows?(camera, normal),
+          do:
+            {:poly, Enum.map(0..(n - 1), corner),
+             "i-#{material}-#{Camera.light(camera, normal)} i-face"}
+
+    if convex?(loop) do
+      run = shown_run(faces, n)
+      outline = Enum.map(run, low) ++ Enum.map(Enum.reverse(run), high)
+      [{:poly, outline, "i-#{material}-m2"}] ++ body ++ [{:poly, outline, "i-outline"}] ++ ends
+    else
+      # The plane of the loop in the world: the axis is one of x, y and z.
+      {ax, ay, az} = at(turn, lift(axis, {0, 0}, 1))
+      k = Enum.find_index([ax, ay, az], &(abs(&1) > 1.0e-9))
+      plane = &Tuple.delete_at(&1, k)
+      middle = fn i -> Geometry.scale(Geometry.add(low.(i), high.(i + 1)), 0.5) end
+
+      sides =
+        for {i, true, _normal} <- faces,
+            do: {i, {plane.(low.(i)), plane.(low.(i + 1))}}
+
+      sides = Enum.sort_by(sides, fn {i, _side} -> Camera.depth(camera, middle.(i)) end)
+      polys = Map.new(body, fn {:poly, [a | _] = corners, class} -> {a, {corners, class}} end)
+
+      for i <- paint_order(sides, plane.(camera.eye)) do
+        {corners, class} = polys[low.(i)]
+        {:poly, corners, class <> " i-face"}
+      end ++ ends
+    end
   end
 
   # A face shows when it looks to the eye of the camera. A face with no
@@ -252,6 +291,59 @@ defmodule DIYWeb.Icon.Shapes do
       else: []
   end
 
+  # The order of the paint of the sides of a prism that show: from the far
+  # one to the near one. The order is on the plane of the loop, where the
+  # eye looks along e. A side is behind a different side when, at a point that
+  # both cover (across e), it is farther along e. The sides come in the
+  # order of the depth of their middles, and a side that nothing is in
+  # front of keeps this order.
+  defp paint_order(sides, {ex, ey}) do
+    across = fn {x, y} -> ex * y - ey * x end
+    along = fn {x, y} -> ex * x + ey * y end
+
+    depth_at = fn {a, b}, c ->
+      t = (c - across.(a)) / (across.(b) - across.(a))
+      along.(a) + t * (along.(b) - along.(a))
+    end
+
+    span = fn {a, b} -> Enum.min_max([across.(a), across.(b)]) end
+
+    # The pairs {far, near}.
+    pairs =
+      for {i, si} <- sides,
+          {j, sj} <- sides,
+          i < j,
+          {{a0, a1}, {b0, b1}} = {span.(si), span.(sj)},
+          {lo, hi} = {max(a0, b0), min(a1, b1)},
+          hi - lo > 1.0e-9 do
+        c = (lo + hi) / 2
+        if depth_at.(si, c) < depth_at.(sj, c), do: {i, j}, else: {j, i}
+      end
+
+    sort_far_first(Enum.map(sides, &elem(&1, 0)), pairs)
+  end
+
+  # The next side to paint is the first one that has no side behind it
+  # that is still to paint. When a number is not exact, each side can have
+  # one. Then the next side is the first one with the fewest.
+  defp sort_far_first([], _pairs), do: []
+
+  defp sort_far_first(keys, pairs) do
+    behind = fn k -> Enum.count(pairs, fn {far, near} -> near == k and far in keys end) end
+    next = Enum.min_by(keys, behind)
+    [next | sort_far_first(List.delete(keys, next), pairs)]
+  end
+
+  # A loop (counterclockwise) is convex when each turn from a side to the
+  # next one goes to the left.
+  defp convex?(loop) do
+    corners = Enum.zip([loop, tl(loop) ++ [hd(loop)], tl(tl(loop)) ++ Enum.take(loop, 2)])
+
+    Enum.all?(corners, fn {{u1, v1}, {u2, v2}, {u3, v3}} ->
+      (u2 - u1) * (v3 - v2) - (v2 - v1) * (u3 - u2) >= -1.0e-12
+    end)
+  end
+
   # The corners of the faces of a prism that show, in the order of the
   # loop. The run starts at the first face that shows after a face that
   # does not show, and it goes on while the faces show. The camera looks
@@ -263,45 +355,58 @@ defmodule DIYWeb.Icon.Shapes do
     run ++ [List.last(run) + 1]
   end
 
+  # A point of the loop of a prism along an axis, at t along the axis.
+  defp lift(:x, {u, v}, t), do: {t, u, v}
+  defp lift(:y, {u, v}, t), do: {v, t, u}
+  defp lift(:z, {u, v}, t), do: {u, v, t}
+
   defp light(class, nil, _camera), do: class
   defp light(class, n, camera), do: String.replace(class, "~", Camera.light(camera, n))
 
   # A box of a material.
   defp box(corner, size, material), do: [{:box, corner, size, material}]
 
-  # A rectangle on the front face (y = y) of a box, from x, z.
-  defp front({x, y, z}, {w, h}, class),
+  # A rectangle on the front face (y = y) of a box, from x, z. It is a
+  # little out of the face (1 cm, or less on a small item).
+  defp front({x, y, z}, {w, h}, class, out \\ 0.01),
     do:
-      {:face, Geometry.on_plane({x, y + 0.01, z}, {1, 0, 0}, {0, 0, 1}, {0, 0}, {w, h}),
-       {0, 1, 0}, class}
+      {:face, Geometry.on_plane({x, y + out, z}, {1, 0, 0}, {0, 0, 1}, {0, 0}, {w, h}), {0, 1, 0},
+       class}
 
   # A rectangle on the side face (x = x) of a box, from y, z.
-  defp side({x, y, z}, {d, h}, class),
+  defp side({x, y, z}, {d, h}, class, out \\ 0.01),
     do:
-      {:face, Geometry.on_plane({x + 0.01, y, z}, {0, 1, 0}, {0, 0, 1}, {0, 0}, {d, h}),
-       {1, 0, 0}, class}
+      {:face, Geometry.on_plane({x + out, y, z}, {0, 1, 0}, {0, 0, 1}, {0, 0}, {d, h}), {1, 0, 0},
+       class}
 
   # A rectangle on a top (z = z), from x, y.
-  defp top({x, y, z}, {w, d}, class),
+  defp top({x, y, z}, {w, d}, class, out \\ 0.01),
     do:
-      {:face, Geometry.on_plane({x, y, z + 0.01}, {1, 0, 0}, {0, 1, 0}, {0, 0}, {w, d}),
-       {0, 0, 1}, class}
+      {:face, Geometry.on_plane({x, y, z + out}, {1, 0, 0}, {0, 1, 0}, {0, 0}, {w, d}), {0, 0, 1},
+       class}
 
-  # A disc on the top, on the front, or on a side.
+  # A disc on the top or on the front.
   defp disc(center, :top, r, class),
     do: {:face, Geometry.circle(center, {1, 0, 0}, {0, 1, 0}, r), {0, 0, 1}, class}
 
   defp disc(center, :front, r, class),
     do: {:face, Geometry.circle(center, {1, 0, 0}, {0, 0, 1}, r), {0, 1, 0}, class}
 
-  defp disc(center, :side, r, class),
-    do: {:face, Geometry.circle(center, {0, 1, 0}, {0, 0, 1}, r), {1, 0, 0}, class}
-
-  defp disc(center, :far_side, r, class),
-    do: {:face, Geometry.circle(center, {0, 1, 0}, {0, 0, 1}, r), {-1, 0, 0}, class}
-
   # A cylinder that stands at a center.
   defp cylinder(center, r, h, material), do: [{:cyl, center, r, h, material}]
+
+  # A tube of 24 sides along x or y, from the center of its end near 0.
+  defp tube({x, y, z}, r, length, axis, material) do
+    {from, center} = if axis == :x, do: {x, {y, z}}, else: {y, {z, x}}
+    {cu, cv} = center
+
+    loop =
+      for k <- 0..23,
+          a = 2 * :math.pi() * k / 24,
+          do: {cu + r * :math.cos(a), cv + r * :math.sin(a)}
+
+    [{:prism, axis, loop, from, length, material}]
+  end
 
   @doc """
   A loop of points round a rectangle with round corners (a radius r),
@@ -334,13 +439,30 @@ defmodule DIYWeb.Icon.Shapes do
   defp rbox({x, y, z}, {w, d, h}, r, material),
     do: [{:prism, rounded({x, y}, {w, d}, r), z, h, material}]
 
-  # The wheels of a car or a van: on the side at x (x = 0 is the far side).
-  defp wheels(x, ys, r) do
-    {dx, face} = if x == 0, do: {-0.02, :far_side}, else: {0.02, :side}
+  # A slab with round corners along an axis, from `from` to `from + length`.
+  # Its corner and its size are in the plane of the two other axes
+  # (`lift/3`).
+  defp rslab(axis, corner, size, r, from, length, material),
+    do: [{:prism, axis, rounded(corner, size, r), from, length, material}]
+
+  # The wheels of a car on a side, as points `{y, z}`: the dark arch over
+  # each wheel, the tire, the rim and its hub.
+  defp wheel_discs(r, ys) do
+    ring = fn y, radius, angles ->
+      for a <- angles, do: {y + radius * :math.cos(a), r + radius * :math.sin(a)}
+    end
+
+    half = for k <- 0..12, do: :math.pi() * k / 12
+    full = for k <- 0..23, do: 2 * :math.pi() * k / 24
 
     for y <- ys,
-        {radius, class} <- [{r, "i-black"}, {r * 0.5, "i-steel-r"}],
-        do: disc({x + dx, y, r}, face, radius, class)
+        part <- [
+          {ring.(y, r + 0.05, half), "i-black"},
+          {ring.(y, r, full), "i-black"},
+          {ring.(y, r * 0.6, full), "i-steel-~"},
+          {ring.(y, r * 0.2, full), "i-gray-~"}
+        ],
+        do: part
   end
 
   # A polygon with its normal (nil: it always shows).
@@ -404,7 +526,7 @@ defmodule DIYWeb.Icon.Shapes do
         front({0.04, d, 0.03}, {w - 0.08, 0.012}, "i-line")
       ] ++
       for(k <- 0..4, do: disc({0.12 + k * 0.13, d + 0.014, 0.85}, :front, 0.022, "i-steel-t")) ++
-      box({0.1, d, 0.66}, {w - 0.2, 0.04, 0.03}, "steel")
+      box({0.1, d + 0.012, 0.66}, {w - 0.2, 0.038, 0.03}, "steel")
   end
 
   # A microwave: a steel body, the door with its window, and the keys with
@@ -447,21 +569,24 @@ defmodule DIYWeb.Icon.Shapes do
   # A water heater: a round tank on its foot, with its cap and its label.
   # Two pipes are on its top, and the relief valve is on its side.
   def model("water_heater") do
-    {r, h} = {0.27, 1.42}
+    {c, r, h} = {0.2795, 0.27, 1.35}
 
-    cylinder({0.28, 0.28, 0}, 0.24, 0.05, "gray") ++
-      cylinder({0.28, 0.28, 0.05}, r, h, "white") ++
-      cylinder({0.28, 0.28, 0.05 + h}, 0.23, 0.04, "gray") ++
-      cylinder({0.18, 0.28, 0.09 + h}, 0.025, 0.14, "copper") ++
-      cylinder({0.38, 0.28, 0.09 + h}, 0.025, 0.14, "copper") ++
+    cylinder({c, c, 0}, 0.24, 0.04, "gray") ++
+      cylinder({c, c, 0.04}, r, h, "white") ++
+      cylinder({c, c, 0.04 + h}, 0.23, 0.04, "gray") ++
+      cylinder({c - 0.1, c, 0.08 + h}, 0.025, 0.14, "copper") ++
+      cylinder({c + 0.1, c, 0.08 + h}, 0.025, 0.14, "copper") ++
       [
         face(
-          for({x, z} <- [{0.2, 0.75}, {0.36, 0.75}, {0.36, 1.0}, {0.2, 1.0}], do: {x, 0.553, z}),
+          for(
+            {x, z} <- [{c - 0.08, 0.7}, {c + 0.08, 0.7}, {c + 0.08, 0.95}, {c - 0.08, 0.95}],
+            do: {x, c + r + 0.003, z}
+          ),
           {0, 1, 0},
           "i-shade-t i-face"
         )
       ] ++
-      box({0.55, 0.25, 1.25}, {0.05, 0.06, 0.06}, "copper")
+      box({c + r, c - 0.03, 1.15}, {0.01, 0.06, 0.06}, "copper")
   end
 
   # The AC outside: a steel box with round corners on a pad. The grille of
@@ -499,32 +624,68 @@ defmodule DIYWeb.Icon.Shapes do
       ]
   end
 
+  # A gas furnace: a steel cabinet with two doors. The upper door has
+  # louvers, and the lower door has the window of the flame and a label.
+  # The flue goes up from the back of its top.
   def model("furnace") do
-    box({0, 0, 0}, {0.6, 0.7, 1.3}, "steel") ++
-      for(k <- 1..5, do: front({0.1, 0.7, 0.75 + k * 0.08}, {0.4, 0.03}, "i-line")) ++
-      [front({0.2, 0.7, 0.2}, {0.2, 0.15}, "i-flame")]
-  end
+    {w, d, h} = {0.46, 0.7, 0.72}
 
-  # The strips of an air handler: a duct with a coil that glows in it.
-  def model("heat_strips") do
-    box({0, 0, 0}, {1.0, 0.5, 0.5}, "steel") ++
-      [front({0.1, 0.5, 0.08}, {0.8, 0.34}, "i-black")] ++
-      for(k <- 0..5, do: front({0.16 + k * 0.13, 0.5, 0.12}, {0.04, 0.26}, "i-hot"))
-  end
-
-  def model("smart_meter") do
-    box({0, 0, 0}, {0.4, 0.25, 0.55}, "gray") ++
+    rbox({0, 0, 0}, {w, d, h}, 0.012, "steel") ++
+      cylinder({w / 2, 0.16, h}, 0.07, 0.12, "gray") ++
       [
-        disc({0.2, 0.26, 0.3}, :front, 0.15, "i-glass"),
-        front({0.12, 0.25, 0.25}, {0.16, 0.06}, "i-black")
+        front({0.02, d, 0.39}, {w - 0.04, 0.31}, "i-steel-t"),
+        front({0.02, d, 0.03}, {w - 0.04, 0.34}, "i-steel-t")
+      ] ++
+      for(k <- 0..4, do: front({0.08, d + 0.002, 0.47 + k * 0.035}, {w - 0.16, 0.012}, "i-line")) ++
+      [
+        front({0.17, d + 0.002, 0.2}, {0.12, 0.06}, "i-flame"),
+        front({0.06, d + 0.002, 0.07}, {0.12, 0.07}, "i-white-t")
       ]
   end
 
-  # A lamp: a base, a stem, and a shade that glows.
+  # The heat strips of an air handler: a steel cabinet with a window. The
+  # coils glow in the window. The box of the breakers is at its right.
+  def model("heat_strips") do
+    {w, d, h} = {1.22, 0.61, 0.61}
+
+    rbox({0, 0, 0}, {w, d, h}, 0.015, "steel") ++
+      [
+        front({0.06, d, 0.08}, {0.78, 0.45}, "i-black"),
+        front({0.9, d, 0.12}, {0.26, 0.38}, "i-gray-l")
+      ] ++
+      for(
+        k <- 0..6,
+        do: front({0.12 + k * 0.1, d + 0.002, 0.13}, {0.035, 0.35}, "i-hot")
+      ) ++
+      for(
+        k <- 0..1,
+        do: front({0.96 + k * 0.08, d + 0.002, 0.3}, {0.04, 0.09}, "i-black")
+      ) ++
+      [front({0.94, d + 0.002, 0.16}, {0.18, 0.06}, "i-white-t")]
+  end
+
+  # A smart meter: the glass dome of the meter on its base, with its
+  # display and its ring.
+  def model("smart_meter") do
+    {w, h, f} = {0.25, 0.36, 0.142}
+
+    rbox({0, 0, 0}, {w, 0.07, h}, 0.02, "gray") ++
+      tube({w / 2, 0.07, 0.17}, 0.105, 0.03, :y, "steel") ++
+      tube({w / 2, 0.1, 0.17}, 0.09, f - 0.1, :y, "white") ++
+      [
+        disc({w / 2, f + 0.002, 0.17}, :front, 0.08, "i-glass"),
+        front({w / 2 - 0.045, f, 0.17}, {0.09, 0.035}, "i-black", 0.004),
+        front({w / 2 - 0.035, f, 0.18}, {0.05, 0.015}, "i-led", 0.006),
+        disc({w / 2 - 0.03, f + 0.006, 0.22}, :front, 0.025, "i-shine")
+      ]
+  end
+
+  # A floor lamp: a round base, a thin stem, and a shade that glows.
   def model("lights") do
-    cylinder({0.25, 0.25, 0}, 0.2, 0.05, "steel") ++
-      box({0.23, 0.23, 0.05}, {0.04, 0.04, 0.5}, "steel") ++
-      cylinder({0.25, 0.25, 0.45}, 0.24, 0.28, "shade")
+    cylinder({0.2, 0.2, 0}, 0.15, 0.03, "steel") ++
+      cylinder({0.2, 0.2, 0.03}, 0.012, 1.14, "steel") ++
+      cylinder({0.2, 0.2, 1.12}, 0.2, 0.36, "shade") ++
+      [disc({0.2, 0.2, 1.485}, :top, 0.05, "i-bulb")]
   end
 
   # A TV on its stand: the foot, the neck, and the thin panel with its
@@ -532,7 +693,7 @@ defmodule DIYWeb.Icon.Shapes do
   def model("tv") do
     {w, h} = {1.12, 0.6}
 
-    box({0.36, 0.0, 0}, {0.4, 0.2, 0.02}, "dark") ++
+    box({0.36, 0.0, 0}, {0.4, 0.25, 0.02}, "dark") ++
       box({0.53, 0.06, 0.02}, {0.06, 0.04, 0.1}, "dark") ++
       box({0, 0.1, 0.12}, {w, 0.035, h}, "dark") ++
       [
@@ -548,49 +709,120 @@ defmodule DIYWeb.Icon.Shapes do
       ]
   end
 
+  # A computer: a monitor with a thin edge on its stand, a keyboard with
+  # rows of keys, and a mouse.
   def model("computer") do
-    box({0.3, 0.1, 0}, {0.2, 0.15, 0.05}, "dark") ++
-      box({0.37, 0.15, 0.05}, {0.06, 0.04, 0.15}, "dark") ++
-      box({0, 0.2, 0.2}, {0.8, 0.04, 0.5}, "dark") ++
-      [front({0.03, 0.24, 0.23}, {0.74, 0.44}, "i-screen")] ++
-      box({0.1, 0.45, 0}, {0.6, 0.22, 0.03}, "gray")
+    d = 0.41
+
+    box({0.2, 0.0, 0}, {0.21, 0.14, 0.012}, "dark") ++
+      box({0.28, 0.04, 0.012}, {0.05, 0.03, 0.14}, "dark") ++
+      box({0.005, 0.07, 0.12}, {0.6, 0.025, 0.388}, "dark") ++
+      [
+        front({0.015, 0.095, 0.135}, {0.58, 0.358}, "i-screen"),
+        face(
+          for(
+            {x, z} <- [{0.1, 0.135}, {0.22, 0.135}, {0.36, 0.475}, {0.24, 0.475}],
+            do: {x, 0.107, z}
+          ),
+          {0, 1, 0},
+          "i-shine"
+        )
+      ] ++
+      rbox({0.06, 0.22, 0}, {0.42, 0.14, 0.018}, 0.01, "gray") ++
+      for(
+        k <- 0..3,
+        do: top({0.08, 0.235 + k * 0.028, 0.008}, {0.38, 0.016}, "i-dark-t")
+      ) ++
+      rbox({0.52, d - 0.11, 0}, {0.06, 0.104, 0.03}, 0.025, "white")
   end
 
+  # A ceiling fan: four blades under the motor, the bowl of its light under
+  # them, and the rod up to the canopy on the ceiling.
   def model("ceiling_fan") do
-    blade = fn corners -> face(corners, {0, 0, 1}, "i-wood-t i-face") end
+    {c, z} = {0.66, 0.07}
 
-    # The rod goes up from the middle of the disc: it paints last.
-    [
-      blade.([{0.5, 0.42, 0.3}, {1.1, 0.42, 0.3}, {1.1, 0.58, 0.3}, {0.5, 0.58, 0.3}]),
-      blade.([{0.42, 0.5, 0.3}, {0.42, 1.1, 0.3}, {0.58, 1.1, 0.3}, {0.58, 0.5, 0.3}]),
-      blade.([{0.5, 0.42, 0.3}, {-0.1, 0.42, 0.3}, {-0.1, 0.58, 0.3}, {0.5, 0.58, 0.3}]),
-      blade.([{0.42, 0.5, 0.3}, {0.42, -0.1, 0.3}, {0.58, -0.1, 0.3}, {0.58, 0.5, 0.3}]),
-      disc({0.5, 0.5, 0.31}, :top, 0.13, "i-steel-t")
-    ] ++ box({0.47, 0.47, 0.3}, {0.06, 0.06, 0.4}, "steel")
+    blades =
+      for k <- 0..3 do
+        a = :math.pi() * k / 2
+
+        along = fn t, s ->
+          {c + t * :math.cos(a) - s * :math.sin(a), c + t * :math.sin(a) + s * :math.cos(a), z}
+        end
+
+        corners = [
+          along.(0.12, -0.04),
+          along.(0.62, -0.065),
+          along.(0.66, 0.0),
+          along.(0.62, 0.065),
+          along.(0.12, 0.04)
+        ]
+
+        face(corners, {0, 0, 1}, "i-wood-t i-face")
+      end
+
+    cylinder({c, c, 0}, 0.07, 0.07, "white") ++
+      blades ++
+      cylinder({c, c, 0.07}, 0.11, 0.1, "steel") ++
+      cylinder({c, c, 0.17}, 0.012, 0.09, "steel") ++
+      cylinder({c, c, 0.26}, 0.06, 0.045, "steel")
   end
 
+  # A power strip: a white body with round corners, six outlets on its top,
+  # and a red switch.
   def model("always_on") do
-    box({0, 0, 0}, {1.0, 0.3, 0.12}, "white") ++
-      for(x <- [0.15, 0.4, 0.65], do: top({x, 0.08, 0.12}, {0.14, 0.14}, "i-black")) ++
-      [top({0.88, 0.12, 0.12}, {0.06, 0.06}, "i-led")]
+    {w, d, h} = {0.46, 0.15, 0.064}
+
+    rbox({0, 0, 0}, {w, d, h}, 0.02, "white") ++
+      for(
+        k <- 0..5,
+        part <- [
+          top({0.04 + k * 0.062, 0.035, h}, {0.045, 0.08}, "i-gray-t", 0.002),
+          top({0.05 + k * 0.062, 0.06, h}, {0.006, 0.025}, "i-black", 0.004),
+          top({0.068 + k * 0.062, 0.06, h}, {0.006, 0.025}, "i-black", 0.004)
+        ],
+        do: part
+      ) ++
+      box({w - 0.06, 0.045, h}, {0.035, 0.06, 0.012}, "red")
   end
 
+  # A pool pump: the motor lies along x, with the cap of its fan at its
+  # back end. The pump and its strainer are at the front end. The strainer
+  # has a clear lid, and the pipe goes up from the pump.
   def model("pool_pump") do
-    cylinder({0.25, 0.3, 0}, 0.25, 0.45, "blue") ++ box({0.55, 0.1, 0}, {0.5, 0.4, 0.35}, "gray")
+    d = 0.2
+
+    box({0.03, 0.01, 0}, {0.58, d - 0.02, 0.025}, "dark") ++
+      tube({0.0, d / 2, 0.11}, 0.07, 0.03, :x, "dark") ++
+      tube({0.03, d / 2, 0.11}, 0.085, 0.27, :x, "gray") ++
+      tube({0.3, d / 2, 0.11}, 0.075, 0.1, :x, "blue") ++
+      cylinder({0.5, d / 2, 0.025}, 0.095, 0.2, "blue") ++
+      cylinder({0.5, d / 2, 0.225}, 0.1, 0.03, "dark") ++
+      [disc({0.5, d / 2, 0.257}, :top, 0.075, "i-glass")] ++
+      cylinder({0.35, d / 2, 0.186}, 0.03, 0.09, "white")
   end
 
-  # A space heater: a small tower with a handle and a grille that glows.
+  # A tower heater: a white body with round corners on its foot. Its front
+  # has a grille that glows, and its top has the keys and a light.
   def model("space_heater") do
-    box({0, 0, 0}, {0.45, 0.3, 0.8}, "white") ++
-      box({0.12, 0.1, 0.8}, {0.21, 0.1, 0.06}, "gray") ++
-      [front({0.07, 0.3, 0.12}, {0.31, 0.5}, "i-black")] ++
-      for(k <- 1..4, do: front({0.1, 0.3, 0.06 + k * 0.11}, {0.25, 0.04}, "i-hot"))
+    {w, d, h} = {0.25, 0.18, 0.64}
+
+    rbox({0, 0, 0}, {w, d, 0.03}, 0.05, "gray") ++
+      rbox({0.02, 0.02, 0.03}, {w - 0.04, d - 0.04, h - 0.03}, 0.05, "white") ++
+      [front({0.05, d - 0.02, 0.1}, {w - 0.1, 0.4}, "i-black")] ++
+      for(
+        k <- 0..6,
+        do: front({0.06, d - 0.018, 0.12 + k * 0.053}, {w - 0.12, 0.022}, "i-hot")
+      ) ++
+      [
+        top({0.06, 0.05, h}, {w - 0.12, 0.06}, "i-dark-t"),
+        top({0.08, 0.065, h + 0.002}, {0.03, 0.03}, "i-led")
+      ]
   end
 
   # A power station: a body with round corners, with two handles on its
   # top. Its dark front has its screen and its outlets. Its side has vents.
   def model("power_station") do
-    {w, d, h} = {0.64, 0.28, 0.41}
+    {w, d, h} = {0.625, 0.265, 0.41}
 
     box({0.04, 0.03, 0}, {w - 0.08, d - 0.06, 0.02}, "dark") ++
       rbox({0, 0, 0.02}, {w, d, h - 0.05}, 0.03, "steel") ++
@@ -605,244 +837,580 @@ defmodule DIYWeb.Icon.Shapes do
       for(k <- 0..3, do: side({w, 0.06, 0.1 + k * 0.05}, {d - 0.12, 0.012}, "i-line"))
   end
 
+  # Solar panels on a post: the frame, the cells in rows of 6, and the lines
+  # between the cells. The panel and its post are one group: when the panel
+  # looks away, its back paints first and the post paints over it.
   def model("solar_panels") do
-    box({0.45, 0.1, 0}, {0.08, 0.08, 1.0}, "gray") ++
-      [
-        face([{0, 0.8, 0.45}, {1.0, 0.8, 0.45}, {1.0, -0.4, 1.3}, {0, -0.4, 1.3}], nil, "i-pv"),
-        face(
-          [{0.5, 0.8, 0.45}, {0.53, 0.8, 0.45}, {0.53, -0.4, 1.3}, {0.5, -0.4, 1.3}],
-          nil,
-          "i-pv-line"
-        )
-      ]
-  end
+    # A point on the panel: s across (0 to 1) and t up its slope (0 to 1).
+    at = fn s, t -> {s * 1.0, 0.8 - t * 1.2, 0.45 + t * 0.85} end
+    panel = fn {s0, t0}, {s1, t1} -> [at.(s0, t0), at.(s1, t0), at.(s1, t1), at.(s0, t1)] end
+    {front, back} = {{0, 0.85, 1.2}, {0, -0.85, -1.2}}
 
-  def model("transfer_switch") do
-    box({0, 0, 0}, {0.6, 0.2, 0.8}, "gray") ++
+    cells =
       [
-        front({0.06, 0.2, 0.06}, {0.48, 0.68}, "i-steel-t"),
-        front({0.4, 0.2, 0.35}, {0.06, 0.15}, "i-black")
+        face(panel.({-0.02, -0.02}, {1.02, 1.02}), front, "i-steel-t"),
+        face(panel.({0, 0}, {1, 1}), front, "i-pv")
       ] ++
-      box({0.25, 0.2, 0.6}, {0.1, 0.12, 0.05}, "red")
+        for(
+          k <- 1..5,
+          do: face(panel.({k / 6 - 0.004, 0}, {k / 6 + 0.004, 1}), front, "i-pv-line")
+        ) ++
+        for(
+          k <- 1..9,
+          do: face(panel.({0, k / 10 - 0.003}, {1, k / 10 + 0.003}), front, "i-pv-line")
+        )
+
+    [
+      {:group,
+       [face(panel.({-0.02, -0.02}, {1.02, 1.02}), back, "i-gray-~ i-face")] ++
+         cylinder({0.5, 0.2, 0}, 0.04, 0.86, "gray") ++ cells}
+    ]
   end
 
-  def model("ev") do
-    {l, w} = {2.4, 1.0}
-    cabin = fn corners, normal, class -> face(corners, normal, class) end
+  # A transfer switch: a gray box with round corners. Its window shows two
+  # rows of breakers, and the big red handle is at its right.
+  def model("transfer_switch") do
+    {w, d, h} = {0.38, 0.13, 0.46}
 
-    box({0, 0, 0.15}, {w, l, 0.4}, "red") ++
+    cylinder({w / 2, 0.06, h}, 0.025, 0.048, "gray") ++
+      rbox({0, 0, 0}, {w, d, h}, 0.02, "gray") ++
       [
-        cabin.(
-          [{0, 0.6, 0.55}, {0, 1.9, 0.55}, {0.15, 1.65, 0.85}, {0.15, 0.85, 0.85}],
-          {-1, 0, 0.5},
-          "i-glass-dark"
-        ),
-        cabin.(
-          [{0.08, 0.6, 0.55}, {w - 0.08, 0.6, 0.55}, {w - 0.15, 0.85, 0.85}, {0.15, 0.85, 0.85}],
-          {0, -1, 0.83},
-          "i-red-t"
-        ),
-        cabin.(
-          [{w, 0.6, 0.55}, {w, 1.9, 0.55}, {w - 0.15, 1.65, 0.85}, {w - 0.15, 0.85, 0.85}],
-          {1, 0, 0.5},
-          "i-glass-dark"
-        ),
-        cabin.(
-          [{0.08, 1.9, 0.55}, {w, 1.9, 0.55}, {w - 0.15, 1.65, 0.85}, {0.15, 1.65, 0.85}],
-          {0, 1, 0.8},
-          "i-glass-dark"
-        ),
-        cabin.(
-          [
-            {0.15, 0.85, 0.85},
-            {w - 0.15, 0.85, 0.85},
-            {w - 0.15, 1.65, 0.85},
-            {0.15, 1.65, 0.85}
-          ],
-          {0, 0, 1},
-          "i-red-t"
-        ),
-        front({0.1, l, 0.35}, {0.18, 0.08}, "i-bulb"),
-        front({w - 0.28, l, 0.35}, {0.18, 0.08}, "i-bulb")
-      ] ++ wheels(w, [0.45, l - 0.5], 0.2) ++ wheels(0, [0.45, l - 0.5], 0.2)
+        front({0.03, d, 0.03}, {0.24, h - 0.06}, "i-steel-t", 0.003),
+        front({0.05, d, 0.18}, {0.2, 0.22}, "i-black", 0.005)
+      ] ++
+      for(
+        row <- 0..1,
+        col <- 0..3,
+        do: front({0.065 + col * 0.045, d, 0.2 + row * 0.1}, {0.03, 0.06}, "i-steel-l", 0.007)
+      ) ++
+      [front({0.05, d, 0.06}, {0.14, 0.08}, "i-white-t", 0.005)] ++
+      box({0.3, d, 0.2}, {0.045, 0.048, 0.16}, "red")
+  end
+
+  # An electric car: the side profile of a crossover across its width. The
+  # windshield and the back window are glass, and the windows of the doors
+  # are on the sides. The tires and the rims, the lights and the handles
+  # are on the faces of the body.
+  def model("ev") do
+    {l, w} = {4.72, 1.85}
+
+    profile = [
+      {0.06, 0.2},
+      {4.64, 0.2},
+      {4.72, 0.36},
+      {4.72, 0.56},
+      {4.6, 0.78},
+      {3.72, 0.94},
+      {2.9, 1.42},
+      {1.55, 1.45},
+      {0.55, 1.12},
+      {0.18, 1.02},
+      {0.0, 0.84},
+      {0.0, 0.36}
+    ]
+
+    # A face across the car on the edge of the profile from point i to
+    # point i + 1, a little out of the body.
+    across = fn i, class ->
+      [{y1, z1}, {y2, z2}] = [Enum.at(profile, i), Enum.at(profile, i + 1)]
+      {ny, nz} = {z2 - z1, y1 - y2}
+      k = 0.006 / :math.sqrt(ny * ny + nz * nz)
+
+      corners =
+        for {x, y, z} <- [{0.12, y1, z1}, {w - 0.12, y1, z1}, {w - 0.12, y2, z2}, {0.12, y2, z2}],
+            do: {x, y + ny * k, z + nz * k}
+
+      face(corners, {0, ny, nz}, class)
+    end
+
+    # The windows of the side, the lines of the doors and the handles, and
+    # the tires, the rims and their hubs.
+    window = [{0.75, 1.0}, {3.6, 1.0}, {2.88, 1.36}, {1.58, 1.39}, {0.9, 1.18}]
+
+    sides =
+      for {x, sign} <- [{-0.006, -1}, {w + 0.006, 1}],
+          {points, class} <-
+            [
+              {window, "i-glass-dark"},
+              {[{2.22, 1.0}, {2.3, 1.0}, {2.3, 1.4}, {2.22, 1.4}], "i-red-~"},
+              {[{2.26, 0.32}, {2.28, 0.32}, {2.28, 1.0}, {2.26, 1.0}], "i-line"},
+              {[{3.5, 0.36}, {3.52, 0.36}, {3.6, 1.0}, {3.58, 1.0}], "i-line"},
+              {[{2.5, 0.88}, {2.7, 0.88}, {2.7, 0.91}, {2.5, 0.91}], "i-dark-~"},
+              {[{1.45, 0.88}, {1.65, 0.88}, {1.65, 0.91}, {1.45, 0.91}], "i-dark-~"},
+              {[{0.0, 0.2}, {4.7, 0.2}, {4.7, 0.3}, {0.0, 0.3}], "i-black"}
+            ] ++ wheel_discs(0.33, [0.95, 3.85]),
+          do: face(for({y, z} <- points, do: {x, y, z}), {sign, 0, 0}, class)
+
+    [
+      {:group,
+       [{:prism, :x, profile, 0.0, w, "red"}] ++
+         [
+           across.(5, "i-glass-dark"),
+           across.(7, "i-glass-dark"),
+           face(
+             for(
+               {x, z} <- [{0.12, 0.62}, {0.4, 0.62}, {0.4, 0.7}, {0.12, 0.68}],
+               do: {x, l + 0.004, z}
+             ),
+             {0, 1, 0},
+             "i-bulb"
+           ),
+           face(
+             for(
+               {x, z} <- [{w - 0.4, 0.62}, {w - 0.12, 0.62}, {w - 0.12, 0.68}, {w - 0.4, 0.7}],
+               do: {x, l + 0.004, z}
+             ),
+             {0, 1, 0},
+             "i-bulb"
+           ),
+           face(
+             for(
+               {x, z} <- [{0.1, 0.62}, {w - 0.1, 0.62}, {w - 0.1, 0.74}, {0.1, 0.74}],
+               do: {x, -0.004, z}
+             ),
+             {0, -1, 0},
+             "i-black"
+           )
+         ] ++
+         for(
+           x <- [0.12, w - 0.47],
+           do:
+             face(
+               for(
+                 {dx, z} <- [{0.0, 0.64}, {0.35, 0.64}, {0.35, 0.72}, {0.0, 0.72}],
+                 do: {x + dx, -0.006, z}
+               ),
+               {0, -1, 0},
+               "i-hot"
+             )
+         ) ++ sides}
+    ]
   end
 
   # The icon of a camper van: the model of the Ford Transit.
   def model("camper_van"), do: VanShapes.van("transit_148")
 
+  # A captain seat on its swivel: the seat and the back have round corners,
+  # with a headrest and two armrests.
   def model("swivel_seat") do
-    cylinder({0.35, 0.35, 0}, 0.3, 0.12, "dark") ++
-      box({0.05, 0.05, 0.12}, {0.6, 0.6, 0.18}, "cloth") ++
-      box({0.05, 0.05, 0.3}, {0.6, 0.14, 0.6}, "cloth")
+    {w, d} = {0.66, 0.66}
+
+    cylinder({w / 2, d / 2 + 0.02, 0}, 0.24, 0.06, "dark") ++
+      cylinder({w / 2, d / 2 + 0.02, 0.06}, 0.08, 0.14, "dark") ++
+      rbox({0.0, 0.04, 0.2}, {w, d - 0.04, 0.14}, 0.07, "cloth") ++
+      rbox({0.04, 0.0, 0.34}, {w - 0.08, 0.15, 0.52}, 0.06, "cloth") ++
+      rbox({0.2, 0.02, 0.86}, {0.26, 0.11, 0.156}, 0.05, "cloth") ++
+      box({0.06, 0.15, 0.5}, {0.06, 0.36, 0.05}, "dark") ++
+      box({w - 0.12, 0.15, 0.5}, {0.06, 0.36, 0.05}, "dark")
   end
 
+  # A DC to DC charger: a dark body with round corners and fins on its top.
+  # It has its label, and the red and black cables at its end.
   def model("dc_charger") do
-    box({0, 0, 0}, {0.6, 0.4, 0.18}, "steel") ++
-      for(k <- 1..3, do: top({0.08, k * 0.1, 0.18}, {0.44, 0.03}, "i-line")) ++
-      box({0.62, 0.1, 0.05}, {0.15, 0.06, 0.06}, "red") ++
-      box({0.62, 0.25, 0.05}, {0.15, 0.06, 0.06}, "dark")
+    {w, d, h} = {0.138, 0.073, 0.124}
+
+    rbox({0, 0, 0}, {w, d, h}, 0.008, "dark") ++
+      for(
+        k <- 0..3,
+        do: top({0.012 + k * 0.034, 0.008, h}, {0.012, d - 0.016}, "i-gray-t", 0.002)
+      ) ++
+      [
+        front({0.02, d, 0.035}, {0.1, 0.05}, "i-white-t", 0.002),
+        front({0.03, d, 0.07}, {0.02, 0.008}, "i-led", 0.003)
+      ] ++
+      tube({w, 0.022, 0.03}, 0.007, 0.04, :x, "red") ++
+      tube({w, 0.051, 0.03}, 0.007, 0.04, :x, "dark")
   end
 
+  # A fridge of 12 V: a gray chest with round corners, and a dark lid with
+  # its handle. The panel with its display is on the front.
   def model("van_fridge") do
-    box({0, 0, 0}, {0.75, 0.45, 0.5}, "white") ++
-      box({0, 0, 0.5}, {0.75, 0.45, 0.06}, "dark") ++
-      [front({0.3, 0.45, 0.35}, {0.15, 0.06}, "i-led")]
+    {w, d, h} = {0.41, 0.605, 0.48}
+
+    rbox({0, 0, 0}, {w, d, h - 0.08}, 0.04, "gray") ++
+      rbox({0, 0, h - 0.08}, {w, d, 0.08}, 0.04, "dark") ++
+      box({0.08, d, h - 0.06}, {w - 0.16, 0.03, 0.03}, "steel") ++
+      [
+        front({0.1, d, 0.22}, {w - 0.2, 0.1}, "i-black"),
+        front({0.13, d + 0.002, 0.25}, {0.08, 0.04}, "i-screen"),
+        front({w - 0.15, d + 0.002, 0.26}, {0.02, 0.02}, "i-led")
+      ]
   end
 
+  # A cooktop of two burners: a steel body with round corners, with black
+  # glass on its top. The burners have their rings and their grates, and
+  # the front has two knobs.
   def model("stove") do
-    box({0, 0, 0}, {0.6, 0.45, 0.1}, "steel") ++
-      [
-        disc({0.17, 0.22, 0.11}, :top, 0.11, "i-burner"),
-        disc({0.43, 0.22, 0.11}, :top, 0.11, "i-burner")
-      ]
+    {w, d, h} = {0.56, 0.41, 0.08}
+
+    rbox({0, 0, 0}, {w, d, h}, 0.02, "steel") ++
+      [top({0.02, 0.02, h}, {w - 0.04, d - 0.1}, "i-black")] ++
+      for(
+        x <- [0.15, 0.41],
+        part <- [
+          disc({x, 0.17, h + 0.012}, :top, 0.09, "i-burner"),
+          disc({x, 0.17, h + 0.012}, :top, 0.035, "i-gray-t"),
+          top({x - 0.1, 0.165, h + 0.014}, {0.2, 0.01}, "i-gray-t"),
+          top({x - 0.005, 0.07, h + 0.014}, {0.01, 0.2}, "i-gray-t")
+        ],
+        do: part
+      ) ++
+      for(x <- [0.18, 0.38], do: disc({x, d + 0.004, h / 2}, :front, 0.022, "i-dark-l"))
   end
 
+  # A sink: a cabinet with two doors and their handles, and a top of light
+  # wood. The basin has its drain, and the faucet has its spout.
   def model("sink") do
-    box({0, 0, 0}, {0.8, 0.55, 0.6}, "wood") ++
-      [top({0.15, 0.12, 0.6}, {0.5, 0.33}, "i-steel-r")] ++
-      box({0.37, 0.02, 0.6}, {0.06, 0.06, 0.25}, "steel")
+    {w, d, h} = {0.61, 0.46, 0.91}
+
+    box({0.02, 0.02, 0}, {w - 0.04, d - 0.04, 0.08}, "dark") ++
+      box({0, 0, 0.08}, {w, d - 0.02, h - 0.12}, "wood") ++
+      [
+        front({0.03, d - 0.02, 0.11}, {w / 2 - 0.045, h - 0.18}, "i-wood-t"),
+        front({w / 2 + 0.015, d - 0.02, 0.11}, {w / 2 - 0.045, h - 0.18}, "i-wood-t"),
+        front({w / 2 - 0.05, d - 0.018, 0.6}, {0.015, 0.12}, "i-steel-l"),
+        front({w / 2 + 0.035, d - 0.018, 0.6}, {0.015, 0.12}, "i-steel-l")
+      ] ++
+      box({-0.01, -0.01, h - 0.04}, {w + 0.02, d + 0.01, 0.04}, "light-wood") ++
+      [
+        top({0.1, 0.12, h}, {w - 0.2, 0.26}, "i-steel-r"),
+        top({0.12, 0.14, h + 0.002}, {w - 0.24, 0.22}, "i-steel-l"),
+        disc({w / 2, 0.25, h + 0.004}, :top, 0.02, "i-dark-t")
+      ] ++
+      cylinder({w / 2, 0.06, h}, 0.018, 0.2, "steel") ++
+      tube({w / 2, 0.078, h + 0.18}, 0.014, 0.09, :y, "steel")
   end
 
+  # A tank of fresh water: a white tank with round corners, the line of the
+  # water in it, its cap, and its fittings.
   def model("water_tank") do
-    box({0, 0, 0}, {0.8, 0.5, 0.45}, "blue") ++
+    {w, d, h} = {0.57, 0.37, 0.326}
+
+    rbox({0, 0, 0}, {w, d, h}, 0.05, "white") ++
       [
-        disc({0.4, 0.25, 0.46}, :top, 0.08, "i-white-t"),
-        front({0.05, 0.5, 0.05}, {0.7, 0.04}, "i-line"),
-        side({0.8, 0.05, 0.05}, {0.4, 0.04}, "i-line")
-      ]
+        front({0.04, d, 0.04}, {w - 0.08, 0.22}, "i-glass"),
+        front({0.04, d + 0.002, 0.26}, {w - 0.08, 0.008}, "i-line")
+      ] ++
+      cylinder({0.15, 0.15, h}, 0.05, 0.03, "blue") ++
+      tube({w, 0.12, 0.05}, 0.015, 0.04, :x, "white") ++
+      tube({w, 0.26, 0.05}, 0.015, 0.04, :x, "white")
   end
 
+  # A water pump: the motor lies along x, and the pump head is black. The
+  # fitting of the water in is at its back, and the fitting of the water out
+  # is at its front. The two fittings are blue.
   def model("water_pump") do
-    cylinder({0.2, 0.2, 0}, 0.18, 0.3, "steel") ++
-      box({0.38, 0.12, 0.05}, {0.3, 0.16, 0.16}, "dark") ++
-      box({0.68, 0.16, 0.08}, {0.2, 0.08, 0.08}, "blue")
+    {d, c} = {0.127, 0.054}
+
+    box({0.02, 0.02, 0}, {0.16, d - 0.04, 0.004}, "dark") ++
+      tube({0.0, d / 2, c}, 0.05, 0.14, :x, "steel") ++
+      tube({0.14, d / 2, c}, 0.045, 0.063, :x, "dark") ++
+      tube({0.17, 0.0, 0.07}, 0.012, d / 2 - 0.045, :y, "blue") ++
+      tube({0.17, d / 2 + 0.045, 0.07}, 0.012, d / 2 - 0.045, :y, "blue")
   end
 
+  # A counter: a cabinet with a dark toe kick, two drawers and two doors
+  # with their handles, and a thick top of light wood.
   def model("counter") do
-    box({0, 0, 0}, {1.2, 0.55, 0.85}, "wood") ++
-      box({-0.02, -0.02, 0.85}, {1.24, 0.59, 0.05}, "light-wood") ++
-      [front({0.6, 0.55, 0.05}, {0.02, 0.75}, "i-line")]
+    {w, d, h} = {1.22, 0.56, 0.91}
+
+    box({0.03, 0.03, 0}, {w - 0.06, d - 0.08, 0.08}, "dark") ++
+      box({0, 0, 0.08}, {w, d - 0.03, h - 0.12}, "wood") ++
+      for(
+        col <- 0..1,
+        x = 0.03 + col * (w / 2),
+        part <- [
+          front({x, d - 0.03, 0.62}, {w / 2 - 0.06, 0.14}, "i-wood-t"),
+          front({x, d - 0.03, 0.11}, {w / 2 - 0.06, 0.48}, "i-wood-t"),
+          front({x + 0.2, d - 0.028, 0.68}, {0.16, 0.015}, "i-steel-l"),
+          front({x + 0.47, d - 0.028, 0.4}, {0.015, 0.14}, "i-steel-l")
+        ],
+        do: part
+      ) ++
+      box({-0.01, -0.01, h - 0.04}, {w + 0.02, d + 0.01, 0.04}, "light-wood")
   end
 
+  # A bench of a dinette: a wooden base with a lid, and a seat and a back of
+  # cloth with round corners.
   def model("bench") do
-    box({0, 0, 0}, {1.0, 0.5, 0.4}, "wood") ++
-      box({0, 0, 0.4}, {1.0, 0.5, 0.1}, "cloth") ++
-      box({0, 0, 0.5}, {1.0, 0.12, 0.4}, "cloth")
-  end
+    {w, d} = {1.02, 0.51}
 
-  def model("van_table") do
-    box({0.32, 0.22, 0}, {0.06, 0.06, 0.65}, "steel") ++
-      box({0, 0, 0.65}, {0.7, 0.5, 0.05}, "light-wood")
-  end
-
-  def model("van_fan") do
-    box({0, 0, 0}, {0.6, 0.6, 0.08}, "white") ++
+    box({0, 0, 0}, {w, d, 0.4}, "wood") ++
       [
+        front({0.04, d, 0.05}, {w - 0.08, 0.3}, "i-wood-t"),
+        front({w / 2 - 0.08, d + 0.002, 0.28}, {0.16, 0.03}, "i-dark-l")
+      ] ++
+      rbox({0.01, 0.12, 0.4}, {w - 0.02, d - 0.13, 0.1}, 0.04, "cloth") ++
+      rbox({0.01, 0.0, 0.4}, {w - 0.02, 0.12, 0.41}, 0.04, "cloth")
+  end
+
+  # A table of a van: its foot, its pole, and a top of light wood with
+  # round corners.
+  def model("van_table") do
+    {w, d, h} = {0.71, 0.51, 0.71}
+
+    cylinder({w / 2, d / 2, 0}, 0.12, 0.012, "steel") ++
+      cylinder({w / 2, d / 2, 0.012}, 0.03, h - 0.04, "steel") ++
+      rbox({0, 0, h - 0.03}, {w, d, 0.03}, 0.08, "light-wood")
+  end
+
+  # A fan of a roof: the white frame, and a cover with a slope over the fan.
+  # The opening of the cover is at its low end, at the front.
+  def model("van_fan") do
+    {w, d} = {0.43, 0.58}
+    cover = [{0.0, 0.03}, {d, 0.03}, {d, 0.06}, {0.12, 0.13}, {0.0, 0.13}]
+
+    rbox({0, 0, 0}, {w, d, 0.03}, 0.03, "white") ++
+      [{:prism, :x, cover, 0.02, w - 0.04, "white"}] ++
+      [front({0.05, d, 0.032}, {w - 0.1, 0.025}, "i-black")]
+  end
+
+  # A window of a van: a black frame with round corners, the glass with a
+  # shine, and its two latches.
+  def model("window") do
+    {w, d, h} = {0.91, 0.043, 0.61}
+    glass = for {z, x} <- rounded({0.05, 0.05}, {h - 0.1, w - 0.1}, 0.05), do: {x, d + 0.004, z}
+
+    rslab(:y, {0, 0}, {h, w}, 0.08, 0, d, "dark") ++
+      [
+        face(glass, {0, 1, 0}, "i-glass-dark"),
         face(
-          [{0.06, 0.54, 0.08}, {0.54, 0.54, 0.08}, {0.54, 0.06, 0.3}, {0.06, 0.06, 0.3}],
-          nil,
-          "i-glass"
-        )
+          for(
+            {x, z} <- [{0.15, 0.08}, {0.3, 0.08}, {0.45, h - 0.08}, {0.3, h - 0.08}],
+            do: {x, d + 0.006, z}
+          ),
+          {0, 1, 0},
+          "i-shine"
+        ),
+        front({0.2, d, 0.02}, {0.08, 0.02}, "i-gray-l", 0.008),
+        front({w - 0.28, d, 0.02}, {0.08, 0.02}, "i-gray-l", 0.008)
       ]
   end
 
-  def model("window") do
-    box({0, 0, 0}, {0.9, 0.06, 0.6}, "dark") ++ [front({0.05, 0.06, 0.05}, {0.8, 0.5}, "i-glass")]
-  end
-
+  # Lights of a van: three round lights, each with its bulb.
   def model("van_lights") do
-    box({0, 0, 0}, {1.0, 0.2, 0.03}, "white") ++
-      for(x <- [0.15, 0.5, 0.85], do: disc({x, 0.1, 0.04}, :top, 0.07, "i-bulb"))
+    for(
+      x <- [0.052, 0.152, 0.252],
+      part <-
+        cylinder({x, 0.051, 0}, 0.05, 0.023, "steel") ++
+          [disc({x, 0.051, 0.025}, :top, 0.036, "i-bulb")],
+      do: part
+    )
   end
 
+  # The devices: a laptop with its keyboard, its pad and its screen, and a
+  # phone with its screen.
   def model("devices") do
-    box({0, 0, 0}, {0.7, 0.45, 0.03}, "gray") ++
+    w = 0.27
+
+    rbox({0, 0.06, 0}, {w, 0.19, 0.015}, 0.01, "gray") ++
       [
+        top({0.015, 0.075, 0.015}, {w - 0.03, 0.09}, "i-dark-t", 0.001),
+        top({w / 2 - 0.045, 0.18, 0.015}, {0.09, 0.055}, "i-gray-r", 0.001),
         face(
-          [{0, 0, 0.03}, {0.7, 0, 0.03}, {0.7, -0.12, 0.45}, {0, -0.12, 0.45}],
+          [{0, 0.06, 0.015}, {w, 0.06, 0.015}, {w, 0.0, 0.25}, {0, 0.0, 0.25}],
           nil,
           "i-dark-l"
         ),
         face(
-          [{0.04, 0.005, 0.07}, {0.66, 0.005, 0.07}, {0.66, -0.1, 0.41}, {0.04, -0.1, 0.41}],
-          {0, 1, 0.3},
+          [
+            {0.012, 0.063, 0.03},
+            {w - 0.012, 0.063, 0.03},
+            {w - 0.012, 0.006, 0.24},
+            {0.012, 0.006, 0.24}
+          ],
+          {0, 1, 0.26},
           "i-screen"
         )
       ] ++
-      box({0.8, 0.2, 0}, {0.16, 0.3, 0.02}, "dark")
+      rbox({0.29, 0.12, 0}, {0.066, 0.13, 0.01}, 0.012, "dark") ++
+      [top({0.295, 0.128, 0.01}, {0.056, 0.114}, "i-screen", 0.001)]
   end
 
+  # A diesel heater: the round body lies along x, with its two end caps and
+  # the pipe of its exhaust.
   def model("diesel_heater") do
-    box({0, 0, 0}, {0.6, 0.35, 0.3}, "red") ++
-      box({0, 0, 0.3}, {0.6, 0.35, 0.04}, "dark") ++
-      box({0.62, 0.12, 0.1}, {0.25, 0.1, 0.1}, "steel")
+    r = 0.0635
+
+    tube({0.0, r, r}, r, 0.02, :x, "dark") ++
+      tube({0.02, r, r}, r, 0.2, :x, "red") ++
+      tube({0.22, r, r}, r, 0.03, :x, "dark") ++
+      tube({0.25, r, r}, 0.025, 0.055, :x, "steel")
   end
 
+  # A CO alarm: a round white body with a dome, its vents and its light.
   def model("co_alarm") do
-    cylinder({0.3, 0.3, 0}, 0.3, 0.08, "white") ++ [disc({0.3, 0.3, 0.09}, :top, 0.05, "i-hot")]
+    c = 0.065
+
+    cylinder({c, c, 0}, 0.064, 0.03, "white") ++
+      cylinder({c, c, 0.03}, 0.045, 0.02, "white") ++
+      for(
+        k <- 0..2,
+        do: top({c - 0.03, c - 0.012 + k * 0.012, 0.05}, {0.06, 0.005}, "i-line", 0.001)
+      ) ++
+      [disc({c + 0.052, c, 0.031}, :top, 0.006, "i-led")]
   end
 
+  # A bed on its platform: the platform has drawers, and the mattress has
+  # round corners, a duvet and two pillows.
   def model("bed_platform") do
-    box({0, 0, 0}, {1.4, 1.9, 0.5}, "wood") ++
-      box({0.03, 0.03, 0.5}, {1.34, 1.84, 0.18}, "cloth") ++
-      box({0.15, 0.1, 0.68}, {1.1, 0.35, 0.1}, "white")
+    {w, d} = {1.52, 1.89}
+
+    box({0, 0, 0}, {w, d, 0.36}, "wood") ++
+      for(
+        k <- 0..1,
+        part <- [
+          front({0.08 + k * (w / 2), d, 0.06}, {w / 2 - 0.12, 0.24}, "i-wood-t"),
+          front({0.28 + k * (w / 2), d + 0.002, 0.2}, {0.2, 0.025}, "i-dark-l")
+        ],
+        do: part
+      ) ++
+      rbox({0.02, 0.02, 0.36}, {w - 0.04, d - 0.04, 0.15}, 0.08, "white") ++
+      rbox({0.02, 0.6, 0.51}, {w - 0.04, d - 0.62, 0.03}, 0.08, "cloth") ++
+      rbox({0.12, 0.08, 0.51}, {0.58, 0.36, 0.1}, 0.08, "white") ++
+      rbox({w - 0.7, 0.08, 0.51}, {0.58, 0.36, 0.1}, 0.08, "white")
   end
 
+  # Storage: a cabinet of three drawers, each with a bar for a handle.
   def model("storage") do
-    box({0, 0, 0}, {0.9, 0.6, 0.6}, "wood") ++
-      [
-        front({0.05, 0.6, 0.3}, {0.8, 0.02}, "i-line"),
-        front({0.35, 0.6, 0.4}, {0.2, 0.04}, "i-steel-r"),
-        front({0.35, 0.6, 0.12}, {0.2, 0.04}, "i-steel-r")
-      ]
+    {w, d, h} = {0.91, 0.61, 0.61}
+
+    box({0, 0, 0}, {w, d, h}, "wood") ++
+      for(
+        k <- 0..2,
+        z = 0.03 + k * 0.195,
+        part <- [
+          front({0.03, d, z}, {w - 0.06, 0.175}, "i-wood-t"),
+          front({w / 2 - 0.12, d + 0.002, z + 0.13}, {0.24, 0.02}, "i-steel-l")
+        ],
+        do: part
+      )
   end
 
+  # A battery of lithium: a dark body with round corners. Its label has a
+  # light of its charge. Its top has the handle, and the red and black
+  # terminals.
   def model("van_battery") do
-    box({0, 0, 0}, {0.6, 0.35, 0.4}, "blue") ++
-      box({0.08, 0.1, 0.4}, {0.1, 0.1, 0.06}, "red") ++
-      box({0.42, 0.1, 0.4}, {0.1, 0.1, 0.06}, "dark") ++
-      [front({0.1, 0.35, 0.15}, {0.4, 0.08}, "i-white-t")]
-  end
+    {w, d, h} = {0.33, 0.166, 0.204}
 
-  def model("inverter") do
-    box({0, 0, 0}, {0.8, 0.4, 0.25}, "steel") ++
-      for(k <- 1..4, do: top({0.08, k * 0.07, 0.25}, {0.64, 0.025}, "i-line")) ++
-      [front({0.3, 0.4, 0.06}, {0.2, 0.12}, "i-black")]
-  end
-
-  # A shore power inlet: a box with a round socket and its yellow lid, and
-  # a cable that bends to the side.
-  def model("shore_power") do
-    box({0, 0, 0}, {0.4, 0.15, 0.4}, "gray") ++
+    rbox({0, 0, 0}, {w, d, h}, 0.015, "dark") ++
       [
-        disc({0.2, 0.16, 0.2}, :front, 0.13, "i-black"),
-        disc({0.2, 0.17, 0.2}, :front, 0.05, "i-flame")
+        front({0.03, d, 0.06}, {w - 0.06, 0.08}, "i-blue-l"),
+        front({0.05, d + 0.002, 0.08}, {0.12, 0.03}, "i-white-t"),
+        front({w - 0.07, d + 0.002, 0.085}, {0.03, 0.02}, "i-led")
       ] ++
-      box({0.17, 0.15, -0.12}, {0.06, 0.25, 0.06}, "dark") ++
-      box({0.17, 0.4, -0.12}, {0.45, 0.06, 0.06}, "dark")
+      box({w / 2 - 0.06, d / 2 - 0.012, h}, {0.12, 0.024, 0.02}, "gray") ++
+      cylinder({0.04, d / 2, h}, 0.018, 0.025, "red") ++
+      cylinder({w - 0.04, d / 2, h}, 0.018, 0.025, "dark")
   end
 
+  # An inverter and charger: a blue body with round corners, its window with
+  # a display and lights, its switch, and the fins on its side.
+  def model("inverter") do
+    {w, d, h} = {0.244, 0.217, 0.356}
+
+    rbox({0, 0, 0}, {w, d, h}, 0.02, "blue") ++
+      [
+        front({0.03, d, 0.2}, {w - 0.06, 0.12}, "i-dark-l"),
+        front({0.05, d + 0.002, 0.25}, {0.08, 0.045}, "i-screen"),
+        front({0.16, d + 0.002, 0.29}, {0.02, 0.012}, "i-led"),
+        front({0.16, d + 0.002, 0.26}, {0.02, 0.012}, "i-flame"),
+        front({0.1, d, 0.06}, {0.05, 0.08}, "i-black")
+      ] ++
+      for(k <- 0..5, do: side({w, 0.03, 0.05 + k * 0.045}, {d - 0.06, 0.012}, "i-line"))
+  end
+
+  # A shore power inlet: a square plate with round corners, and the round
+  # socket in its yellow ring, with its three pins.
+  def model("shore_power") do
+    {w, d, h} = {0.15, 0.08, 0.15}
+
+    rslab(:y, {0, 0}, {h, w}, 0.02, 0, 0.02, "gray") ++
+      tube({w / 2, 0.02, 0.07}, 0.05, d - 0.03, :y, "gray") ++
+      [
+        disc({w / 2, d - 0.009, 0.07}, :front, 0.047, "i-flame"),
+        disc({w / 2, d - 0.008, 0.07}, :front, 0.038, "i-black")
+      ] ++
+      for(
+        {x, z} <- [{-0.015, 0.08}, {0.015, 0.08}, {0.0, 0.055}],
+        do: disc({w / 2 + x, d - 0.006, z}, :front, 0.006, "i-steel-t")
+      )
+  end
+
+  # Solar panels on the roof of a van: the frame with round corners, the
+  # cells, and the lines between them.
   def model("van_solar") do
-    box({0, 0, 0}, {0.8, 1.2, 0.04}, "gray") ++ [top({0.03, 0.03, 0.04}, {0.74, 1.14}, "i-pv")]
+    {w, d, h} = {1.14, 1.73, 0.04}
+
+    rbox({0, 0, 0}, {w, d, h}, 0.02, "steel") ++
+      [top({0.025, 0.025, h}, {w - 0.05, d - 0.05}, "i-pv")] ++
+      for(
+        k <- 1..5,
+        do: top({0.025 + k * (w - 0.05) / 6, 0.025, h + 0.002}, {0.006, d - 0.05}, "i-pv-line")
+      ) ++
+      for(
+        k <- 1..9,
+        do: top({0.025, 0.025 + k * (d - 0.05) / 10, h + 0.002}, {w - 0.05, 0.006}, "i-pv-line")
+      )
   end
 
+  # Insulation: two boards of foam, with the lines of their joints.
   def model("insulation") do
-    box({0, 0, 0}, {1.0, 0.6, 0.15}, "pink") ++ box({0, 0, 0.15}, {1.0, 0.6, 0.15}, "pink")
+    {w, d} = {1.22, 0.61}
+
+    box({0, 0, 0}, {w, d, 0.075}, "pink") ++
+      box({0, 0, 0.075}, {w, d, 0.075}, "pink") ++
+      [front({0, d, 0.07}, {w, 0.01}, "i-line"), top({w / 2, 0, 0.15}, {0.01, d}, "i-line")]
   end
 
+  # The walls of a van: boards of light wood (shiplap), with the line of
+  # each joint.
   def model("walls") do
-    box({0, 0, 0}, {1.0, 0.05, 0.9}, "light-wood") ++
-      for(k <- 1..3, do: front({0, 0.05, k * 0.22}, {1.0, 0.015}, "i-line"))
+    {w, d, h} = {1.22, 0.046, 0.91}
+
+    box({0, 0, 0}, {w, d, h}, "light-wood") ++
+      for(k <- 1..5, do: front({0, d, k * h / 6}, {w, 0.01}, "i-line", 0.004)) ++
+      for(
+        k <- 0..5,
+        do:
+          front(
+            {if(rem(k, 2) == 0, do: 0.4, else: 0.8), d, k * h / 6},
+            {0.008, h / 6},
+            "i-line",
+            0.004
+          )
+      )
   end
 
+  # The floor of a van: planks of light wood with their joints, in a
+  # pattern of bricks.
   def model("van_floor") do
-    box({0, 0, 0}, {1.0, 1.0, 0.05}, "light-wood") ++
-      for(k <- 1..3, do: top({0, k * 0.25, 0.05}, {1.0, 0.015}, "i-line"))
+    {w, d, h} = {1.22, 1.22, 0.025}
+
+    box({0, 0, 0}, {w, d, h}, "light-wood") ++
+      for(k <- 1..7, do: top({0, k * d / 8, h}, {w, 0.008}, "i-line", 0.001)) ++
+      for(
+        k <- 0..7,
+        do:
+          top(
+            {if(rem(k, 2) == 0, do: 0.4, else: 0.8), k * d / 8, h},
+            {0.008, d / 8},
+            "i-line",
+            0.001
+          )
+      )
   end
 
-  # The kind "other": a box.
+  # The kind "other": a box of cardboard with its tape.
   def model("other") do
-    box({0, 0, 0}, {0.6, 0.6, 0.6}, "gray") ++ [front({0.2, 0.6, 0.2}, {0.2, 0.2}, "i-steel-t")]
+    {w, d, h} = {0.61, 0.61, 0.61}
+
+    box({0, 0, 0}, {w, d, h}, "light-wood") ++
+      [
+        top({w / 2 - 0.04, 0, h}, {0.08, d}, "i-light-wood-r"),
+        front({w / 2 - 0.04, d, h - 0.12}, {0.08, 0.12}, "i-light-wood-r"),
+        front({0.08, d, 0.08}, {0.16, 0.1}, "i-white-t")
+      ]
   end
 
   # A washer or a dryer with a door in front: a white body with round
