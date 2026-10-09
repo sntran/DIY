@@ -77,7 +77,7 @@ defmodule DIYWeb.Inside do
             :for={level <- Enum.reverse(@view.levels)}
             type="button"
             data-focus={level.id}
-            class="btn btn-sm btn-ghost shrink-0 px-2"
+            class="btn btn-sm btn-ghost shrink-0 px-2 aria-pressed:bg-base-300"
           >
             {level.name}
           </button>

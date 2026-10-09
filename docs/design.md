@@ -1307,9 +1307,12 @@ its turn. A length is in inches.
   stops before it lifts gives no glide. After a zoom in, the finger moves
   the view. The button to add a room is under the plan: so it does not hide
   the name of a room.
-- The tabs of the layers. A tab fills the screen with its layer, and the
-  other layers are pale. The button "Show all the house", or a tap on a
-  room of a different layer, ends it.
+- The tabs of the layers. A tab fills the screen with its layer. In the
+  house, the other layers hide, and a tap goes through them. The chosen
+  room on a layer that hides is not chosen now. In the van, the other
+  layers are pale, and a tap on a zone of a different layer ends it. The
+  button "Show all the house" (or "Show all the van") ends it. The tab of
+  the layer that shows is pressed (`aria-pressed`).
 - A drop. The center of the space of the item on the floor moves with
   the pointer. The item goes to the room that has this center. The script
   tries its own room first, then the rooms of the layer under the pointer,
@@ -1350,11 +1353,15 @@ its turn. A length is in inches.
   front. A wall between two rooms is cut at 75 cm (30 inches): the rooms
   look like rooms, as in the drawn picture. A high wall there hides a
   part of the room at its left, because the camera is to the right. A wall
-  of 75 cm hides near 1 m of the floor behind it. Each other wall is cut
+  of 75 cm hides a band of the floor behind it: near 1 m along y, and
+  near 55 cm along x. Where an item of the room behind is in this band,
+  the wall in front of it is low, also on a slant.
+  An item over the wall (a fan) does not count. Each other wall is cut
   near the floor: at the front of a room and at the right end. A wall at
   the back is low where a room or a yard is behind it, also on a slant.
   So a wall does not hide the items of a room or of a yard. The walls are
-  16 cm thick, and the slabs 30 cm.
+  16 cm thick, and the slabs 30 cm. The van keeps its look: its walls,
+  its colors and its light background.
 - The picture of an item is its icon at the size of the item
   (`DIYWeb.Icon.Shapes.placed/2`). A turn turns the model, and a face
   that looks away does not show. Solar panels on a roof lie on its slope.
@@ -1396,12 +1403,15 @@ its turn. A length is in inches.
   property test checks that a point goes to the screen and back. It uses
   random cameras that look down more than a roof slopes.
   The zoom is in the `viewBox`, which LiveView keeps
-  (`JS.ignore_attributes/1`). The tab keeps it in its session storage.
-  With no view in the session storage, the page starts on floor 1
-  (`data-start`). The walls and the slabs of floor 1 fill the screen, and
-  the other layers hide. The tab of a layer, or a tap on a room, also
-  hides the other layers. While one layer shows, the view stays in the box
-  of that layer. So on a phone, the floor is in the middle of the screen. The button "Show all the house" shows all the layers.
+  (`JS.ignore_attributes/1`). The tab keeps it in its session storage,
+  with the layer that shows. With no view in the session storage, the
+  house starts on floor 1 (`data-start`). The walls and the slabs of
+  floor 1 fill the screen, and the other layers hide. The tab of a layer,
+  or a tap on a room, also hides the other layers. A room that the person
+  chooses in the list, or that an arrow key moves, also shows its layer.
+  While one layer shows, the view stays in the box of that layer. So on a
+  phone, the floor is in the middle of the screen. The button "Show all
+  the house" shows all the layers.
 - The plan is for the eyes. A list of the rooms and of their items gives
   the same facts, with the usage of each item. It shows when it has the
   focus. In the list, the arrow keys move an item or a room (6 inches, or

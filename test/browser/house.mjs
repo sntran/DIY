@@ -383,6 +383,16 @@ async function build(context, name) {
   await page.click("#item-sheet .btn-ghost[aria-label=Close]")
   await page.waitForSelector("#item-sheet", { state: "detached" })
 
+  // The list chooses a bedroom on floor 2: floor 2 comes, and floor 1
+  // hides.
+  await follow(page, `#choose-${await roomId(page, "Bedroom 1")}`)
+  await page.waitForSelector("#room-bar:has-text('Bedroom 1')")
+  await page.waitForSelector("#plan-svg[data-dim=f2]")
+  await page.waitForSelector("button[data-focus=f2][aria-pressed=true]")
+  await check(page, `${name} a room on floor 2`)
+  await page.click("#room-bar a[aria-label=Close]")
+  await page.waitForSelector("#room-bar", { state: "detached" })
+
   await follow(page, 'a[id^="add-"][aria-label="Add an item to Kitchen"]')
   await page.waitForSelector("#add-sheet")
   await check(page, `${name} add`)

@@ -55,8 +55,10 @@ defmodule DIYWeb.CutawayTest do
     # numbers.
     assert html =~ ~s(data-axes="0.269464 0.086996 -0.155575 0.150682 0.0 -0.257955")
     assert html =~ ~s(data-arrows="1 0 0 1")
-    # The page starts on floor 1.
+    # The page starts on floor 1. The house has its look (the class
+    # cutaway-house in assets/css/app.css).
     assert html =~ ~s(data-start="ground")
+    assert html =~ "cutaway-house"
     assert html =~ ~s(class="p-floor p-tile p-chosen")
     assert html =~ ~s(data-plan="0 0 144 294")
     # The roof has its rise: 147 inches times 5/12.
@@ -172,6 +174,68 @@ defmodule DIYWeb.CutawayTest do
                id =~ "-y0-",
                do: Float.round(height.(w), 6)
              )
+  end
+
+  test "a wall between two rooms is low where it can hide an item of the room behind it" do
+    build = house()
+
+    [kitchen, living, bed, bath] =
+      Enum.map(["Kitchen", "Living room", "Bedroom 1", "Bathroom"], &room(build, &1))
+
+    height = fn %{box: {_, _, z0, _, _, z1}} -> Float.round(z1 - z0, 6) end
+
+    # The parts of the wall on a side of a room: {from, to, height}, with
+    # from and to along the side (inches).
+    parts = fn build, room, side ->
+      view = Cutaway.view(build)
+
+      for level <- view.levels,
+          %{kind: :wall, room: ^room, id: id, box: {x0, y0, _, x1, y1, _}} = w <- level.objects,
+          id =~ "-#{side}-" do
+        {a, b} = if side == "x0", do: {y0, y1}, else: {x0, x1}
+        {round(a / 0.0254), round(b / 0.0254), height.(w)}
+      end
+      |> Enum.sort()
+    end
+
+    # With no item near them, the walls between the rooms are at 75 cm.
+    assert [{0, 294, 0.75}] == parts.(build, living, "x0")
+    assert [{0, 144, 0.75}] == parts.(build, bath, "y0")
+
+    # The dishwasher of the kitchen against the wall of the living room:
+    # the wall is low in front of it. The eye looks at a slant, so the low
+    # part goes on to the front.
+    move = fn build, type, room, at ->
+      items =
+        for item <- build.items,
+            do: if(item.type == type and item.room == room, do: %{item | at: at}, else: item)
+
+      %{build | items: items}
+    end
+
+    assert [{0, 100, 0.75}, {100, low, 0.25}, {low, 294, 0.75}] =
+             parts.(move.(build, "dishwasher", kitchen, %{x: 120, y: 100}), living, "x0")
+
+    assert low > 124
+
+    # The computer of the bedroom against the wall of the bathroom.
+    assert [{0, 50, 0.75}, {50, low, 0.25}, {low, 144, 0.75}] =
+             parts.(move.(build, "computer", bed, %{x: 50, y: 150}), bath, "y0")
+
+    assert low > 74
+
+    # An item far from the wall, or an item over it (a fan), does not count.
+    assert [{0, 294, 0.75}] ==
+             parts.(move.(build, "dishwasher", kitchen, %{x: 60, y: 100}), living, "x0")
+
+    fan =
+      Enum.map(build.items, fn item ->
+        if item.type == "ceiling_fan",
+          do: %{item | room: kitchen, at: %{x: 100, y: 100}},
+          else: item
+      end)
+
+    assert [{0, 294, 0.75}] == parts.(%{build | items: fan}, living, "x0")
   end
 
   test "the lines of the floors: a pattern of each material, on the plane of the floor" do

@@ -10,16 +10,19 @@ defmodule DIYWeb.Cutaway do
   The walls on the outside at the back have their full height. The wall
   on the outside at the left end of the house is cut on a slope. It is full
   at the back of the house, and near the floor at its front. A wall
-  between two rooms is cut at 75 cm: it shows the rooms, and it hides
-  little of the room behind it. The other walls are cut near the floor: at
-  the front of a room and at the right end. A wall is also cut near the
-  floor where a room or a yard is behind it, also on a slant. So the
-  camera sees each room and its items.
+  between two rooms is cut at 75 cm: it shows the rooms, as in a drawn
+  picture. Where it can hide an item of the room behind it, it is cut near
+  the floor. The other walls are cut near the floor: at the front of a
+  room and at the right end. A wall is also cut near the floor where a
+  room or a yard is behind it, also on a slant. So the camera sees the
+  items of each room.
 
-  The look follows a picture that an artist drew of a house
-  (`assets/css/app.css`). It has warm colors and brown lines of ink. The
-  top of each wall is a dark cut, and the walls have a soft light. At night (the dark mode), the floor
-  of each room inside has the warm light of a lamp (the class `p-glow`).
+  The look follows a picture that an artist drew of a house (the class
+  `cutaway-house` in `assets/css/app.css`). It has warm colors and brown
+  lines of ink. The top of each wall is a dark cut, and the walls have a
+  soft light. At night (the dark mode), the floor of each room inside has
+  the warm light of a lamp (the class `p-glow`). The van
+  (`DIYWeb.VanCutaway`) keeps its look.
 
   The page moves the items and the rooms with a script (the hook Plan,
   `assets/js/plan.js`). The SVG gives the script what it needs:
@@ -30,7 +33,7 @@ defmodule DIYWeb.Cutaway do
     for a move to the right and down (`DIYWeb.Camera.arrows/1`).
     `data-fit` is the box of all the layers. `data-start` is the layer of
     the first view (floor 1): the house fills the screen, and the other
-    layers hide;
+    layers hide. With `data-start`, one layer shows at a time;
   - each surface of a room: `data-room`, `data-plan` (`x y w d`, inches)
     and `data-origin`. The origin is the SVG point of the plan point 0, 0
     on the surface of the room. A roof also has `data-rise`: the height of
@@ -55,8 +58,9 @@ defmodule DIYWeb.Cutaway do
   # One inch in meters.
   @m 0.0254
   # The pitch of a roof (5 in 12). Then, in meters: the height of a wall,
-  # of a wall of the attic, and of the cut of a wall near the floor. Then
-  # the thickness of a wall and of a floor.
+  # and of a wall of the attic. Then the cut of a wall near the floor, and
+  # the cut of a wall between two rooms. Then the thickness of a wall and
+  # of a floor.
   @pitch 5 / 12
   @full 2.4
   @attic 0.5
@@ -123,7 +127,7 @@ defmodule DIYWeb.Cutaway do
     {outdoor, indoor} = Enum.split_with(rooms, &(id == "ground" and &1.place == :outdoor))
     low = Enum.map(outdoor, &room_view(&1, floor_z.(&1), camera))
     others = Enum.map(indoor, &room_view(&1, floor_z.(&1), camera))
-    {ground, slabs, walls} = shell(level, rooms, house, floor_z)
+    {ground, slabs, walls} = shell(level, rooms, house, floor_z, items)
 
     item_views =
       for room <- rooms,
@@ -195,11 +199,11 @@ defmodule DIYWeb.Cutaway do
   ## The shell: the lot, the slabs and the walls
 
   # The lot (on the ground), a slab under each room, and the walls of the
-  # rooms inside (as objects, `walls/4`). A yard is on the ground: it has
+  # rooms inside (as objects, `walls/5`). A yard is on the ground: it has
   # no slab. A floor with no room has the slab of the house.
-  defp shell(%{id: "roof"}, _rooms, _house, _floor_z), do: {[], [], []}
+  defp shell(%{id: "roof"}, _rooms, _house, _floor_z, _items), do: {[], [], []}
 
-  defp shell(%{id: id, z: z, camera: camera}, rooms, house, floor_z) do
+  defp shell(%{id: id, z: z, camera: camera}, rooms, house, floor_z, items) do
     on_slab = Enum.reject(rooms, &(id == "ground" and &1.place == :outdoor))
 
     slabs =
@@ -213,7 +217,7 @@ defmodule DIYWeb.Cutaway do
 
     high = if id == "attic", do: @attic, else: @full
     inside = Enum.filter(rooms, &(&1.place == :indoor))
-    walls = walls(id, {inside, rooms}, fn room -> {floor_z.(room), high} end, camera)
+    walls = walls(id, {inside, rooms}, items, fn room -> {floor_z.(room), high} end, camera)
     {lot(id, rooms, house, camera), slabs, walls}
   end
 
@@ -256,23 +260,28 @@ defmodule DIYWeb.Cutaway do
   # wall between two rooms stands on the line between them. Only the room
   # at its back draws it (the eye is at the large x and y). The rooms of the
   # layer (with the yards) tell where a wall has a room behind it. `base`
-  # gives the floor of a room and the full height of a wall (meters).
+  # gives the floor of a room and the full height of a wall (meters). The
+  # items of the layer (by room) tell where a wall between two rooms can
+  # hide an item.
   #
   # The cut of a wall comes from its side (`cut/2`). A wall on the outside
   # can have no room of the layer behind it (the kind `:high`). At the back,
   # such a wall has its full height. At the far side, it is cut on a slope
   # (`slope/3`). It is full at the back of the rooms of the layer, and near
-  # the floor at their front. Each other wall is cut near the floor. (A
-  # high wall between two rooms, or at the near side, can hide a part of a
-  # room.)
-  defp walls(id, {rooms, all}, base, camera) do
+  # the floor at their front. A wall between two rooms (the kind `:shared`)
+  # is cut at 75 cm. Where it can hide an item of the room behind it, it is
+  # cut near the floor (`hidden/4`). Each other wall is cut near the floor.
+  # (A high wall between two rooms, or at the near side, can hide a part of
+  # a room.)
+  defp walls(id, {rooms, all}, items, base, camera) do
     span = depth_span(rooms, camera)
 
     for room <- rooms,
         {floor, high} = base.(room),
         side <- ~w(x0 y0 x1 y1),
         reach = reach(camera, side, high),
-        {{a, b, kind}, i} <- Enum.with_index(spans(room, side, {rooms, all}, reach)) do
+        hidden = hidden(room, side, {all, items}, camera),
+        {{a, b, kind}, i} <- Enum.with_index(spans(room, side, {rooms, all}, reach, hidden)) do
       height =
         case {cut(side, camera), kind} do
           {:back, :high} -> {high, high}
@@ -338,10 +347,11 @@ defmodule DIYWeb.Cutaway do
   defp reach(%{eye: {ex, _ey, ez}}, _side, high), do: high * ex / ez / @m
 
   # The parts of a side of a room, in inches along the side. Each part has
-  # its kind: :high, :low, or :shared (a low wall between two rooms inside).
-  # A part is :high when no room of the layer (`all`, with the yards) is
-  # behind it, also on a slant (`reach/3`).
-  defp spans(room, side, {rooms, all}, reach) do
+  # its kind: :high, :low, or :shared (a wall of 75 cm between two rooms
+  # inside). A part is :high when no room of the layer (`all`, with the
+  # yards) is behind it, also on a slant (`reach/3`). A part between two
+  # rooms is :low where it can hide an item (`hidden`).
+  defp spans(room, side, {rooms, all}, reach, hidden) do
     others = Enum.reject(rooms, &(&1.id == room.id))
     {line, range} = edge(room.plan, side)
     touch = for o <- others, across(o.plan, side) == line, do: along(o.plan, side)
@@ -349,18 +359,51 @@ defmodule DIYWeb.Cutaway do
     behind = behind(Enum.reject(all, &(&1.id == room.id)), side, line, reach)
 
     for {a, b, shared?} <- split(range, touch),
-        part <- span(a, b, shared?, back?, behind),
+        part <- span(a, b, shared?, back?, behind, hidden),
         do: part
   end
 
-  defp span(a, b, true, true, _behind), do: [{a, b, :shared}]
-  defp span(_a, _b, true, false, _behind), do: []
-  defp span(a, b, false, false, _behind), do: [{a, b, :low}]
+  defp span(a, b, true, true, _behind, hidden) do
+    for {p, q, hides?} <- split({a, b}, hidden),
+        do: {p, q, if(hides?, do: :low, else: :shared)}
+  end
 
-  defp span(a, b, false, true, behind) do
+  defp span(_a, _b, true, false, _behind, _hidden), do: []
+  defp span(a, b, false, false, _behind, _hidden), do: [{a, b, :low}]
+
+  defp span(a, b, false, true, behind, _hidden) do
     for {p, q, hidden?} <- split({a, b}, behind),
         do: {p, q, if(hidden?, do: :low, else: :high)}
   end
+
+  # The ranges along a side at the back of a room (x0 or y0) where its wall
+  # can hide an item of a different room. Such an item stands on the floor,
+  # up to `depth` behind the line. The eye looks at a slant, so the
+  # range goes on along the side up to `slant`. An item over the wall (a
+  # fan) does not count.
+  defp hidden(room, side, {all, items}, %{eye: {ex, ey, ez}}) when side in ~w(x0 y0) do
+    {line, _range} = edge(room.plan, side)
+    {depth, slant} = if side == "x0", do: {ex, ey}, else: {ey, ex}
+    {depth, slant} = {@inner * depth / ez / @m, @inner * slant / ez / @m}
+
+    for other <- all,
+        other.id != room.id,
+        item <- Map.get(items, other.id, []),
+        Catalog.lift(item.type) < @inner / @m,
+        box = Layout.item_box(item),
+        plan = %{box | x: other.plan.x + box.x, y: other.plan.y + box.y},
+        {near, far} = across_range(plan, side),
+        far > line - depth and near < line do
+      {c, d} = along(plan, side)
+      {c, d + slant}
+    end
+  end
+
+  defp hidden(_room, _side, _items, _camera), do: []
+
+  # The range of a plan across a side (x for x0, y for y0).
+  defp across_range(p, "x0"), do: {p.x, p.x + p.w}
+  defp across_range(p, "y0"), do: {p.y, p.y + p.d}
 
   # The line of a side of a plan, and its range along the side.
   defp edge(p, "x0"), do: {p.x, {p.y, p.y + p.d}}
@@ -440,9 +483,13 @@ defmodule DIYWeb.Cutaway do
     {ox0, oy0, ox1, oy1} = flat
     shape = Geometry.wedge({cx * @m, cy * @m, z}, {sw * @m, sd * @m}, {h0, h1}, axis)
 
+    # The face of the wall in its room. A wall between two rooms stands on
+    # the line: its face is half its thickness in front of the line.
+    face = if kind == :shared, do: line * @m + @thick / 2, else: line * @m
+
     trim =
       if max(h0, h1) > @low and side in ~w(x0 y0),
-        do: trim(side, line, {a, b}, z, {h0, h1}),
+        do: trim(side, face, {a, b}, z, {h0, h1}),
         else: []
 
     %{
@@ -457,16 +504,15 @@ defmodule DIYWeb.Cutaway do
   end
 
   # The trim of a wall that is higher than the cut near the floor. It is on
-  # the face of the wall in its room (the face at the line of the wall). It
-  # is a baseboard, and a window when the wall has its full height and room
-  # for it. A window is 4 feet wide at most, from 3
-  # feet over the floor.
-  defp trim(side, line, {a, b}, z, {h0, h1}) do
+  # the face of the wall in its room (`face`, meters). It is a baseboard,
+  # and a window when the wall has its full height and room for it. A
+  # window is 4 feet wide at most, from 3 feet over the floor.
+  defp trim(side, face, {a, b}, z, {h0, h1}) do
     plane = fn {u0, u1}, {z0, z1} ->
       for {u, zz} <- [{u0, z0}, {u1, z0}, {u1, z1}, {u0, z1}] do
         if side == "x0",
-          do: {line * @m + 0.004, u * @m, z + zz},
-          else: {u * @m, line * @m + 0.004, z + zz}
+          do: {face + 0.004, u * @m, z + zz},
+          else: {u * @m, face + 0.004, z + zz}
       end
     end
 
@@ -839,7 +885,7 @@ defmodule DIYWeb.Cutaway do
       data-start={@start}
       data-axes={@axes}
       data-arrows={@arrows}
-      class="cutaway block w-full h-full touch-none select-none"
+      class={["cutaway block w-full h-full touch-none select-none", @start && "cutaway-house"]}
       aria-hidden="true"
       phx-mounted={JS.ignore_attributes(["viewBox", "style", "data-dim"])}
     >
