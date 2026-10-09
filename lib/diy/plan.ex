@@ -45,12 +45,20 @@ defmodule DIY.Plan do
         }
 
   # The delivery charges of the utilities, for an EFL that does not give
-  # them: as the EFLs of October 2026 give them (Oncor: the EFLs of
-  # Discount Power and Reliant in test/fixtures/efl; CenterPoint: the EFL
-  # of Just Energy there).
+  # them. Oncor and CenterPoint: as the EFLs of October 2026 give them
+  # (Oncor: the EFLs of Discount Power and Reliant in test/fixtures/efl;
+  # CenterPoint: the EFL of Just Energy there). The other utilities: the
+  # table "TDSP delivery charges" of Xoom Energy, with the rates of
+  # 10/4/2026. This table gives the same numbers for Oncor and CenterPoint.
+  # A utility changes its charges in March and in September.
   @tdus %{
     "oncor" => %{name: "Oncor", base: 4.06, cents: 6.8673},
-    "centerpoint" => %{name: "CenterPoint", base: 4.9, cents: 6.5333}
+    "centerpoint" => %{name: "CenterPoint", base: 4.9, cents: 6.5333},
+    "aep texas central" => %{name: "AEP Texas Central", base: 3.24, cents: 5.6898},
+    "aep texas north" => %{name: "AEP Texas North", base: 3.24, cents: 5.5751},
+    "tnmp" => %{name: "TNMP", base: 7.56, cents: 7.771},
+    "texas-new mexico" => %{name: "TNMP", base: 7.56, cents: 7.771},
+    "lubbock" => %{name: "Lubbock Power & Light", base: 0.0, cents: 6.312}
   }
 
   @doc "The delivery charges of a utility (by its name in an EFL), or `nil`."

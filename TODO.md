@@ -51,8 +51,9 @@ The owner decides about each item.
   the person compares 2 plans with the worksheet.
 - The EFL forms that the reader does not know yet: numbers in columns
   under their names, and charges in a table.
-- The delivery charges of the other utilities (AEP Texas, TNMP) in the
-  table of `DIY.Plan.tdu/1`.
+- The delivery charges of the utilities change in March and in
+  September: a way to update the table of `DIY.Plan.tdu/1` (today by
+  hand).
 - The check of phase 5 with the van of the owner: the label in the door
   frame, the weight of each axle on a truck scale, and the Wh of a day
   from the app of the battery.

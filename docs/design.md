@@ -541,9 +541,12 @@ delivery charges of the utility (TDU), the credits, the minimum usage
 fee, and the averages at 500, 1,000 and 2,000 kWh. The page shows each
 number with the line where it came from, and a link opens the PDF at its
 page. When the EFL does not give the delivery charges, the reader takes
-them from the table of the utility (`DIY.Plan.tdu/1`: Oncor and
-CenterPoint, from the EFLs of October 2026), or finds them from the
-averages at 500 and 2,000 kWh (only when it found the energy charge). The
+them from the table of the utility (`DIY.Plan.tdu/1`). The table has
+Oncor and CenterPoint (from the EFLs of October 2026), and AEP Texas
+Central, AEP Texas North, TNMP and Lubbock Power & Light (from the table
+of Xoom Energy, with the rates of 10/4/2026). Else the reader finds them
+from the averages at 500 and 2,000 kWh (only when it found the energy
+charge). The
 page tells where they come from; with a fit, only the average at 1,000
 kWh checks the numbers. The form of a plan gives the delivery charges
 only of a utility of the table; for another utility, the user gives them.

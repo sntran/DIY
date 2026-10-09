@@ -434,7 +434,7 @@ defmodule DIYWeb.LessonLiveTest do
       open(
         conn,
         ~p"/plans?step=4",
-        Build.set_lesson(house(%{@market | utility: "AEP Texas Central"}), 4)
+        Build.set_lesson(house(%{@market | utility: "Entergy Texas"}), 4)
       )
 
     assert has_element?(view, "#plan-form input[name='plan[tdu_base]'][required]")
