@@ -7,9 +7,9 @@ defmodule DIYWeb.VanCutaway do
 
   The plan of the van is `DIY.Layout.van_box/1`. `x` goes across the van,
   from its right side (the side of the sliding door). `y` goes along it,
-  from the doors at the back to the cab. The zones (`DIY.Catalog.zones/0`) are the
-  rooms of the van. The cab and the roof of the van are fixed: they have
-  no handles.
+  from the doors at the back to the cab. The zones (`DIY.Catalog.zones/0`)
+  are the rooms of the van. The cab and the roof of the van are fixed:
+  they have no handles.
 
   The camera of a van (`DIYWeb.Camera.van/0`) is at its left side (the
   side of the driver). The cab is at the left of the screen. The floor

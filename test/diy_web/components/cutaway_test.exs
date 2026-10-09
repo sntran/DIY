@@ -17,6 +17,7 @@ defmodule DIYWeb.CutawayTest do
   end
 
   defp room(build, name), do: Enum.find(build.rooms, &(&1.name == name)).id
+  defp kitchen_room(build), do: Enum.find(build.rooms, &(&1.name == "Kitchen"))
 
   defp add(build, room, type, params \\ %{}) do
     {:ok, build, id} = Build.add_item(build, room, type)
@@ -113,6 +114,23 @@ defmodule DIYWeb.CutawayTest do
                do: height.(w)
              )
              |> Enum.uniq()
+
+    # The kitchen 200 inches to the back: the living room is in front of it
+    # on a slant. The wall at the back of the living room is low next to the
+    # kitchen, so it does not hide the items of the kitchen. Far from the
+    # kitchen, it is high.
+    back = %{kitchen_room(build) | plan: %{kitchen_room(build).plan | y: -200}}
+    moved = Enum.map(build.rooms, &if(&1.id == kitchen, do: back, else: &1))
+    [ground | _] = Cutaway.view(%{build | rooms: moved}).levels
+
+    parts =
+      for %{kind: :wall, room: ^living, id: id, box: {x0, _, _, x1, _, _}} = w <- ground.objects,
+          id =~ "-y0-",
+          do: {x0, x1, height.(w)}
+
+    {_x0, _x1, near} = Enum.min_by(parts, &elem(&1, 0))
+    {_x0, _x1, far} = Enum.max_by(parts, &elem(&1, 0))
+    assert {near, far} == {0.25, 2.4}
 
     # A yard behind the kitchen. The wall at the back of the kitchen is then
     # low, so it does not hide the items of the yard.

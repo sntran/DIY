@@ -893,9 +893,9 @@ is in the shade (`-r`).
 Each kind of item has its icon (`DIYWeb.Icon`), in the same style. The
 camera of the house shows the front of an item. A car and a van show
 their side (the camera of a van). An icon is a few boxes, discs and
-details of a material (white, steel, wood, cloth). The faces have a thin edge, so that a white item
-shows on a light page. The icon is next to the name of the item in these
-places:
+details of a material (white, steel, wood, cloth). The faces have a thin
+edge, so that a white item shows on a light page. The icon is next to
+the name of the item in these places:
 
 - the cards of the zones of a van;
 - the lists to add an item;
@@ -976,8 +976,10 @@ its turn. A length is in inches.
   slope. It is full at the back of the house, and near the floor at its
   front. Each other wall is cut near the floor: at the front of a room,
   between two rooms, and at the right end. The camera is a little to the
-  right, so a high wall between two rooms hides a part of the room at its
-  left. So a wall does not hide the items of a room or of a yard.
+  right, so a high wall between two rooms can hide a part of the room at
+  its left. A wall at the back is low where a room or a yard is behind
+  it, also on a slant. So a wall does not hide the items of a room or of
+  a yard.
 - The picture of an item is its icon at the size of the item
   (`DIYWeb.Icon.Shapes.placed/2`). A turn turns the model, and a face
   that looks away does not show. Solar panels on a roof lie on its slope.

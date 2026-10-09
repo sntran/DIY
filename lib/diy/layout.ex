@@ -6,9 +6,8 @@ defmodule DIY.Layout do
   - A room of the house has a `plan`: `%{x, y, w, d}`. The point `x`, `y`
     is the back corner of the room: the corner far from a person who looks
     at the picture. `w` goes along `x` (to the right), and `d` along `y`
-    (to the front). All the levels use the
-    same `x` and `y`: a room on floor 2 is above the room on floor 1 at the
-    same point.
+    (to the front). All the levels use the same `x` and `y`: a room on
+    floor 2 is above the room on floor 1 at the same point.
   - An item in a room of the house has `at`: `%{x, y}`, the back corner of
     the item in its room. It has `turn`: 0 to 3, a quarter turn each time.
     It has `size`: `%{w, d, h}`, or `nil` for the typical size of its kind

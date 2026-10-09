@@ -12,7 +12,8 @@ defmodule DIYWeb.Cutaway do
   at the back of the house, and near the floor at its front. The other
   walls are cut near the floor: at the front of a room, between two rooms,
   and at the right end. A wall is also cut near the floor where a room or
-  a yard is behind it. So the camera sees each room and its items.
+  a yard is behind it, also on a slant. So the camera sees each room and
+  its items.
 
   The page moves the items and the rooms with a script (the hook Plan,
   `assets/js/plan.js`). The SVG gives the script what it needs:
@@ -243,16 +244,17 @@ defmodule DIYWeb.Cutaway do
   # can have no room of the layer behind it (the kind `:high`). At the back,
   # such a wall has its full height. At the far side, it is cut on a slope
   # (`slope/3`). It is full at the back of the rooms of the layer, and near
-  # the floor at their front. Each other wall is cut near the floor. A high
-  # wall between two rooms, or at the near side, hides a part of a room.
+  # the floor at their front. Each other wall is cut near the floor. (A
+  # high wall between two rooms, or at the near side, can hide a part of a
+  # room.)
   defp walls(id, {rooms, all}, base, camera) do
     span = depth_span(rooms, camera)
 
     for room <- rooms,
+        {floor, high} = base.(room),
         side <- ~w(x0 y0 x1 y1),
-        {{a, b, kind}, i} <- Enum.with_index(spans(room, side, rooms, all)) do
-      {floor, high} = base.(room)
-
+        reach = reach(camera, side, high),
+        {{a, b, kind}, i} <- Enum.with_index(spans(room, side, {rooms, all}, reach)) do
       height =
         case {cut(side, camera), kind} do
           {:back, :high} -> {high, high}
@@ -310,16 +312,22 @@ defmodule DIYWeb.Cutaway do
     low + (high - low) * min(max(part, 0.0), 1.0)
   end
 
+  # The reach of a high wall on a side (inches). The eye looks at a slant.
+  # So the wall hides the points behind it that are up to this far along
+  # the wall. A wall on x goes along y, and a wall on y goes along x.
+  defp reach(%{eye: {_ex, ey, ez}}, side, high) when side in ~w(x0 x1), do: high * ey / ez / @m
+  defp reach(%{eye: {ex, _ey, ez}}, _side, high), do: high * ex / ez / @m
+
   # The parts of a side of a room, in inches along the side. Each part has
   # its kind: :high, :low, or :shared (a low wall between two rooms inside).
   # A part is :high when no room of the layer (`all`, with the yards) is
-  # behind it.
-  defp spans(room, side, rooms, all) do
+  # behind it, also on a slant (`reach/3`).
+  defp spans(room, side, {rooms, all}, reach) do
     others = Enum.reject(rooms, &(&1.id == room.id))
     {line, range} = edge(room.plan, side)
     touch = for o <- others, across(o.plan, side) == line, do: along(o.plan, side)
     back? = side in ~w(x0 y0)
-    behind = behind(Enum.reject(all, &(&1.id == room.id)), side, line)
+    behind = behind(Enum.reject(all, &(&1.id == room.id)), side, line, reach)
 
     for {a, b, shared?} <- split(range, touch),
         part <- span(a, b, shared?, back?, behind),
@@ -350,9 +358,15 @@ defmodule DIYWeb.Cutaway do
   defp along(p, side) when side in ~w(x0 x1), do: {p.y, p.y + p.d}
   defp along(p, _side), do: {p.x, p.x + p.w}
 
-  # The ranges of the rooms behind the line of a side at the back.
-  defp behind(others, side, line),
-    do: for(o <- others, across(o.plan, side) <= line, do: along(o.plan, side))
+  # The ranges of the rooms with a part behind the line of a side at the
+  # back (x0 or y0). The eye looks at a slant, so a high wall hides a room
+  # behind it up to its reach further along the wall.
+  defp behind(others, side, line, reach) do
+    for o <- others, elem(edge(o.plan, side), 0) < line do
+      {c, d} = along(o.plan, side)
+      {c, d + reach}
+    end
+  end
 
   # A range in parts: each part is in the ranges `by`, or out of all of
   # them. The parts that are next to each other and of the same kind join.

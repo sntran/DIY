@@ -116,12 +116,18 @@ defmodule DIYWeb.CameraTest do
   end
 
   property "the face in the light looks more to the eye than the face in the shade" do
-    check all(c <- any_camera()) do
-      {ex, ey, _ez} = c.eye
-      {lit, shade} = if ey >= ex, do: {{0, 1, 0}, {1, 0, 0}}, else: {{1, 0, 0}, {0, 1, 0}}
-      assert Camera.light(c, lit) == "l"
-      assert Camera.light(c, shade) == "r"
-      assert Geometry.dot(c.eye, lit) >= Geometry.dot(c.eye, shade)
+    # Any camera, and the cameras at a yaw of 45 degrees. At 45 degrees, the
+    # two faces of a box look to the eye by the same amount (but for a
+    # rounding).
+    cameras = one_of([any_camera(), map(integer(1..89), &Camera.new(:half, 45, &1))])
+
+    check all(c <- cameras) do
+      box = Geometry.box({0, 0, 0}, {1, 1, 1})
+      [{shade, "m-r"}, {lit, "m-l"}, _top] = Camera.faces(c, box, "m")
+      normal = fn face -> if face == box.front, do: {0, 1, 0}, else: {1, 0, 0} end
+      assert Geometry.dot(c.eye, normal.(lit)) >= Geometry.dot(c.eye, normal.(shade))
+      assert Camera.light(c, normal.(lit)) == "l"
+      assert Camera.light(c, normal.(shade)) == "r"
     end
   end
 

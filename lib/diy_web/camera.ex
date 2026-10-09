@@ -46,6 +46,7 @@ defmodule DIYWeb.Camera do
   def new(name, yaw, pitch) when yaw > 0 and yaw < 90 and pitch > 0 and pitch < 90 do
     {a, b} = {yaw * :math.pi() / 180, pitch * :math.pi() / 180}
     {sa, ca, sb, cb} = {:math.sin(a), :math.cos(a), :math.sin(b), :math.cos(b)}
+    {ex, ey} = {ca * cb, sa * cb}
 
     %__MODULE__{
       name: name,
@@ -56,10 +57,10 @@ defmodule DIYWeb.Camera do
       # The SVG y of 1 meter along x, y and z.
       down: {@scale * ca * sb, @scale * sa * sb, -@scale * cb},
       # The direction to the eye, and its part on the ground.
-      eye: {ca * cb, sa * cb, sb},
+      eye: {ex, ey, sb},
       ground: {ca, sa},
       # The face of a box that looks more to the camera.
-      lit: if(sa >= ca, do: :front, else: :side)
+      lit: if(ey >= ex, do: :front, else: :side)
     }
   end
 
