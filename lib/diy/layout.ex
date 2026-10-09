@@ -13,7 +13,12 @@ defmodule DIY.Layout do
     the item in its room. It has `turn`: 0 to 3, a quarter turn each time.
     It has `size`: `%{w, d, h}`, or `nil` for the typical size of its kind
     (`DIY.Catalog.size/1`).
-  - A zone of a van and an item in a van have no plan and no `at` (`nil`).
+  - A zone of a van has a plan in the van. `x` goes across the van (from
+    its left side), and `y` along it, from the doors at the back. The cab
+    is the zone at the front of the cargo area (`van_box/1`). The roof of
+    the van is a layer of its own. The shell (the insulation, the walls
+    and the floor) has no plan: its items are the materials of the van,
+    with no place.
 
   The app makes a draft of the plan (`draft/2`). The size of the house
   gives the size of its floors, and the rooms of a floor are in rows. The
@@ -24,9 +29,13 @@ defmodule DIY.Layout do
   The rules (`fill/1` keeps them after each change; `specs/Plan.tla`
   checks them on a small grid):
 
-  - Two rooms of the same layer do not overlap. A layer is a surface: the
-    ground (outside and floor 1), floor 2, floor 3, the attic and the roof
-    (`layer/1`).
+  - Two rooms of the same layer do not overlap. A layer is a surface
+    (`layer/1`): the ground (outside and floor 1), floor 2, floor 3, the
+    attic and the roof. Each van has two layers: its floor and its roof.
+  - A zone of a van is in the van (`van_box/1`), and the cab and the roof
+    are at their places for the model. A different model, or a stored text
+    that a person changed, can break this rule. Then all the zones of the
+    van get the draft again (`van_draft/2`).
   - An item is in its room: `0 <= x <= w(room) - w(item)`, and the same
     for `y`. An item that is larger than its room is at 0. It goes
     through the walls of the room, and the picture can paint a wall over
@@ -65,6 +74,7 @@ defmodule DIY.Layout do
   The layer of a room: the rooms of a layer are on the same surface, and
   they do not overlap.
   """
+  def layer(%{level: "van:" <> _ = level, place: :van_roof}), do: level <> ":roof"
   def layer(%{level: level}) when level in ["outside", "f1"], do: "ground"
   def layer(%{level: "roof", place: :roof}), do: "roof"
   def layer(%{level: "roof"}), do: "attic"
@@ -85,7 +95,7 @@ defmodule DIY.Layout do
   and of the roof. With no such room, the draft floor at the origin.
   """
   def house_box(build) do
-    case for(r <- build.rooms, r.plan, r.level != "outside", do: r.plan) do
+    case for(r <- build.rooms, r.plan, r.level != "outside", not van?(r), do: r.plan) do
       [] ->
         {w, d} = footprint(build.house)
         %{x: 0, y: 0, w: w, d: d}
@@ -116,6 +126,13 @@ defmodule DIY.Layout do
   def size(%{type: "solar_panels", params: %{"watts" => watts}}) do
     {cols, rows} = panel_grid(watts)
     {cols * @panel_w, rows * @panel_d, 2}
+  end
+
+  # A camper van: the size of its model, and its space has the mirrors too
+  # (7 in on each side). A size that a stored build gives has no effect.
+  def size(%{type: "camper_van", params: %{"model" => model}}) do
+    van = Catalog.van_size(model)
+    {van.width + 14, van.length, van.height}
   end
 
   def size(%{size: %{w: w, d: d, h: h}}), do: {w, d, h}
@@ -294,6 +311,58 @@ defmodule DIY.Layout do
   defp round6(n), do: round(n / 6) * 6
   defp floor6(n), do: trunc(n / 6) * 6
 
+  ## The van
+
+  # The depth of the cab zone: the seats in front of the cargo area. A guess
+  # of the app (no source): a seat and the space for the legs.
+  @cab 36
+
+  @doc "True for a zone of a van."
+  def van?(%{level: level}), do: String.starts_with?(level, "van:")
+
+  @doc """
+  The box of the floor of a van, from the size of its model
+  (`DIY.Catalog.van_size/1`): the cargo area, and the cab in front of it.
+  """
+  def van_box(van) do
+    size = Catalog.van_size(van.params["model"])
+    %{x: 0, y: 0, w: size.cargo_width, d: size.cargo_length + @cab}
+  end
+
+  @doc "The depth of the cab zone of a van, in inches."
+  def cab, do: @cab
+
+  @doc "True when a plan is in a box."
+  def inside?(plan, box),
+    do:
+      plan.x >= box.x and plan.y >= box.y and plan.x + plan.w <= box.x + box.w and
+        plan.y + plan.d <= box.y + box.d
+
+  @doc """
+  The draft plans of the zones of a van, in the order of the zones. From
+  the doors at the back: the bed, the electrical bay, the living area and
+  the galley, each across the van. The cab is at the front, and the roof
+  of the van is over all of it. The shell has no plan.
+  """
+  def van_draft(van, zones) do
+    %{w: w, d: d} = van_box(van)
+    cargo = d - @cab
+    bed = min(72, round(cargo * 0.42))
+    bay = @min_room
+    living = div(cargo - bed - bay, 2)
+
+    plans = %{
+      bed: %{x: 0, y: 0, w: w, d: bed},
+      bay: %{x: 0, y: bed, w: w, d: bay},
+      living: %{x: 0, y: bed + bay, w: w, d: living},
+      galley: %{x: 0, y: bed + bay + living, w: w, d: cargo - bed - bay - living},
+      cab: %{x: 0, y: cargo, w: w, d: @cab},
+      van_roof: %{x: 0, y: 0, w: w, d: d}
+    }
+
+    Enum.map(zones, &plans[&1.place])
+  end
+
   ## The fill
 
   @doc """
@@ -303,49 +372,99 @@ defmodule DIY.Layout do
   place. An item with no place goes to a free place in its room, and an
   item out of its room comes back in. When no room of the house has a
   plan (a new house, or a build of an older version), the app makes the
-  draft. A zone of a van and an item in a van have no plan.
+  draft. The zones of a van keep their plans when the plans are good,
+  else they get the draft of the van (`van_draft/2`). The shell of a van
+  and its items have no plan.
   """
   def fill(%{house: nil} = build), do: build
 
   def fill(build) do
-    van? = fn room -> String.starts_with?(room.level, "van:") end
-    house = Enum.reject(build.rooms, van?)
+    house = Enum.reject(build.rooms, &van?/1)
 
     rooms =
       if house != [] and Enum.all?(house, &(&1.plan == nil)),
         do: drafted(build.rooms, house, build.house),
-        else: placed(build, van?)
+        else: placed(build)
 
-    build = %{build | rooms: rooms}
-    %{build | items: items(build, van?)}
+    build = %{build | rooms: vans(rooms, build.items)}
+    %{build | items: items(build)}
   end
 
   defp drafted(rooms, house, numbers) do
     plans = Map.new(Enum.zip(Enum.map(house, & &1.id), draft(numbers, house)))
-    Enum.map(rooms, &Map.put(&1, :plan, plans[&1.id]))
+    Enum.map(rooms, &if(van?(&1), do: &1, else: Map.put(&1, :plan, plans[&1.id])))
   end
 
-  # The rooms with a good plan keep it. Then each other room of the house
-  # goes to a free place, in order.
-  defp placed(build, van?) do
+  # The rooms of the house with a good plan keep it. Then each other room
+  # of the house goes to a free place, in order.
+  defp placed(build) do
     {kept, _seen} =
       Enum.map_reduce(build.rooms, [], fn room, seen ->
-        good =
-          not van?.(room) and valid_plan?(room.plan) and
-            not Enum.any?(seen, &(layer(&1) == layer(room) and overlap?(&1.plan, room.plan)))
+        cond do
+          van?(room) ->
+            {room, seen}
 
-        if good, do: {room, [room | seen]}, else: {%{room | plan: nil}, seen}
+          valid_plan?(room.plan) and
+              not Enum.any?(seen, &(layer(&1) == layer(room) and overlap?(&1.plan, room.plan))) ->
+            {room, [room | seen]}
+
+          true ->
+            {%{room | plan: nil}, seen}
+        end
       end)
 
     Enum.reduce(kept, kept, fn
       %{plan: nil} = room, rooms ->
-        if van?.(room),
+        if van?(room),
           do: rooms,
           else: put_plan(rooms, room, free_plan(%{build | rooms: rooms}, room))
 
       _room, rooms ->
         rooms
     end)
+  end
+
+  # The zones of each van keep their plans when each plan is valid, in the
+  # van, and not over a different zone of its layer. The cab and the roof
+  # must be at their places for the model (a new model moves them). Else all
+  # the zones get the draft again. The shell has no plan.
+  defp vans(rooms, items) do
+    vans = Map.new(for(i <- items, i.type == "camper_van", do: {"van:" <> i.id, i}))
+
+    zones =
+      rooms
+      |> Enum.filter(&(van?(&1) and &1.place != :shell))
+      |> Enum.group_by(& &1.level)
+
+    plans =
+      for {level, list} <- zones, van = vans[level], van != nil, reduce: %{} do
+        plans ->
+          box = van_box(van)
+          draft = van_draft(van, list)
+
+          # The cab and the roof are fixed: at their places for the model.
+          fixed? =
+            Enum.all?(Enum.zip(list, draft), fn {zone, plan} ->
+              zone.place not in [:cab, :van_roof] or zone.plan == plan
+            end)
+
+          good =
+            fixed? and Enum.all?(list, &(valid_plan?(&1.plan) and inside?(&1.plan, box))) and
+              not Enum.any?(pairs(list), fn {a, b} ->
+                layer(a) == layer(b) and overlap?(a.plan, b.plan)
+              end)
+
+          new = if good, do: Enum.map(list, & &1.plan), else: draft
+
+          Enum.zip(list, new)
+          |> Enum.reduce(plans, fn {z, p}, plans -> Map.put(plans, z.id, p) end)
+      end
+
+    Enum.map(rooms, &if(van?(&1), do: %{&1 | plan: Map.get(plans, &1.id)}, else: &1))
+  end
+
+  defp pairs(list) do
+    for {a, i} <- Enum.with_index(list), {b, j} <- Enum.with_index(list), i < j, do: {a, b}
   end
 
   defp put_plan(rooms, room, plan),
@@ -420,7 +539,7 @@ defmodule DIY.Layout do
 
   # The items: an item in the house has a place in its room. The items with
   # a place come first: an item with no place goes where no item is.
-  defp items(build, van?) do
+  defp items(build) do
     rooms = Map.new(build.rooms, &{&1.id, &1})
 
     {kept, todo} =
@@ -428,7 +547,7 @@ defmodule DIY.Layout do
         room = rooms[item.room]
 
         cond do
-          room == nil or van?.(room) -> {%{item | at: nil}, todo}
+          room == nil or room.plan == nil -> {%{item | at: nil}, todo}
           item.at == nil -> {item, [item.id | todo]}
           true -> {%{item | at: clamp(item.at, item, room.plan)}, todo}
         end

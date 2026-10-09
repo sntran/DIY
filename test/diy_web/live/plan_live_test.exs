@@ -124,7 +124,7 @@ defmodule DIYWeb.PlanLiveTest do
     assert room(view, "Kitchen").plan == %{kitchen.plan | x: -42, y: 0}
 
     html = render_hook(view, "move_room", %{"id" => kitchen.id, "dx" => 100, "dy" => 0})
-    assert html =~ "A room cannot go over a different room on its floor."
+    assert html =~ "A room or a zone cannot go over a different one."
 
     html = render_hook(view, "move_room", %{"id" => kitchen.id, "dx" => 20_000, "dy" => 0})
     assert html =~ "A wall of a room is from 2 to 200 feet long"
@@ -170,7 +170,7 @@ defmodule DIYWeb.PlanLiveTest do
     assert room(view, "Kitchen").plan.x == -6
 
     html = render_hook(view, "nudge_room", %{"id" => kitchen.id, "dx" => 24, "dy" => 0})
-    assert html =~ "A room cannot go over a different room"
+    assert html =~ "A room or a zone cannot go over a different one."
 
     before = build(view)
     render_hook(view, "nudge_item", %{"id" => "i999", "dx" => 6, "dy" => 0})
@@ -238,7 +238,7 @@ defmodule DIYWeb.PlanLiveTest do
     assert %{w: 126, d: 240} = room(view, "Kitchen").plan
 
     html = view |> form("#size-#{kitchen.id}", %{"w" => "30", "d" => "20"}) |> render_submit()
-    assert html =~ "A room cannot go over a different room"
+    assert html =~ "A room or a zone cannot go over a different one."
 
     html = view |> form("#size-#{kitchen.id}", %{"w" => "ten", "d" => "20"}) |> render_submit()
     assert html =~ "A wall of a room is from 2 to 200 feet long"
@@ -288,16 +288,14 @@ defmodule DIYWeb.PlanLiveTest do
     {:ok, build} = Build.flag_item(build, station, :planned, true)
     view = open(conn, ~p"/inside", build)
     assert has_element?(view, "#room-#{laundry} #away-#{station}", "in the van now")
-    # An item in a van does not move on the plan, and a drop of it gives a
-    # message. (A different tab can take it to the van while it moves.)
-    before = build(view)
+    # The station has its place in the van: the arrow keys move it there.
     render_hook(view, "nudge_item", %{"id" => station, "dx" => 6, "dy" => 0})
-    assert build(view) == before
+    assert elem(Build.item(build(view), station), 1).at.x == 6
 
+    # On the plan, it does not go from the van to a room of the house.
     html =
       render_hook(view, "place_item", %{"id" => station, "room" => laundry, "x" => 10, "y" => 10})
 
-    assert html =~ "This item or this room is not on the plan now."
-    assert build(view) == before
+    assert html =~ "This item cannot go in that room."
   end
 end

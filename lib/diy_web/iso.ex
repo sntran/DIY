@@ -10,6 +10,10 @@ defmodule DIYWeb.Iso do
 
   A picture has its origin: the point of the SVG for the point 0, 0, 0 of
   the world.
+
+  These axes show a mirror image of the real world. For a house, this has
+  no effect. For a van with its front to `y`, the right side is at x = 0.
+  The left side (the side of the driver) is at the largest x.
   """
 
   # The pixels of 1 meter: to the side for x and y (cos 30°), down for x and

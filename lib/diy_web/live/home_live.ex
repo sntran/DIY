@@ -42,7 +42,7 @@ defmodule DIYWeb.HomeLive do
     Weather
   }
 
-  alias DIYWeb.{Cutaway, Device, Format, Inside, Scene}
+  alias DIYWeb.{Cutaway, Device, Format, Inside, Scene, VanCutaway}
 
   @impl true
   def mount(_params, _session, socket) do
@@ -68,6 +68,8 @@ defmodule DIYWeb.HomeLive do
      |> assign(:van_id, nil)
      |> assign(:scene, nil)
      |> assign(:van_scene, nil)
+     |> assign(:van_view, nil)
+     |> assign(:shown_van, nil)
      |> assign(:cutaway, nil)
      |> assign(:room, nil)
      |> assign(:sheet, nil)
@@ -252,15 +254,16 @@ defmodule DIYWeb.HomeLive do
     end
   end
 
-  # The plan at scale (DIYWeb.Inside, and the hook Plan).
+  # The plan at scale (DIYWeb.Inside and DIYWeb.VanPage, and the hook
+  # Plan).
   def handle_event("select_room", %{"id" => ""}, socket),
-    do: {:noreply, push_patch(socket, to: ~p"/inside")}
+    do: {:noreply, push_patch(socket, to: plan_path(socket, []))}
 
   def handle_event("select_room", %{"id" => id}, socket) when is_binary(id),
-    do: {:noreply, push_patch(socket, to: ~p"/inside?#{[room: id]}")}
+    do: {:noreply, push_patch(socket, to: plan_path(socket, room: id))}
 
   def handle_event("open_item", %{"id" => id}, socket) when is_binary(id),
-    do: {:noreply, push_patch(socket, to: ~p"/inside?#{[item: id]}")}
+    do: {:noreply, push_patch(socket, to: plan_path(socket, item: id))}
 
   # An item that the person drops on the plan. x and y are its center on
   # the plan, in inches. The room is the room of that center (the hook).
@@ -629,9 +632,15 @@ defmodule DIYWeb.HomeLive do
     if Build.van_level?(room.level), do: String.replace_prefix(room.level, "van:", "")
   end
 
+  # The page of a plan: the van on the page Van, else the rooms.
+  defp plan_path(%{assigns: %{live_action: :van, shown_van: van}}, params) when is_binary(van),
+    do: ~p"/van?#{[{:id, van} | params]}"
+
+  defp plan_path(_socket, params), do: ~p"/inside?#{params}"
+
   # The result of a change of the plan: the new build (and a text for a
-  # screen reader), or a message.
-  # A change of the plan: a message that stays from an older change goes.
+  # screen reader), or a message. A message that stays from an older change
+  # goes.
   defp plan_result(socket, {:ok, build}, status) do
     socket = socket |> clear_flash(:error) |> put(build)
     {:noreply, assign(socket, :status, status && status.(build))}
@@ -643,8 +652,10 @@ defmodule DIYWeb.HomeLive do
   defp move_error(:plan),
     do: "A wall of a room is from 2 to 200 feet long, and a room stays near the house."
 
-  defp move_error(:overlap), do: "A room cannot go over a different room on its floor."
+  defp move_error(:overlap), do: "A room or a zone cannot go over a different one."
   defp move_error(:place), do: "This item cannot go in that room."
+  defp move_error(:van), do: "A zone stays in the van."
+  defp move_error(:fixed), do: "The cab and the roof of the van stay where they are."
 
   # An item or a room that is not on the plan now (it went to a van, or a
   # different tab removed it).
@@ -687,9 +698,16 @@ defmodule DIYWeb.HomeLive do
     "#{Catalog.name(item)} turned. Its space is #{Inside.feet(w)} by #{Inside.feet(d)}."
   end
 
+  # A zone of a van tells its new place: from the back of the van and from
+  # its right side (as the item sheet).
   defp room_status(build, id) do
-    {:ok, room} = Build.room(build, id)
-    "#{room.name} moved."
+    case Build.room(build, id) do
+      {:ok, %{level: "van:" <> _, plan: plan} = zone} ->
+        "#{zone.name} moved: #{Inside.feet(plan.y)} from the back of the van, #{Inside.feet(plan.x)} from its right side."
+
+      {:ok, room} ->
+        "#{room.name} moved."
+    end
   end
 
   defp with_build(socket, {:ok, build}), do: {:noreply, put(socket, build)}
@@ -797,9 +815,13 @@ defmodule DIYWeb.HomeLive do
     vans = Van.vans(build)
     van = Enum.find(vans, &(&1.id == socket.assigns.van_id)) || List.first(vans)
 
+    van_page? = socket.assigns.live_action == :van and van != nil
+
     socket
     |> assign(:scene, Scene.parts(build))
     |> assign(:van_scene, van && Scene.van_parts(build, van))
+    |> assign(:shown_van, van && van.id)
+    |> assign(:van_view, if(van_page?, do: VanCutaway.view(build, van)))
     |> assign(
       :cutaway,
       if(socket.assigns.live_action == :inside, do: Cutaway.view(Build.house_view(build)))
@@ -1020,6 +1042,10 @@ defmodule DIYWeb.HomeLive do
               climate={@weather.climate}
               item_error={assigns[:item_error]}
               scene={@van_scene}
+              view={@van_view}
+              room={@room}
+              sheet={@sheet}
+              status={@status}
             />
           <% @live_action == :settings -> %>
             <DIYWeb.Settings.settings

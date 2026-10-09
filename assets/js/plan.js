@@ -149,7 +149,8 @@ const parseView = (text) => {
 
 // A move of the pointer of more than this (in pixels) is a drag, not a tap.
 const SLOP = 5
-const KEY = "plan-view"
+// The view stays for each plan (the house, and each van) in the tab.
+const KEY = "plan-view:"
 
 export const planHook = {
   mounted() {
@@ -194,7 +195,7 @@ export const planHook = {
   // The view that the person had on this page before (a zoom), if any.
   saved() {
     try {
-      const text = this.el.ownerDocument.defaultView.sessionStorage.getItem(KEY)
+      const text = this.el.ownerDocument.defaultView.sessionStorage.getItem(KEY + this.el.id)
       return text ? parseView(text) : null
     } catch (_error) {
       return null
@@ -211,7 +212,7 @@ export const planHook = {
     // A handle is 24 pixels wide: the smallest target of WCAG 2.2 (2.5.8).
     this.svg.style.setProperty("--p-handle", `${(12 * units).toFixed(3)}px`)
     try {
-      this.el.ownerDocument.defaultView.sessionStorage.setItem(KEY, box(view))
+      this.el.ownerDocument.defaultView.sessionStorage.setItem(KEY + this.el.id, box(view))
     } catch (_error) {
       // A page with no storage keeps the view only while it is open.
     }

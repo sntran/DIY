@@ -1,18 +1,24 @@
 defmodule DIYWeb.VanPage do
   @moduledoc """
-  The build of a camper van (`DIY.Van`): its two budgets (the weight on
-  each axle, and the days off the grid), the safety notes, its zones in a
-  row (like the rooms of the house), and the power stations that go from
-  the house to the van.
+  The build of a camper van (`DIY.Van`). The page shows the inside of the
+  van at scale (`DIYWeb.VanCutaway`). It shows the two budgets: the weight
+  on each axle, and the days off the grid. It also shows the safety notes,
+  and the power stations that go from the house to the van.
 
-  `?id=ID` chooses a van, `?item=ID` opens an item of the van (or the van
+  The inside of the van is cut open, as the house on the page Rooms. A
+  drag moves an item, also to a different zone. A tap on a zone chooses
+  it: a zone that is not fixed has handles on its walls. A list of the
+  zones and their items gives the same facts to a screen reader and to a
+  keyboard.
+
+  `?id=ID` chooses a van. `?item=ID` opens an item of the van (or the van
   itself, for its numbers), and `?add=ZONE` the list of the items for a
-  zone.
+  zone. `?room=ZONE` chooses a zone (with `&sheet=zone`, its sheet).
   """
   use DIYWeb, :html
 
   alias DIY.{Build, Catalog, Van}
-  alias DIYWeb.{Format, Icon, Inside, Scene}
+  alias DIYWeb.{Cutaway, Format, Icon, Inside, Scene}
 
   attr :build, :map, required: true
   attr :van_id, :string, default: nil
@@ -21,15 +27,21 @@ defmodule DIYWeb.VanPage do
   attr :climate, :map, default: nil
   attr :item_error, :string, default: nil
   attr :scene, :map, required: true, doc: "the parts of the picture (`DIYWeb.Scene.van_parts/2`)"
+  attr :view, :map, default: nil, doc: "the van cut open (`DIYWeb.VanCutaway.view/2`)"
+  attr :room, :string, default: nil, doc: "the zone that the person chose"
+  attr :sheet, :string, default: nil, doc: "\"zone\": the sheet of the chosen zone"
+  attr :status, :string, default: nil, doc: "a text for a screen reader after a move"
 
   def page(assigns) do
     vans = Van.vans(assigns.build)
     van = Enum.find(vans, &(&1.id == assigns.van_id)) || List.first(vans)
+    zones = if van, do: Build.zones(assigns.build, van.id), else: []
 
     assigns =
       assign(assigns,
         vans: vans,
         van: van,
+        zone: Enum.find(zones, &(&1.id == assigns.room and &1.plan != nil)),
         weight: van && Van.weight(assigns.build, van),
         power: van && Van.power(assigns.build, van, assigns.climate)
       )
@@ -77,10 +89,17 @@ defmodule DIYWeb.VanPage do
           <Scene.van id="van-scene" parts={@scene} />
         </div>
 
+        <.plan
+          :if={@view}
+          build={@build}
+          van={@van}
+          view={@view}
+          zone={@zone}
+          status={@status}
+        />
         <.weight weight={@weight} />
         <.power power={@power} />
         <.notes warnings={Van.warnings(@build, @van)} />
-        <.zones build={@build} van={@van} />
         <.stations build={@build} van={@van} />
 
         <.item_sheet
@@ -95,6 +114,7 @@ defmodule DIYWeb.VanPage do
           van={@van}
           zone={Enum.find(Build.zones(@build, @van.id), &(&1.id == @add))}
         />
+        <.zone_sheet :if={@zone && @sheet == "zone" && movable?(@zone)} van={@van} zone={@zone} />
       <% end %>
     </section>
     """
@@ -143,7 +163,7 @@ defmodule DIYWeb.VanPage do
           </li>
         </ul>
         <p class="text-xs opacity-80">
-          The cab has the people, and the bed has the gear. Each zone has a typical place from the front axle to the rear axle. The bed and the electrical bay are over the rear axle. A truck scale gives the real weight of each axle.
+          The people sit at the middle of the cab, and the gear is at the middle of the bed. The place of each item on the plan of the van gives its weight on each axle. A truck scale gives the real weight of each axle.
         </p>
       </details>
     </div>
@@ -293,55 +313,244 @@ defmodule DIYWeb.VanPage do
 
   attr :build, :map, required: true
   attr :van, :map, required: true
+  attr :view, :map, required: true
+  attr :zone, :map, default: nil
+  attr :status, :string, default: nil
 
-  # The zones of the van in a row, like the rooms of the house.
-  defp zones(assigns) do
+  # The inside of the van, cut open: the plan of its zones and its items
+  # (the hook Plan). Then the bar of the chosen zone, and the list.
+  defp plan(assigns) do
+    ~H"""
+    <div class="space-y-1">
+      <h2 class="text-lg font-bold">Inside the van</h2>
+      <div id={"van-plan-#{@van.id}"} phx-hook="Plan" class="space-y-2">
+        <div class="flex items-center gap-2 overflow-x-auto pb-1">
+          <button
+            :for={level <- Enum.reverse(@view.levels)}
+            type="button"
+            data-focus={level.id}
+            class="btn btn-sm btn-ghost shrink-0 px-2"
+          >
+            {level.name}
+          </button>
+        </div>
+        <div class="relative h-[min(60dvh,95vw)] overflow-hidden rounded-box border border-base-300">
+          <Cutaway.cutaway view={@view} selected={@zone && @zone.id} />
+          <Inside.zoom all="Show all the van" />
+        </div>
+        <.zone_bar :if={@zone} van={@van} zone={@zone} build={@build} />
+        <.shell build={@build} van={@van} />
+        <p id="van-size-source" class="text-xs opacity-80">
+          The sizes of the model: {Catalog.van_size(@van.params["model"]).source} The depth of the cab ({Inside.feet(
+            DIY.Layout.cab()
+          )}) and the thickness of the doors at the back ({Inside.feet(Van.doors())}) are guesses of the app. The places of the seats, the dash and the wheel wells are for the picture only.
+        </p>
+        <.list build={@build} van={@van} />
+        <p id="plan-status" class="sr-only" aria-live="polite">{@status}</p>
+      </div>
+    </div>
+    """
+  end
+
+  attr :build, :map, required: true
+  attr :van, :map, required: true
+
+  # The shell of the van has no place on the plan. Its items (the
+  # insulation, the walls and the floor) are the materials of the picture.
+  # A tap can open them and add one.
+  defp shell(assigns) do
+    assigns = assign(assigns, :zone, Build.zone(assigns.build, assigns.van.id, :shell))
+
+    ~H"""
+    <div id="van-shell" class="card card-border p-3 space-y-2">
+      <div class="flex items-center justify-between gap-2">
+        <h3 class="font-semibold">{@zone.name}</h3>
+        <.link
+          patch={~p"/van?#{[id: @van.id, add: @zone.id]}"}
+          id="shell-add"
+          class="btn btn-sm"
+          aria-label={"Add an item to #{@zone.name}"}
+        >
+          <.icon name="hero-plus" class="size-4" /> Item
+        </.link>
+      </div>
+      <p class="text-xs opacity-80">
+        The insulation, the walls and the floor. They have no place on the plan: the picture shows them as the materials of the van.
+      </p>
+      <ul :if={Build.items_in(@build, @zone.id) != []} class="flex flex-wrap gap-2">
+        <li :for={item <- Build.items_in(@build, @zone.id)}>
+          <.link
+            patch={~p"/van?#{[id: @van.id, item: item.id]}"}
+            id={"shell-item-#{item.id}"}
+            class="btn btn-sm btn-ghost"
+          >
+            <Icon.item type={item.type} class="size-5" /> {Catalog.name(item)} · {lb(Van.weight(item))}
+          </.link>
+        </li>
+      </ul>
+    </div>
+    """
+  end
+
+  # The cab and the roof of a van do not move (`DIY.Build.move_room/4`).
+  defp movable?(zone), do: zone.place not in [:cab, :van_roof]
+
+  attr :van, :map, required: true
+  attr :zone, :map, required: true
+  attr :build, :map, required: true
+
+  # The bar of the chosen zone: its name, its size, and its buttons.
+  defp zone_bar(assigns) do
+    ~H"""
+    <div id="zone-bar" class="card card-border bg-base-100 p-3 gap-2">
+      <div class="flex items-center gap-2">
+        <div class="grow min-w-0">
+          <p class="font-semibold truncate">{@zone.name}</p>
+          <p class="text-xs opacity-70">
+            {Inside.feet(@zone.plan.w)} by {Inside.feet(@zone.plan.d)}{if not movable?(@zone),
+              do: ". It stays where it is."}
+          </p>
+        </div>
+        <.link
+          patch={~p"/van?#{[id: @van.id, add: @zone.id, room: @zone.id]}"}
+          id="bar-add"
+          class="btn btn-sm btn-primary"
+          aria-label={"Add an item to #{@zone.name}"}
+        >
+          <.icon name="hero-plus" class="size-4" /> Item
+        </.link>
+        <.link
+          :if={movable?(@zone)}
+          patch={~p"/van?#{[id: @van.id, room: @zone.id, sheet: "zone"]}"}
+          id="bar-change"
+          class="btn btn-sm"
+        >
+          Change
+        </.link>
+        <.link
+          patch={~p"/van?#{[id: @van.id]}"}
+          class="btn btn-sm btn-ghost btn-square"
+          aria-label="Close"
+        >
+          <.icon name="hero-x-mark" class="size-4" />
+        </.link>
+      </div>
+      <Inside.moves
+        :if={movable?(@zone)}
+        id="move-room"
+        event="nudge_room"
+        target={@zone.id}
+        step={6}
+        what="the zone"
+        van
+        blocked={Inside.blocked(@build, @zone.id, 6)}
+      />
+    </div>
+    """
+  end
+
+  attr :van, :map, required: true
+  attr :zone, :map, required: true
+
+  # The sheet of a zone: its size in feet. The zone stays in the van.
+  defp zone_sheet(assigns) do
+    ~H"""
+    <Inside.sheet
+      id="zone-sheet"
+      title={@zone.name}
+      close={~p"/van?#{[id: @van.id, room: @zone.id]}"}
+    >
+      <form id={"size-#{@zone.id}"} phx-submit="room_size" class="space-y-2">
+        <input type="hidden" name="room_id" value={@zone.id} />
+        <p class="text-sm font-semibold">Size, in feet</p>
+        <div class="flex items-end gap-2">
+          <label :for={
+            {key, label, inches} <- [
+              {"w", "Across the van", @zone.plan.w},
+              {"d", "Along the van", @zone.plan.d}
+            ]
+          }>
+            <span class="text-xs">{label}</span>
+            <input
+              name={key}
+              type="number"
+              step="any"
+              min="2"
+              inputmode="decimal"
+              value={Format.value(Float.round(inches / 12, 2))}
+              class="input input-sm w-24"
+            />
+          </label>
+          <button class="btn btn-sm">Set the size</button>
+        </div>
+        <p class="text-xs opacity-70">
+          The walls at the front move. The zone stays in the van, and it does not go over a different zone.
+        </p>
+      </form>
+    </Inside.sheet>
+    """
+  end
+
+  attr :build, :map, required: true
+  attr :van, :map, required: true
+
+  # The zones and their items, as a list: for a screen reader, and for a
+  # keyboard (it shows when it has the focus). The arrow keys move an item
+  # or a zone (the hook Plan).
+  defp list(assigns) do
     assigns = assign(assigns, :zones, Build.zones(assigns.build, assigns.van.id))
 
     ~H"""
-    <div class="space-y-1">
-      <h2 class="text-lg font-bold">Zones</h2>
-      <div id="van-zones" class="flex snap-x snap-mandatory overflow-x-auto gap-3 pb-2">
-        <article
-          :for={{zone, i} <- Enum.with_index(@zones)}
-          id={"zone-#{zone.id}"}
-          class="card card-border bg-base-100 snap-center shrink-0 w-[85%] p-4 space-y-3"
-          aria-label={zone.name}
-        >
-          <header class="flex items-start justify-between gap-2">
-            <h3 class="text-lg font-bold">{zone.name}</h3>
-            <span class="text-xs opacity-70">Zone {i + 1} of {length(@zones)}</span>
-          </header>
-          <ul class="grid grid-cols-2 gap-2">
+    <section
+      id="van-list"
+      aria-label="The zones and their items"
+      class="sr-only focus-within:not-sr-only focus-within:card focus-within:card-border focus-within:p-3"
+    >
+      <p class="text-sm">
+        The arrow keys move the item or the zone that has the focus: 6 inches, or 2 feet with Shift. On the plan, the right side of the van is at the top left. The Left key moves it to the right side of the van, and the Up key to the back.
+      </p>
+      <ul>
+        <li :for={zone <- @zones} id={"zone-#{zone.id}"}>
+          <h3>
+            {zone.name}{if zone.plan,
+              do: " (#{Inside.feet(zone.plan.w)} across, #{Inside.feet(zone.plan.d)} along the van)"}
+          </h3>
+          <ul>
+            <li :if={zone.plan}>
+              <.link
+                patch={~p"/van?#{[id: @van.id, room: zone.id]}"}
+                id={"choose-#{zone.id}"}
+                data-nudge-room={movable?(zone) && zone.id}
+                class="link"
+              >
+                Choose {zone.name}
+              </.link>
+            </li>
             <li :for={item <- Build.items_in(@build, zone.id)}>
               <.link
                 patch={~p"/van?#{[id: @van.id, item: item.id]}"}
                 id={"van-item-#{item.id}"}
-                class="card card-border p-2 h-full hover:bg-base-200"
+                data-nudge={item.at && item.id}
+                class="link"
               >
-                <Icon.item type={item.type} />
-                <span class="text-sm font-semibold leading-tight">{Catalog.name(item)}</span>
-                <span class="text-xs opacity-80">{lb(Van.weight(item))}</span>
-                <span :if={Van.wh_day(item, 7) > 0} class="text-xs opacity-80">
-                  {Format.int(Van.wh_day(item, 7))} Wh in a day of July
-                </span>
+                {Catalog.name(item)}: {lb(Van.weight(item))}{if Van.wh_day(item, 7) > 0,
+                  do: ", #{Format.int(Van.wh_day(item, 7))} Wh in a day of July"}
               </.link>
             </li>
             <li>
               <.link
                 patch={~p"/van?#{[id: @van.id, add: zone.id]}"}
                 id={"add-#{zone.id}"}
-                class="card card-border border-dashed p-2 h-full items-center justify-center hover:bg-base-200"
+                class="link"
                 aria-label={"Add an item to #{zone.name}"}
               >
-                <.icon name="hero-plus" class="size-6" />
-                <span class="text-sm">Add</span>
+                Add an item
               </.link>
             </li>
           </ul>
-        </article>
-      </div>
-    </div>
+        </li>
+      </ul>
+    </section>
     """
   end
 
@@ -450,6 +659,12 @@ defmodule DIYWeb.VanPage do
                                                                                do:
                                                                                  " · #{Format.int(Van.wh_day(@item, 1))} Wh in a day of January"}
       </p>
+
+      <Inside.place
+        :if={not @van? and @item.at}
+        item={@item}
+        room={elem(Build.room(@build, @item.room), 1)}
+      />
 
       <p :if={not @van?} class="text-sm">
         <span class="font-semibold">It counts in:</span> {Inside.features(

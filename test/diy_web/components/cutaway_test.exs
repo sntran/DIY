@@ -163,6 +163,114 @@ defmodule DIYWeb.CutawayTest do
   defp overlap?({ax0, ay0, ax1, ay1}, {bx0, by0, bx1, by1}),
     do: ax0 < bx1 - 0.01 and bx0 < ax1 - 0.01 and ay0 < by1 - 0.01 and by0 < ay1 - 0.01
 
+  test "each kind and each model of van paint from the back at each turn: a depth check" do
+    m = 0.0254
+
+    for turn <- 0..3 do
+      for {model, _name, _numbers, _source} <- Catalog.van_models() do
+        frame = %{at: {0, 0, 0}, turn: turn}
+
+        polys =
+          for {:poly, corners, _class} <- Shapes.placed_model(Shapes.van(model), frame),
+              do: corners
+
+        assert depth_faults(polys) == [], "#{model} at turn #{turn}"
+      end
+
+      for type <- Catalog.types() do
+        {w, d, h} = Catalog.size(type)
+        frame = %{at: {0, 0, 0}, size: {w * m, d * m, h * m}, turn: turn}
+        polys = for {:poly, corners, _class} <- Shapes.placed(type, frame), do: corners
+        assert depth_faults(polys) == [], "#{type} at turn #{turn}"
+      end
+    end
+  end
+
+  # The pairs of polygons (in the order of the paint) where the first one
+  # is nearer to the eye at a point that both cover. Then the second one
+  # paints over it. The eye looks along (-1, -1, -1): a larger x + y + z is nearer.
+  defp depth_faults(polys) do
+    prepared = polys |> Enum.map(&prepare/1) |> Enum.with_index()
+
+    for {a, i} <- prepared,
+        {b, j} <- prepared,
+        i < j,
+        a.plane && b.plane,
+        nearer?(a, b),
+        do: {i, j}
+  end
+
+  defp prepare(corners) do
+    screen = Enum.map(corners, &Iso.at({0, 0}, &1))
+    {xs, ys} = Enum.unzip(screen)
+
+    %{
+      screen: screen,
+      plane: plane(corners),
+      box: {Enum.min(xs), Enum.min(ys), Enum.max(xs), Enum.max(ys)}
+    }
+  end
+
+  defp nearer?(a, b) do
+    {ax0, ay0, ax1, ay1} = a.box
+    {bx0, by0, bx1, by1} = b.box
+    {x0, y0, x1, y1} = {max(ax0, bx0), max(ay0, by0), min(ax1, bx1), min(ay1, by1)}
+
+    x1 - x0 >= 0.05 and y1 - y0 >= 0.05 and
+      Enum.any?(
+        for(i <- 1..7, j <- 1..7, do: {x0 + (x1 - x0) * i / 8, y0 + (y1 - y0) * j / 8}),
+        fn point ->
+          in_poly?(point, a.screen) and in_poly?(point, b.screen) and
+            depth(a.plane, point) > depth(b.plane, point) + 0.03
+        end
+      )
+  end
+
+  defp in_poly?({px, py}, poly) do
+    n = length(poly)
+
+    poly
+    |> Enum.with_index()
+    |> Enum.reduce(false, fn {{xi, yi}, i}, inside ->
+      {xj, yj} = Enum.at(poly, rem(i + n - 1, n))
+
+      if yi > py != yj > py and px < (xj - xi) * (py - yi) / (yj - yi + 1.0e-12) + xi,
+        do: not inside,
+        else: inside
+    end)
+  end
+
+  defp sub({a, b, c}, {x, y, z}), do: {a - x, b - y, c - z}
+  defp cross({a, b, c}, {x, y, z}), do: {b * z - c * y, c * x - a * z, a * y - b * x}
+  defp dot({a, b, c}, {x, y, z}), do: a * x + b * y + c * z
+
+  # The plane of a polygon: a normal and a point. A polygon that is not flat,
+  # or that the eye sees on its edge, has no plane (nil).
+  defp plane([p | rest] = corners) do
+    normals =
+      for {q, r} <- Enum.zip(rest, tl(rest)),
+          n = cross(sub(q, p), sub(r, p)),
+          dot(n, n) > 1.0e-12,
+          do: n
+
+    with [n | _] <- normals,
+         length = :math.sqrt(dot(n, n)),
+         true <- Enum.all?(corners, &(abs(dot(n, sub(&1, p))) / length < 1.0e-4)),
+         true <- abs(dot(n, {1, 1, 1})) >= 1.0e-9 do
+      {n, p}
+    else
+      _ -> nil
+    end
+  end
+
+  # The depth (x + y + z) on a plane at a point of the screen.
+  defp depth({n, c}, {sx, sy}) do
+    {a, b} = {sx / 8.66, sy / 5.0}
+    p0 = {(a + b) / 2, (b - a) / 2, 0.0}
+    t = (dot(n, c) - dot(n, p0)) / dot(n, {1, 1, 1})
+    dot(p0, {1, 1, 1}) + 3 * t
+  end
+
   test "three boxes that are each behind the next one still get an order" do
     square = [{[{0, 0, 0}, {1, 0, 0}, {1, 1, 0}, {0, 1, 0}], "x"}]
     object = fn id, box -> %{id: id, box: box, key: 0, loose: false, polys: square} end

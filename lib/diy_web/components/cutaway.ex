@@ -74,8 +74,11 @@ defmodule DIYWeb.Cutaway do
         level(id, name, z, rooms, items, house)
       end
 
-    %{levels: levels, box: around(Enum.map(levels, & &1.box), 4.0)}
+    frame(levels)
   end
+
+  @doc "A view of layers (`layer/2`): the layers, and the box of the SVG."
+  def frame(levels), do: %{levels: levels, box: around(Enum.map(levels, & &1.box), 4.0)}
 
   defp meters(%{x: x, y: y, w: w, d: d}), do: %{x: x * @m, y: y * @m, w: w * @m, d: d * @m}
 
@@ -91,11 +94,34 @@ defmodule DIYWeb.Cutaway do
           item <- Map.get(items, room.id, []),
           do: item_view(item, room, floor_z.(room))
 
-    objects = Iso.order(walls ++ item_views)
+    layer(%{id: id, name: name, z: z}, %{
+      ground: ground,
+      low: low,
+      slabs: slabs,
+      rooms: others,
+      objects: walls ++ item_views,
+      labels: Enum.map(rooms, &label(&1, floor_z.(&1)))
+    })
+  end
+
+  @doc """
+  A layer of a view, from its parts in the world (meters):
+
+  - the polygons of the ground and of the slabs (`{corners, class}`);
+  - the surfaces of the rooms (`floor/3`) on the ground (`low`) and over
+    the slabs (`rooms`);
+  - the objects (walls and items, `item_view/3`), and the labels
+    (`label/2`).
+
+  The objects go in the order of the paint (`DIYWeb.Iso.order/1`), and
+  the points go to the SVG.
+  """
+  def layer(%{id: id, name: name, z: z}, parts) do
+    objects = Iso.order(parts.objects)
 
     polys =
-      Enum.map(ground ++ slabs, &elem(&1, 0)) ++
-        Enum.flat_map(low ++ others ++ objects, fn part ->
+      Enum.map(parts.ground ++ parts.slabs, &elem(&1, 0)) ++
+        Enum.flat_map(parts.low ++ parts.rooms ++ objects, fn part ->
           Enum.map(part.polys, fn {corners, _class} -> corners end)
         end)
 
@@ -103,12 +129,12 @@ defmodule DIYWeb.Cutaway do
       id: id,
       name: name,
       z: z,
-      ground: Enum.map(ground, &svg/1),
-      low: Enum.map(low, &svg_polys/1),
-      slabs: Enum.map(slabs, &svg/1),
-      rooms: Enum.map(others, &svg_polys/1),
+      ground: Enum.map(parts.ground, &svg/1),
+      low: Enum.map(parts.low, &svg_polys/1),
+      slabs: Enum.map(parts.slabs, &svg/1),
+      rooms: Enum.map(parts.rooms, &svg_polys/1),
       objects: Enum.map(objects, &svg_polys/1),
-      labels: Enum.map(rooms, &label(&1, floor_z.(&1))),
+      labels: parts.labels,
       box: bounds(polys)
     }
   end
@@ -293,7 +319,11 @@ defmodule DIYWeb.Cutaway do
     }
   end
 
-  defp faces(box, class),
+  @doc """
+  The three faces of a box (`DIYWeb.Iso.box/2`) that show, with the
+  classes of a material: `NAME-l`, `NAME-r` and `NAME-t`.
+  """
+  def faces(box, class),
     do: [{box.left, class <> "-l"}, {box.right, class <> "-r"}, {box.top, class <> "-t"}]
 
   ## The rooms
@@ -315,11 +345,18 @@ defmodule DIYWeb.Cutaway do
     %{surface(room, z) | polys: polys, rise: round(rise / @m)}
   end
 
-  defp room_view(room, z) do
+  defp room_view(room, z), do: floor(room, z, material(room))
+
+  @doc """
+  The surface of a room on a flat floor at a height (meters). It has its
+  material (the class `p-NAME`), and the data of its plan for the hook. A
+  zone that is `fixed` (the cab and the roof of a van) has no handles.
+  """
+  def floor(room, z, material, fixed \\ false) do
     p = meters(room.plan)
     {x1, y1} = {p.x + p.w, p.y + p.d}
     corners = [{p.x, p.y, z}, {x1, p.y, z}, {x1, y1, z}, {p.x, y1, z}]
-    %{surface(room, z) | polys: [{corners, "p-floor p-" <> material(room)}]}
+    %{surface(room, z) | polys: [{corners, "p-floor p-" <> material}], fixed: fixed}
   end
 
   defp surface(room, z) do
@@ -333,6 +370,7 @@ defmodule DIYWeb.Cutaway do
       plan: "#{room.plan.x} #{room.plan.y} #{room.plan.w} #{room.plan.d}",
       origin: "#{Iso.round1(ox)} #{Iso.round1(oy)}",
       rise: nil,
+      fixed: false,
       polys: []
     }
   end
@@ -365,8 +403,8 @@ defmodule DIYWeb.Cutaway do
     end)
   end
 
-  # The label of a room: its name, at its center.
-  defp label(room, z) do
+  @doc "The label of a room: its name, at its center, at a height (meters)."
+  def label(room, z) do
     p = meters(room.plan)
 
     z =
@@ -380,9 +418,12 @@ defmodule DIYWeb.Cutaway do
 
   ## The items
 
-  # An item: its shapes at its place, size and turn, with its box in the
-  # world (for the order of the paint).
-  defp item_view(item, room, z) do
+  @doc """
+  An item: its shapes at its place, size and turn in its room, on a floor
+  at a height (meters). It has its box in the world, for the order of the
+  paint.
+  """
+  def item_view(item, room, z) do
     {w, d, h} = Layout.size(item)
     {ew, ed} = Layout.extent(item)
     {x, y} = {room.plan.x + item.at.x, room.plan.y + item.at.y}
@@ -397,6 +438,10 @@ defmodule DIYWeb.Cutaway do
 
         {"solar_panels", roof} ->
           on_roof(item, roof, z)
+
+        {"camper_van", nil} ->
+          frame = %{at: {x * @m, y * @m, z}, size: size, turn: item.turn}
+          Shapes.placed_model(Shapes.van(item.params["model"]), frame)
 
         {type, nil} ->
           base = z + Catalog.lift(type) * @m
@@ -550,7 +595,7 @@ defmodule DIYWeb.Cutaway do
           :for={object <- level.objects}
           :key={object.id}
           id={"plan-#{object.kind}-#{object.id}"}
-          class={if object.kind == :item, do: ["p-item", object.planned && "p-planned"]}
+          class={object_class(object)}
           data-item={object.kind == :item && object.id}
           data-in={object.kind == :item && object.room}
           data-at={object.kind == :item && object.at}
@@ -590,6 +635,12 @@ defmodule DIYWeb.Cutaway do
     """
   end
 
+  # An item can move. A fixed part of a van (a seat, the dash) does not take
+  # a tap: the tap goes to the zone under it.
+  defp object_class(%{kind: :item, planned: planned}), do: ["p-item", planned && "p-planned"]
+  defp object_class(%{kind: :fixture}), do: "p-fixture"
+  defp object_class(_wall), do: nil
+
   attr :room, :map, required: true
   attr :selected, :string, default: nil
 
@@ -622,8 +673,13 @@ defmodule DIYWeb.Cutaway do
         {x1, y1, z} = {x0 + w, y0 + d, room.z}
         {cx, cy} = {x0 + w / 2, y0 + d / 2}
 
+        edges =
+          if room.fixed,
+            do: [],
+            else: [{"x0", x0, cy}, {"x1", x1, cy}, {"y0", cx, y0}, {"y1", cx, y1}]
+
         handles =
-          for {edge, x, y} <- [{"x0", x0, cy}, {"x1", x1, cy}, {"y0", cx, y0}, {"y1", cx, y1}] do
+          for {edge, x, y} <- edges do
             {sx, sy} = Iso.at({0, 0}, {x, y, z})
             {edge, Iso.round1(sx), Iso.round1(sy)}
           end

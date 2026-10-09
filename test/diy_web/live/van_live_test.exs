@@ -60,7 +60,8 @@ defmodule DIYWeb.VanLiveTest do
     assert_patch(view, ~p"/van?id=#{van.id}")
     assert has_element?(view, "#van-weight")
     assert has_element?(view, "#van-power")
-    assert has_element?(view, "#van-zones article", "Galley")
+    assert has_element?(view, "#van-list h3", "Galley")
+    assert has_element?(view, "#plan-svg [data-room]")
     assert render(view) =~ "Ram ProMaster 2500, 159 in, high roof"
     assert render(view) =~ "These numbers are typical of the model"
     assert has_element?(view, "#weight-total", "of 8,900 lb")
@@ -165,7 +166,7 @@ defmodule DIYWeb.VanLiveTest do
 
     view |> element("#van-stations button", "Take it in this van") |> render_click()
     assert has_element?(view, "#van-stations", "in this van")
-    assert has_element?(view, "#van-zones", "Power station")
+    assert has_element?(view, "#van-list", "Power station")
     assert render(view) =~ "The batteries keep 1,900 Wh."
 
     # The house shows it as away, in its room and on the page Power.

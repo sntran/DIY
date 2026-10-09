@@ -46,9 +46,192 @@ defmodule DIYWeb.Icon.Shapes do
   meters). The model has a turn, and its back corner is at a point of the
   world (`at`).
   """
-  def placed_model(model, %{at: at, turn: turn}) do
+  def placed_model(model, %{at: at, turn: turn} = frame) do
     {{x0, y0, z0}, {x1, y1, z1}} = bounds(model)
-    draw(model, %{at: at, turn: turn, size: {x1 - x0, y1 - y0, z1 - z0}})
+    draw(model, %{at: at, turn: turn, size: Map.get(frame, :size, {x1 - x0, y1 - y0, z1 - z0})})
+  end
+
+  # The side profile of each model of van, in meters, from the back (y = 0)
+  # to the front. It gives the roof to the start of the cap, and the top
+  # and the bottom of the windshield. Then it gives the end of the hood,
+  # and the top of the nose. The ProMaster has a short hood; the Sprinter a long
+  # one that slopes.
+  @profiles %{
+    "promaster_159" => %{
+      cap: 1.30,
+      top: {1.15, 0.35},
+      glass: {0.55, 1.15},
+      hood: {0.08, 0.95},
+      nose: 0.85
+    },
+    "transit_148" => %{
+      cap: 1.45,
+      top: {1.30, 0.45},
+      glass: {0.85, 1.25},
+      hood: {0.15, 1.05},
+      nose: 0.95
+    },
+    "sprinter_170" => %{
+      cap: 1.55,
+      top: {1.40, 0.40},
+      glass: {0.95, 1.30},
+      hood: {0.10, 0.95},
+      nose: 0.90
+    }
+  }
+
+  @doc "The height of the hood of a model of a van over the ground, in meters."
+  def hood_height(model), do: elem(Map.get(@profiles, model, @profiles["transit_148"]).hood, 1)
+
+  # The bottom of the body, the radius of a wheel (a tire of 30 in), and
+  # the depth of a bumper.
+  @sill 0.45
+  @tire 0.38
+  @bumper 0.12
+
+  @doc """
+  The model of a camper van of a model (`DIY.Catalog.van_size/1`), at its
+  real size in meters. The body has the nose, the hood and the windshield
+  of its brand, and the wheels are at its axles. The model also has the
+  doors of the cab, the sliding door on the right side and the doors at
+  the back. It has the mirrors, the lights, the grille and the bumpers. The front
+  looks to y. A face looks out: after a turn, a face that looks away does
+  not show.
+  """
+  def van(model) do
+    size = DIY.Catalog.van_size(model)
+    {l, w, h} = {size.length * 0.0254, size.width * 0.0254, size.height * 0.0254}
+    shape = Map.get(@profiles, model, @profiles["transit_148"])
+    {top_y, top_down} = shape.top
+    {glass_y, glass_z} = shape.glass
+    {hood_y, hood_z} = shape.hood
+    hood_y = max(hood_y, @bumper + 0.03)
+
+    # The windshield, from its bottom to its top.
+    low = {l - glass_y, glass_z}
+    high = {l - top_y, h - top_down}
+
+    # The profile, counterclockwise from the back of the bottom (y to the
+    # right, z up): the outer side of each edge is on its right.
+    profile = [
+      {@bumper, @sill},
+      {l - @bumper, @sill},
+      {l - @bumper, shape.nose},
+      {l - hood_y, hood_z},
+      low,
+      high,
+      {l - shape.cap, h},
+      {@bumper, h}
+    ]
+
+    front_axle = l - size.front * 0.0254
+    rear_axle = front_axle - size.wheelbase * 0.0254
+    # The back of the door of the cab, and the sliding door behind it.
+    cab_door = elem(low, 0) - 0.95
+    sliding = {cab_door - 1.25, cab_door - 0.05}
+    mirror = fn x -> box({x, elem(low, 0) - 0.15, glass_z + 0.05}, {0.16, 0.06, 0.24}, "dark") end
+
+    # The faces across the van paint first, then the sides, then the details
+    # on the sides. So a side paints over the hood after a turn. No part of
+    # the body goes into the bumpers: they paint as parts of their own.
+    body =
+      [
+        face(across(w, {@bumper, h}, {@bumper, @sill}), {0, -1, 0}, "i-white-~ i-face"),
+        face(
+          for(
+            {x, z} <- [
+              {w / 2 - 0.01, @sill},
+              {w / 2 + 0.01, @sill},
+              {w / 2 + 0.01, h - 0.1},
+              {w / 2 - 0.01, h - 0.1}
+            ],
+            do: {x, @bumper, z}
+          ),
+          {0, -1, 0},
+          "i-line"
+        )
+      ] ++
+        body(profile, w) ++
+        [face(Enum.map(profile, fn {y, z} -> {0, y, z} end), {-1, 0, 0}, "i-white-~ i-face")] ++
+        van_side(0, -1, cab_door, {low, high}, h) ++
+        [far_side({0, elem(sliding, 0), @sill + 0.05}, {1.2, h - @sill - 0.3}, "i-steel-l")] ++
+        [van_window(0, -1, sliding, h)] ++
+        wheels(0, [rear_axle, front_axle], @tire) ++
+        [face(Enum.map(profile, fn {y, z} -> {w, y, z} end), {1, 0, 0}, "i-white-~ i-face")] ++
+        van_side(w, 1, cab_door, {low, high}, h) ++
+        [van_window(w, 1, sliding, h)] ++
+        wheels(w, [rear_axle, front_axle], @tire) ++
+        [
+          front({0.12, l - @bumper - 0.01, @sill + 0.25}, {0.22, 0.12}, "i-bulb"),
+          front({w - 0.34, l - @bumper - 0.01, @sill + 0.25}, {0.22, 0.12}, "i-bulb"),
+          front({w / 2 - 0.35, l - @bumper - 0.01, @sill + 0.05}, {0.7, 0.18}, "i-black")
+        ]
+
+    [
+      {:group, box({0, 0, @sill - 0.12}, {w, @bumper, 0.16}, "dark")},
+      {:group, mirror.(-0.18)},
+      {:group, body},
+      {:group, mirror.(w + 0.02)},
+      {:group, box({0, l - @bumper, @sill - 0.12}, {w, @bumper, 0.16}, "dark")}
+    ]
+  end
+
+  # The faces across the van between the points of its profile. They are
+  # the nose, the front of the hood, the hood, the windshield, the cap and
+  # the roof.
+  # The bottom and the back are not here. An edge from a to b has its
+  # outer side on its right: its normal is (dz, -dy).
+  defp body(profile, w) do
+    edges = Enum.zip(profile, tl(profile) ++ [hd(profile)])
+
+    for {{{y1, z1}, {y2, z2}}, i} <- Enum.with_index(edges), i not in [0, length(edges) - 1] do
+      {dy, dz} = {y2 - y1, z2 - z1}
+      class = if i == 4, do: "i-glass-dark", else: "i-white-~ i-face"
+      face(across(w, {y1, z1}, {y2, z2}), {0, dz, -dy}, class)
+    end
+  end
+
+  defp across(w, {y1, z1}, {y2, z2}), do: [{0, y1, z1}, {w, y1, z1}, {w, y2, z2}, {0, y2, z2}]
+
+  # A side of a van (x = 0 with the normal -x, x = w with +x). It has the
+  # window of the door of the cab (its front follows the windshield), and a
+  # dark band at the bottom.
+  defp van_side(x, sign, cab_door, {{y0, z0}, {y1, z1}}, h) do
+    on_glass = fn z -> y0 + (y1 - y0) * (z - z0) / (z1 - z0) - 0.06 end
+    {bottom, top} = {z0 + 0.06, h - 0.4}
+    corners = fn list -> Enum.map(list, fn {y, z} -> {x + sign * 0.01, y, z} end) end
+
+    [
+      face(
+        corners.([
+          {cab_door + 0.1, bottom},
+          {on_glass.(bottom), bottom},
+          {on_glass.(top), top},
+          {cab_door + 0.1, top}
+        ]),
+        {sign, 0, 0},
+        "i-glass-dark"
+      ),
+      face(
+        corners.([{@bumper, @sill}, {y0, @sill}, {y0, @sill + 0.16}, {@bumper, @sill + 0.16}]),
+        {sign, 0, 0},
+        "i-dark-~"
+      )
+    ]
+  end
+
+  # A window of the cargo area, at the sliding door.
+  defp van_window(x, sign, {y0, y1}, h) do
+    corners =
+      for {y, z} <- [
+            {y0 + 0.2, h - 1.15},
+            {y1 - 0.2, h - 1.15},
+            {y1 - 0.2, h - 0.45},
+            {y0 + 0.2, h - 0.45}
+          ],
+          do: {x + sign * 0.02, y, z}
+
+    face(corners, {sign, 0, 0}, "i-glass-dark")
   end
 
   @doc """
@@ -56,7 +239,12 @@ defmodule DIYWeb.Icon.Shapes do
   """
   def bounds(model) do
     points =
-      Enum.flat_map(model, fn
+      model
+      |> Enum.flat_map(fn
+        {:group, parts} -> parts
+        part -> [part]
+      end)
+      |> Enum.flat_map(fn
         {:box, corner, size, _material} ->
           [corner, Iso.add(corner, size)]
 
@@ -95,13 +283,19 @@ defmodule DIYWeb.Icon.Shapes do
     model
     |> Enum.with_index()
     |> Enum.flat_map(fn {part, i} ->
-      case for({:poly, corners, class} <- draw_one(part, point, normal), do: {corners, class}) do
+      case for({:poly, corners, class} <- draw_part(part, point, normal), do: {corners, class}) do
         [] -> []
         polys -> [object(i, polys)]
       end
     end)
     |> Iso.order()
   end
+
+  # A group of parts (`{:group, parts}`) paints as one part.
+  defp draw_part({:group, parts}, point, normal),
+    do: Enum.flat_map(parts, &draw_one(&1, point, normal))
+
+  defp draw_part(part, point, normal), do: draw_one(part, point, normal)
 
   # A part as an object of the order of the paint: its box in the world.
   # Its key is its place in the model: the order of the model stays where
@@ -400,14 +594,14 @@ defmodule DIYWeb.Icon.Shapes do
   def model("ceiling_fan") do
     blade = fn corners -> face(corners, {0, 0, 1}, "i-wood-t i-face") end
 
-    box({0.47, 0.47, 0.3}, {0.06, 0.06, 0.4}, "steel") ++
-      [
-        blade.([{0.5, 0.42, 0.3}, {1.1, 0.42, 0.3}, {1.1, 0.58, 0.3}, {0.5, 0.58, 0.3}]),
-        blade.([{0.42, 0.5, 0.3}, {0.42, 1.1, 0.3}, {0.58, 1.1, 0.3}, {0.58, 0.5, 0.3}]),
-        blade.([{0.5, 0.42, 0.3}, {-0.1, 0.42, 0.3}, {-0.1, 0.58, 0.3}, {0.5, 0.58, 0.3}]),
-        blade.([{0.42, 0.5, 0.3}, {0.42, -0.1, 0.3}, {0.58, -0.1, 0.3}, {0.58, 0.5, 0.3}]),
-        disc({0.5, 0.5, 0.31}, :top, 0.13, "i-steel-t")
-      ]
+    # The rod goes up from the middle of the disc: it paints last.
+    [
+      blade.([{0.5, 0.42, 0.3}, {1.1, 0.42, 0.3}, {1.1, 0.58, 0.3}, {0.5, 0.58, 0.3}]),
+      blade.([{0.42, 0.5, 0.3}, {0.42, 1.1, 0.3}, {0.58, 1.1, 0.3}, {0.58, 0.5, 0.3}]),
+      blade.([{0.5, 0.42, 0.3}, {-0.1, 0.42, 0.3}, {-0.1, 0.58, 0.3}, {0.5, 0.58, 0.3}]),
+      blade.([{0.42, 0.5, 0.3}, {0.42, -0.1, 0.3}, {0.58, -0.1, 0.3}, {0.58, 0.5, 0.3}]),
+      disc({0.5, 0.5, 0.31}, :top, 0.13, "i-steel-t")
+    ] ++ box({0.47, 0.47, 0.3}, {0.06, 0.06, 0.4}, "steel")
   end
 
   def model("always_on") do
@@ -471,7 +665,7 @@ defmodule DIYWeb.Icon.Shapes do
         ),
         cabin.(
           [{0.08, 0.6, 0.55}, {w - 0.08, 0.6, 0.55}, {w - 0.15, 0.85, 0.85}, {0.15, 0.85, 0.85}],
-          nil,
+          {0, -1, 0.83},
           "i-red-t"
         ),
         cabin.(
@@ -505,12 +699,14 @@ defmodule DIYWeb.Icon.Shapes do
     across = fn {y1, z1}, {y2, z2} -> [{0, y1, z1}, {w, y1, z1}, {w, y2, z2}, {0, y2, z2}] end
 
     # The two sides have the profile, and the back has its doors: they
-    # show after a turn. A slope of the cab looks to the front and up. The
+    # show after a turn. The sliding door is on the right side of the van
+    # (x = 0, `DIYWeb.Iso`). A slope of the cab looks to the front and up. The
     # hood is low: when the front looks away, the body is in front of it,
     # so it shows only with the front.
     [
       face(Enum.map(profile, fn {y, z} -> {0, y, z} end), {-1, 0, 0}, "i-white-~ i-face"),
       far_side({0, 0.75, 0.6}, {0.6, 0.35}, "i-glass-dark"),
+      far_side({0, 1.45, 0.2}, {0.55, 0.85}, "i-steel-l"),
       face(across.({0, 0.2}, {0, h}), {0, -1, 0}, "i-white-~ i-face"),
       face(Enum.map(profile, fn {y, z} -> {w, y, z} end), {1, 0, 0}, "i-white-~ i-face"),
       face(across.({0, h}, {2.0, h}), {0, 0, 1}, "i-white-t i-face"),
@@ -518,8 +714,7 @@ defmodule DIYWeb.Icon.Shapes do
       face(across.({2.3, 0.72}, {2.1, 1.12}), {0, 0.89, 0.45}, "i-glass-dark"),
       face(across.({l, 0.65}, {2.3, 0.72}), {0, 1, 0.5}, "i-white-t i-face"),
       front({0, l, 0.2}, {w, 0.45}, "i-white-~ i-face"),
-      side({w, 0.75, 0.6}, {0.6, 0.35}, "i-glass-dark"),
-      side({w, 1.45, 0.2}, {0.55, 0.85}, "i-steel-l")
+      side({w, 0.75, 0.6}, {0.6, 0.35}, "i-glass-dark")
     ] ++ wheels(w, [0.5, 2.25], 0.2) ++ wheels(0, [0.5, 2.25], 0.2)
   end
 

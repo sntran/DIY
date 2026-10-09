@@ -175,7 +175,8 @@ async function van(page, name) {
   assert.match(await page.textContent("#weight-total"), /of 8,900 lb/)
   await check(page, `${name} van`)
 
-  await page.click('a[aria-label="Add an item to Galley"]')
+  // The list of the zones is for a keyboard, as the list of the rooms.
+  await follow(page, 'a[id^="add-"][aria-label="Add an item to Galley"]')
   await page.waitForSelector("#add-sheet")
   await check(page, `${name} van add`)
   await page.click("#add-van_fridge")
@@ -184,6 +185,44 @@ async function van(page, name) {
   await page.click("#item-sheet .btn-ghost[aria-label=Close]")
   await page.waitForSelector("#item-sheet", { state: "detached" })
   await page.waitForSelector("#van-notes:has-text('no power station')")
+
+  // The van cut open: the person zooms to its floor, and drags the fridge.
+  await page.click('div[id^="van-plan-"] button[data-focus=floor]')
+  const vanFridge = `g[data-item="${await itemId(page, "12 V fridge")}"]`
+  const vanFridgeAt = await page.getAttribute(vanFridge, "data-at")
+  await page.locator(vanFridge).scrollIntoViewIfNeeded()
+  await drag(page, center(await page.locator(vanFridge).boundingBox()), 8, 6)
+  await page.waitForFunction(([s, at]) => document.querySelector(s).getAttribute("data-at") !== at, [vanFridge, vanFridgeAt])
+    .catch(() => assert.fail(`${name}: the fridge moves in the van with a drag`))
+  await check(page, `${name} van plan`)
+
+  // A tap on the cab chooses it: the seats and the dash let the tap
+  // through. The cab is fixed.
+  const zoneId = (zone) =>
+    page.evaluate((zone) => [...document.querySelectorAll('#van-list li[id^="zone-"]')]
+      .find((li) => li.querySelector("h3").textContent.trim().startsWith(zone)).id.slice(5), zone)
+  const cab = `polygon[data-room="${await zoneId("Cab")}"]`
+  await page.locator(cab).scrollIntoViewIfNeeded()
+  await page.mouse.click(...Object.values(center(await page.locator(cab).boundingBox())))
+  await page.waitForSelector("#zone-bar:has-text('It stays where it is')")
+  await check(page, `${name} van zone`)
+
+  // The bed: its bar and its sheet.
+  await follow(page, `#choose-${await zoneId("Bed")}`)
+  await page.waitForSelector("#zone-bar:has-text('Bed')")
+  await page.click("#bar-change")
+  await page.waitForSelector("#zone-sheet")
+  await check(page, `${name} van zone sheet`)
+  await page.keyboard.press("Escape")
+  await page.waitForSelector("#zone-sheet", { state: "detached" })
+
+  // The shell has no place on the plan: a tap adds insulation to it.
+  await page.click("#shell-add")
+  await page.waitForSelector("#add-sheet")
+  await page.click("#add-insulation")
+  await page.waitForSelector("#item-sheet:has-text('Insulation')")
+  await page.click("#item-sheet .btn-ghost[aria-label=Close]")
+  await page.waitForSelector('#van-shell a[id^="shell-item-"]')
 
   await page.click('#van-stations button:has-text("Take it in this van")')
   await page.waitForSelector("#van-stations:has-text('in this van')")
@@ -280,6 +319,14 @@ async function build(context, name) {
   await drag(page, center(await page.locator('circle[data-handle="x0"]').boundingBox()), -26, -15)
   await page.waitForFunction(([s, p]) => document.querySelector(s).getAttribute("data-plan") !== p, [kitchen, plan])
     .catch(() => assert.fail(`${name}: the back wall of the kitchen moves with its handle`))
+  // The living room is next to the kitchen. So the button that moves the
+  // kitchen to it cannot move, but it keeps the focus, and the page says
+  // why.
+  await page.focus("#move-room-right")
+  await page.keyboard.press("Enter")
+  await page.waitForSelector("#flash-error")
+  assert.equal(await page.evaluate(() => document.activeElement.id), "move-room-right",
+    `${name}: the move button keeps the focus`)
   await page.click("#room-bar a[aria-label=Close]")
   await page.waitForSelector("#room-bar", { state: "detached" })
 

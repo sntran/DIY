@@ -6,15 +6,18 @@ defmodule DIY.Van do
   ## The weight budget
 
   The payload is the weight rating of the van (GVWR) less its empty
-  weight. The items, the water, the people and the gear take it. Each zone
-  has a place from the front axle to the rear axle (`@places`): the part
-  of the weight of a zone on the rear axle is that place, and the rest is
-  on the front axle (a lever). The places are a simple model of the app:
-  a typical layout, with the bed and the electrical bay over the rear
-  axle.
+  weight. The items, the water, the people and the gear take it. Each item
+  has its place along the van, on the plan of the van (`DIY.Layout`). The
+  part of its weight on the rear axle comes from that place, the front
+  axle and the wheelbase of the model (`lever/2`). The rest is on the
+  front axle. An item behind the rear axle takes some weight off the
+  front axle.
 
   The water of a tank weighs 8.34 lb for each gallon (USGS, "Water
-  density"). The people sit in the cab. The gear goes under the bed.
+  density"). The people sit in the cab, and the gear goes under the bed:
+  at the middle of these zones. An item of the shell (the insulation, the
+  walls, the floor) is at the middle of the plan of the van. The plan is
+  the cargo area and the cab.
 
   ## The power budget
 
@@ -37,18 +40,14 @@ defmodule DIY.Van do
   use, the van stays off the grid with no limit.
   """
 
-  alias DIY.{Build, Catalog}
+  alias DIY.{Build, Catalog, Layout}
 
-  # The place of each zone, from the front axle (0) to the rear axle (1).
-  @places %{
-    cab: 0.1,
-    galley: 0.4,
-    living: 0.55,
-    bed: 1.0,
-    bay: 0.95,
-    van_roof: 0.5,
-    shell: 0.5
-  }
+  # The thickness of the doors at the back of a van, in inches: the plan
+  # of the van starts after them. A guess of the app (no source).
+  @doors 3
+
+  @doc "The thickness of the doors at the back of a van, in inches: a guess."
+  def doors, do: @doors
 
   @water_lb 8.34
   @inverter 0.9
@@ -72,8 +71,43 @@ defmodule DIY.Van do
   def weight(%{type: "water_tank", params: p}), do: p["weight"] + p["gallons"] * @water_lb
   def weight(%{params: %{"weight" => weight}}), do: weight / 1
 
-  @doc "The place of a zone, from the front axle (0) to the rear axle (1)."
-  def place(zone), do: Map.fetch!(@places, zone)
+  @doc """
+  The part of a weight on the rear axle of a van, at a place `y` along the
+  van. `y` is in inches from the doors at the back, as on the plan. The
+  part is 0 at the front axle, 1 at the rear axle, and more than 1 behind
+  it.
+  """
+  def lever(van, y) do
+    size = Catalog.van_size(van.params["model"])
+    (size.length - @doors - y - size.front) / size.wheelbase
+  end
+
+  @doc """
+  The places of the rear axle, of the front axle and of the front (the
+  bumper) on the plan of a van. Each is `y` in inches, from the doors at
+  the back.
+  """
+  def axles(van) do
+    size = Catalog.van_size(van.params["model"])
+    front = size.length - @doors
+    %{rear: front - size.front - size.wheelbase, front: front - size.front, nose: front}
+  end
+
+  # The place along the van of an item: the middle of the item on the plan
+  # of its zone. An item of the shell is at the middle of the plan of the
+  # van (the cargo area and the cab).
+  defp along(_van, %{at: %{y: y}} = item, %{plan: %{y: zone_y}}) do
+    {_w, d} = Layout.extent(item)
+    zone_y + y + d / 2
+  end
+
+  defp along(van, _item, _zone), do: Layout.van_box(van).d / 2
+
+  # The middle of a zone along the van.
+  defp middle(build, van, place) do
+    %{plan: plan} = Build.zone(build, van.id, place)
+    plan.y + plan.d / 2
+  end
 
   @doc """
   The weight budget of a van: the empty weight, the payload, the load (the
@@ -83,21 +117,27 @@ defmodule DIY.Van do
   """
   def weight(build, van) do
     p = van.params
-    items = items(build, van.id)
 
     loads =
-      Enum.map(items, fn {zone, item} -> {zone, weight(item)} end) ++
-        [{:cab, p["people"] * p["person_lb"] / 1}, {:bed, p["gear_lb"] / 1}]
+      for(
+        zone <- Build.zones(build, van.id),
+        item <- Build.items_in(build, zone.id),
+        do: {zone.place, weight(item), lever(van, along(van, item, zone))}
+      ) ++
+        [
+          {:cab, p["people"] * p["person_lb"] / 1, lever(van, middle(build, van, :cab))},
+          {:bed, p["gear_lb"] / 1, lever(van, middle(build, van, :bed))}
+        ]
 
-    rear = Enum.sum(for {zone, lb} <- loads, do: lb * place(zone))
-    load = Enum.sum(for {_zone, lb} <- loads, do: lb)
+    rear = Enum.sum(for {_zone, lb, lever} <- loads, do: lb * lever)
+    load = Enum.sum(for {_zone, lb, _lever} <- loads, do: lb)
     front = p["front_empty"] + load - rear
     rear = p["rear_empty"] + rear
     empty = p["front_empty"] + p["rear_empty"]
 
     zones =
       for {zone, _name} <- Catalog.zones(),
-          do: {zone, Enum.sum(for {z, lb} <- loads, z == zone, do: lb)}
+          do: {zone, Enum.sum(for {z, lb, _lever} <- loads, z == zone, do: lb)}
 
     %{
       empty: empty / 1,
