@@ -85,9 +85,20 @@ defmodule DIY.Estimate do
   @dryer 0.073
   @therm 100_000
 
+  # The kinds that use no power of the house by themselves (`no_use/0`).
+  @no_use ~w(power_station solar_panels transfer_switch smart_meter camper_van)
+
   @hvac_range 0.15
   @typical_range 0.20
   @checked_range 0.10
+
+  @doc """
+  The kinds that use no power of the house by themselves: the power
+  equipment, the meter and a camper van. Their sheet gives their note,
+  and no kWh: a play test read "0 kWh" as a fault. The page Bill does not
+  list them.
+  """
+  def no_use, do: @no_use
 
   @doc "The names of the months."
   def month_names, do: @month_names
@@ -474,13 +485,10 @@ defmodule DIY.Estimate do
   def kwh(%{type: "always_on", params: p}, ctx), do: other(p["watts"] * 24 * ctx.days / 1_000)
 
   # A meter measures the power of the house. Its own power is too small to
-  # show. A camper van has its own build, with its own power (DIY.Van).
-  def kwh(%{type: type}, _ctx) when type in ["smart_meter", "camper_van"], do: other(0)
-
-  # The power equipment changes the power from the grid, not the use of
-  # the house: see DIY.Power.
-  def kwh(%{type: type}, _ctx) when type in ["power_station", "solar_panels", "transfer_switch"],
-    do: other(0)
+  # show. A camper van has its own build, with its own power (DIY.Van). The
+  # power equipment changes the power from the grid, not the use of the
+  # house: see DIY.Power.
+  def kwh(%{type: type}, _ctx) when type in @no_use, do: other(0)
 
   def kwh(%{type: "ev", params: p}, ctx),
     do: other(p["miles"] * ctx.days / p["mi_kwh"] / charge_efficiency(p["charger"]))
