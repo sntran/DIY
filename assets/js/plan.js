@@ -1,10 +1,10 @@
 // The hook Plan of the plan of the house at scale (DIYWeb.Cutaway). The
 // person moves the items and the rooms with a pointer (a finger or a
-// mouse). Two fingers, Ctrl and the wheel, or the buttons zoom. A drag on
-// an empty place moves the picture. When the picture shows all the house,
-// a finger that moves up or down scrolls the page. A tap on an item opens
-// it. A tap on a room, on a wall or on the edge of a floor chooses the
-// room: the room then has handles on its walls, and the view zooms in to
+// mouse). Two fingers, Ctrl and the mouse wheel, or the buttons zoom. A
+// drag on an empty place moves the picture. When the picture shows all the
+// house, a finger that moves up or down scrolls the page. A tap on an item
+// opens it. A tap on a room, on a wall or on the edge of a slab chooses the
+// room. The room then has handles on its walls, and the view zooms in to
 // it. In the list of the rooms (for a keyboard and a screen reader), the
 // arrow keys move an item or a room.
 //
@@ -264,9 +264,11 @@ export const planHook = {
     return this.el.ownerDocument.defaultView
   },
 
-  // True when the view shows all the house.
+  // True when the view shows all the house: all its width and all its
+  // height.
   whole() {
-    return this.view.w >= this.fit().w - 1e-6
+    const fit = this.fit()
+    return this.view.w >= fit.w - 1e-6 && this.view.h >= fit.h - 1e-6
   },
 
   // The view that the person had on this page before (a zoom), if any.
@@ -280,7 +282,10 @@ export const planHook = {
   },
 
   // The server draws the SVG again: its labels and its handles show again.
+  // A pale state for a layer that is not there now stops.
   updated() {
+    const dimmed = this.dimmed()
+    if (dimmed && !this.svg.querySelector(`#plan-${dimmed}`)) this.dim(null)
     this.declutter()
     this.handles()
   },
@@ -294,7 +299,7 @@ export const planHook = {
     const units = this.units(view)
     this.svg.style.setProperty("--p-label", `${(12 * units).toFixed(3)}px`)
     // A handle is 24 pixels wide: the smallest target of WCAG 2.2 (2.5.8).
-    this.svg.style.setProperty("--p-handle", `${(12 * units).toFixed(3)}px`)
+    this.svg.style.setProperty("--p-handle", `${((HANDLE / 2) * units).toFixed(3)}px`)
     // After a zoom, the labels have a new size on the SVG.
     if (units !== this.labelUnits) {
       this.labelUnits = units
@@ -515,11 +520,12 @@ export const planHook = {
   },
 
   // The view zooms in to a room: all the surfaces of its floor (a roof has
-  // three), its items, its walls and its slab. A room of a different layer
-  // than the layer of a tab: no layer is pale now.
+  // three), its items, its walls and its slab. When the room is not on the
+  // layer of the tab, no layer is pale.
   zoomTo(room) {
     const layer = room.closest("[data-box]")
-    if (this.dimmed && layer.getAttribute("id") !== `plan-${this.dimmed}`) this.dim(null)
+    const dimmed = this.dimmed()
+    if (dimmed && layer.getAttribute("id") !== `plan-${dimmed}`) this.dim(null)
     const id = room.getAttribute("data-room")
     const parts = this.svg.querySelectorAll(`[data-room="${id}"], [data-in="${id}"], [data-of="${id}"]`)
     const boxes = [...parts].map((el) => el.getBBox())
@@ -530,12 +536,16 @@ export const planHook = {
     this.show(focus(this.view, {x, y, w, h}, this.shape(), this.fit()))
   },
 
-  // One layer stands out (the tab of a floor): the other layers are pale.
+  // One layer stands out (the tab of a layer): the other layers are pale.
   // The SVG keeps the attribute when the server draws it again.
   dim(id) {
-    this.dimmed = id
     if (id) this.svg.setAttribute("data-dim", id)
     else this.svg.removeAttribute("data-dim")
+  },
+
+  // The layer that stands out, or null.
+  dimmed() {
+    return this.svg.getAttribute("data-dim")
   },
 
   // An item that the person drops: the center of its space on the floor
@@ -573,8 +583,8 @@ export const planHook = {
     this.pushEvent(event, payload, () => this.restore(drag))
   },
 
-  // The wheel scrolls the page. Ctrl (or Command) and the wheel zoom; a
-  // pinch on a touchpad also comes as a wheel with Ctrl.
+  // The mouse wheel scrolls the page. Ctrl (or Command) and the wheel zoom.
+  // A pinch on a touchpad also comes as a wheel with Ctrl.
   wheel(e) {
     if (!e.ctrlKey && !e.metaKey) return this.hint()
     e.preventDefault()

@@ -507,6 +507,32 @@ test("a finger scrolls the page when the view shows all the house", () => {
   assert.equal(win.scrolls.length, 3)
 })
 
+test("a finger on an item, or on the chosen room, moves it: the page does not scroll", () => {
+  const {pointer, win, fridge, fridgeG, kitchen, kitchenG} = setup()
+  pointer("pointerdown", 1, 100, 300, fridge, "touch")
+  pointer("pointermove", 1, 100, 340, fridge, "touch")
+  assert.ok(fridgeG.classes.has("p-dragging"))
+  pointer("pointercancel", 1, 100, 340, fridge, "touch")
+  pointer("pointerdown", 1, 100, 300, kitchen, "touch")
+  pointer("pointermove", 1, 100, 340, kitchen, "touch")
+  assert.ok(kitchenG.classes.has("p-dragging"))
+  assert.deepEqual(win.scrolls, [])
+})
+
+test("a view as wide as the house but not as high: the finger moves the view", () => {
+  // A wide screen: the tab of the layer gives a view of all the width of
+  // the house, but not of all its height.
+  const {hook, pointer, win, root, focus, svg} = setup({chosen: false, width: 1000, height: 600})
+  svg.querySelector("#plan-ground").setAttribute("data-box", "0 100 196 50")
+  root.fire("click", {target: focus})
+  assert.ok(hook.view.w >= 200 && hook.view.h < 400)
+  const y = hook.view.y
+  pointer("pointerdown", 1, 100, 300, undefined, "touch")
+  pointer("pointermove", 1, 100, 360, undefined, "touch")
+  assert.deepEqual(win.scrolls, [])
+  assert.ok(hook.view.y < y)
+})
+
 test("an item goes to the room under the center of its space, not under the pointer", () => {
   const {hook, pointer, pushed, fridge, fridgeG, kitchen, living, setUnder} = setup()
   // 40 inches along x: the center stays in the kitchen, but the pointer
@@ -605,7 +631,7 @@ test("two fingers zoom; a third does nothing; a cancel stops a drag", () => {
   assert.equal(hook.drag, null)
 })
 
-test("Ctrl and the wheel zoom; the wheel alone scrolls the page, and a note tells how to zoom", () => {
+test("Ctrl and the mouse wheel zoom; the wheel alone scrolls the page, and a note tells how to zoom", () => {
   const {hook, svg, hint, timers} = setup()
   let prevented = false
   const wheel = (keys) =>
@@ -714,9 +740,22 @@ test("the label of a larger room shows; a label over it hides until a zoom in", 
   assert.deepEqual(labels.map((l) => l.style.visibility), ["", "", ""])
 })
 
-test("the hook goes: it removes its listeners", () => {
-  const {hook, svg, root} = setup()
+test("the hook goes: it removes its listeners, and the note does not wait", () => {
+  const {hook, svg, root, hint, timers} = setup()
+  svg.fire("wheel", {clientX: 0, clientY: 0, deltaY: 100, preventDefault: () => assert.fail()})
   hook.destroyed()
   assert.equal(svg.listeners.size, 0)
   assert.equal(root.listeners.size, 0)
+  timers[0][0]()
+  assert.ok(!hint.classes.has("opacity-0"))
+})
+
+test("a pale state for a layer that is not there stops when the server draws the SVG", () => {
+  const {hook, svg} = setup()
+  hook.dim("ground")
+  hook.updated()
+  assert.equal(svg.getAttribute("data-dim"), "ground")
+  hook.dim("attic")
+  hook.updated()
+  assert.equal(svg.getAttribute("data-dim"), null)
 })

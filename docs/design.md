@@ -1006,15 +1006,16 @@ its turn. A length is in inches.
   size and its buttons. A drag on the chosen room moves it with its
   items, and a drag on a handle moves a wall. A drag on an empty place
   moves the view, and the house stays on the screen. Two fingers, Ctrl
-  and the wheel, or the buttons zoom.
-- The plan does not trap the page. The wheel alone scrolls the page: a
-  note on the plan then tells how to zoom. When the plan shows all the
-  house, a finger that moves up or down scrolls the page. After a zoom
-  in, the finger moves the view.
+  and the mouse wheel, or the buttons zoom.
+- The plan does not trap the page. The mouse wheel alone scrolls the
+  page: a note on the plan then tells how to zoom. When the plan shows
+  all the house (all its width and all its height), a finger that moves
+  up or down scrolls the page. After a zoom in, the finger moves the
+  view. The button to add a room is under the plan: so it does not hide
+  the name of a room.
 - The tabs of the layers. A tab fills the screen with its layer, and the
-  other layers are pale. The button "all the house", or a tap on a room
-  of a different layer, ends it. The button to add a room is under the
-  plan: so it does not hide the name of a room.
+  other layers are pale. The button "Show all the house", or a tap on a
+  room of a different layer, ends it.
 - A drop. The center of the space of the item on the floor moves with
   the pointer. The item goes to the room that has this center. The script
   tries its own room first, then the rooms of the layer under the pointer,

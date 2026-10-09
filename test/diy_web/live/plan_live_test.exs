@@ -40,8 +40,9 @@ defmodule DIYWeb.PlanLiveTest do
 
     # The plan has the note for the wheel. The button to add a room is under
     # the plan, not on it: so it does not hide the name of a room.
-    assert has_element?(view, "#house-plan [data-hint]", "Use Ctrl and the wheel to zoom.")
-    assert has_element?(view, "#house-plan > div > #add-room")
+    assert has_element?(view, "#house-plan [data-hint]", "Use Ctrl and the mouse wheel to zoom.")
+    assert has_element?(view, "#house-plan > div.flex > #add-room")
+    refute has_element?(view, "#house-plan > div.relative > #add-room")
 
     render_hook(view, "select_room", %{"id" => kitchen.id})
     assert_patch view, ~p"/inside?#{[room: kitchen.id]}"
