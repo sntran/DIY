@@ -492,7 +492,7 @@ defmodule DIY.Catalog do
           2.0,
           0.1,
           100.0,
-          "The label or the app of the station gives it in Wh: 2,048 Wh is 2.048 kWh."
+          "The label or the app of the station gives it in Wh: 2,048 Wh is 2.048 kWh. Common stations have near 1 kWh (with 1,800 W of outlets), 2 kWh (2,400 W) or 4 kWh (4,000 W). Their data sheets of 2025 and 2026 give these sizes."
         ),
         float(
           "extra_kwh",

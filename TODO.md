@@ -61,6 +61,9 @@ The owner decides about each item.
   layout).
 - The sun of the place of a trip, in place of the sun at the house.
 - The axles of the Transit and of the Sprinter in the models of vans.
+- Two sets of solar panels on the same side of the roof: a check of
+  their sum against the roof. And a roof that the user adds (a porch):
+  today it gets the number of the main roof.
 - The range of a fridge around the house with the temperature of each
   year (today the history uses the mean temperature of the month).
 - A planned item that replaces a gas item: a heat pump water heater, an
@@ -80,10 +83,6 @@ the next pull requests.
 - "Am I on a good plan?" The app does not rank plans, and the lesson
   comes before the worksheet. A person with little time may want the
   worksheet first.
-- Solar: a typical price for each watt in Texas, with its source, and the
-  number of panels that the roof holds.
-- The sizes of stations as examples (kWh and watts), with no brand names
-  (honesty rule 4).
 - More models of each van: other roofs and lengths (for example a Transit
   with a medium roof).
 - A medium house of 2 floors gets 2 bedrooms. Many such houses have 3.

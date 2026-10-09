@@ -522,6 +522,41 @@ that a station runs, also gives the hours, with a link to the page
 Power. The view "What feeds what" shows the plan when there is one. The
 warnings of today under it have their own label.
 
+The sheet of solar panels helps to choose their size and their price
+(`DIY.Solar`). It has at most 2 short notes:
+
+- Panels on the roof: the panels of 400 W (45 by 68 in) that one side of
+  the roof holds (all of a flat roof). The note says that it is a simple model of the app.
+  The roof covers the top floor: the size of the house ÷ its floors. One
+  side of a gable roof is half of the roof, × 1.12 for a slope of 6 in
+  12. A flat roof is all one side. The app uses 2/3 of the side, for the
+  paths and the space at the ridge of the fire code (International
+  Residential Code 2021, R324.6). A hip roof has 4 sides, so the note
+  says that it holds less.
+- Panels that charge a station: a note when no station is in the house,
+  or when the solar input of the stations is 0 W. Also a note when the
+  sun of the panels is more than the solar input of the stations of the
+  house. The sun is 80% of the watts of the labels,
+  as on the page Power. The rest is lost in full sun, and the page Power
+  gives the kWh of one year. A play test found this fault. It put 6,000
+  W of panels on a station of 1,000 W. The page gave a payback of 334
+  years, with no word of why.
+- Panels on the roof and on the grid in Texas: a typical price for each
+  watt, with the installation, before any credit. SolarReviews (October
+  2026) gives a price for each size from 4 to 10 kW: $3.40 for 4 kW to
+  $2.65 for 10 kW. The app rounds to the nearest kW. Under 3,500 W, the
+  note gives no total: a small system costs more for each watt. Over 10
+  kW, the note gives $2.25 (EnergySage, October 2026, for 13 kW) to
+  $2.65.
+- The US tax credit for home solar (section 25D) stops for a system that
+  the installer completes after 2025 (Public Law 119-21). Many pages
+  still give a price after this credit, so the note tells it.
+
+The help of the battery of a station gives common sizes, with no brand
+names (honesty rule 4). The sizes are near 1 kWh (1,800 W of outlets), 2
+kWh (2,400 W) and 4 kWh (4,000 W). They come from the data sheets of
+common stations of 2025 and 2026.
+
 The page Bill shows the house of today (the planned items are on the page
 Power). With a station, panels on the grid, or a price at night, it also
 shows the bill of each month from the power of the grid at the prices of
