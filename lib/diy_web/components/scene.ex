@@ -1,6 +1,6 @@
 defmodule DIYWeb.Scene do
   @moduledoc """
-  The isometric pictures of the app, in SVG. `house/1` draws the house on
+  The pictures of the app, in SVG. `house/1` draws the house on
   its lot, with the equipment of the build and the flows of the power.
   `van/1` draws a camper van with its two budgets. `sample/1` draws the
   two houses of the first page.
@@ -17,7 +17,9 @@ defmodule DIYWeb.Scene do
   LiveView keeps them as an assign. So the page sends a picture again only
   when its parts change.
 
-  The math of the points is in `DIYWeb.Iso`. The colors are CSS variables
+  The math of the points is in `DIYWeb.Geometry`, and the cameras are in
+  `DIYWeb.Camera`: the camera of the house for a house, and the camera of a
+  van for a van. The colors are CSS variables
   (`assets/css/app.css`): one set for the light mode (a day) and one for
   the dark mode (a night). The pictures are for the eyes only: the text of
   the page gives the same facts, and a link with a picture has a label
@@ -34,7 +36,7 @@ defmodule DIYWeb.Scene do
   use DIYWeb, :html
 
   alias DIY.{Build, Power, Van}
-  alias DIYWeb.{Format, Iso}
+  alias DIYWeb.{Camera, Format, Geometry}
 
   # The house: its width (x), its depth (y), the height of a floor, the
   # rise of the roof, and the overhang of the roof (in meters).
@@ -51,10 +53,8 @@ defmodule DIYWeb.Scene do
   # The garage, on the right of the house: x, y, width, depth, height.
   @garage {@w, 1.8, 5.2, @d - 1.8, 2.8}
 
-  # The SVG point of the origin of the world, in the picture of the house,
-  # and the SVG point of the sun (or of the moon).
-  @origin {152.0, 92.0}
-  @sun {44, 30}
+  # The sky over a picture of the house (SVG units): the sun is in it.
+  @sky 44
 
   # The size of the labels in the picture of the house.
   @chip 1.3
@@ -185,30 +185,39 @@ defmodule DIYWeb.Scene do
     parts = assigns.parts
     {back, front} = house_shapes(parts)
     {lines, chips} = flows(parts)
+    shapes = back ++ lines ++ front ++ chips
+    view = house_view(shapes)
 
     assigns =
       assign(assigns,
-        shapes: back ++ lines ++ front ++ chips,
-        view: house_view(parts),
-        origin: @origin,
-        sun: @sun,
+        shapes: shapes,
+        view: view,
+        camera: Camera.house(),
+        sun: sun(view),
         chip: @chip
       )
 
     ~H"""
-    <.canvas id={@id} view={@view} origin={@origin} shapes={@shapes} sun={@sun} chip={@chip} />
+    <.canvas
+      id={@id}
+      view={@view}
+      camera={@camera}
+      shapes={@shapes}
+      sun={@sun}
+      chip={@chip}
+    />
     """
   end
 
-  # The box of the picture of a house: from some sky over the ridge of the
-  # roof to the front corner of the lot.
-  defp house_view(parts) do
-    {_x, ridge} = Iso.at(@origin, {@w / 2, @d / 2, height(parts) + @rise})
-    {_x0, x1, _y0, y1} = @lot
-    {_x, bottom} = Iso.at(@origin, {x1, y1, -@slab})
-    top = min(ridge - 40, 0.0)
-    {0.0, top, 360.0, bottom + 4 - top}
+  # The box of the picture of a house: its shapes, with some sky over them
+  # for the sun.
+  defp house_view(shapes) do
+    {x, y, w, h} = bounds(Camera.house(), shapes, 4, @chip)
+    {x, y - @sky, w, h + @sky}
   end
+
+  # The sun (or the moon) in the sky, at the top left of a picture.
+  defp sun({x, y, _w, _h}), do: {Camera.round1(x + 36), Camera.round1(y + 28)}
 
   attr :id, :string, required: true
   attr :plan, :boolean, default: false, doc: "a plan on paper, not a house that is there"
@@ -222,19 +231,21 @@ defmodule DIYWeb.Scene do
         do: Enum.map(lot() ++ ground(@sample) ++ building(@sample) ++ garage(@sample), &plan/1),
         else: back ++ front
 
+    view = house_view(back ++ front)
+
     assigns =
       assign(assigns,
         shapes: shapes,
-        view: house_view(@sample),
-        origin: @origin,
-        sun: if(assigns.plan, do: nil, else: @sun)
+        view: view,
+        camera: Camera.house(),
+        sun: if(assigns.plan, do: nil, else: sun(view))
       )
 
     ~H"""
     <.canvas
       id={@id}
       view={@view}
-      origin={@origin}
+      camera={@camera}
       shapes={@shapes}
       sun={@sun}
       class={@plan && "scene-plan"}
@@ -256,21 +267,20 @@ defmodule DIYWeb.Scene do
   """
   def van(assigns) do
     parts = assigns.parts
+    camera = Camera.van()
     {x0, x1, y0, y1} = {-1.6, @van_w + 1.6, -1.4, @van_l + 1.6}
-    slab = Iso.box({x0, y0, -0.5}, {x1 - x0, y1 - y0, 0.5})
+    slab = Geometry.box({x0, y0, -0.5}, {x1 - x0, y1 - y0, 0.5})
+    [dirt_r, dirt_l, _top] = faces(slab, "s-dirt", camera)
 
     shapes =
-      [
-        {:poly, slab.left, "s-dirt-l"},
-        {:poly, slab.right, "s-dirt-r"},
-        {:poly, slab.top, "s-drive"}
-      ] ++ van_body({0.0, 0.0}, parts) ++ van_chips(parts)
+      [dirt_r, dirt_l, {:poly, slab.top, "s-drive"}] ++
+        van_body({0.0, 0.0}, parts, camera) ++ van_chips(parts)
 
-    origin = {0.0, 0.0}
-    assigns = assign(assigns, shapes: shapes, origin: origin, view: bounds(origin, shapes, 6))
+    assigns =
+      assign(assigns, shapes: shapes, camera: camera, view: bounds(camera, shapes, 6, 0.5))
 
     ~H"""
-    <.canvas id={@id} view={@view} origin={@origin} shapes={@shapes} chip={0.5} />
+    <.canvas id={@id} view={@view} camera={@camera} shapes={@shapes} chip={0.5} />
     """
   end
 
@@ -300,12 +310,18 @@ defmodule DIYWeb.Scene do
 
   defp lb(pounds), do: "#{Format.int(pounds)} lb"
 
-  # The box of the SVG around the shapes, with a margin.
-  defp bounds(origin, shapes, margin) do
+  # The box of the SVG around the shapes, with a margin. The labels have
+  # their size (`chip`).
+  defp bounds(camera, shapes, margin, chip) do
+    at = &Camera.at(camera, {0, 0}, &1)
+
     points =
       Enum.flat_map(shapes, fn
-        {:poly, corners, _class} -> Enum.map(corners, &Iso.at(origin, &1))
-        {:chip, point, text, _class} -> chip_box(Iso.at(origin, point), text, 0.5)
+        {:poly, corners, _class} -> Enum.map(corners, at)
+        {:line, points, _class} -> Enum.map(points, at)
+        {:wire, a, b, _class} -> [at.(a), at.(b)]
+        {:circle, point, _r, _class} -> [at.(point)]
+        {:chip, point, text, _class} -> chip_box(at.(point), text, chip)
       end)
 
     {xs, ys} = Enum.unzip(points)
@@ -321,7 +337,7 @@ defmodule DIYWeb.Scene do
 
   attr :id, :string, required: true
   attr :view, :any, required: true, doc: "the box of the SVG: {x, y, width, height}"
-  attr :origin, :any, required: true
+  attr :camera, :any, required: true, doc: "the camera (`DIYWeb.Camera`)"
   attr :shapes, :list, required: true
   attr :sun, :any, default: nil, doc: "the SVG point of the sun (or of the moon)"
   attr :chip, :float, default: 1.0, doc: "the size of the labels"
@@ -335,12 +351,12 @@ defmodule DIYWeb.Scene do
 
     assigns =
       assign(assigns,
-        box: Enum.map_join([x, y, w, h], " ", &Iso.round1/1),
-        x: Iso.round1(x),
-        y: Iso.round1(y),
-        w: Iso.round1(w),
-        h: Iso.round1(h),
-        bottom: Iso.round1(y + h),
+        box: Enum.map_join([x, y, w, h], " ", &Camera.round1/1),
+        x: Camera.round1(x),
+        y: Camera.round1(y),
+        w: Camera.round1(w),
+        h: Camera.round1(h),
+        bottom: Camera.round1(y + h),
         fills: for(c <- ~w(s-grass s-glass s-pv), MapSet.member?(classes, c), do: c),
         blur: MapSet.member?(classes, "s-shadow")
       )
@@ -369,18 +385,19 @@ defmodule DIYWeb.Scene do
       </defs>
       <rect x={@x} y={@y} width={@w} height={@h} fill={"url(##{@id}-sky)"} />
       <circle :if={@sun} cx={elem(@sun, 0)} cy={elem(@sun, 1)} r="14" class="s-sun" />
-      <.shape :for={shape <- @shapes} shape={shape} origin={@origin} id={@id} chip={@chip} />
+      <.shape :for={shape <- @shapes} shape={shape} camera={@camera} id={@id} chip={@chip} />
     </svg>
     """
   end
 
   attr :shape, :any, required: true
-  attr :origin, :any, required: true
+  attr :camera, :any, required: true
   attr :id, :string, required: true
   attr :chip, :float, required: true
 
   defp shape(%{shape: {:poly, corners, class}} = assigns) do
-    assigns = assign(assigns, points: Iso.points(assigns.origin, corners), class: class)
+    assigns =
+      assign(assigns, points: Camera.points(assigns.camera, {0, 0}, corners), class: class)
 
     ~H"""
     <polygon points={@points} class={@class} {fills(@class, @id)} />
@@ -388,7 +405,7 @@ defmodule DIYWeb.Scene do
   end
 
   defp shape(%{shape: {:line, points, class}} = assigns) do
-    d = "M" <> Enum.map_join(points, " L", &Iso.points(assigns.origin, [&1]))
+    d = "M" <> Enum.map_join(points, " L", &Camera.points(assigns.camera, {0, 0}, [&1]))
     assigns = assign(assigns, d: d, class: class)
 
     ~H"""
@@ -397,11 +414,11 @@ defmodule DIYWeb.Scene do
   end
 
   defp shape(%{shape: {:wire, a, b, class}} = assigns) do
-    {ax, ay} = Iso.at(assigns.origin, a)
-    {bx, by} = Iso.at(assigns.origin, b)
+    {ax, ay} = Camera.at(assigns.camera, {0, 0}, a)
+    {bx, by} = Camera.at(assigns.camera, {0, 0}, b)
 
     [a1, a2, c1, c2, b1, b2] =
-      Enum.map([ax, ay, (ax + bx) / 2, max(ay, by) + 6, bx, by], &Iso.round1/1)
+      Enum.map([ax, ay, (ax + bx) / 2, max(ay, by) + 6, bx, by], &Camera.round1/1)
 
     assigns = assign(assigns, d: "M#{a1},#{a2} Q#{c1},#{c2} #{b1},#{b2}", class: class)
 
@@ -411,8 +428,8 @@ defmodule DIYWeb.Scene do
   end
 
   defp shape(%{shape: {:circle, point, r, class}} = assigns) do
-    {x, y} = Iso.at(assigns.origin, point)
-    assigns = assign(assigns, x: Iso.round1(x), y: Iso.round1(y), r: r, class: class)
+    {x, y} = Camera.at(assigns.camera, {0, 0}, point)
+    assigns = assign(assigns, x: Camera.round1(x), y: Camera.round1(y), r: r, class: class)
 
     ~H"""
     <circle cx={@x} cy={@y} r={@r} class={@class} />
@@ -420,16 +437,16 @@ defmodule DIYWeb.Scene do
   end
 
   defp shape(%{shape: {:chip, point, text, class}} = assigns) do
-    {x, y} = Iso.at(assigns.origin, point)
-    move = "translate(#{Iso.round1(x)} #{Iso.round1(y)}) scale(#{assigns.chip})"
+    {x, y} = Camera.at(assigns.camera, {0, 0}, point)
+    move = "translate(#{Camera.round1(x)} #{Camera.round1(y)}) scale(#{assigns.chip})"
     w = chip_w(text)
 
     assigns =
       assign(assigns,
         move: move,
         text: text,
-        x: Iso.round1(-w / 2),
-        w: Iso.round1(w),
+        x: Camera.round1(-w / 2),
+        w: Camera.round1(w),
         class: class
       )
 
@@ -473,7 +490,7 @@ defmodule DIYWeb.Scene do
     front =
       bushes() ++
         person() ++
-        if(parts.van, do: van_body({van_x(parts), 7.3}, parts.van), else: []) ++
+        if(parts.van, do: van_body({van_x(parts), 7.3}, parts.van, Camera.house()), else: []) ++
         car(parts) ++
         tree({-2.1, 12.4}, 0.8)
 
@@ -486,28 +503,28 @@ defmodule DIYWeb.Scene do
 
   defp lot do
     {x0, x1, y0, y1} = @lot
-    slab = Iso.box({x0, y0, -@slab}, {x1 - x0, y1 - y0, @slab})
-    turf = Iso.box({x0, y0, -0.25}, {x1 - x0, y1 - y0, 0.25})
+    slab = Geometry.box({x0, y0, -@slab}, {x1 - x0, y1 - y0, @slab})
+    turf = Geometry.box({x0, y0, -0.25}, {x1 - x0, y1 - y0, 0.25})
 
     [
-      {:poly, slab.left, "s-dirt-l"},
-      {:poly, slab.right, "s-dirt-r"},
-      {:poly, turf.left, "s-turf-l"},
-      {:poly, turf.right, "s-turf-r"},
+      {:poly, slab.front, "s-dirt-l"},
+      {:poly, slab.side, "s-dirt-r"},
+      {:poly, turf.front, "s-turf-l"},
+      {:poly, turf.side, "s-turf-r"},
       {:poly, slab.top, "s-grass"}
     ]
   end
 
   # The pole of the grid, at the back on the right.
   defp pole do
-    post = Iso.box({18.0, -2.1, 0.0}, {0.25, 0.25, 7.0})
-    arm = Iso.box({17.3, -2.0, 6.4}, {1.6, 0.12, 0.12})
-    [{:poly, post.left, "s-pole-l"}, {:poly, post.right, "s-pole-r"}] ++ faces(arm, "s-pole")
+    post = Geometry.box({18.0, -2.1, 0.0}, {0.25, 0.25, 7.0})
+    arm = Geometry.box({17.3, -2.0, 6.4}, {1.6, 0.12, 0.12})
+    [{:poly, post.front, "s-pole-l"}, {:poly, post.side, "s-pole-r"}] ++ faces(arm, "s-pole")
   end
 
   # A tree of low polygons: a trunk and two cones.
   defp tree({x, y}, k) do
-    trunk = Iso.box({x - 0.12 * k, y - 0.12 * k, 0.0}, {0.24 * k, 0.24 * k, 1.2 * k})
+    trunk = Geometry.box({x - 0.12 * k, y - 0.12 * k, 0.0}, {0.24 * k, 0.24 * k, 1.2 * k})
     top = {x, y, 5.2 * k}
 
     cone = fn z, r ->
@@ -517,7 +534,7 @@ defmodule DIYWeb.Scene do
       [{:poly, [left, front, top], "s-leaf-l"}, {:poly, [front, right, top], "s-leaf-r"}]
     end
 
-    [{:poly, trunk.left, "s-trunk-l"}, {:poly, trunk.right, "s-trunk-r"}] ++
+    [{:poly, trunk.front, "s-trunk-l"}, {:poly, trunk.side, "s-trunk-r"}] ++
       cone.(1.0 * k, 1.5 * k) ++ cone.(2.6 * k, 1.1 * k)
   end
 
@@ -537,29 +554,31 @@ defmodule DIYWeb.Scene do
   defp yard_panel({x, y}) do
     low = {x, y, 0.5}
     high = {x, y - 1.2, 1.3}
-    leg = Iso.box({x + 0.45, y - 1.1, 0.0}, {0.08, 0.08, 1.3})
+    leg = Geometry.box({x + 0.45, y - 1.1, 0.0}, {0.08, 0.08, 1.3})
 
     [
-      {:poly, leg.right, "s-pole-r"},
-      {:poly, [low, Iso.add(low, {1.0, 0.0, 0.0}), Iso.add(high, {1.0, 0.0, 0.0}), high], "s-pv"}
+      {:poly, leg.side, "s-pole-r"},
+      {:poly,
+       [low, Geometry.add(low, {1.0, 0.0, 0.0}), Geometry.add(high, {1.0, 0.0, 0.0}), high],
+       "s-pv"}
     ]
   end
 
   # The paths: the walk to the door, the drive to the garage, and the pool.
   defp ground(parts) do
     {_x0, _x1, _y0, y1} = @lot
-    walk = Iso.box({4.6, @d, 0.0}, {1.3, y1 - @d, 0.02})
+    walk = Geometry.box({4.6, @d, 0.0}, {1.3, y1 - @d, 0.02})
 
     drive =
       if parts.garage or parts.car or parts.van,
-        do: [{:poly, Iso.box({10.5, @d, 0.0}, {4.4, y1 - @d, 0.02}).top, "s-drive"}],
+        do: [{:poly, Geometry.box({10.5, @d, 0.0}, {4.4, y1 - @d, 0.02}).top, "s-drive"}],
         else: []
 
     pool =
       if parts.pool,
         do: [
-          {:poly, Iso.box({-2.4, 8.4, 0.0}, {5.0, 3.2, 0.05}).top, "s-rim"},
-          {:poly, Iso.box({-2.0, 8.75, 0.0}, {4.2, 2.5, 0.06}).top, "s-water"}
+          {:poly, Geometry.box({-2.4, 8.4, 0.0}, {5.0, 3.2, 0.05}).top, "s-rim"},
+          {:poly, Geometry.box({-2.0, 8.75, 0.0}, {4.2, 2.5, 0.06}).top, "s-water"}
         ],
         else: []
 
@@ -580,8 +599,8 @@ defmodule DIYWeb.Scene do
   # door, the gable, the front of the roof, and the panels on it.
   defp building(parts) do
     h = height(parts)
-    walls = Iso.box({0.0, 0.0, 0.0}, {@w, @d, h})
-    base = Iso.box({0.0, 0.0, 0.0}, {@w, @d, 0.35})
+    walls = Geometry.box({0.0, 0.0, 0.0}, {@w, @d, h})
+    base = Geometry.box({0.0, 0.0, 0.0}, {@w, @d, 0.35})
     ridge = @d / 2
     top = h + @rise
     back = [{-0.4, -@eave, h}, {@w, -@eave, h}, {@w, ridge, top}, {-0.4, ridge, top}]
@@ -589,10 +608,10 @@ defmodule DIYWeb.Scene do
 
     [
       {:poly, back, "s-roof-b"},
-      {:poly, walls.left, "s-wall-l"},
-      {:poly, walls.right, "s-wall-r"},
-      {:poly, base.left, "s-base-l"},
-      {:poly, base.right, "s-base-r"}
+      {:poly, walls.front, "s-wall-l"},
+      {:poly, walls.side, "s-wall-r"},
+      {:poly, base.front, "s-base-l"},
+      {:poly, base.side, "s-base-r"}
     ] ++
       bands(parts) ++
       windows(parts) ++
@@ -610,13 +629,13 @@ defmodule DIYWeb.Scene do
   end
 
   # The edge of a roof plane, from a to b, down.
-  defp fascia(a, b), do: [a, b, Iso.add(b, {0, 0, -0.22}), Iso.add(a, {0, 0, -0.22})]
+  defp fascia(a, b), do: [a, b, Geometry.add(b, {0, 0, -0.22}), Geometry.add(a, {0, 0, -0.22})]
 
   # A line between two floors, on the two walls that show.
   defp bands(parts) do
     for f <- 1..(parts.floors - 1)//1,
-        {face, class} <- [{:left, "s-band-l"}, {:right, "s-band-r"}] do
-      band = Iso.box({0.0, 0.0, f * @floor - 0.08}, {@w, @d, 0.16})
+        {face, class} <- [{:front, "s-band-l"}, {:side, "s-band-r"}] do
+      band = Geometry.box({0.0, 0.0, f * @floor - 0.08}, {@w, @d, 0.16})
       {:poly, Map.fetch!(band, face), class}
     end
   end
@@ -641,7 +660,7 @@ defmodule DIYWeb.Scene do
   defp window({:side, at}, z), do: window({@w, at, z}, {0, 1, 0}, "s-frame-r")
 
   defp window(corner, along, frame) do
-    plane = &Iso.on_plane(corner, along, {0, 0, 1}, &1, &2)
+    plane = &Geometry.on_plane(corner, along, {0, 0, 1}, &1, &2)
 
     [
       {:poly, plane.({-0.1, -0.1}, {1.5, 1.6}), frame},
@@ -653,14 +672,14 @@ defmodule DIYWeb.Scene do
   # A round window in the gable.
   defp gable_window(h, ridge) do
     [
-      {:poly, Iso.circle({@w, ridge, h + 1.0}, {0, 1, 0}, {0, 0, 1}, 0.55), "s-frame-r"},
-      {:poly, Iso.circle({@w, ridge, h + 1.0}, {0, 1, 0}, {0, 0, 1}, 0.42), "s-glass"}
+      {:poly, Geometry.circle({@w, ridge, h + 1.0}, {0, 1, 0}, {0, 0, 1}, 0.55), "s-frame-r"},
+      {:poly, Geometry.circle({@w, ridge, h + 1.0}, {0, 1, 0}, {0, 0, 1}, 0.42), "s-glass"}
     ]
   end
 
   # The door, its roof, and its step.
   defp door do
-    plane = &Iso.on_plane({4.7, @d, 0.0}, {1, 0, 0}, {0, 0, 1}, &1, &2)
+    plane = &Geometry.on_plane({4.7, @d, 0.0}, {1, 0, 0}, {0, 0, 1}, &1, &2)
 
     [
       {:poly, plane.({-0.12, 0.0}, {1.34, 2.32}), "s-frame"},
@@ -668,8 +687,8 @@ defmodule DIYWeb.Scene do
       {:poly, plane.({0.15, 1.3}, {0.8, 0.6}), "s-glass"},
       {:poly, plane.({0.86, 1.0}, {0.1, 0.1}), "s-knob"}
     ] ++
-      faces(Iso.box({4.4, @d, 0.0}, {1.7, 0.6, 0.16}), "s-step") ++
-      faces(Iso.box({4.3, @d, 2.45}, {1.9, 0.7, 0.14}), "s-fascia")
+      faces(Geometry.box({4.4, @d, 0.0}, {1.7, 0.6, 0.16}), "s-step") ++
+      faces(Geometry.box({4.3, @d, 2.45}, {1.9, 0.7, 0.14}), "s-fascia")
   end
 
   # The panels on the front of the roof: rows from the eave, at the middle.
@@ -682,13 +701,15 @@ defmodule DIYWeb.Scene do
 
   defp roof_panels(n, h, ridge) do
     slope = {0.0, -(@d + @eave - ridge), @rise}
-    up = Iso.scale(slope, 1 / :math.sqrt(elem(slope, 1) ** 2 + @rise ** 2))
+    up = Geometry.scale(slope, 1 / :math.sqrt(elem(slope, 1) ** 2 + @rise ** 2))
     eave = {-0.4, @d + @eave, h + 0.04}
 
     for i <- 0..(n - 1) do
       row = div(i, 8)
       x = (@w + 0.4 - min(n - row * 8, 8) * 1.12) / 2 + rem(i, 8) * 1.12
-      {:poly, Iso.on_plane(eave, {1, 0, 0}, up, {x, 0.45 + row * 1.85}, {1.04, 1.75}), "s-pv"}
+
+      {:poly, Geometry.on_plane(eave, {1, 0, 0}, up, {x, 0.45 + row * 1.85}, {1.04, 1.75}),
+       "s-pv"}
     end
   end
 
@@ -701,20 +722,20 @@ defmodule DIYWeb.Scene do
 
   defp garage(_parts) do
     {x, y, w, d, h} = @garage
-    body = Iso.box({x, y, 0.0}, {w, d, h})
-    base = Iso.box({x, y, 0.0}, {w, d, 0.35})
-    plane = &Iso.on_plane({x + 0.6, @d, 0.0}, {1, 0, 0}, {0, 0, 1}, &1, &2)
+    body = Geometry.box({x, y, 0.0}, {w, d, h})
+    base = Geometry.box({x, y, 0.0}, {w, d, 0.35})
+    plane = &Geometry.on_plane({x + 0.6, @d, 0.0}, {1, 0, 0}, {0, 0, 1}, &1, &2)
 
     [
-      {:poly, body.left, "s-wall-l"},
-      {:poly, body.right, "s-wall-r"},
-      {:poly, base.left, "s-base-l"},
-      {:poly, base.right, "s-base-r"},
+      {:poly, body.front, "s-wall-l"},
+      {:poly, body.side, "s-wall-r"},
+      {:poly, base.front, "s-base-l"},
+      {:poly, base.side, "s-base-r"},
       {:poly, plane.({-0.1, 0.0}, {4.2, 2.35}), "s-frame"},
       {:poly, plane.({0.0, 0.0}, {4.0, 2.2}), "s-gdoor"}
     ] ++
       for(k <- 1..3, do: {:poly, plane.({0.0, k * 0.55}, {4.0, 0.04}), "s-gline"}) ++
-      faces(Iso.box({x - 0.05, y - 0.05, h}, {w + 0.1, d + 0.1, 0.2}), "s-fascia")
+      faces(Geometry.box({x - 0.05, y - 0.05, h}, {w + 0.1, d + 0.1, 0.2}), "s-fascia")
   end
 
   # The meter on the wall at the right, and the switch of the panel on the
@@ -722,16 +743,17 @@ defmodule DIYWeb.Scene do
   # the house with no switch has its inlet there.
   defp meter(parts) do
     {x, y} = meter_at(parts)
-    glass = Iso.circle({x + 0.19, y + 0.25, 1.75}, {0, 1, 0}, {0, 0, 1}, 0.15)
+    glass = Geometry.circle({x + 0.19, y + 0.25, 1.75}, {0, 1, 0}, {0, 0, 1}, 0.15)
 
     box =
       cond do
-        parts.switch -> faces(Iso.box({8.85, @d, 1.15}, {0.7, 0.15, 0.85}), "s-meter")
-        parts.panel -> faces(Iso.box({8.85, @d, 1.35}, {0.3, 0.12, 0.4}), "s-meter")
+        parts.switch -> faces(Geometry.box({8.85, @d, 1.15}, {0.7, 0.15, 0.85}), "s-meter")
+        parts.panel -> faces(Geometry.box({8.85, @d, 1.35}, {0.3, 0.12, 0.4}), "s-meter")
         true -> []
       end
 
-    faces(Iso.box({x, y, 1.3}, {0.18, 0.5, 0.7}), "s-meter") ++ [{:poly, glass, "s-glass"}] ++ box
+    faces(Geometry.box({x, y, 1.3}, {0.18, 0.5, 0.7}), "s-meter") ++
+      [{:poly, glass, "s-glass"}] ++ box
   end
 
   defp meter_at(%{garage: true}), do: {@w + 5.2, 3.4}
@@ -742,8 +764,8 @@ defmodule DIYWeb.Scene do
 
   defp ac(parts) do
     {x, y} = if parts.garage, do: {@w + 5.6, 5.4}, else: {@w + 0.5, 4.6}
-    fan = Iso.circle({x + 0.5, y + 0.5, 0.81}, {1, 0, 0}, {0, 1, 0}, 0.36)
-    faces(Iso.box({x, y, 0.0}, {1.0, 1.0, 0.8}), "s-ac") ++ [{:poly, fan, "s-fan"}]
+    fan = Geometry.circle({x + 0.5, y + 0.5, 0.81}, {1, 0, 0}, {0, 1, 0}, 0.36)
+    faces(Geometry.box({x, y, 0.0}, {1.0, 1.0, 0.8}), "s-ac") ++ [{:poly, fan, "s-fan"}]
   end
 
   # The stations, at the front wall: each with its extra batteries under it.
@@ -755,32 +777,34 @@ defmodule DIYWeb.Scene do
 
   defp station({x, y}, extra) do
     base = if extra, do: 0.42, else: 0.0
-    screen = Iso.on_plane({x, y + 0.5, base}, {1, 0, 0}, {0, 0, 1}, {0.12, 0.34}, {0.56, 0.12})
-    pack = if extra, do: faces(Iso.box({x, y, 0.0}, {0.8, 0.5, 0.38}), "s-station"), else: []
+
+    screen =
+      Geometry.on_plane({x, y + 0.5, base}, {1, 0, 0}, {0, 0, 1}, {0.12, 0.34}, {0.56, 0.12})
+
+    pack = if extra, do: faces(Geometry.box({x, y, 0.0}, {0.8, 0.5, 0.38}), "s-station"), else: []
 
     pack ++
-      faces(Iso.box({x, y, base}, {0.8, 0.5, 0.62}), "s-station") ++ [{:poly, screen, "s-screen"}]
+      faces(Geometry.box({x, y, base}, {0.8, 0.5, 0.62}), "s-station") ++
+      [{:poly, screen, "s-screen"}]
   end
 
-  # The top, the left and the right of a box, with a class for each.
-  defp faces(box, class) do
-    [
-      {:poly, box.left, class <> "-l"},
-      {:poly, box.right, class <> "-r"},
-      {:poly, box.top, class <> "-t"}
-    ]
-  end
+  # The top, the front and the side of a box, with a class for each: the
+  # camera of the house has the front in the light.
+  defp faces(box, class), do: faces(box, class, Camera.house())
+
+  defp faces(box, class, camera),
+    do: for({corners, class} <- Camera.faces(camera, box, class), do: {:poly, corners, class})
 
   # Bushes at the front wall.
   defp bushes, do: for(x <- [0.9, 2.6, 8.9], do: {:circle, {x, @d + 0.5, 0.35}, 7, "s-bush"})
 
   # The user, at the door.
   defp person do
-    body = Iso.box({5.05, @d + 1.4, 0.0}, {0.4, 0.3, 1.25})
+    body = Geometry.box({5.05, @d + 1.4, 0.0}, {0.4, 0.3, 1.25})
 
     [
-      {:poly, body.left, "s-shirt-l"},
-      {:poly, body.right, "s-shirt-r"},
+      {:poly, body.front, "s-shirt-l"},
+      {:poly, body.side, "s-shirt-r"},
       {:circle, {5.25, @d + 1.55, 1.55}, 2.6, "s-skin"}
     ]
   end
@@ -814,7 +838,7 @@ defmodule DIYWeb.Scene do
     ]
 
     wheels(x + 1.8, [y + 0.9, y + l - 0.9], 0.34) ++
-      faces(Iso.box({x, y, 0.28}, {1.8, l, 0.7}), "s-car") ++
+      faces(Geometry.box({x, y, 0.28}, {1.8, l, 0.7}), "s-car") ++
       [{:poly, side, "s-vglass"}, {:poly, shield, "s-vglass"}, {:poly, roof, "s-car-t"}] ++
       lights({x, y + l, 0.6}, 1.8)
   end
@@ -823,21 +847,22 @@ defmodule DIYWeb.Scene do
   defp wheels(x, ys, r) do
     for y <- ys,
         {radius, class} <- [{r, "s-tire"}, {r * 0.5, "s-hub"}],
-        do: {:poly, Iso.circle({x + 0.02, y, r}, {0, 1, 0}, {0, 0, 1}, radius), class}
+        do: {:poly, Geometry.circle({x + 0.02, y, r}, {0, 1, 0}, {0, 0, 1}, radius), class}
   end
 
   # The lights at the front of a car or a van.
   defp lights({x, y, z}, w) do
     for s <- [0.15, w - 0.45] do
-      {:poly, Iso.on_plane({x, y + 0.01, z}, {1, 0, 0}, {0, 0, 1}, {s, 0.0}, {0.3, 0.14}),
+      {:poly, Geometry.on_plane({x, y + 0.01, z}, {1, 0, 0}, {0, 0, 1}, {s, 0.0}, {0.3, 0.14}),
        "s-lamp"}
     end
   end
 
   # A camper van, from its back corner at x, y, with the front to +y: the
   # wheels, the side with its windows and its door, the roof (with panels
-  # and a fan), the windshield, the hood, and the front.
-  defp van_body({x, y}, parts) do
+  # and a fan), the windshield, the hood, and the front. The camera gives
+  # the light of the side and of the front.
+  defp van_body({x, y}, parts, camera) do
     {w, low, high} = {@van_w, 0.45, @van_h}
     {cab, nose} = {y + 4.5, y + @van_l}
 
@@ -857,12 +882,12 @@ defmodule DIYWeb.Scene do
       [{x, b1, z1}, {x + w, b1, z1}, {x + w, b2, z2}, {x, b2, z2}]
     end
 
-    front = Iso.on_plane({x, nose, low}, {1, 0, 0}, {0, 0, 1}, {0.0, 0.0}, {w, 1.0})
-    plane = &Iso.on_plane({x + w + 0.01, y, low}, {0, 1, 0}, {0, 0, 1}, &1, &2)
+    front = Geometry.on_plane({x, nose, low}, {1, 0, 0}, {0, 0, 1}, {0.0, 0.0}, {w, 1.0})
+    plane = &Geometry.on_plane({x + w + 0.01, y, low}, {0, 1, 0}, {0, 0, 1}, &1, &2)
 
     wheels(x + w, [y + 1.1, y + 5.1], 0.42) ++
       [
-        {:poly, side, "s-van-r"},
+        {:poly, side, "s-van-" <> Camera.light(camera, {1, 0, 0})},
         {:poly, plane.({0.0, 0.0}, {@van_l, 0.35}), "s-van-trim"},
         {:poly, plane.({1.6, 1.15}, {1.3, 0.75}), "s-vglass"},
         {:poly, plane.({3.0, 0.35}, {1.5, 1.85}), "s-van-door"},
@@ -874,7 +899,7 @@ defmodule DIYWeb.Scene do
       [
         {:poly, across.({y + 5.3, 1.6}, {y + 4.8, 2.5}), "s-vglass"},
         {:poly, across.({nose, 1.45}, {y + 5.3, 1.6}), "s-van-t"},
-        {:poly, front, "s-van-l"}
+        {:poly, front, "s-van-" <> Camera.light(camera, {0, 1, 0})}
       ] ++
       lights({x, nose, 0.95}, w)
   end
@@ -886,7 +911,7 @@ defmodule DIYWeb.Scene do
         for i <- 0..(count(parts.solar, @van_panel_w, 4) - 1) do
           at = {rem(i, 2) * 0.97, div(i, 2) * 1.55}
           corner = {x + 0.1, y + 0.2, @van_h + 0.06}
-          {:poly, Iso.on_plane(corner, {1, 0, 0}, {0, 1, 0}, at, {0.92, 1.5}), "s-pv"}
+          {:poly, Geometry.on_plane(corner, {1, 0, 0}, {0, 1, 0}, at, {0.92, 1.5}), "s-pv"}
         end
       else
         []
@@ -894,7 +919,7 @@ defmodule DIYWeb.Scene do
 
     fan =
       if parts.fan,
-        do: faces(Iso.box({x + 0.75, y + 3.4, @van_h}, {0.6, 0.6, 0.18}), "s-ac"),
+        do: faces(Geometry.box({x + 0.75, y + 3.4, @van_h}, {0.6, 0.6, 0.18}), "s-ac"),
         else: []
 
     panels ++ fan
@@ -947,7 +972,7 @@ defmodule DIYWeb.Scene do
     yard_w = parts.yard.station + parts.yard.grid
 
     chips =
-      [{:chip, Iso.add(pole, {0, 0, 0.9}), "Grid", "s-chip"}] ++
+      [{:chip, Geometry.add(pole, {0, 0, 0.9}), "Grid", "s-chip"}] ++
         if(roof > 0, do: [{:chip, {4.6, 5.6, h + 1.9}, kw(roof), "s-chip"}], else: []) ++
         if(yard_w > 0, do: [{:chip, yard_chip(yard_w), kw(yard_w), "s-chip"}], else: []) ++
         if(stations, do: [{:chip, @kwh_chip, kwh(parts.stations), "s-chip"}], else: [])

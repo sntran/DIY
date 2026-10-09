@@ -2,12 +2,13 @@ defmodule DIYWeb.Icon.Shapes do
   @moduledoc """
   The shapes of the icon of each kind of item (`DIYWeb.Icon`), in the
   style of the pictures (`DIYWeb.Scene`). An icon is a few boxes, discs and
-  details of a material, with a light top, a lit left face and a right
-  face in the shade.
+  details of a material, with a light top, a face in the light and a face
+  in the shade (`DIYWeb.Camera`).
 
-  Each material has three classes: `i-NAME-t` (the top), `i-NAME-l` and
-  `i-NAME-r`. The faces of a material also have the class `i-face`: a thin
-  edge, so that a white item shows on a light page.
+  Each material has three classes: `i-NAME-t` (the top), `i-NAME-l` (in
+  the light) and `i-NAME-r` (in the shade). The faces of a material also
+  have the class `i-face`: a thin edge, so that a white item shows on a
+  light page.
 
   The unit is near a meter, and the front of an item looks to the left (y).
   A model (`model/1`) is a list of parts. A part at the back paints first
@@ -19,36 +20,38 @@ defmodule DIYWeb.Icon.Shapes do
   - `{:face, corners, normal, class}`: a flat part, with the direction
     that it looks to (`nil`: it always shows).
 
-  A shape is `{:poly, corners, class}`. `shapes/1` gives the shapes of an
+  A shape is `{:poly, corners, class}`. `shapes/2` gives the shapes of an
   icon, and `placed/2` the shapes of an item at the scale of the world
-  (`DIYWeb.Cutaway`).
+  (`DIYWeb.Cutaway`). A camera shows the faces that look to it.
   """
 
-  alias DIYWeb.Iso
+  alias DIYWeb.{Camera, Geometry}
 
   @doc """
-  The shapes of the icon of a kind, in the order of the paint: the model
-  of the kind (`model/1`), as it is.
+  The shapes of the icon of a kind for a camera (the camera of the house
+  by default), in the order of the paint: the model of the kind
+  (`model/1`), as it is.
   """
-  def shapes(type), do: draw(model(type), nil)
+  def shapes(type, camera \\ Camera.house()), do: draw(model(type), nil, camera)
 
   @doc """
   The shapes of an item at the scale of the world. The model of its kind
   has the size of the item (`{w, d, h}` in meters, before the turn). The
   model has a turn (0 to 3 quarter turns), and its back corner is at a
-  point of the world (`at`). A face that looks away after the turn does
-  not show.
+  point of the world (`at`). A face that looks away from the `camera`
+  after the turn does not show.
   """
-  def placed(type, frame), do: draw(model(type), frame)
+  def placed(type, frame), do: draw(model(type), frame, frame.camera)
 
   @doc """
   The shapes of a model at the scale of the world, with its own size (in
   meters). The model has a turn, and its back corner is at a point of the
-  world (`at`).
+  world (`at`). The `camera` shows the faces that look to it.
   """
-  def placed_model(model, %{at: at, turn: turn} = frame) do
+  def placed_model(model, %{at: at, turn: turn, camera: camera} = frame) do
     {{x0, y0, z0}, {x1, y1, z1}} = bounds(model)
-    draw(model, %{at: at, turn: turn, size: Map.get(frame, :size, {x1 - x0, y1 - y0, z1 - z0})})
+    size = Map.get(frame, :size, {x1 - x0, y1 - y0, z1 - z0})
+    draw(model, %{at: at, turn: turn, size: size}, camera)
   end
 
   # The side profile of each model of van, in meters, from the back (y = 0)
@@ -246,7 +249,7 @@ defmodule DIYWeb.Icon.Shapes do
       end)
       |> Enum.flat_map(fn
         {:box, corner, size, _material} ->
-          [corner, Iso.add(corner, size)]
+          [corner, Geometry.add(corner, size)]
 
         {:cyl, {x, y, z}, r, h, _material} ->
           [{x - r, y - r, z}, {x + r, y + r, z + h}]
@@ -265,37 +268,37 @@ defmodule DIYWeb.Icon.Shapes do
   end
 
   # The polygons of a model. With no frame, a point stays as it is.
-  defp draw(model, frame) do
-    for object <- parts(model, frame),
+  defp draw(model, frame, camera) do
+    for object <- parts(model, frame, camera),
         {corners, class} <- object.polys,
         do: {:poly, corners, class}
   end
 
   @doc """
-  The parts of a model in the order of the paint (`DIYWeb.Iso.order/1`),
-  each with its box in the world and its polygons. After a turn, a part at
-  the back paints first. A part that does not show (a face that looks
-  away) is not in the list. With no frame, a point stays as it is.
+  The parts of a model for a camera, in the order of the paint
+  (`DIYWeb.Camera.order/2`), each with its box in the world and its
+  polygons. After a turn, a part at the back paints first. A part that does
+  not show (a face that looks away) is not in the list. With no frame, a
+  point stays as it is.
   """
-  def parts(model, frame) do
+  def parts(model, frame, camera) do
     {point, normal} = transform(model, frame)
+    view = %{point: point, normal: normal, camera: camera}
 
     model
     |> Enum.with_index()
     |> Enum.flat_map(fn {part, i} ->
-      case for({:poly, corners, class} <- draw_part(part, point, normal), do: {corners, class}) do
+      case for({:poly, corners, class} <- draw_part(part, view), do: {corners, class}) do
         [] -> []
         polys -> [object(i, polys)]
       end
     end)
-    |> Iso.order()
+    |> Camera.order(camera)
   end
 
   # A group of parts (`{:group, parts}`) paints as one part.
-  defp draw_part({:group, parts}, point, normal),
-    do: Enum.flat_map(parts, &draw_one(&1, point, normal))
-
-  defp draw_part(part, point, normal), do: draw_one(part, point, normal)
+  defp draw_part({:group, parts}, view), do: Enum.flat_map(parts, &draw_one(&1, view))
+  defp draw_part(part, view), do: draw_one(part, view)
 
   # A part as an object of the order of the paint: its box in the world.
   # Its key is its place in the model: the order of the model stays where
@@ -314,7 +317,7 @@ defmodule DIYWeb.Icon.Shapes do
 
     point = fn {x, y, z} ->
       {rx, ry} = rotate({(x - x0) * kx, (y - y0) * ky}, turn, {w, d})
-      Iso.add(at, {rx, ry, (z - z0) * kz})
+      Geometry.add(at, {rx, ry, (z - z0) * kz})
     end
 
     # A normal goes with the inverse of the scale, and with the turn.
@@ -340,11 +343,12 @@ defmodule DIYWeb.Icon.Shapes do
   defp at(nil, point), do: point
   defp at(fun, point), do: fun.(point)
 
-  # A box shows its left, its right and its top in the world.
-  defp draw_one({:box, corner, size, material}, point, _normal) do
+  # A box shows its top and the two faces that look to the camera
+  # (`DIYWeb.Camera.faces/3`).
+  defp draw_one({:box, corner, size, material}, %{point: point, camera: camera}) do
     box =
       if point do
-        {a, b} = {point.(corner), point.(Iso.add(corner, size))}
+        {a, b} = {point.(corner), point.(Geometry.add(corner, size))}
 
         low =
           {min(elem(a, 0), elem(b, 0)), min(elem(a, 1), elem(b, 1)), min(elem(a, 2), elem(b, 2))}
@@ -352,67 +356,58 @@ defmodule DIYWeb.Icon.Shapes do
         high =
           {max(elem(a, 0), elem(b, 0)), max(elem(a, 1), elem(b, 1)), max(elem(a, 2), elem(b, 2))}
 
-        Iso.box(low, Iso.add(high, Iso.scale(low, -1)))
+        Geometry.box(low, Geometry.add(high, Geometry.scale(low, -1)))
       else
-        Iso.box(corner, size)
+        Geometry.box(corner, size)
       end
 
-    [
-      {:poly, box.left, "i-#{material}-l i-face"},
-      {:poly, box.right, "i-#{material}-r i-face"},
-      {:poly, box.top, "i-#{material}-t i-face"}
-    ]
+    for {corners, class} <- Camera.faces(camera, box, "i-#{material}"),
+        do: {:poly, corners, class <> " i-face"}
   end
 
-  # A cylinder that stands at a center: the near half of its body (the lit
-  # left part and the right part in the shade), and its top. A point of the
-  # ring is on the near half when its dx + dy is 0 or more; the screen shows
-  # dx - dy to the side.
-  defp draw_one({:cyl, {x, y, z} = center, r, h, material}, point, _normal) do
+  # A cylinder that stands at a center: the near half of its body (a part
+  # in the light and a part in the shade), and its top. A point of the ring
+  # is on the near half when it goes to the eye on the ground (`gx`, `gy`).
+  # The screen shows its part along the ground to the right (gy, -gx).
+  defp draw_one({:cyl, {x, y, z} = center, r, h, material}, %{point: point, camera: camera}) do
     {cx, cy, _cz} = at(point, center)
+    {gx, gy} = camera.ground
 
     ring = fn zz ->
-      Enum.map(Iso.circle({x, y, zz}, {1, 0, 0}, {0, 1, 0}, r, 16), &at(point, &1))
+      Enum.map(Geometry.circle({x, y, zz}, {1, 0, 0}, {0, 1, 0}, r, 16), &at(point, &1))
     end
+
+    side = fn {px, py, _} -> (px - cx) * gy - (py - cy) * gx end
 
     half = fn sign, face ->
       near = fn zz ->
-        Enum.filter(ring.(zz), fn {px, py, _} ->
-          px - cx + (py - cy) >= -1.0e-9 and sign * (px - cx - (py - cy)) >= -1.0e-9
+        Enum.filter(ring.(zz), fn {px, py, _} = p ->
+          (px - cx) * gx + (py - cy) * gy >= -1.0e-9 and sign * side.(p) >= -1.0e-9
         end)
       end
 
-      lower = Enum.sort_by(near.(z), fn {px, py, _} -> px - py end)
-      upper = Enum.sort_by(near.(z + h), fn {px, py, _} -> py - px end)
+      lower = Enum.sort_by(near.(z), side)
+      upper = Enum.sort_by(near.(z + h), &(-side.(&1)))
       {:poly, lower ++ upper, "i-#{material}-#{face} i-face"}
     end
 
     [half.(-1, "l"), half.(1, "r"), {:poly, ring.(z + h), "i-#{material}-t i-face"}]
   end
 
-  # A face shows when it looks to the eye (x, y and z all go to the eye). A
-  # face with no normal always shows. A "~" in its class is the light of
-  # its side: t (the top), l (the left) or r (the right).
-  defp draw_one({:face, corners, normal, class}, point, turn_normal) do
-    n = normal && at(turn_normal, normal)
+  # A face shows when it looks to the eye of the camera. A face with no
+  # normal always shows. A "~" in its class is its light
+  # (`DIYWeb.Camera.light/2`): t (the top), l (in the light) or r (in the
+  # shade).
+  defp draw_one({:face, corners, normal, class}, %{point: point, normal: turn, camera: camera}) do
+    n = normal && at(turn, normal)
 
-    if n == nil or elem(n, 0) + elem(n, 1) + elem(n, 2) > 1.0e-9,
-      do: [{:poly, Enum.map(corners, &at(point, &1)), light(class, n)}],
+    if n == nil or Camera.shows?(camera, n),
+      do: [{:poly, Enum.map(corners, &at(point, &1)), light(class, n, camera)}],
       else: []
   end
 
-  defp light(class, nil), do: class
-
-  defp light(class, {x, y, z}) do
-    side =
-      cond do
-        z >= max(x, y) -> "t"
-        x >= y -> "r"
-        true -> "l"
-      end
-
-    String.replace(class, "~", side)
-  end
+  defp light(class, nil, _camera), do: class
+  defp light(class, n, camera), do: String.replace(class, "~", Camera.light(camera, n))
 
   # A box of a material.
   defp box(corner, size, material), do: [{:box, corner, size, material}]
@@ -420,40 +415,40 @@ defmodule DIYWeb.Icon.Shapes do
   # A rectangle on the front face (y = y) of a box, from x, z.
   defp front({x, y, z}, {w, h}, class),
     do:
-      {:face, Iso.on_plane({x, y + 0.01, z}, {1, 0, 0}, {0, 0, 1}, {0, 0}, {w, h}), {0, 1, 0},
-       class}
+      {:face, Geometry.on_plane({x, y + 0.01, z}, {1, 0, 0}, {0, 0, 1}, {0, 0}, {w, h}),
+       {0, 1, 0}, class}
 
   # A rectangle on the side face (x = x) of a box, from y, z.
   defp side({x, y, z}, {d, h}, class),
     do:
-      {:face, Iso.on_plane({x + 0.01, y, z}, {0, 1, 0}, {0, 0, 1}, {0, 0}, {d, h}), {1, 0, 0},
-       class}
+      {:face, Geometry.on_plane({x + 0.01, y, z}, {0, 1, 0}, {0, 0, 1}, {0, 0}, {d, h}),
+       {1, 0, 0}, class}
 
   # A rectangle on the far side face (x = x) of a box: it shows after a
   # turn.
   defp far_side({x, y, z}, {d, h}, class),
     do:
-      {:face, Iso.on_plane({x - 0.01, y, z}, {0, 1, 0}, {0, 0, 1}, {0, 0}, {d, h}), {-1, 0, 0},
-       class}
+      {:face, Geometry.on_plane({x - 0.01, y, z}, {0, 1, 0}, {0, 0, 1}, {0, 0}, {d, h}),
+       {-1, 0, 0}, class}
 
   # A rectangle on a top (z = z), from x, y.
   defp top({x, y, z}, {w, d}, class),
     do:
-      {:face, Iso.on_plane({x, y, z + 0.01}, {1, 0, 0}, {0, 1, 0}, {0, 0}, {w, d}), {0, 0, 1},
-       class}
+      {:face, Geometry.on_plane({x, y, z + 0.01}, {1, 0, 0}, {0, 1, 0}, {0, 0}, {w, d}),
+       {0, 0, 1}, class}
 
   # A disc on the top, on the front, or on a side.
   defp disc(center, :top, r, class),
-    do: {:face, Iso.circle(center, {1, 0, 0}, {0, 1, 0}, r), {0, 0, 1}, class}
+    do: {:face, Geometry.circle(center, {1, 0, 0}, {0, 1, 0}, r), {0, 0, 1}, class}
 
   defp disc(center, :front, r, class),
-    do: {:face, Iso.circle(center, {1, 0, 0}, {0, 0, 1}, r), {0, 1, 0}, class}
+    do: {:face, Geometry.circle(center, {1, 0, 0}, {0, 0, 1}, r), {0, 1, 0}, class}
 
   defp disc(center, :side, r, class),
-    do: {:face, Iso.circle(center, {0, 1, 0}, {0, 0, 1}, r), {1, 0, 0}, class}
+    do: {:face, Geometry.circle(center, {0, 1, 0}, {0, 0, 1}, r), {1, 0, 0}, class}
 
   defp disc(center, :far_side, r, class),
-    do: {:face, Iso.circle(center, {0, 1, 0}, {0, 0, 1}, r), {-1, 0, 0}, class}
+    do: {:face, Geometry.circle(center, {0, 1, 0}, {0, 0, 1}, r), {-1, 0, 0}, class}
 
   # A cylinder that stands at a center.
   defp cylinder(center, r, h, material), do: [{:cyl, center, r, h, material}]
@@ -700,7 +695,7 @@ defmodule DIYWeb.Icon.Shapes do
 
     # The two sides have the profile, and the back has its doors: they
     # show after a turn. The sliding door is on the right side of the van
-    # (x = 0, `DIYWeb.Iso`). A slope of the cab looks to the front and up. The
+    # (x = 0, `DIYWeb.Geometry`). A slope of the cab looks to the front and up. The
     # hood is low: when the front looks away, the body is in front of it,
     # so it shows only with the front.
     [

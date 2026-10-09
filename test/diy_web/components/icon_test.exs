@@ -4,7 +4,7 @@ defmodule DIYWeb.IconTest do
   import Phoenix.LiveViewTest
 
   alias DIY.Catalog
-  alias DIYWeb.Icon
+  alias DIYWeb.{Camera, Icon}
   alias DIYWeb.Icon.Shapes
 
   test "each kind has shapes of its own" do
@@ -44,8 +44,11 @@ defmodule DIYWeb.IconTest do
       [_, box] = Regex.run(~r/viewBox="([^"]+)"/, render_component(&Icon.item/1, type: kind.type))
       [x, y, w, h] = box |> String.split() |> Enum.map(&(&1 |> Float.parse() |> elem(0)))
 
-      for {:poly, corners, _class} <- Shapes.shapes(kind.type), corner <- corners do
-        {px, py} = DIYWeb.Iso.at({0, 0}, corner)
+      camera =
+        if kind.type in ["camper_van", "ev"], do: Camera.van(), else: Camera.house()
+
+      for {:poly, corners, _class} <- Shapes.shapes(kind.type, camera), corner <- corners do
+        {px, py} = Camera.at(camera, {0, 0}, corner)
         assert px >= x + 0.9 and px <= x + w - 0.9 and py >= y + 0.9 and py <= y + h - 0.9
       end
     end

@@ -154,7 +154,7 @@ defmodule DIYWeb.HomeLiveTest do
 
     html = render(view)
     assert html =~ "Drag an item to move it"
-    assert has_element?(view, "#plan-svg[data-k]")
+    assert has_element?(view, "#plan-svg[data-axes][data-arrows='1 0 0 1']")
     assert has_element?(view, "#list-f1")
     assert has_element?(view, "#pill")
     assert html =~ "Kitchen"

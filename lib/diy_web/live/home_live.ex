@@ -682,9 +682,8 @@ defmodule DIYWeb.HomeLive do
   defp wall(plan, "y1", _dx, dy), do: {:ok, %{plan | d: plan.d + dy}}
   defp wall(_plan, _edge, _dx, _dy), do: :error
 
-  # The texts for a screen reader after an arrow key or a turn. The left
-  # wall is the wall that the Left key goes to, and the top wall is the
-  # wall that the Up key goes to.
+  # The texts for a screen reader after an arrow key or a turn
+  # (`DIYWeb.Inside.where/2`).
   defp item_status(build, id) do
     {:ok, item} = Build.item(build, id)
     {:ok, room} = Build.room(build, item.room)

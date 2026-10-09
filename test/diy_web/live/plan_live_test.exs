@@ -162,7 +162,7 @@ defmodule DIYWeb.PlanLiveTest do
     assert has_element?(
              view,
              "#plan-status",
-             "Fridge: 2 ft from the left wall of Kitchen, 6 in from the top wall."
+             "Fridge: 2 ft from the left wall of Kitchen, 6 in from the back wall."
            )
 
     render_hook(view, "nudge_room", %{"id" => kitchen.id, "dx" => -6, "dy" => 0})
@@ -195,7 +195,10 @@ defmodule DIYWeb.PlanLiveTest do
     view |> element("#move-item-right") |> render_click()
     view |> element("#move-item-down") |> render_click()
     assert item_id(view, tv.id).at == %{x: at.x + 6, y: at.y + 6}
-    assert has_element?(view, "#move-item-left[aria-label='Move the item 6 in to the left wall']")
+    assert has_element?(view, "#move-item-left[aria-label='Move the item 6 in to the left']")
+    assert has_element?(view, "#move-item-up[aria-label='Move the item 6 in to the back']")
+    assert has_element?(view, "#move-item-down[aria-label='Move the item 6 in to the front']")
+    assert has_element?(view, "#move-item-right[aria-label='Move the item 6 in to the right']")
     view |> element("#move-item-left") |> render_click()
     view |> element("#move-item-up") |> render_click()
     assert item_id(view, tv.id).at == at

@@ -16,7 +16,7 @@ defmodule DIYWeb.Inside do
   use DIYWeb, :html
 
   alias DIY.{Build, Catalog, Estimate, Layout}
-  alias DIYWeb.{Cutaway, Format, Icon}
+  alias DIYWeb.{Camera, Cutaway, Format, Icon}
 
   @place_names %{indoor: "Inside", outdoor: "Outside", roof: "On the roof"}
 
@@ -191,8 +191,9 @@ defmodule DIYWeb.Inside do
   end
 
   @doc """
-  The place of an item in its room, in words. The left wall is the wall
-  that the Left key goes to. The top wall is the wall of the Up key.
+  The place of an item in its room, in words. In the house, the Left key
+  goes to the left wall, and the Up key to the back wall. In a van, the Up
+  key goes to its right side, and the Right key to its back.
   """
   def where(item, %{level: "van:" <> _} = zone),
     do:
@@ -200,7 +201,7 @@ defmodule DIYWeb.Inside do
 
   def where(item, room),
     do:
-      "#{feet(item.at.x)} from the left wall of #{room.name}, #{feet(item.at.y)} from the top wall."
+      "#{feet(item.at.x)} from the left wall of #{room.name}, #{feet(item.at.y)} from the back wall."
 
   @doc "A length in inches as feet and inches, for example 12 ft 6 in."
   def feet(inches) do
@@ -230,7 +231,7 @@ defmodule DIYWeb.Inside do
       class="sr-only focus-within:not-sr-only focus-within:card focus-within:card-border focus-within:p-3"
     >
       <p class="text-sm">
-        The arrow keys move the item or the room that has the focus: 6 inches, or 2 feet with Shift. The Left key moves it to the left wall, and the Up key to the top wall.
+        The arrow keys move the item or the room that has the focus: 6 inches, or 2 feet with Shift. Each key moves it as it points on the plan: the Up key moves it to the back of the house.
       </p>
       <section :for={level <- @levels} id={"list-#{level}"}>
         <h2 class="font-semibold">{Build.level_name(level)}</h2>
@@ -621,6 +622,15 @@ defmodule DIYWeb.Inside do
     """
   end
 
+  # The icon of each button. The names are whole, so that the CSS build
+  # finds them in the code.
+  @arrows %{
+    "left" => "hero-arrow-left",
+    "up" => "hero-arrow-up",
+    "down" => "hero-arrow-down",
+    "right" => "hero-arrow-right"
+  }
+
   attr :id, :string, required: true
   attr :event, :string, required: true, doc: "nudge_item or nudge_room"
   attr :target, :string, required: true, doc: "the id of the item or of the room"
@@ -631,43 +641,29 @@ defmodule DIYWeb.Inside do
 
   @doc """
   Four buttons that move an item or a room: for a person who does not
-  drag (WCAG 2.2, 2.5.7). Each arrow points as the move goes on the plan.
-  The left wall is at the top left, and the top wall is at the top right.
-  In a van, the right side of the van is at the top left, and the back is
-  at the top right (`DIYWeb.Iso`). A button that cannot move looks
-  disabled (`aria-disabled`), but it keeps the focus of the keyboard. The
-  server refuses its move, and the page says why.
+  drag (WCAG 2.2, 2.5.7). Each arrow points as the move goes on the
+  screen (`DIYWeb.Camera.arrows/1`). In the house, the Up arrow moves it to
+  the back. In a van, the Left arrow moves it to the front (the cab), and
+  the Up arrow to the right side of the van. A button that cannot move
+  looks disabled (`aria-disabled`), but it keeps the focus of the
+  keyboard. The server refuses its move, and the page says why.
   """
   def moves(assigns) do
-    words =
-      if assigns.van,
-        do: ["to the right side", "to the back", "to the front", "to the left side"],
-        else: [
-          "to the left wall",
-          "to the top wall",
-          "away from the top wall",
-          "away from the left wall"
-        ]
+    camera = if assigns.van, do: Camera.van(), else: Camera.house()
 
     assigns =
       assign(assigns,
         buttons:
-          Enum.zip(
-            [
-              {"left", -assigns.step, 0, "hero-arrow-up-left"},
-              {"up", 0, -assigns.step, "hero-arrow-up-right"},
-              {"down", 0, assigns.step, "hero-arrow-down-left"},
-              {"right", assigns.step, 0, "hero-arrow-down-right"}
-            ],
-            words
-          )
+          for {key, dx, dy} <- steps(camera, assigns.step) do
+            {key, dx, dy, Map.fetch!(@arrows, key), direction(dx, dy, assigns.van)}
+          end
       )
 
     ~H"""
     <div id={@id} class="flex items-center gap-1" role="group" aria-label={"Move #{@what}"}>
       <span class="text-xs mr-1">Move {@what}:</span>
       <button
-        :for={{{key, dx, dy, icon}, text} <- @buttons}
+        :for={{key, dx, dy, icon, text} <- @buttons}
         type="button"
         id={"#{@id}-#{key}"}
         phx-click={@event}
@@ -687,14 +683,41 @@ defmodule DIYWeb.Inside do
     """
   end
 
-  @doc "The move buttons that cannot move a room or a zone by a step."
-  def blocked(build, id, step) do
-    for {key, dx, dy} <- [
-          {"left", -step, 0},
-          {"up", 0, -step},
-          {"down", 0, step},
-          {"right", step, 0}
-        ],
+  # The move of each button on the plan (inches): left, up, down and right
+  # on the screen of a camera.
+  defp steps(camera, step) do
+    {{rx, ry}, {dx, dy}} = Camera.arrows(camera)
+
+    [
+      {"left", -rx * step, -ry * step},
+      {"up", -dx * step, -dy * step},
+      {"down", dx * step, dy * step},
+      {"right", rx * step, ry * step}
+    ]
+  end
+
+  # The words of a move on the plan: of a room in the house, or of a zone
+  # or an item in a van (its right side is at x = 0).
+  defp direction(dx, _dy, van) when dx != 0 do
+    case {dx < 0, van} do
+      {true, true} -> "to the right side"
+      {false, true} -> "to the left side"
+      {true, false} -> "to the left"
+      {false, false} -> "to the right"
+    end
+  end
+
+  defp direction(_dx, dy, _van) when dy < 0, do: "to the back"
+  defp direction(_dx, _dy, _van), do: "to the front"
+
+  @doc """
+  The move buttons (`moves/1`) that cannot move a room or a zone by a step.
+  A zone is in a van (`van`): its buttons follow the camera of a van.
+  """
+  def blocked(build, id, step, van \\ false) do
+    camera = if van, do: Camera.van(), else: Camera.house()
+
+    for {key, dx, dy} <- steps(camera, step),
         not Build.can_move?(build, id, dx, dy),
         do: key
   end

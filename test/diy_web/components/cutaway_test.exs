@@ -5,7 +5,7 @@ defmodule DIYWeb.CutawayTest do
   import Phoenix.LiveViewTest
 
   alias DIY.{Build, Catalog, House}
-  alias DIYWeb.{Cutaway, Iso}
+  alias DIYWeb.{Camera, Cutaway}
   alias DIYWeb.Icon.Shapes
 
   defp house(floors \\ 2) do
@@ -45,13 +45,15 @@ defmodule DIYWeb.CutawayTest do
       end)
 
     assert ids.(build) == ["ground", "f2"]
-    assert Cutaway.k() == {8.66 * 0.0254, 5.0 * 0.0254, 10.0 * 0.0254}
   end
 
   test "the surfaces of the rooms, with the data for the hook" do
     build = house()
     html = html(build, room(build, "Kitchen"))
-    assert html =~ ~s(data-k="0.219964 0.127 0.254")
+    {{ax, ay}, {bx, by}, {cx, cy}} = Camera.axes(Camera.house())
+    axes = Enum.map_join([ax, ay, bx, by, cx, cy], " ", &Float.round(&1, 6))
+    assert html =~ ~s(data-axes="#{axes}")
+    assert html =~ ~s(data-arrows="1 0 0 1")
     assert html =~ ~s(class="p-floor p-tile p-chosen")
     assert html =~ ~s(data-plan="0 0 144 294")
     # The roof has its rise: 147 inches times 5/12.
@@ -61,6 +63,43 @@ defmodule DIYWeb.CutawayTest do
     assert length(Regex.scan(~r/data-handle="/, html)) == 4
     assert html =~ ~s(data-outline=)
     refute html(build) =~ "data-outline"
+  end
+
+  test "the cut of the walls: full at the back, on a slope at the sides, low at the front" do
+    cut = fn camera -> for side <- ~w(x0 y0 x1 y1), do: Cutaway.cut(side, camera) end
+    assert cut.(Camera.house()) == [:side, :back, :side, :front]
+    assert cut.(Camera.van()) == [:back, :side, :front, :side]
+
+    # A slope: the full height at the back of the span, low at its front,
+    # and the same out of the span.
+    assert Cutaway.slope(0, {0, 100}, {2.4, 0.25}) == 2.4
+    assert Cutaway.slope(100, {0, 100}, {2.4, 0.25}) == 0.25
+    assert_in_delta Cutaway.slope(50, {0, 100}, {2.4, 0.25}), 1.325, 1.0e-9
+    assert Cutaway.slope(-10, {0, 100}, {2.4, 0.25}) == 2.4
+    assert Cutaway.slope(130, {0, 100}, {2.4, 0.25}) == 0.25
+
+    # In the house, the wall at the back of the kitchen is full, and its
+    # wall at the left side is full at the back and lower at the front: its
+    # top slopes. The wall at its front is low.
+    build = house()
+    kitchen = room(build, "Kitchen")
+    view = Cutaway.view(build)
+    [ground | _] = view.levels
+    walls = Map.new(for %{kind: :wall, room: ^kitchen} = w <- ground.objects, do: {w.id, w})
+    height = fn %{box: {_, _, z0, _, _, z1}} -> z1 - z0 end
+    assert height.(walls["ground-#{kitchen}-y0-0"]) == 2.4
+    assert height.(walls["ground-#{kitchen}-y1-0"]) == 0.25
+
+    # The face of the wall at the left that looks to the side (x): its
+    # height on the screen at its back end (from p1 up to p4) is more than
+    # at its front end (from p2 up to p3).
+    {side, "p-wall-r"} = hd(walls["ground-#{kitchen}-x0-0"].polys)
+
+    [p1, p2, p3, p4] =
+      for pair <- String.split(side), do: pair |> String.split(",") |> Enum.map(&number/1)
+
+    assert Enum.at(p1, 1) - Enum.at(p4, 1) > Enum.at(p2, 1) - Enum.at(p3, 1)
+    assert Enum.at(p2, 1) - Enum.at(p3, 1) > 0
   end
 
   test "the materials of the floors" do
@@ -111,12 +150,15 @@ defmodule DIYWeb.CutawayTest do
   end
 
   test "a model turns: a face that looks away does not show" do
-    frame = fn turn -> %{at: {0, 0, 0}, size: {1.0, 2.6, 1.25}, turn: turn} end
+    frame = fn turn, camera ->
+      %{at: {0, 0, 0}, size: {1.0, 2.6, 1.25}, turn: turn, camera: camera}
+    end
+
     # The van shows one of its two sides (the profile has 7 corners) in each
-    # turn.
-    for turn <- 0..3 do
+    # turn, for each camera.
+    for turn <- 0..3, camera <- [Camera.house(), Camera.van()] do
       sides =
-        for {:poly, corners, _class} <- Shapes.placed("camper_van", frame.(turn)),
+        for {:poly, corners, _class} <- Shapes.placed("camper_van", frame.(turn, camera)),
             length(corners) == 7,
             do: 1
 
@@ -125,7 +167,12 @@ defmodule DIYWeb.CutawayTest do
 
     # The space of a turned item: d by w.
     {xs, ys} =
-      Shapes.placed("fridge", %{at: {0, 0, 0}, size: {0.9, 0.7, 1.8}, turn: 3})
+      Shapes.placed("fridge", %{
+        at: {0, 0, 0},
+        size: {0.9, 0.7, 1.8},
+        turn: 3,
+        camera: Camera.house()
+      })
       |> Enum.flat_map(&elem(&1, 1))
       |> Enum.map(fn {x, y, _z} -> {x, y} end)
       |> Enum.unzip()
@@ -134,28 +181,36 @@ defmodule DIYWeb.CutawayTest do
     assert_in_delta Enum.max(ys) - Enum.min(ys), 0.9, 0.05
 
     model = [{:face, [{0, 0, 0}, {2, 0, 0}, {2, 1, 0}], {0, 0, 1}, "x"}]
-    assert [{:poly, _corners, "x"}] = Shapes.placed_model(model, %{at: {1, 1, 0}, turn: 2})
+
+    assert [{:poly, _corners, "x"}] =
+             Shapes.placed_model(model, %{at: {1, 1, 0}, turn: 2, camera: Camera.house()})
   end
 
-  test "for each kind and each turn, no part of a model paints after a part in front of it" do
+  test "for each kind, each turn and each camera, no part of a model paints after a part in front of it" do
     m = 0.0254
 
-    for type <- Catalog.types(), turn <- 0..3 do
+    for type <- Catalog.types(), turn <- 0..3, camera <- [Camera.house(), Camera.van()] do
       {w, d, h} = Catalog.size(type)
       frame = %{at: {0, 0, 0}, size: {w * m, d * m, h * m}, turn: turn}
-      indexed = type |> Shapes.model() |> Shapes.parts(frame) |> Enum.with_index()
+      indexed = type |> Shapes.model() |> Shapes.parts(frame, camera) |> Enum.with_index()
 
-      for {a, i} <- indexed, {b, j} <- indexed, i < j, overlap?(part_screen(a), part_screen(b)) do
+      for {a, i} <- indexed,
+          {b, j} <- indexed,
+          i < j,
+          overlap?(part_screen(a, camera), part_screen(b, camera)) do
         refute behind?(b.box, a.box) and not behind?(a.box, b.box),
-               "#{type} at turn #{turn}: part #{b.id} is behind part #{a.id}"
+               "#{type} at turn #{turn}, #{camera.name}: part #{b.id} is behind part #{a.id}"
       end
     end
   end
 
   # The box of the polygons of a part on the screen.
-  defp part_screen(part) do
+  defp part_screen(part, camera) do
     {xs, ys} =
-      part.polys |> Enum.flat_map(&elem(&1, 0)) |> Enum.map(&Iso.at({0, 0}, &1)) |> Enum.unzip()
+      part.polys
+      |> Enum.flat_map(&elem(&1, 0))
+      |> Enum.map(&Camera.at(camera, {0, 0}, &1))
+      |> Enum.unzip()
 
     {Enum.min(xs), Enum.min(ys), Enum.max(xs), Enum.max(ys)}
   end
@@ -166,52 +221,52 @@ defmodule DIYWeb.CutawayTest do
   test "each kind and each model of van paint from the back at each turn: a depth check" do
     m = 0.0254
 
-    for turn <- 0..3 do
+    for turn <- 0..3, camera <- [Camera.house(), Camera.van()] do
       for {model, _name, _numbers, _source} <- Catalog.van_models() do
-        frame = %{at: {0, 0, 0}, turn: turn}
+        frame = %{at: {0, 0, 0}, turn: turn, camera: camera}
 
         polys =
           for {:poly, corners, _class} <- Shapes.placed_model(Shapes.van(model), frame),
               do: corners
 
-        assert depth_faults(polys) == [], "#{model} at turn #{turn}"
+        assert depth_faults(polys, camera) == [], "#{model} at turn #{turn}, #{camera.name}"
       end
 
       for type <- Catalog.types() do
         {w, d, h} = Catalog.size(type)
-        frame = %{at: {0, 0, 0}, size: {w * m, d * m, h * m}, turn: turn}
+        frame = %{at: {0, 0, 0}, size: {w * m, d * m, h * m}, turn: turn, camera: camera}
         polys = for {:poly, corners, _class} <- Shapes.placed(type, frame), do: corners
-        assert depth_faults(polys) == [], "#{type} at turn #{turn}"
+        assert depth_faults(polys, camera) == [], "#{type} at turn #{turn}, #{camera.name}"
       end
     end
   end
 
   # The pairs of polygons (in the order of the paint) where the first one
   # is nearer to the eye at a point that both cover. Then the second one
-  # paints over it. The eye looks along (-1, -1, -1): a larger x + y + z is nearer.
-  defp depth_faults(polys) do
-    prepared = polys |> Enum.map(&prepare/1) |> Enum.with_index()
+  # paints over it. A larger depth (`DIYWeb.Camera.depth/2`) is nearer.
+  defp depth_faults(polys, camera) do
+    prepared = polys |> Enum.map(&prepare(&1, camera)) |> Enum.with_index()
 
     for {a, i} <- prepared,
         {b, j} <- prepared,
         i < j,
         a.plane && b.plane,
-        nearer?(a, b),
+        nearer?(a, b, camera),
         do: {i, j}
   end
 
-  defp prepare(corners) do
-    screen = Enum.map(corners, &Iso.at({0, 0}, &1))
+  defp prepare(corners, camera) do
+    screen = Enum.map(corners, &Camera.at(camera, {0, 0}, &1))
     {xs, ys} = Enum.unzip(screen)
 
     %{
       screen: screen,
-      plane: plane(corners),
+      plane: plane(corners, camera),
       box: {Enum.min(xs), Enum.min(ys), Enum.max(xs), Enum.max(ys)}
     }
   end
 
-  defp nearer?(a, b) do
+  defp nearer?(a, b, camera) do
     {ax0, ay0, ax1, ay1} = a.box
     {bx0, by0, bx1, by1} = b.box
     {x0, y0, x1, y1} = {max(ax0, bx0), max(ay0, by0), min(ax1, bx1), min(ay1, by1)}
@@ -221,7 +276,7 @@ defmodule DIYWeb.CutawayTest do
         for(i <- 1..7, j <- 1..7, do: {x0 + (x1 - x0) * i / 8, y0 + (y1 - y0) * j / 8}),
         fn point ->
           in_poly?(point, a.screen) and in_poly?(point, b.screen) and
-            depth(a.plane, point) > depth(b.plane, point) + 0.03
+            depth(a.plane, point, camera) > depth(b.plane, point, camera) + 0.03
         end
       )
   end
@@ -246,7 +301,7 @@ defmodule DIYWeb.CutawayTest do
 
   # The plane of a polygon: a normal and a point. A polygon that is not flat,
   # or that the eye sees on its edge, has no plane (nil).
-  defp plane([p | rest] = corners) do
+  defp plane([p | rest] = corners, camera) do
     normals =
       for {q, r} <- Enum.zip(rest, tl(rest)),
           n = cross(sub(q, p), sub(r, p)),
@@ -256,19 +311,23 @@ defmodule DIYWeb.CutawayTest do
     with [n | _] <- normals,
          length = :math.sqrt(dot(n, n)),
          true <- Enum.all?(corners, &(abs(dot(n, sub(&1, p))) / length < 1.0e-4)),
-         true <- abs(dot(n, {1, 1, 1})) >= 1.0e-9 do
+         true <- abs(dot(n, camera.eye)) >= 1.0e-9 do
       {n, p}
     else
       _ -> nil
     end
   end
 
-  # The depth (x + y + z) on a plane at a point of the screen.
-  defp depth({n, c}, {sx, sy}) do
-    {a, b} = {sx / 8.66, sy / 5.0}
-    p0 = {(a + b) / 2, (b - a) / 2, 0.0}
-    t = (dot(n, c) - dot(n, p0)) / dot(n, {1, 1, 1})
-    dot(p0, {1, 1, 1}) + 3 * t
+  # The depth on a plane at a point of the screen. The points of the world
+  # on that point of the screen are on a line along the eye: p0 + t eye,
+  # where p0 is the point at z = 0.
+  defp depth({n, c}, {sx, sy}, camera) do
+    {rx, ry} = camera.right
+    {dx, dy, _dz} = camera.down
+    det = rx * dy - ry * dx
+    p0 = {(sx * dy - ry * sy) / det, (rx * sy - dx * sx) / det, 0.0}
+    t = (dot(n, c) - dot(n, p0)) / dot(n, camera.eye)
+    dot(p0, camera.eye) + t
   end
 
   test "three boxes that are each behind the next one still get an order" do
@@ -278,9 +337,10 @@ defmodule DIYWeb.CutawayTest do
     a = object.("a", {0, 0, 1, 1, 2, 2})
     b = object.("b", {1, 0, 0, 2, 1, 2})
     c = object.("c", {0, 1, 0, 2, 2, 1})
-    assert Iso.order([c, b, a]) |> Enum.map(& &1.id) |> Enum.sort() == ["a", "b", "c"]
+    camera = Camera.house()
+    assert Camera.order([c, b, a], camera) |> Enum.map(& &1.id) |> Enum.sort() == ["a", "b", "c"]
     # With no cycle: the box at the back first, whatever its key.
-    assert Iso.order([%{b | key: -1}, a]) |> Enum.map(& &1.id) == ["a", "b"]
+    assert Camera.order([%{b | key: -1}, a], camera) |> Enum.map(& &1.id) == ["a", "b"]
   end
 
   ## The property
@@ -390,8 +450,4 @@ defmodule DIYWeb.CutawayTest do
   end
 
   defp number(text), do: text |> Float.parse() |> elem(0)
-
-  test "a point of the world on the screen" do
-    assert Iso.at({0, 0}, {1, 0, 0}) == {8.66, 5.0}
-  end
 end
