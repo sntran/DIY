@@ -272,50 +272,50 @@
    walls (cut), the floors of the rooms, and the roof. */
 .cutaway {
   --p-grass-t: #a7d37f; --p-grass-l: #b08463; --p-grass-r: #8e6649;
-  --p-slab-t: #ece8e1; --p-slab-l: #d6d0c5; --p-slab-r: #b9b2a6;
-  --p-wall-t: #fbf9f5; --p-wall-l: #f3eee6; --p-wall-r: #d9d2c5;
-  --p-wood: #e9c99d; --p-tile: #dde5ee; --p-carpet: #e8ddd0; --p-concrete: #cdd1d6;
-  --p-ply: #e7d1a6; --p-asphalt: #8a8e95; --p-deck: #cfa57a; --p-yard: #8fc56b;
+  --p-slab-t: #f3ece1; --p-slab-l: #fbf6ee; --p-slab-r: #e6dccd;
+  --p-wall-t: #5f554c; --p-wall-l: #f7efe3; --p-wall-r: #e6d8c4;
+  --p-wood: #dca671; --p-tile: #ece5d8; --p-carpet: #d9c7ad; --p-concrete: #cfcac2;
+  --p-ply: #e3c89a; --p-asphalt: #8a8e95; --p-deck: #cfa57a; --p-yard: #8fc56b;
   --p-membrane: #a3abb5; --p-roof-f: #5b6675; --p-roof-b: #465060; --p-gable: #efe9df;
   --p-pad: #dad6cf; --p-edge: rgb(31 35 40 / 0.28); --p-text: #1f2937; --p-halo: #ffffff;
-  --p-chosen: #2563eb; --p-sky: #eef5fc;
+  --p-chosen: #2563eb; --p-sky: #f4efe8;
   --p-vwall-t: #f4f5f7; --p-vwall-l: #e3e6ea; --p-vwall-r: #c8cdd4;
   --p-vpanel-t: #f0d3a8; --p-vpanel-l: #e2bd88; --p-vpanel-r: #c9a06a;
   --p-vinsul: #f9a8d4; --p-vmetal: #c9ced6; --p-vmat: #4b5059; --p-vroof: #f1f3f6;
-  --p-grain: rgb(31 35 40 / 0.13); --p-stripe: rgb(255 255 255 / 0.12); --p-shadow: #1f2328;
+  --p-grain: rgb(110 60 20 / 0.2); --p-stripe: rgb(255 255 255 / 0.12); --p-shadow: #1f2328;
   --p-frame: #ffffff; --p-pane: #b9dcf5; --p-baseboard: #e4ddd1;
   background: var(--p-sky);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme=light]) .cutaway {
     --p-grass-t: #3f6b3a; --p-grass-l: #5f4635; --p-grass-r: #4a3628;
-    --p-slab-t: #6b6f76; --p-slab-l: #575b62; --p-slab-r: #464a50;
-    --p-wall-t: #c4beb3; --p-wall-l: #b0aa9f; --p-wall-r: #8a847a;
-    --p-wood: #8c6d4a; --p-tile: #6f7b88; --p-carpet: #7d7166; --p-concrete: #6b7078;
-    --p-ply: #8a7553; --p-asphalt: #3f4247; --p-deck: #7c5f42; --p-yard: #345c30;
+    --p-slab-t: #4a4540; --p-slab-l: #8a7f70; --p-slab-r: #6e6458;
+    --p-wall-t: #1c1a18; --p-wall-l: #7d6a55; --p-wall-r: #5e4f40;
+    --p-wood: #8f5e36; --p-tile: #6e675d; --p-carpet: #74604c; --p-concrete: #5d5a55;
+    --p-ply: #7a6343; --p-asphalt: #3f4247; --p-deck: #7c5f42; --p-yard: #345c30;
     --p-membrane: #5d646d; --p-roof-f: #3a4350; --p-roof-b: #2c333d; --p-gable: #a49e93;
     --p-pad: #6b6a66; --p-edge: rgb(255 255 255 / 0.22); --p-text: #f3f4f6; --p-halo: #111827;
-    --p-chosen: #60a5fa; --p-sky: #0f172a;
+    --p-chosen: #60a5fa; --p-sky: #111214;
     --p-vwall-t: #9aa1ab; --p-vwall-l: #868d97; --p-vwall-r: #6c727b;
     --p-vpanel-t: #a88b62; --p-vpanel-l: #937754; --p-vpanel-r: #7a6145;
     --p-vinsul: #b56a93; --p-vmetal: #5b616b; --p-vmat: #2b2f35; --p-vroof: #8d949e;
-    --p-grain: rgb(0 0 0 / 0.28); --p-stripe: rgb(255 255 255 / 0.05); --p-shadow: #000000;
+    --p-grain: rgb(0 0 0 / 0.3); --p-stripe: rgb(255 255 255 / 0.05); --p-shadow: #000000;
     --p-frame: #d6d1c8; --p-pane: #2c4a66; --p-baseboard: #9b958b;
   }
 }
 [data-theme=dark] .cutaway {
   --p-grass-t: #3f6b3a; --p-grass-l: #5f4635; --p-grass-r: #4a3628;
-  --p-slab-t: #6b6f76; --p-slab-l: #575b62; --p-slab-r: #464a50;
-  --p-wall-t: #c4beb3; --p-wall-l: #b0aa9f; --p-wall-r: #8a847a;
-  --p-wood: #8c6d4a; --p-tile: #6f7b88; --p-carpet: #7d7166; --p-concrete: #6b7078;
-  --p-ply: #8a7553; --p-asphalt: #3f4247; --p-deck: #7c5f42; --p-yard: #345c30;
+  --p-slab-t: #4a4540; --p-slab-l: #8a7f70; --p-slab-r: #6e6458;
+  --p-wall-t: #1c1a18; --p-wall-l: #7d6a55; --p-wall-r: #5e4f40;
+  --p-wood: #8f5e36; --p-tile: #6e675d; --p-carpet: #74604c; --p-concrete: #5d5a55;
+  --p-ply: #7a6343; --p-asphalt: #3f4247; --p-deck: #7c5f42; --p-yard: #345c30;
   --p-membrane: #5d646d; --p-roof-f: #3a4350; --p-roof-b: #2c333d; --p-gable: #a49e93;
   --p-pad: #6b6a66; --p-edge: rgb(255 255 255 / 0.22); --p-text: #f3f4f6; --p-halo: #111827;
-  --p-chosen: #60a5fa; --p-sky: #0f172a;
+  --p-chosen: #60a5fa; --p-sky: #111214;
   --p-vwall-t: #9aa1ab; --p-vwall-l: #868d97; --p-vwall-r: #6c727b;
   --p-vpanel-t: #a88b62; --p-vpanel-l: #937754; --p-vpanel-r: #7a6145;
   --p-vinsul: #b56a93; --p-vmetal: #5b616b; --p-vmat: #2b2f35; --p-vroof: #8d949e;
-  --p-grain: rgb(0 0 0 / 0.28); --p-stripe: rgb(255 255 255 / 0.05); --p-shadow: #000000;
+  --p-grain: rgb(0 0 0 / 0.3); --p-stripe: rgb(255 255 255 / 0.05); --p-shadow: #000000;
   --p-frame: #d6d1c8; --p-pane: #2c4a66; --p-baseboard: #9b958b;
 }
 .p-lot-t { fill: var(--p-grass-t) } .p-lot-l { fill: var(--p-grass-l) } .p-lot-r { fill: var(--p-grass-r) }
@@ -343,6 +343,25 @@
 .p-shadow-1 { stop-color: var(--p-shadow); stop-opacity: 0.16 }
 .p-shadow-2 { stop-color: var(--p-shadow); stop-opacity: 0 }
 .p-frame { fill: var(--p-frame) } .p-pane { fill: var(--p-pane) } .p-baseboard { fill: var(--p-baseboard) }
+
+/* The materials of the furniture of the plan (DIYWeb.Decor). */
+.i-sage-t { fill: #a9b8a0 } .i-sage-l { fill: #8fa086 } .i-sage-r { fill: #72826a }
+.i-sage-m1 { fill: color-mix(in oklab, #8fa086 75%, #72826a) } .i-sage-m2 { fill: color-mix(in oklab, #8fa086 50%, #72826a) } .i-sage-m3 { fill: color-mix(in oklab, #8fa086 25%, #72826a) }
+.i-linen-t { fill: #f5efe3 } .i-linen-l { fill: #e8dfcf } .i-linen-r { fill: #cfc3ad }
+.i-linen-m1 { fill: color-mix(in oklab, #e8dfcf 75%, #cfc3ad) } .i-linen-m2 { fill: color-mix(in oklab, #e8dfcf 50%, #cfc3ad) } .i-linen-m3 { fill: color-mix(in oklab, #e8dfcf 25%, #cfc3ad) }
+.i-rug-t { fill: #c9764f } .i-rug-l { fill: #b06440 } .i-rug-r { fill: #8e4f33 }
+.i-rug-m1 { fill: color-mix(in oklab, #b06440 75%, #8e4f33) } .i-rug-m2 { fill: color-mix(in oklab, #b06440 50%, #8e4f33) } .i-rug-m3 { fill: color-mix(in oklab, #b06440 25%, #8e4f33) }
+.i-leaf-t { fill: #6fae5a } .i-leaf-l { fill: #4f8f45 } .i-leaf-r { fill: #3a6f34 }
+.i-leaf-m1 { fill: color-mix(in oklab, #4f8f45 75%, #3a6f34) } .i-leaf-m2 { fill: color-mix(in oklab, #4f8f45 50%, #3a6f34) } .i-leaf-m3 { fill: color-mix(in oklab, #4f8f45 25%, #3a6f34) }
+.i-clay-t { fill: #d0805a } .i-clay-l { fill: #b5673f } .i-clay-r { fill: #8f4f2f }
+.i-clay-m1 { fill: color-mix(in oklab, #b5673f 75%, #8f4f2f) } .i-clay-m2 { fill: color-mix(in oklab, #b5673f 50%, #8f4f2f) } .i-clay-m3 { fill: color-mix(in oklab, #b5673f 25%, #8f4f2f) }
+/* At night (the dark mode), each room has the warm light of a lamp. */
+.p-glow { fill: url(#p-glow-fill); display: none; pointer-events: none }
+.p-glow-0 { stop-color: #ffb357; stop-opacity: 0.5 } .p-glow-1 { stop-color: #ffb357; stop-opacity: 0 }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme=light]) .p-glow { display: inline }
+}
+[data-theme=dark] .p-glow { display: inline }
 /* The van cut open (DIYWeb.VanCutaway): its walls (bare or with panels),
    the insulation in their cut, its floor, the mat of the cab, its roof. */
 .p-vwall-t { fill: var(--p-vwall-t) } .p-vwall-l { fill: var(--p-vwall-l) } .p-vwall-r { fill: var(--p-vwall-r) }
@@ -366,9 +385,9 @@
 /* The tab of a layer: the other layers are pale (assets/js/plan.js). The
    ids of the layers come from DIYWeb.Cutaway.view/1 (the house) and
    DIYWeb.VanCutaway (the van). */
-.cutaway[data-dim] > g[data-box] { opacity: 0.3; transition: opacity 0.2s }
+.cutaway[data-dim] > g[data-box] { opacity: 0; pointer-events: none; transition: opacity 0.2s }
 .cutaway[data-dim=ground] > #plan-ground, .cutaway[data-dim=f2] > #plan-f2, .cutaway[data-dim=f3] > #plan-f3,
 .cutaway[data-dim=attic] > #plan-attic, .cutaway[data-dim=roof] > #plan-roof, .cutaway[data-dim=floor] > #plan-floor {
-  opacity: 1
+  opacity: 1; pointer-events: auto
 }
 .p-handle { r: var(--p-handle, 2px); fill: var(--p-halo); stroke: var(--p-chosen); stroke-width: 2.5; vector-effect: non-scaling-stroke; cursor: move }

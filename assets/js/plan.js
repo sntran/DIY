@@ -234,7 +234,11 @@ export const planHook = {
     this.pointers = new Map()
     this.drag = null
     const saved = this.saved()
-    this.show(saved || this.fit())
+    // With no view of the person, the page starts on floor 1: it fills the
+    // screen, and the other layers are pale.
+    const start = this.layerView("ground")
+    if (!saved && start) this.dim("ground")
+    this.show(saved || start || this.fit())
 
     this.listeners = {
       pointerdown: (e) => this.down(e),
@@ -593,8 +597,7 @@ export const planHook = {
   // layer of the tab, no layer is pale.
   zoomTo(room) {
     const layer = room.closest("[data-box]")
-    const dimmed = this.dimmed()
-    if (dimmed && layer.getAttribute("id") !== `plan-${dimmed}`) this.dim(null)
+    this.dim(layer.getAttribute("id").replace("plan-", ""))
     const id = room.getAttribute("data-room")
     const parts = this.svg.querySelectorAll(`[data-room="${id}"], [data-in="${id}"], [data-of="${id}"]`)
     const boxes = [...parts].map((el) => el.getBBox())
@@ -610,6 +613,24 @@ export const planHook = {
   dim(id) {
     if (id) this.svg.setAttribute("data-dim", id)
     else this.svg.removeAttribute("data-dim")
+  },
+
+  // The view that fills the screen with a layer, or null with no layer.
+  // The house fills the screen (its slabs and its walls): the yards can go
+  // past the edge.
+  layerView(id) {
+    const layer = this.svg.querySelector(`#plan-${id}`)
+    if (!layer) return null
+    const shell = [...layer.querySelectorAll("[data-of]")].map((el) => el.getBBox())
+    if (shell.length === 0) {
+      const [x, y, w, h] = numbers(layer.getAttribute("data-box"))
+      return frame({x, y, w, h}, this.shape(), 1.05)
+    }
+    const x = Math.min(...shell.map((b) => b.x))
+    const y = Math.min(...shell.map((b) => b.y))
+    const w = Math.max(...shell.map((b) => b.x + b.width)) - x
+    const h = Math.max(...shell.map((b) => b.y + b.height)) - y
+    return frame({x, y, w, h}, this.shape(), 1.08)
   },
 
   // The layer that stands out, or null.
@@ -688,9 +709,8 @@ export const planHook = {
       return this.show(zoom(v, factor, v.x + v.w / 2, v.y + v.h / 2, this.fit()))
     }
     const id = button.getAttribute("data-focus")
-    const [x, y, w, h] = numbers(this.svg.querySelector(`#plan-${id}`).getAttribute("data-box"))
     this.dim(id)
-    this.show(frame({x, y, w, h}, this.shape(), 1.05))
+    this.show(this.layerView(id))
   },
 
   // The arrow keys on an item or a room of the list.

@@ -41,7 +41,7 @@ defmodule DIYWeb.Cutaway do
   use DIYWeb, :html
 
   alias DIY.{Catalog, Layout}
-  alias DIYWeb.{Camera, Geometry}
+  alias DIYWeb.{Camera, Decor, Geometry}
   alias DIYWeb.Icon.Shapes
 
   # One inch in meters.
@@ -53,8 +53,8 @@ defmodule DIYWeb.Cutaway do
   @full 2.4
   @attic 0.5
   @low 0.25
-  @thick 0.12
-  @slab 0.2
+  @thick 0.16
+  @slab 0.3
 
   @doc """
   The layers of the cut-open house, from the bottom to the top, and the
@@ -120,12 +120,18 @@ defmodule DIYWeb.Cutaway do
           item <- Map.get(items, room.id, []),
           do: item_view(item, room, floor_z.(room), camera)
 
+    decor =
+      for room <- rooms,
+          {{model, x, y, turn}, i} <-
+            Enum.with_index(Decor.pieces(room, Map.get(items, room.id, []))),
+          do: decor_view("#{room.id}-#{i}", model, room, {x, y, turn}, floor_z.(room), camera)
+
     layer(level, %{
       ground: ground,
       low: low,
       slabs: slabs,
       rooms: others,
-      objects: walls ++ item_views,
+      objects: walls ++ decor ++ item_views,
       labels: Enum.map(rooms, &label(&1, floor_z.(&1), camera))
     })
   end
@@ -503,6 +509,12 @@ defmodule DIYWeb.Cutaway do
     %{surface(room, z, camera) | polys: polys, rise: round(rise / @m)}
   end
 
+  defp room_view(%{place: :indoor} = room, z, camera) do
+    view = floor(room, z, material(room), camera)
+    [{corners, _class} | _] = view.polys
+    %{view | polys: view.polys ++ [{corners, "p-tex p-glow"}]}
+  end
+
   defp room_view(room, z, camera), do: floor(room, z, material(room), camera)
 
   # The patterns of the floors, on the plan (inches): the size of a tile of
@@ -612,6 +624,26 @@ defmodule DIYWeb.Cutaway do
       y: Camera.round1(sy),
       text: room.name,
       rank: room.plan.w * room.plan.d
+    }
+  end
+
+  # A piece of furniture (`DIYWeb.Decor`): a fixed object with no tap.
+  defp decor_view(id, model, room, {x, y, turn}, z, camera) do
+    {x, y} = {(room.plan.x + x) * @m, (room.plan.y + y) * @m}
+    polys = Shapes.placed_model(model, %{at: {x, y, z}, turn: turn, camera: camera})
+    polys = for {:poly, corners, class} <- polys, do: {corners, class}
+    points = Enum.flat_map(polys, &elem(&1, 0))
+    {x0, x1} = points |> Enum.map(&elem(&1, 0)) |> Enum.min_max()
+    {y0, y1} = points |> Enum.map(&elem(&1, 1)) |> Enum.min_max()
+    {z0, z1} = points |> Enum.map(&elem(&1, 2)) |> Enum.min_max()
+
+    %{
+      id: "decor-" <> id,
+      kind: :fixture,
+      loose: false,
+      box: {x0, y0, z0, x1, y1, z1},
+      key: Camera.depth(camera, {(x0 + x1) / 2, (y0 + y1) / 2, 0}),
+      polys: polys
     }
   end
 
@@ -824,6 +856,10 @@ defmodule DIYWeb.Cutaway do
       phx-mounted={JS.ignore_attributes(["viewBox", "style", "data-dim"])}
     >
       <defs>
+        <radialGradient id="p-glow-fill">
+          <stop offset="0" class="p-glow-0" />
+          <stop offset="1" class="p-glow-1" />
+        </radialGradient>
         <radialGradient id="p-shadow-fill">
           <stop offset="0" class="p-shadow-0" />
           <stop offset="0.6" class="p-shadow-1" />

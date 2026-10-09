@@ -33,7 +33,7 @@ defmodule DIYWeb.Camera do
   defstruct [:name, :yaw, :pitch, :right, :down, :eye, :ground, :lit]
 
   @doc "The camera of the house: a dollhouse, seen from the front."
-  def house, do: new(:house, 72, 28)
+  def house, do: new(:house, 60, 34)
 
   @doc "The camera of a van: seen from its left side."
   def van, do: new(:van, 18, 28)
