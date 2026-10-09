@@ -451,7 +451,7 @@ defmodule DIYWeb.Inside do
 
     ~H"""
     <.sheet id="item-sheet" title={Catalog.name(@item)} icon={@item.type}>
-      <p class="text-sm opacity-80">In {@room.name} ({Build.level_name(@room.level)})</p>
+      <p class="text-sm opacity-80">In {@room.name}{level_note(@room.level)}</p>
 
       <div :if={@item.typical} class="alert alert-warning text-sm">
         <span>
@@ -460,7 +460,12 @@ defmodule DIYWeb.Inside do
             else:
               "These numbers are a guess for a house like yours. Check them on the label of the item."}
         </span>
-        <button type="button" phx-click="check_item" phx-value-id={@item.id} class="btn btn-xs">Correct</button>
+        <button
+          type="button"
+          phx-click="check_item"
+          phx-value-id={@item.id}
+          class="btn btn-xs shrink-0 whitespace-nowrap"
+        >They are right</button>
       </div>
 
       <form id="flags-form" phx-change="flag" class="space-y-1">
@@ -491,7 +496,7 @@ defmodule DIYWeb.Inside do
         <input type="hidden" name="item_id" value={@item.id} />
         <.param
           :for={param <- @kind.params}
-          :if={param.key != "weight" or @van}
+          :if={shown?(param, @item, @van)}
           param={param}
           value={@item.params[param.key]}
           error={@error == param.key}
@@ -515,14 +520,18 @@ defmodule DIYWeb.Inside do
             Format.cost(@estimate.items[@item.id].year, @price.cents)
           )}
         </p>
-        <p class="opacity-80">How the app gets this number, for {month_name(math_month(@item))}:</p>
+        <p class="opacity-80">
+          How the app gets this number, for one month: {month_name(math_month(@item))}{season(
+            math_month(@item)
+          )}.
+        </p>
         <ul class="list-disc pl-5 opacity-80">
           <li :for={line <- Estimate.explain(@item, math_month(@item), @estimate)}>{line}</li>
         </ul>
       </div>
 
       <p class="text-sm">
-        <span class="font-semibold">It turns on:</span> {features(@features)}.
+        <span class="font-semibold">The app uses it for:</span> {features(@features)}.
       </p>
 
       <.usage :if={:usage in @kind.features} usage={@build.usage} />
@@ -593,7 +602,7 @@ defmodule DIYWeb.Inside do
       />
       <p id="item-where" class="text-sm" aria-live="polite">{where(@item, @room)}</p>
       <p :if={@item.type == "solar_panels"} class="text-xs opacity-70">
-        The watts give the size of the array: {@panel} inches for each panel of 400 W.
+        The watts give the size of the panels on the roof: {@panel} inches for each panel of 400 W.
       </p>
       <p :if={@item.type == "camper_van"} class="text-xs opacity-70">
         The model of the van gives its size, with its mirrors.
@@ -623,7 +632,7 @@ defmodule DIYWeb.Inside do
       <p :if={@item.type not in ["solar_panels", "camper_van"]} class="text-xs opacity-70">
         In inches.{if @item.size,
           do: " You gave this size.",
-          else: " The typical size of this kind: give the size of your item."}
+          else: " These are the typical sizes of this kind of item. Give the sizes of your item."}
       </p>
       <div class="flex gap-2">
         <button
@@ -768,12 +777,26 @@ defmodule DIYWeb.Inside do
   defp math_month(%{type: type}) when type in ["furnace", "heat_strips", "space_heater"], do: 1
   defp math_month(_item), do: 7
 
+  # The level of the room of an item, for a floor or the roof. A room
+  # around the house (a garage, a yard) needs no level.
+  defp level_note("outside"), do: ""
+  defp level_note(level), do: " (#{Build.level_name(level)})"
+
+  defp season(1), do: ", a cold month"
+  defp season(7), do: ", a hot month"
+
+  # A parameter shows when it is for the item: the weight only in a van,
+  # and the heat efficiency only for a unit that heats.
+  defp shown?(%{key: "weight"}, _item, van), do: van
+  defp shown?(%{key: "hspf2"}, item, _van), do: item.params["heat_pump"] == true
+  defp shown?(_param, _item, _van), do: true
+
   defp month_name(month), do: Enum.at(Estimate.month_names(), month - 1)
 
   @doc "Features of a kind of item, in words."
   def features(features), do: Enum.map_join(features, ", ", &feature/1)
 
-  defp feature(:estimate), do: "the usage estimate"
+  defp feature(:estimate), do: "the estimate of your power bill"
   defp feature(:backup), do: "the hours of backup in an outage"
   defp feature(:shift), do: "the charge at night"
   defp feature(:power_view), do: "the view of what feeds what, and the permit notes"
@@ -857,6 +880,7 @@ defmodule DIYWeb.Inside do
       <select name={"item[#{@param.key}]"} class="select select-sm w-full">
         <option :for={{key, label} <- @values} value={key} selected={key == @value}>{label}</option>
       </select>
+      <span :if={@param.note} class="block text-xs opacity-70">{@param.note}</span>
     </label>
     """
   end

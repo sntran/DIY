@@ -75,7 +75,7 @@ defmodule DIYWeb.Cutaway do
     floors = build.house.floors
 
     layers =
-      [{"ground", "Floor 1 and outside", 0.0}] ++
+      [{"ground", "Floor 1 and around the house", 0.0}] ++
         for(f <- 2..floors//1, do: {"f#{f}", "Floor #{f}", (f - 1) * gap}) ++
         [{"attic", "Attic", floors * gap}, {"roof", "Roof", (floors + 1) * gap}]
 

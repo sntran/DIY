@@ -120,7 +120,7 @@ defmodule DIYWeb.Start do
             <label
               :for={{key, label, sqft} <- House.sizes()}
               for={"size-#{key}"}
-              class="btn btn-outline has-[:checked]:btn-primary has-[:checked]:text-primary-content"
+              class="btn btn-outline has-[:checked]:bg-primary has-[:checked]:border-primary has-[:checked]:text-primary-content"
             >
               <input
                 id={"size-#{key}"}
@@ -141,7 +141,7 @@ defmodule DIYWeb.Start do
             <label
               :for={{key, label, _year} <- House.ages()}
               for={"age-#{key}"}
-              class="btn btn-outline has-[:checked]:btn-primary has-[:checked]:text-primary-content"
+              class="btn btn-outline has-[:checked]:bg-primary has-[:checked]:border-primary has-[:checked]:text-primary-content"
             >
               <input
                 id={"age-#{key}"}
@@ -162,7 +162,7 @@ defmodule DIYWeb.Start do
             <label
               :for={floors <- 1..3}
               for={"floors-#{floors}"}
-              class="btn btn-outline has-[:checked]:btn-primary has-[:checked]:text-primary-content"
+              class="btn btn-outline has-[:checked]:bg-primary has-[:checked]:border-primary has-[:checked]:text-primary-content"
             >
               <input
                 id={"floors-#{floors}"}
