@@ -48,6 +48,13 @@ defmodule DIYWeb.VanPage do
 
     ~H"""
     <section id="van" class="space-y-4">
+      <.link
+        patch={if @van, do: ~p"/inside?#{[item: @van.id]}", else: ~p"/inside"}
+        id="van-back"
+        class="btn btn-ghost btn-sm -ml-2"
+      >
+        <.icon name="hero-arrow-left" class="size-4" /> Rooms
+      </.link>
       <h1 class="text-xl font-bold">Van</h1>
 
       <p :if={is_nil(@van)} id="no-van" class="text-sm">

@@ -46,6 +46,7 @@ defmodule DIYWeb.VanLiveTest do
     view = open(conn, ~p"/van", house())
     assert has_element?(view, "#no-van")
     refute has_element?(view, "nav a", "Van")
+    assert has_element?(view, "#van-back[href='/inside']")
   end
 
   test "a van in the driveway opens its own build", %{conn: conn} do
@@ -54,8 +55,19 @@ defmodule DIYWeb.VanLiveTest do
     view |> element("#add-camper_van") |> render_click()
     [van] = DIY.Van.vans(build(view))
     assert_patch(view, ~p"/inside?item=#{van.id}")
-    assert has_element?(view, "nav a", "Van")
 
+    # A van is a part of the house: the bar has no part Van. The sheet of
+    # the van opens it, and the part Rooms stays the current part.
+    refute has_element?(view, "nav a", "Van")
+    view |> element("#open-van") |> render_click()
+    assert_patch(view, ~p"/van?id=#{van.id}")
+    refute has_element?(view, "nav a", "Van")
+    assert has_element?(view, "nav a.dock-active[aria-current=true]", "Rooms")
+
+    # The link at the top goes back to the van in the rooms.
+    view |> element("#van-back") |> render_click()
+    assert_patch(view, ~p"/inside?item=#{van.id}")
+    assert has_element?(view, "nav a.dock-active[aria-current=page]", "Rooms")
     view |> element("#open-van") |> render_click()
     assert_patch(view, ~p"/van?id=#{van.id}")
     assert has_element?(view, "#van-weight")

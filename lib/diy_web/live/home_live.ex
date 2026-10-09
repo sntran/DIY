@@ -958,7 +958,6 @@ defmodule DIYWeb.HomeLive do
       flash={@flash}
       nav={nav?(@build)}
       power={power?(@build)}
-      van={van?(@build)}
       plans={plans?(@build)}
       action={@live_action}
       saved={Device.saved?(assigns)}
@@ -1084,9 +1083,6 @@ defmodule DIYWeb.HomeLive do
   defp power?(_build), do: false
 
   # The page Van is for a build with a camper van.
-  defp van?(%Build{} = build), do: Van.vans(build) != []
-  defp van?(_build), do: false
-
   # The plan lesson is for an area of Texas with retail choice.
   defp plans?(%Build{market: %{choice: true}}), do: true
   defp plans?(_build), do: false
