@@ -1389,6 +1389,24 @@ its turn. A length is in inches.
     in the picture.
   - At night (the dark mode), the colors are darker, and the floor of each
     room inside has the warm light of a lamp (`p-glow`).
+  - The furniture of a room (`DIYWeb.Decor`), as in the drawn picture. The
+    name of a room gives its pieces:
+    - a bedroom: a bed, nightstands, a dresser and a rug;
+    - a living room: a sofa, an armchair, a table, books and plants;
+    - a kitchen: counters, and a table with chairs;
+    - a bathroom: a bath, a toilet and a vanity;
+    - a garage: a bench and shelves;
+    - a yard: a table, trees and bushes.
+
+    Each piece has its place: against
+    the back wall, in the middle, or at the front. In a kitchen, counters
+    fill the back wall between the items. A piece that touches an item, or
+    a piece before it, does not show: so the items always show. A rug is
+    flat: it paints first, and the pieces and the items stand on it. The
+    furniture is for the eyes only. It uses no power, and a tap goes
+    through it to the floor of the room. The leaves of a plant or a tree
+    are discs that look to the camera.
+  - A long wall has a picture in a frame at the left of its window.
 - The order of the paint (`DIYWeb.Camera.order/2`). A wall or an item that
   is behind a different one paints first. A box is behind a different box
   when it is on the far side of it along x, y or z. A wall is flat for

@@ -54,7 +54,7 @@ defmodule DIYWeb.Cutaway do
   use DIYWeb, :html
 
   alias DIY.{Catalog, Layout}
-  alias DIYWeb.{Camera, Geometry}
+  alias DIYWeb.{Camera, Decor, Geometry}
   alias DIYWeb.Icon.Shapes
 
   # One inch in meters.
@@ -136,12 +136,17 @@ defmodule DIYWeb.Cutaway do
           item <- Map.get(items, room.id, []),
           do: item_view(item, room, floor_z.(room), camera)
 
+    decor =
+      for room <- rooms,
+          {piece, i} <- Enum.with_index(Decor.pieces(room, Map.get(items, room.id, []))),
+          do: decor_view("#{room.id}-#{i}", piece, room, floor_z.(room), camera)
+
     layer(level, %{
       ground: ground,
       low: low,
       slabs: slabs,
       rooms: others,
-      objects: walls ++ item_views,
+      objects: walls ++ decor ++ item_views,
       labels: Enum.map(rooms, &label(&1, floor_z.(&1), camera))
     })
   end
@@ -508,8 +513,9 @@ defmodule DIYWeb.Cutaway do
 
   # The trim of a wall that is higher than the cut near the floor. It is on
   # the face of the wall in its room (`face`, meters). It is a baseboard,
-  # and a window when the wall has its full height and room for it. A
-  # window is 4 feet wide at most, from 3 feet over the floor.
+  # and a window when the wall has its full height and room for it. A long
+  # wall also has a picture at the left of its window. A window is 4 feet
+  # wide at most, from 3 feet over the floor.
   defp trim(side, face, {a, b}, z, {h0, h1}) do
     plane = fn {u0, u1}, {z0, z1} ->
       for {u, zz} <- [{u0, z0}, {u1, z0}, {u1, z1}, {u0, z1}] do
@@ -538,7 +544,20 @@ defmodule DIYWeb.Cutaway do
         []
       end
 
-    [{plane.({a, b}, {0.0, 0.1}), "p-baseboard"} | window]
+    # A picture in a frame at the left of the window, on a long wall.
+    left = middle - half - 34
+
+    picture =
+      if window != [] and left - 10 >= a + 6 do
+        [
+          {plane.({left - 10, left + 10}, {1.35, 1.78}), "p-frame"},
+          {plane.({left - 8, left + 8}, {1.38, 1.75}), "p-art"}
+        ]
+      else
+        []
+      end
+
+    [{plane.({a, b}, {0.0, 0.1}), "p-baseboard"} | window ++ picture]
   end
 
   ## The rooms
@@ -681,6 +700,51 @@ defmodule DIYWeb.Cutaway do
       rank: room.plan.w * room.plan.d
     }
   end
+
+  ## The furniture
+
+  @doc """
+  A piece of furniture of a room (`DIYWeb.Decor.pieces/2`), on a floor at a
+  height (meters), for a camera. It is a fixed object: a tap goes through
+  it to the floor of the room.
+  """
+  def decor_view(id, {model, x, y, turn}, room, z, camera) do
+    at = {(room.plan.x + x) * @m, (room.plan.y + y) * @m, z}
+
+    polys =
+      for {:poly, corners, class} <-
+            Shapes.placed_model(model, %{at: at, turn: turn, camera: camera}),
+          do: {corners, class}
+
+    {{x0, x1}, {y0, y1}, {z0, z1}} =
+      polys
+      |> Enum.flat_map(&elem(&1, 0))
+      |> Enum.reduce({{nil, nil}, {nil, nil}, {nil, nil}}, fn {px, py, pz}, {xs, ys, zs} ->
+        {span(xs, px), span(ys, py), span(zs, pz)}
+      end)
+
+    # A rug is flat: it paints first, so the pieces on it show. It is out
+    # of the order of the boxes: a part that stands on its floor behind it
+    # does not cover it on the screen.
+    flat? = z1 - z0 < 0.02
+
+    key =
+      if flat?,
+        do: -1.0e6,
+        else: Camera.depth(camera, {(x0 + x1) / 2, (y0 + y1) / 2, 0})
+
+    %{
+      id: "decor-" <> id,
+      kind: :fixture,
+      loose: flat?,
+      box: {x0, y0, z0, x1, y1, z1},
+      key: key,
+      polys: polys
+    }
+  end
+
+  defp span({nil, nil}, v), do: {v, v}
+  defp span({lo, hi}, v), do: {min(lo, v), max(hi, v)}
 
   ## The items
 
