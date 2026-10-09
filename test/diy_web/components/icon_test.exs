@@ -213,7 +213,7 @@ defmodule DIYWeb.IconTest do
   end
 
   test "the electric car: the profile of its body, its glass, and its wheels" do
-    [{:group, [{:prism, :x, _profile, 0.0, w, "red"} | details]}] = Shapes.model("ev")
+    [{:group, [{:prism, :x, _profile, +0.0, w, "red"} | details]}] = Shapes.model("ev")
     {{_x0, y0, z0}, {_x1, y1, z1}} = Shapes.bounds(Shapes.model("ev"))
 
     # The size of the kind: 73 by 186 by 57 inches.
