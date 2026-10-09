@@ -110,6 +110,9 @@ defmodule DIYWeb.LessonLiveTest do
     assert html =~ "give a number of dollars"
     assert has_element?(view, "#exercise p[role=status]", "of 5 right.")
     refute has_element?(view, "#exercise-done")
+    # The answers stay in the form after the check.
+    assert has_element?(view, ~s(#answer-base[value="9.95"]))
+    assert has_element?(view, ~s(#answer-total[value="x"]))
     # The months of the estimate show their range.
     assert has_element?(view, "#your-months", " to ")
 
@@ -237,6 +240,7 @@ defmodule DIYWeb.LessonLiveTest do
 
     view |> form("#exercise", %{"answer" => %{"total" => "1"}}) |> render_submit()
     refute has_element?(view, "#exercise-done")
+    assert has_element?(view, ~s(#answer-total[value="1"]))
     right = answers(view, plan)
     view |> form("#exercise", %{"answer" => %{"total" => right["total"]}}) |> render_submit()
     assert has_element?(view, "#exercise-done")

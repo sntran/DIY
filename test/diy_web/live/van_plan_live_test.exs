@@ -94,7 +94,16 @@ defmodule DIYWeb.VanPlanLiveTest do
     render_hook(view, "select_room", %{"id" => living.id})
     assert_patch(view, ~p"/van?#{[id: van, room: living.id]}")
     assert has_element?(view, "#zone-bar", "Living area")
+    refute has_element?(view, "#zone-bar", "The kitchen of the van")
     assert has_element?(view, "#plan-selection [data-handle=x0]")
+
+    # The galley and the bay: the bar tells what they are.
+    for {place, note} <- [galley: "The kitchen of the van", bay: "The batteries and the chargers"] do
+      render_hook(view, "select_room", %{"id" => zone(view, van, place).id})
+      assert has_element?(view, "#zone-bar", note)
+    end
+
+    render_hook(view, "select_room", %{"id" => living.id})
 
     # On the draft, the zone has no free place next to it: the buttons are
     # disabled (they keep the focus), and the bar says why. They use the

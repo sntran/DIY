@@ -150,7 +150,39 @@ the house has walls and an AC").
 A preset has the rooms of the house and its typical items
 (`DIY.House`). A typical item has a dashed border and the word "Typical":
 its numbers are a guess of the app. A change of a number, or a tap on
-"Correct", makes it checked. The range of a checked item is smaller.
+"They are right", makes it checked. The range of a checked item is
+smaller.
+
+The front of the house helps a person with no skill in power:
+
+- It tells what a kWh is, what retail choice is, and what the delivery
+  charges are.
+- It asks for the last bill: its total in dollars and its kWh. The total
+  divided by the kWh is the price of the plan (`my_bill`). The form shows
+  until the user gives a price. A person who thinks that the bill is
+  wrong usually has a price that is not the typical price.
+- With no camper van, a card tells that a van goes in the driveway, and
+  adds one with one tap.
+- The button "See the rooms and the items" opens the page Rooms.
+
+Each page starts at its top (the hook Top). All the pages are one
+LiveView, and a patch keeps the scroll of the page before it. The hook
+sees the name of the page, the step of the lesson and the van change.
+
+The words. A sheet tells a technical word in plain words:
+
+- a ton of cooling is a size, not a weight;
+- SEER2 and HSPF2 are efficiencies;
+- GVWR and GAWR are the most weight of the van and of one axle;
+- Ah are amp hours.
+
+The heat efficiency shows only for a unit that heats. The rooms
+at the ground outside the house (the garage, the yard, the driveway)
+are on the "Ground level". A wide table tells the person to swipe it on
+a phone. The bill page gives the room of an item when two items have the
+same name. The answers of the exercise stay in the form after a check.
+The main buttons have the same orange in the light and the dark theme.
+Their white words have a contrast of 4.7 (WCAG AA).
 
 ### The rooms
 

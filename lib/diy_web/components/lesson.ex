@@ -34,6 +34,7 @@ defmodule DIYWeb.LessonPage do
   attr :plan_id, :string, default: nil
   attr :efl, :map, default: nil
   attr :checks, :map, default: nil
+  attr :answers, :map, default: %{}, doc: "the answers that the person typed"
   attr :hint, :boolean, default: false
   attr :shares, :map, default: %{}
   attr :tdu, :map, default: nil, doc: "the delivery charges of the utility (DIY.Plan.tdu/1)"
@@ -71,6 +72,7 @@ defmodule DIYWeb.LessonPage do
         source={@source}
         plan={plan(@build, @plan_id)}
         checks={@checks}
+        answers={@answers}
         efl={@efl}
         shares={@shares}
       />
@@ -80,6 +82,7 @@ defmodule DIYWeb.LessonPage do
         months={@months}
         plan={second_plan(@build)}
         checks={@checks}
+        answers={@answers}
         hint={@hint}
         efl={@efl}
         shares={@shares}
@@ -183,6 +186,7 @@ defmodule DIYWeb.LessonPage do
   attr :source, :atom, required: true
   attr :plan, :map, required: true
   attr :checks, :map, default: nil
+  attr :answers, :map, default: %{}, doc: "the answers that the person typed"
   attr :efl, :map, default: nil
   attr :shares, :map, required: true
 
@@ -232,6 +236,7 @@ defmodule DIYWeb.LessonPage do
           :for={part <- Lesson.parts(@plan)}
           part={part}
           check={@checks && @checks[part]}
+          value={@answers[Atom.to_string(part)]}
           hint={hint(part, @plan, @month, @bill)}
         />
         <button class="btn btn-sm">Check</button>
@@ -253,6 +258,11 @@ defmodule DIYWeb.LessonPage do
 
   attr :part, :atom, required: true
   attr :check, :atom, default: nil
+
+  attr :value, :string,
+    default: nil,
+    doc: "the answer that the person typed: it stays after a check"
+
   attr :hint, :string, default: nil
 
   defp answer(assigns) do
@@ -273,6 +283,7 @@ defmodule DIYWeb.LessonPage do
       <input
         name={"answer[#{@part}]"}
         id={"answer-#{@part}"}
+        value={@value}
         inputmode="decimal"
         placeholder="$"
         class={["input input-sm w-32 block", @check in [:wrong, :invalid] && "input-error"]}
@@ -359,6 +370,7 @@ defmodule DIYWeb.LessonPage do
   attr :months, :list, required: true
   attr :plan, :map, default: nil
   attr :checks, :map, default: nil
+  attr :answers, :map, default: %{}, doc: "the answers that the person typed"
   attr :hint, :boolean, default: false
   attr :efl, :map, default: nil
   attr :shares, :map, required: true
@@ -384,7 +396,11 @@ defmodule DIYWeb.LessonPage do
           <p class="font-semibold">
             The bill of {@month.name} with {@plan.name}: {Format.kwh(@month.kwh)}
           </p>
-          <.answer part={:total} check={@checks && @checks[:total]} />
+          <.answer
+            part={:total}
+            check={@checks && @checks[:total]}
+            value={@answers["total"]}
+          />
           <button class="btn btn-sm">Check</button>
           <.result checks={@checks} />
           <button :if={not @hint} type="button" phx-click="hint" class="btn btn-sm btn-ghost">
@@ -436,6 +452,9 @@ defmodule DIYWeb.LessonPage do
       <h2 class="text-lg font-bold">4. On your own: the worksheet</h2>
       <p class="text-sm">
         Each plan with your months, in the order that you added them. The app shows the math. You choose.
+      </p>
+      <p :if={@years != []} class="text-xs opacity-70 sm:hidden">
+        Swipe the table to see all of it.
       </p>
       <div
         :if={@years != []}
@@ -601,6 +620,7 @@ defmodule DIYWeb.LessonPage do
       )
 
     ~H"""
+    <p class="text-xs opacity-70 sm:hidden">Swipe the table to see all of it.</p>
     <div class="overflow-x-auto" tabindex="0" role="region" aria-label="The bill of each month">
       <table class="table table-xs sm:table-sm">
         <thead>

@@ -157,7 +157,7 @@ defmodule DIY.Build do
 
   @doc "The name of a level."
   def level_name("roof"), do: "Roof and attic"
-  def level_name("outside"), do: "Outside"
+  def level_name("outside"), do: "Ground level"
   def level_name("f" <> floor), do: "Floor #{floor}"
 
   @doc "A new, empty build."

@@ -143,7 +143,7 @@ defmodule DIYWeb.VanLiveTest do
     view |> element("#van-model") |> render_click()
     assert render(view) =~ "Ford Transit 250"
     assert render(view) =~ "The app does not know the rating of an axle of this model"
-    view |> element("#item-sheet button", "Correct") |> render_click()
+    view |> element("#item-sheet button", "They are right") |> render_click()
     refute render(view) =~ "These numbers are typical of the model"
   end
 
@@ -163,7 +163,17 @@ defmodule DIYWeb.VanLiveTest do
     view = open(conn, ~p"/van?#{[id: van]}", build)
 
     assert render(view) =~
-             ~r/Off the grid: \d+\.\d days in [A-Z][a-z]+, the month with the fewest days/
+             ~r/Off the grid: \d+\.\d days in [A-Z][a-z]+\. The other months give more days\./
+
+    # The person drives 1 hour in one day, but the van has no alternator
+    # charger: the page tells why the engine gives no power. With a
+    # charger, or with no drive, it does not.
+    assert has_element?(view, "#van-no-engine", "You drive 1 h in one day")
+    assert has_element?(view, "#van-months td", "Jan")
+    {charged, _} = add(build, van, :bay, "dc_charger")
+    refute has_element?(open(conn, ~p"/van?#{[id: van]}", charged), "#van-no-engine")
+    {:ok, parked} = Build.update_item(build, van, %{"drive_hours" => "0"})
+    refute has_element?(open(conn, ~p"/van?#{[id: van]}", parked), "#van-no-engine")
 
     {large, _} = add(build, van, :bay, "van_battery", %{"ah" => "2000", "fused" => "true"})
     assert render(open(conn, ~p"/van?#{[id: van]}", large)) =~ "30 days or more"

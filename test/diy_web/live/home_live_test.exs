@@ -176,7 +176,7 @@ defmodule DIYWeb.HomeLiveTest do
     html = render(view)
     assert html =~ "Energy in one year"
     assert html =~ "kWh in one year"
-    assert html =~ "the usage estimate"
+    assert html =~ "the estimate of your power bill"
     assert html =~ "These numbers are a guess"
 
     html = view |> form("#item-form", %{"item" => %{"kwh_year" => "9999"}}) |> render_change()
@@ -215,7 +215,7 @@ defmodule DIYWeb.HomeLiveTest do
     lights = item(view, "lights")
     refute render_patch(view, ~p"/inside?item=#{lights.id}") =~ "Give a number from"
     render_patch(view, ~p"/inside?item=#{tv.id}")
-    view |> element("#item-sheet button", "Correct") |> render_click()
+    view |> element("#item-sheet button", "They are right") |> render_click()
     refute item(view, "tv").typical
     render_click(view, "check_item", %{"id" => "i999"})
 
@@ -226,7 +226,9 @@ defmodule DIYWeb.HomeLiveTest do
     assert render(view) =~ "kWh of cooling + "
 
     furnace = item(view, "furnace")
-    assert render_patch(view, ~p"/inside?item=#{furnace.id}") =~ "for January"
+
+    assert render_patch(view, ~p"/inside?item=#{furnace.id}") =~
+             "for one month: January, a cold month."
 
     assert render_patch(view, ~p"/inside?item=i999") =~ "Kitchen"
     refute has_element?(view, "#item-sheet")
@@ -291,7 +293,7 @@ defmodule DIYWeb.HomeLiveTest do
   test "the smart meter turns on the real usage", %{conn: conn} do
     view = open(conn, ~p"/", house())
     html = settle(view)
-    assert html =~ "add your smart meter"
+    assert html =~ "A next small step: see the real use of your house."
     backyard = room(view, "Backyard")
 
     render_click(view, "add_item", %{"room" => backyard.id, "type" => "smart_meter"})
@@ -416,6 +418,89 @@ defmodule DIYWeb.HomeLiveTest do
     assert html =~ "Cooling"
     assert html =~ "(typical)"
     assert html =~ "for its age"
+  end
+
+  test "the price of the last bill of the person", %{conn: conn} do
+    view = open(conn, ~p"/", house())
+    settle(view)
+    assert has_element?(view, "#my-bill", "Is this near your bill?")
+
+    # A bill of $150.00 for 1,100 kWh: 13.6¢ for each kWh.
+    view |> form("#my-bill", %{"dollars" => "$150.00", "kwh" => "1,100"}) |> render_submit()
+    assert_in_delta build(view).price, 150 / 1100 * 100, 1.0e-9
+    assert render(view) =~ "The app now uses the price of your bill: 13.6¢ for each kWh."
+    refute has_element?(view, "#my-bill")
+
+    # A total or a kWh that is not a number, or that is 0, and a price that
+    # is too high: an error, and the price stays.
+    view = open(conn, ~p"/", house())
+    settle(view)
+
+    for {dollars, kwh} <- [
+          {"", "1000"},
+          {"abc", "1000"},
+          {"150", "0"},
+          {"150", "12x"},
+          {"9000", "10"}
+        ] do
+      view |> form("#my-bill", %{"dollars" => dollars, "kwh" => kwh}) |> render_submit()
+      assert render(view) =~ "Give the total of the bill in dollars and its kWh"
+      assert build(view).price == nil
+    end
+  end
+
+  test "a camper van: the front page tells where it goes", %{conn: conn} do
+    view = open(conn, ~p"/", house())
+    settle(view)
+    driveway = room(view, "Driveway")
+    assert has_element?(view, "#van-card", "It goes in the driveway.")
+    view |> element("#add-van") |> render_click()
+    van = item(view, "camper_van")
+    assert van.room == driveway.id
+    assert_patch view, ~p"/inside?#{[item: van.id]}"
+    # A house with a van: no card.
+    view = open(conn, ~p"/", build(view))
+    settle(view)
+    refute has_element?(view, "#van-card")
+
+    # With no driveway: the first room outside. With no room outside: no
+    # card.
+    build = house()
+    {:ok, build} = Build.delete_room(build, Enum.find(build.rooms, &(&1.name == "Driveway")).id)
+    view = open(conn, ~p"/", build)
+    settle(view)
+    assert has_element?(view, "#van-card", "It goes in the backyard.")
+
+    build =
+      Enum.reduce(Enum.filter(build.rooms, &(&1.place == :outdoor)), build, fn room, b ->
+        elem(Build.delete_room(b, room.id), 1)
+      end)
+
+    view = open(conn, ~p"/", build)
+    settle(view)
+    refute has_element?(view, "#van-card")
+  end
+
+  test "the heat efficiency shows only for an AC that heats", %{conn: conn} do
+    build = house()
+    ac = Enum.find(build.items, &(&1.type == "ac"))
+    view = open(conn, ~p"/inside?#{[item: ac.id]}", build)
+    settle(view)
+    assert has_element?(view, ~s(#item-form input[name="item[seer2]"]))
+    refute has_element?(view, ~s(#item-form input[name="item[hspf2]"]))
+    view |> form("#item-form", %{"item" => %{"heat_pump" => "true"}}) |> render_change()
+    assert has_element?(view, ~s(#item-form input[name="item[hspf2]"]))
+  end
+
+  test "two items with the same name: the bill gives the room of each one", %{conn: conn} do
+    build = house()
+    garage = Enum.find(build.rooms, &(&1.name == "Garage"))
+    {:ok, build, _id} = Build.add_item(build, garage.id, "fridge")
+    view = open(conn, ~p"/estimate", build)
+    html = settle(view)
+    assert html =~ "Fridge (Kitchen)"
+    assert html =~ "Fridge (Garage)"
+    refute html =~ "Clothes dryer ("
   end
 
   test "the math of a house with no items", %{conn: conn} do
