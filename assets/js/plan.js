@@ -1,10 +1,12 @@
 // The hook Plan of the plan of the house at scale (DIYWeb.Cutaway). The
 // person moves the items and the rooms with a pointer (a finger or a
-// mouse). Two fingers, the wheel or the buttons zoom. A drag on an empty
-// place moves the picture. A tap on an item opens it. A tap on a room
-// chooses it: the room then has handles on its walls, and the view zooms
-// in to it. In the list of the rooms (for a keyboard and a screen reader),
-// the arrow keys move an item or a room.
+// mouse). Two fingers, Ctrl and the wheel, or the buttons zoom. A drag on
+// an empty place moves the picture. When the picture shows all the house,
+// a finger that moves up or down scrolls the page. A tap on an item opens
+// it. A tap on a room, on a wall or on the edge of a floor chooses the
+// room: the room then has handles on its walls, and the view zooms in to
+// it. In the list of the rooms (for a keyboard and a screen reader), the
+// arrow keys move an item or a room.
 //
 // The server draws the SVG. This script only moves parts of it while the
 // pointer moves, and then sends the change: the server then draws it again.
@@ -153,22 +155,46 @@ export function arrow(key, shift, arrows) {
   return moves[key] ? {dx: moves[key][0] * step + 0, dy: moves[key][1] * step + 0} : null
 }
 
-// True when two boxes ({x, y, width, height}) overlap.
-export function overlaps(a, b) {
-  return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+// True when two boxes ({x, y, width, height}) overlap, or are nearer than
+// a gap.
+export function overlaps(a, b, gap = 0) {
+  return (
+    a.x < b.x + b.width + gap &&
+    b.x < a.x + a.width + gap &&
+    a.y < b.y + b.height + gap &&
+    b.y < a.y + a.height + gap
+  )
 }
 
-// The view that shows a box of the SVG (a room) on a screen with a shape
-// (w / h). The box has a margin, and it is at the middle. A view that
-// shows it in more detail stays: a tap does not zoom out.
-export function focus(view, box, shape) {
-  const margin = 1.15
+// The view that shows a box of the SVG on a screen with a shape (w / h).
+// The box has a margin, and it is at the middle. The view is at least
+// `least` wide.
+export function frame(box, shape, margin = 1.15, least = 0) {
   let w = box.w * margin
   let h = box.h * margin
   if (w / h < shape) w = h * shape
   else h = w / shape
-  if (w >= view.w) return view
+  if (w < least) [w, h] = [least, least / shape]
   return {x: box.x + box.w / 2 - w / 2, y: box.y + box.h / 2 - h / 2, w, h}
+}
+
+// The view that shows a room: a third of the box of the house at least,
+// so that the person sees where the room is. A view that shows it in more
+// detail stays: a tap does not zoom out.
+export function focus(view, box, shape, fit) {
+  const next = frame(box, shape, 1.15, fit.w / 3)
+  return next.w >= view.w ? view : next
+}
+
+// A view that keeps the house (the box fit) on the screen. A view smaller
+// than the house stays in it; a view larger than the house keeps all of
+// it. So a drag does not move the house off the screen.
+export function clamp(view, fit) {
+  const axis = (start, size, from, length) => {
+    const [low, high] = [from, from + length - size].sort((a, b) => a - b)
+    return Math.min(Math.max(start, low), high)
+  }
+  return {...view, x: axis(view.x, view.w, fit.x, fit.w), y: axis(view.y, view.h, fit.y, fit.h)}
 }
 
 // The view as the text of a viewBox.
@@ -180,6 +206,9 @@ const parseView = (text) => {
 
 // A move of the pointer of more than this (in pixels) is a drag, not a tap.
 const SLOP = 5
+// A handle is 24 pixels wide. Handles that are nearer than 1.5 handles
+// on the screen would hide their room: then they do not show.
+const HANDLE = 24
 // The view stays for each plan (the house, and each van) in the tab.
 const KEY = "plan-view:"
 
@@ -209,6 +238,7 @@ export const planHook = {
   },
 
   destroyed() {
+    this.window().clearTimeout(this.hintTimer)
     for (const [type, fun] of Object.entries(this.listeners)) this.svg.removeEventListener(type, fun)
     this.el.removeEventListener("click", this.onClick)
     this.el.removeEventListener("keydown", this.onKey)
@@ -224,24 +254,41 @@ export const planHook = {
     return unitsOf(view, this.svg.clientWidth, this.svg.clientHeight)
   },
 
+  // The shape of the SVG on the screen (w / h). A page with no size yet
+  // has a square.
+  shape() {
+    return (this.svg.clientWidth || 1) / (this.svg.clientHeight || 1)
+  },
+
+  window() {
+    return this.el.ownerDocument.defaultView
+  },
+
+  // True when the view shows all the house.
+  whole() {
+    return this.view.w >= this.fit().w - 1e-6
+  },
+
   // The view that the person had on this page before (a zoom), if any.
   saved() {
     try {
-      const text = this.el.ownerDocument.defaultView.sessionStorage.getItem(KEY + this.el.id)
+      const text = this.window().sessionStorage.getItem(KEY + this.el.id)
       return text ? parseView(text) : null
     } catch (_error) {
       return null
     }
   },
 
-  // The server draws the SVG again: its labels show again.
+  // The server draws the SVG again: its labels and its handles show again.
   updated() {
     this.declutter()
+    this.handles()
   },
 
   // Shows a view: the viewBox, and the size of the labels and the handles
-  // on the screen (the same at each zoom).
+  // on the screen (the same at each zoom). The house stays on the screen.
   show(view) {
+    view = clamp(view, this.fit())
     this.view = view
     this.svg.setAttribute("viewBox", box(view))
     const units = this.units(view)
@@ -253,15 +300,16 @@ export const planHook = {
       this.labelUnits = units
       this.declutter()
     }
+    this.handles()
     try {
-      this.el.ownerDocument.defaultView.sessionStorage.setItem(KEY + this.el.id, box(view))
+      this.window().sessionStorage.setItem(KEY + this.el.id, box(view))
     } catch (_error) {
       // A page with no storage keeps the view only while it is open.
     }
   },
 
-  // Where two labels overlap, the label of the larger room shows
-  // (data-rank), and the other one hides until a zoom in.
+  // Where two labels overlap, or are nearer than 4 pixels, the label of
+  // the larger room shows (data-rank). The other one hides until a zoom in.
   declutter() {
     const labels = [...this.svg.querySelectorAll("[data-rank]")].sort(
       (a, b) => Number(b.getAttribute("data-rank")) - Number(a.getAttribute("data-rank")),
@@ -270,9 +318,21 @@ export const planHook = {
     for (const label of labels) {
       label.style.visibility = ""
       const box = label.getBBox()
-      if (shown.some((other) => overlaps(other, box))) label.style.visibility = "hidden"
+      if (shown.some((other) => overlaps(other, box, 4 * this.labelUnits))) label.style.visibility = "hidden"
       else shown.push(box)
     }
+  },
+
+  // The handles of the chosen room show when they are far enough apart on
+  // the screen.
+  handles() {
+    const handles = [...this.svg.querySelectorAll("[data-handle]")]
+    const points = handles.map((h) => [Number(h.getAttribute("cx")), Number(h.getAttribute("cy"))])
+    let near = Infinity
+    for (const [i, [x, y]] of points.entries())
+      for (const [u, v] of points.slice(i + 1)) near = Math.min(near, Math.hypot(u - x, v - y))
+    const hide = near / this.units(this.view) < 1.5 * HANDLE
+    for (const handle of handles) handle.style.visibility = hide ? "hidden" : ""
   },
 
   // The SVG point of a point of the screen.
@@ -292,6 +352,12 @@ export const planHook = {
     return this.svg.querySelector(`[data-room="${id}"]`)
   },
 
+  // The surface of the room of a wall, or of the edge of a slab, or null.
+  roomOf(el) {
+    const part = el.closest("[data-of]")
+    return part ? this.surface(part.getAttribute("data-of")) : null
+  },
+
   down(e) {
     this.pointers.set(e.pointerId, {x: e.clientX, y: e.clientY})
     this.svg.setPointerCapture(e.pointerId)
@@ -305,7 +371,7 @@ export const planHook = {
     const target = e.target
     const handle = target.closest("[data-handle]")
     const item = target.closest("[data-item]")
-    const room = target.closest("[data-room]")
+    const room = target.closest("[data-room]") || this.roomOf(target)
     const chosen = this.svg.querySelector("[data-outline]")
     let kind = "pan"
     let el = null
@@ -313,7 +379,9 @@ export const planHook = {
     else if (item) [kind, el] = ["item", item]
     else if (room && chosen && room.getAttribute("data-room") === chosen.getAttribute("data-outline"))
       [kind, el] = ["room", room]
-    this.drag = {kind, el, room, x: e.clientX, y: e.clientY, view: this.view, moved: false}
+    // A finger on a view of all the house scrolls the page up or down.
+    const scroll = kind === "pan" && e.pointerType === "touch" && this.whole()
+    this.drag = {kind, el, room, x: e.clientX, y: e.clientY, last: e.clientY, scroll, view: this.view, moved: false}
   },
 
   move(e) {
@@ -331,7 +399,10 @@ export const planHook = {
     const sdx = now.x - start.x
     const sdy = now.y - start.y
 
-    if (drag.kind === "pan") {
+    if (drag.scroll) {
+      this.window().scrollBy(0, drag.last - e.clientY)
+      drag.last = e.clientY
+    } else if (drag.kind === "pan") {
       // The view moves with the pointer: the start point stays under it.
       const units = this.units(drag.view)
       this.show({...drag.view, x: drag.view.x - dx * units, y: drag.view.y - dy * units})
@@ -444,8 +515,11 @@ export const planHook = {
   },
 
   // The view zooms in to a room: all the surfaces of its floor (a roof has
-  // three), its items and its walls.
+  // three), its items, its walls and its slab. A room of a different layer
+  // than the layer of a tab: no layer is pale now.
   zoomTo(room) {
+    const layer = room.closest("[data-box]")
+    if (this.dimmed && layer.getAttribute("id") !== `plan-${this.dimmed}`) this.dim(null)
     const id = room.getAttribute("data-room")
     const parts = this.svg.querySelectorAll(`[data-room="${id}"], [data-in="${id}"], [data-of="${id}"]`)
     const boxes = [...parts].map((el) => el.getBBox())
@@ -453,8 +527,15 @@ export const planHook = {
     const y = Math.min(...boxes.map((b) => b.y))
     const w = Math.max(...boxes.map((b) => b.x + b.width)) - x
     const h = Math.max(...boxes.map((b) => b.y + b.height)) - y
-    const shape = (this.svg.clientWidth || 1) / (this.svg.clientHeight || 1)
-    this.show(focus(this.view, {x, y, w, h}, shape))
+    this.show(focus(this.view, {x, y, w, h}, this.shape(), this.fit()))
+  },
+
+  // One layer stands out (the tab of a floor): the other layers are pale.
+  // The SVG keeps the attribute when the server draws it again.
+  dim(id) {
+    this.dimmed = id
+    if (id) this.svg.setAttribute("data-dim", id)
+    else this.svg.removeAttribute("data-dim")
   },
 
   // An item that the person drops: the center of its space on the floor
@@ -492,26 +573,45 @@ export const planHook = {
     this.pushEvent(event, payload, () => this.restore(drag))
   },
 
+  // The wheel scrolls the page. Ctrl (or Command) and the wheel zoom; a
+  // pinch on a touchpad also comes as a wheel with Ctrl.
   wheel(e) {
+    if (!e.ctrlKey && !e.metaKey) return this.hint()
     e.preventDefault()
     const p = this.point(e.clientX, e.clientY)
     this.show(zoom(this.view, Math.exp(-e.deltaY * 0.0015), p.x, p.y, this.fit()))
   },
 
-  // The buttons: zoom in, zoom out, all the house, and one layer.
+  // After the wheel with no Ctrl, a note on the picture tells how to zoom,
+  // for 1.5 seconds.
+  hint() {
+    const hint = this.el.querySelector("[data-hint]")
+    if (!hint) return
+    hint.classList.remove("opacity-0")
+    this.window().clearTimeout(this.hintTimer)
+    this.hintTimer = this.window().setTimeout(() => hint.classList.add("opacity-0"), 1500)
+  },
+
+  // The buttons: zoom in, zoom out, all the house, and one layer. The tab
+  // of a layer fills the screen with the layer, and the other layers are
+  // pale.
   click(e) {
     const button = e.target.closest("[data-zoom], [data-focus]")
     if (!button) return
     const zoomTo = button.getAttribute("data-zoom")
     const v = this.view
-    if (zoomTo === "fit") return this.show(this.fit())
+    if (zoomTo === "fit") {
+      this.dim(null)
+      return this.show(this.fit())
+    }
     if (zoomTo) {
       const factor = zoomTo === "in" ? 1.5 : 1 / 1.5
       return this.show(zoom(v, factor, v.x + v.w / 2, v.y + v.h / 2, this.fit()))
     }
-    const layer = this.svg.querySelector(`#plan-${button.getAttribute("data-focus")}`)
-    const [x, y, w, h] = numbers(layer.getAttribute("data-box"))
-    this.show({x: x - w * 0.05, y: y - h * 0.05, w: w * 1.1, h: h * 1.1})
+    const id = button.getAttribute("data-focus")
+    const [x, y, w, h] = numbers(this.svg.querySelector(`#plan-${id}`).getAttribute("data-box"))
+    this.dim(id)
+    this.show(frame({x, y, w, h}, this.shape(), 1.05))
   },
 
   // The arrow keys on an item or a room of the list.

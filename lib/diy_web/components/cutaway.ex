@@ -29,8 +29,9 @@ defmodule DIYWeb.Cutaway do
     its ridge over its eaves, in inches;
   - each item: `data-item`, `data-in` (its room) and `data-at` (the
     center of the item on the plan, in inches);
-  - each wall of a room of the house: `data-of` (its room), for a zoom to
-    the room;
+  - each wall of a room of the house, and the edge of the slab under it:
+    `data-of` (its room). A tap on it chooses the room, and the zoom to a
+    room shows its walls;
   - each label: `data-rank`, the area of its room;
   - each layer: `data-box` (its box in the SVG), for a zoom to the layer.
 
@@ -133,7 +134,9 @@ defmodule DIYWeb.Cutaway do
   A layer of a view (its `id`, its `name`, its height `z` and its
   `camera`), from its parts in the world (meters):
 
-  - the polygons of the ground and of the slabs (`{corners, class}`);
+  - the polygons of the ground and of the slabs (`{corners, class}`). A
+    slab under a room also has the id of its room (`{corners, class,
+    room}`): a tap on its edge chooses the room;
   - the surfaces of the rooms (`floor/5`) on the ground (`low`) and over
     the slabs (`rooms`);
   - the objects (walls and items, `item_view/4`), and the labels
@@ -159,13 +162,18 @@ defmodule DIYWeb.Cutaway do
       z: z,
       ground: Enum.map(parts.ground, svg),
       low: Enum.map(parts.low, svg_polys),
-      slabs: Enum.map(parts.slabs, svg),
+      slabs: Enum.map(parts.slabs, &slab_svg(&1, camera)),
       rooms: Enum.map(parts.rooms, svg_polys),
       objects: Enum.map(objects, svg_polys),
       labels: parts.labels,
       box: bounds(polys, camera)
     }
   end
+
+  defp slab_svg({corners, class}, camera), do: slab_svg({corners, class, nil}, camera)
+
+  defp slab_svg({corners, class, room}, camera),
+    do: {Camera.points(camera, {0, 0}, corners), class, room}
 
   # The height of the floor of a room over its layer. Floor 1 is on its
   # slab, a garage is on a lower slab, and a yard is on the ground.
@@ -191,7 +199,7 @@ defmodule DIYWeb.Cutaway do
           on_slab
           |> Enum.map(&slab_object(&1, id, z, floor_z.(&1), camera))
           |> Camera.order(camera)
-          |> Enum.flat_map(& &1.polys)
+          |> Enum.flat_map(fn slab -> for {c, class} <- slab.polys, do: {c, class, slab.id} end)
 
     high = if id == "attic", do: @attic, else: @full
     inside = Enum.filter(rooms, &(&1.place == :indoor))
@@ -813,7 +821,7 @@ defmodule DIYWeb.Cutaway do
       data-arrows={@arrows}
       class="cutaway block w-full h-full touch-none select-none"
       aria-hidden="true"
-      phx-mounted={JS.ignore_attributes(["viewBox", "style"])}
+      phx-mounted={JS.ignore_attributes(["viewBox", "style", "data-dim"])}
     >
       <defs>
         <radialGradient id="p-shadow-fill">
@@ -836,7 +844,12 @@ defmodule DIYWeb.Cutaway do
       <g :for={level <- @view.levels} id={"plan-#{level.id}"} data-box={box_text(level.box)}>
         <polygon :for={{points, class} <- level.ground} points={points} class={class} />
         <.surface :for={room <- level.low} :key={room.id} room={room} selected={@selected} />
-        <polygon :for={{points, class} <- level.slabs} points={points} class={class} />
+        <polygon
+          :for={{points, class, room} <- level.slabs}
+          points={points}
+          class={class}
+          data-of={room}
+        />
         <.surface :for={room <- level.rooms} :key={room.id} room={room} selected={@selected} />
         <g
           :for={object <- level.objects}

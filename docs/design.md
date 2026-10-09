@@ -1000,11 +1000,21 @@ its turn. A length is in inches.
   of the house. The first items of a room stand along its back walls. A
   build of an older version gets the draft when it loads.
 - The person changes the plan. A drag moves an item, also to a different
-  room. A tap opens an item, and a tap chooses a room. The chosen room
-  has an outline and a handle on each wall. Its bar (under the plan) has
-  its size and its buttons. A drag on the chosen room moves it with its
+  room. A tap opens an item. A tap on a room, on one of its walls or on
+  the edge of its floor (its slab) chooses the room. The chosen room has
+  an outline and a handle on each wall. Its bar (under the plan) has its
+  size and its buttons. A drag on the chosen room moves it with its
   items, and a drag on a handle moves a wall. A drag on an empty place
-  moves the view. Two fingers, the wheel or the buttons zoom.
+  moves the view, and the house stays on the screen. Two fingers, Ctrl
+  and the wheel, or the buttons zoom.
+- The plan does not trap the page. The wheel alone scrolls the page: a
+  note on the plan then tells how to zoom. When the plan shows all the
+  house, a finger that moves up or down scrolls the page. After a zoom
+  in, the finger moves the view.
+- The tabs of the layers. A tab fills the screen with its layer, and the
+  other layers are pale. The button "all the house", or a tap on a room
+  of a different layer, ends it. The button to add a room is under the
+  plan: so it does not hide the name of a room.
 - A drop. The center of the space of the item on the floor moves with
   the pointer. The item goes to the room that has this center. The script
   tries its own room first, then the rooms of the layer under the pointer,
@@ -1089,9 +1099,12 @@ its turn. A length is in inches.
   place, from the left wall and from the back wall. The move buttons of
   a sheet and of a bar point the same way (`DIYWeb.Camera.arrows/1`).
 - On a phone. A tap on a room chooses it, and the view zooms in to it:
-  its floor, its walls and its items fill the screen. Where the names of
-  two rooms overlap, the name of the larger room shows, and the other one
-  hides until a zoom in.
+  its floor, its walls and its items fill the screen. The view shows a
+  third of the house at least, so the person sees where the room is.
+  Where the names of two rooms overlap, or are nearer than 4 pixels, the
+  name of the larger room shows. The other one hides until a zoom in. The
+  handles of a small room show only when they are 36 pixels apart at
+  least: else they would hide the room.
 - The tests. Property tests check the draft (no overlap) and random
   changes (the rules, and the JSON gives the same plan). A property test
   draws random houses: each point is in the box of the SVG, and each id

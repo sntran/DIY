@@ -62,7 +62,7 @@ defmodule DIYWeb.Inside do
       <div :if={"plan" not in @build.hints} id="plan-hint" class="alert alert-info text-sm">
         <.icon name="hero-hand-raised" class="size-6" />
         <span>
-          Drag an item to move it. Tap an item to open it. Tap a room to change it. Pinch or use the buttons to zoom.
+          Drag an item to move it. Tap an item to open it. Tap a room to change it. Pinch, use Ctrl and the wheel, or use the buttons to zoom.
         </span>
         <button type="button" phx-click="hint" phx-value-hint="plan" class="btn btn-sm">OK</button>
       </div>
@@ -79,18 +79,19 @@ defmodule DIYWeb.Inside do
           </button>
         </div>
 
-        <%!-- With a chosen room, the plan is shorter: its bar shows under it. --%>
+        <%!-- Under the plan: the bar of the chosen room, or the button to add a room. --%>
         <div class={[
           "relative overflow-hidden rounded-box border border-base-300",
-          if(@chosen, do: "h-[calc(100dvh-22rem)]", else: "h-[calc(100dvh-14rem)]")
+          if(@chosen, do: "h-[calc(100dvh-22rem)]", else: "h-[calc(100dvh-17rem)]")
         ]}>
           <Cutaway.cutaway view={@view} selected={@chosen && @chosen.id} />
           <.zoom all="Show all the house" />
+        </div>
+        <div :if={!@chosen} class="flex justify-end">
           <.link
-            :if={!@chosen}
             patch={~p"/inside?#{[sheet: "new_room"]}"}
             id="add-room"
-            class="btn btn-sm btn-primary absolute bottom-2 right-2"
+            class="btn btn-sm btn-primary"
           >
             <.icon name="hero-plus" class="size-4" /> Add a room
           </.link>
@@ -131,6 +132,13 @@ defmodule DIYWeb.Inside do
   @doc "The buttons of the zoom of a plan, at its top right (the hook Plan)."
   def zoom(assigns) do
     ~H"""
+    <p
+      data-hint
+      aria-hidden="true"
+      class="absolute top-2 left-2 rounded-box bg-base-100 px-2 py-1 text-sm shadow opacity-0 transition-opacity pointer-events-none"
+    >
+      Use Ctrl and the wheel to zoom.
+    </p>
     <div class="absolute top-2 right-2 flex flex-col gap-2">
       <button type="button" data-zoom="in" class="btn btn-sm btn-square shadow" aria-label="Zoom in">
         <.icon name="hero-plus" class="size-4" />
