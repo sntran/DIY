@@ -96,7 +96,7 @@ defmodule DIYWeb.Inside do
           </.link>
         </div>
 
-        <.room_bar :if={@chosen} room={@chosen} />
+        <.room_bar :if={@chosen} room={@chosen} build={@build} />
 
         <.list
           build={@build}
@@ -146,6 +146,7 @@ defmodule DIYWeb.Inside do
   end
 
   attr :room, :map, required: true
+  attr :build, :map, required: true
 
   # The bar of the chosen room: its name, its size, and its buttons.
   defp room_bar(assigns) do
@@ -177,7 +178,14 @@ defmodule DIYWeb.Inside do
           <.icon name="hero-x-mark" class="size-4" />
         </.link>
       </div>
-      <.moves id="move-room" event="nudge_room" target={@room.id} step={24} what="the room" />
+      <.moves
+        id="move-room"
+        event="nudge_room"
+        target={@room.id}
+        step={24}
+        what="the room"
+        blocked={blocked(@build, @room.id, 24)}
+      />
     </div>
     """
   end
@@ -186,6 +194,10 @@ defmodule DIYWeb.Inside do
   The place of an item in its room, in words. The left wall is the wall
   that the Left key goes to. The top wall is the wall of the Up key.
   """
+  def where(item, %{level: "van:" <> _} = zone),
+    do:
+      "#{feet(item.at.x)} from the right side of #{zone.name}, #{feet(item.at.y)} from its back."
+
   def where(item, room),
     do:
       "#{feet(item.at.x)} from the left wall of #{room.name}, #{feet(item.at.y)} from the top wall."
@@ -541,13 +553,23 @@ defmodule DIYWeb.Inside do
     ~H"""
     <div id="item-place" class="space-y-2 rounded-box bg-base-200 p-3">
       <p class="text-sm font-semibold">Its place, its size and its turn</p>
-      <.moves id="move-item" event="nudge_item" target={@item.id} step={6} what="the item" />
+      <.moves
+        id="move-item"
+        event="nudge_item"
+        target={@item.id}
+        step={6}
+        what="the item"
+        van={Build.van_level?(@room.level)}
+      />
       <p id="item-where" class="text-sm" aria-live="polite">{where(@item, @room)}</p>
       <p :if={@item.type == "solar_panels"} class="text-xs opacity-70">
         The watts give the size of the array: {@panel} inches for each panel of 400 W.
       </p>
+      <p :if={@item.type == "camper_van"} class="text-xs opacity-70">
+        The model of the van gives its size, with its mirrors.
+      </p>
       <form
-        :if={@item.type != "solar_panels"}
+        :if={@item.type not in ["solar_panels", "camper_van"]}
         id="size-form"
         phx-submit="item_size"
         class="flex flex-wrap items-end gap-2"
@@ -568,7 +590,7 @@ defmodule DIYWeb.Inside do
         </label>
         <button class="btn btn-sm">Set the size</button>
       </form>
-      <p :if={@item.type != "solar_panels"} class="text-xs opacity-70">
+      <p :if={@item.type not in ["solar_panels", "camper_van"]} class="text-xs opacity-70">
         In inches.{if @item.size,
           do: " You gave this size.",
           else: " The typical size of this kind: give the size of your item."}
@@ -604,41 +626,75 @@ defmodule DIYWeb.Inside do
   attr :target, :string, required: true, doc: "the id of the item or of the room"
   attr :step, :integer, required: true, doc: "inches for each tap"
   attr :what, :string, required: true
+  attr :van, :boolean, default: false, doc: "true in a van: the words of a van"
+  attr :blocked, :list, default: [], doc: "the buttons (left, up, down, right) that cannot move"
 
   @doc """
   Four buttons that move an item or a room: for a person who does not
   drag (WCAG 2.2, 2.5.7). Each arrow points as the move goes on the plan.
   The left wall is at the top left, and the top wall is at the top right.
+  In a van, the right side of the van is at the top left, and the back is
+  at the top right (`DIYWeb.Iso`). A button that cannot move is disabled.
   """
   def moves(assigns) do
+    words =
+      if assigns.van,
+        do: ["to the right side", "to the back", "to the front", "to the left side"],
+        else: [
+          "to the left wall",
+          "to the top wall",
+          "away from the top wall",
+          "away from the left wall"
+        ]
+
     assigns =
       assign(assigns,
-        buttons: [
-          {"left", -assigns.step, 0, "hero-arrow-up-left", "to the left wall"},
-          {"up", 0, -assigns.step, "hero-arrow-up-right", "to the top wall"},
-          {"down", 0, assigns.step, "hero-arrow-down-left", "away from the top wall"},
-          {"right", assigns.step, 0, "hero-arrow-down-right", "away from the left wall"}
-        ]
+        buttons:
+          Enum.zip(
+            [
+              {"left", -assigns.step, 0, "hero-arrow-up-left"},
+              {"up", 0, -assigns.step, "hero-arrow-up-right"},
+              {"down", 0, assigns.step, "hero-arrow-down-left"},
+              {"right", assigns.step, 0, "hero-arrow-down-right"}
+            ],
+            words
+          )
       )
 
     ~H"""
     <div id={@id} class="flex items-center gap-1" role="group" aria-label={"Move #{@what}"}>
       <span class="text-xs mr-1">Move {@what}:</span>
       <button
-        :for={{key, dx, dy, icon, text} <- @buttons}
+        :for={{{key, dx, dy, icon}, text} <- @buttons}
         type="button"
         id={"#{@id}-#{key}"}
         phx-click={@event}
         phx-value-id={@target}
         phx-value-dx={dx}
         phx-value-dy={dy}
+        disabled={key in @blocked}
         class="btn btn-sm btn-square"
         aria-label={"Move #{@what} #{feet(@step)} #{text}"}
       >
         <.icon name={icon} class="size-4" />
       </button>
     </div>
+    <p :if={length(@blocked) == 4} id={"#{@id}-full"} class="text-xs opacity-70">
+      No free place is next to it. Make it smaller first (Change).
+    </p>
     """
+  end
+
+  @doc "The move buttons that cannot move a room or a zone by a step."
+  def blocked(build, id, step) do
+    for {key, dx, dy} <- [
+          {"left", -step, 0},
+          {"up", 0, -step},
+          {"down", 0, step},
+          {"right", step, 0}
+        ],
+        not Build.can_move?(build, id, dx, dy),
+        do: key
   end
 
   # The fields of the size of an item: its width, its depth and its height.

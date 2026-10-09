@@ -632,15 +632,15 @@ defmodule DIYWeb.HomeLive do
     if Build.van_level?(room.level), do: String.replace_prefix(room.level, "van:", "")
   end
 
-  # The result of a change of the plan: the new build (and a text for a
-  # screen reader), or a message.
   # The page of a plan: the van on the page Van, else the rooms.
   defp plan_path(%{assigns: %{live_action: :van, shown_van: van}}, params) when is_binary(van),
     do: ~p"/van?#{[{:id, van} | params]}"
 
   defp plan_path(_socket, params), do: ~p"/inside?#{params}"
 
-  # A change of the plan: a message that stays from an older change goes.
+  # The result of a change of the plan: the new build (and a text for a
+  # screen reader), or a message. A message that stays from an older change
+  # goes.
   defp plan_result(socket, {:ok, build}, status) do
     socket = socket |> clear_flash(:error) |> put(build)
     {:noreply, assign(socket, :status, status && status.(build))}
@@ -698,9 +698,16 @@ defmodule DIYWeb.HomeLive do
     "#{Catalog.name(item)} turned. Its space is #{Inside.feet(w)} by #{Inside.feet(d)}."
   end
 
+  # A zone of a van tells its new place: from the back of the van and from
+  # its right side (as the item sheet).
   defp room_status(build, id) do
-    {:ok, room} = Build.room(build, id)
-    "#{room.name} moved."
+    case Build.room(build, id) do
+      {:ok, %{level: "van:" <> _, plan: plan} = zone} ->
+        "#{zone.name} moved: #{Inside.feet(plan.y)} from the back of the van, #{Inside.feet(plan.x)} from its right side."
+
+      {:ok, room} ->
+        "#{room.name} moved."
+    end
   end
 
   defp with_build(socket, {:ok, build}), do: {:noreply, put(socket, build)}

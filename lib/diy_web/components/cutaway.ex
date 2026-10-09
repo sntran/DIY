@@ -595,7 +595,7 @@ defmodule DIYWeb.Cutaway do
           :for={object <- level.objects}
           :key={object.id}
           id={"plan-#{object.kind}-#{object.id}"}
-          class={if object.kind == :item, do: ["p-item", object.planned && "p-planned"]}
+          class={object_class(object)}
           data-item={object.kind == :item && object.id}
           data-in={object.kind == :item && object.room}
           data-at={object.kind == :item && object.at}
@@ -634,6 +634,12 @@ defmodule DIYWeb.Cutaway do
     </svg>
     """
   end
+
+  # An item can move. A fixed part of a van (a seat, the dash) does not take
+  # a tap: the tap goes to the zone under it.
+  defp object_class(%{kind: :item, planned: planned}), do: ["p-item", planned && "p-planned"]
+  defp object_class(%{kind: :fixture}), do: "p-fixture"
+  defp object_class(_wall), do: nil
 
   attr :room, :map, required: true
   attr :selected, :string, default: nil

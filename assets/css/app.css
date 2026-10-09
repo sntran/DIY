@@ -307,6 +307,7 @@
 .p-vmetal { fill: var(--p-vmetal) } .p-vmat { fill: var(--p-vmat) } .p-vroof { fill: var(--p-vroof) }
 .p-chosen { stroke: var(--p-chosen); stroke-width: 2.5 }
 .p-item { cursor: grab }
+.p-fixture { pointer-events: none }
 .p-planned { opacity: 0.55 }
 .p-dragging { cursor: grabbing; opacity: 0.85 }
 .p-label {

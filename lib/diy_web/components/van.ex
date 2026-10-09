@@ -338,10 +338,54 @@ defmodule DIYWeb.VanPage do
           <Cutaway.cutaway view={@view} selected={@zone && @zone.id} />
           <Inside.zoom all="Show all the van" />
         </div>
-        <.zone_bar :if={@zone} van={@van} zone={@zone} />
+        <.zone_bar :if={@zone} van={@van} zone={@zone} build={@build} />
+        <.shell build={@build} van={@van} />
+        <p id="van-size-source" class="text-xs opacity-80">
+          The sizes of the model: {Catalog.van_size(@van.params["model"]).source} The places of the seats, the dash and the wheel wells are for the picture only.
+        </p>
         <.list build={@build} van={@van} />
         <p id="plan-status" class="sr-only" aria-live="polite">{@status}</p>
       </div>
+    </div>
+    """
+  end
+
+  attr :build, :map, required: true
+  attr :van, :map, required: true
+
+  # The shell of the van has no place on the plan: its items (the
+  # insulation, the walls and the floor) are the materials of the picture.
+  # A tap can open them and add one.
+  defp shell(assigns) do
+    assigns = assign(assigns, :zone, Build.zone(assigns.build, assigns.van.id, :shell))
+
+    ~H"""
+    <div id="van-shell" class="card card-border p-3 space-y-2">
+      <div class="flex items-center justify-between gap-2">
+        <h3 class="font-semibold">{@zone.name}</h3>
+        <.link
+          patch={~p"/van?#{[id: @van.id, add: @zone.id]}"}
+          id="shell-add"
+          class="btn btn-sm"
+          aria-label={"Add an item to #{@zone.name}"}
+        >
+          <.icon name="hero-plus" class="size-4" /> Item
+        </.link>
+      </div>
+      <p class="text-xs opacity-80">
+        The insulation, the walls and the floor. They have no place on the plan: the picture shows them as the materials of the van.
+      </p>
+      <ul :if={Build.items_in(@build, @zone.id) != []} class="flex flex-wrap gap-2">
+        <li :for={item <- Build.items_in(@build, @zone.id)}>
+          <.link
+            patch={~p"/van?#{[id: @van.id, item: item.id]}"}
+            id={"shell-item-#{item.id}"}
+            class="btn btn-sm btn-ghost"
+          >
+            <Icon.item type={item.type} class="size-5" /> {Catalog.name(item)} · {lb(Van.weight(item))}
+          </.link>
+        </li>
+      </ul>
     </div>
     """
   end
@@ -351,6 +395,7 @@ defmodule DIYWeb.VanPage do
 
   attr :van, :map, required: true
   attr :zone, :map, required: true
+  attr :build, :map, required: true
 
   # The bar of the chosen zone: its name, its size, and its buttons.
   defp zone_bar(assigns) do
@@ -395,6 +440,8 @@ defmodule DIYWeb.VanPage do
         target={@zone.id}
         step={6}
         what="the zone"
+        van
+        blocked={Inside.blocked(@build, @zone.id, 6)}
       />
     </div>
     """
@@ -458,7 +505,7 @@ defmodule DIYWeb.VanPage do
       class="sr-only focus-within:not-sr-only focus-within:card focus-within:card-border focus-within:p-3"
     >
       <p class="text-sm">
-        The arrow keys move the item or the zone that has the focus: 6 inches, or 2 feet with Shift. The Left key moves it to the left side of the van, and the Up key to the back.
+        The arrow keys move the item or the zone that has the focus: 6 inches, or 2 feet with Shift. On the plan, the right side of the van is at the top left. The Left key moves it to the right side of the van, and the Up key to the back.
       </p>
       <ul>
         <li :for={zone <- @zones} id={"zone-#{zone.id}"}>

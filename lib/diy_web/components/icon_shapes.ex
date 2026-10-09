@@ -131,37 +131,40 @@ defmodule DIYWeb.Icon.Shapes do
     sliding = {cab_door - 1.25, cab_door - 0.05}
     mirror = fn x -> box({x, elem(low, 0) - 0.15, glass_z + 0.05}, {0.16, 0.06, 0.24}, "dark") end
 
+    # The faces across the van paint first, then the sides, then the details
+    # on the sides: so a side paints over the hood after a turn. No part of
+    # the body goes into the bumpers: they paint as parts of their own.
     body =
-      [face(Enum.map(profile, fn {y, z} -> {0, y, z} end), {-1, 0, 0}, "i-white-~ i-face")] ++
+      [
+        face(across(w, {@bumper, h}, {@bumper, @sill}), {0, -1, 0}, "i-white-~ i-face"),
+        face(
+          for(
+            {x, z} <- [
+              {w / 2 - 0.01, @sill},
+              {w / 2 + 0.01, @sill},
+              {w / 2 + 0.01, h - 0.1},
+              {w / 2 - 0.01, h - 0.1}
+            ],
+            do: {x, @bumper, z}
+          ),
+          {0, -1, 0},
+          "i-line"
+        )
+      ] ++
+        body(profile, w) ++
+        [face(Enum.map(profile, fn {y, z} -> {0, y, z} end), {-1, 0, 0}, "i-white-~ i-face")] ++
         van_side(0, -1, cab_door, {low, high}, h) ++
+        [far_side({0, elem(sliding, 0), @sill + 0.05}, {1.2, h - @sill - 0.3}, "i-steel-l")] ++
         [van_window(0, -1, sliding, h)] ++
         wheels(0, [rear_axle, front_axle], @tire) ++
-        [
-          face(across(w, {@bumper, h}, {@bumper, @sill}), {0, -1, 0}, "i-white-~ i-face"),
-          face(
-            for(
-              {x, z} <- [
-                {w / 2 - 0.01, @sill},
-                {w / 2 + 0.01, @sill},
-                {w / 2 + 0.01, h - 0.1},
-                {w / 2 - 0.01, h - 0.1}
-              ],
-              do: {x, @bumper - 0.005, z}
-            ),
-            {0, -1, 0},
-            "i-line"
-          )
-        ] ++
         [face(Enum.map(profile, fn {y, z} -> {w, y, z} end), {1, 0, 0}, "i-white-~ i-face")] ++
         van_side(w, 1, cab_door, {low, high}, h) ++
-        [side({w, elem(sliding, 0), @sill + 0.05}, {1.2, h - @sill - 0.3}, "i-steel-l")] ++
         [van_window(w, 1, sliding, h)] ++
         wheels(w, [rear_axle, front_axle], @tire) ++
-        body(profile, w) ++
         [
-          front({0.12, l - @bumper, @sill + 0.25}, {0.22, 0.12}, "i-bulb"),
-          front({w - 0.34, l - @bumper, @sill + 0.25}, {0.22, 0.12}, "i-bulb"),
-          front({w / 2 - 0.35, l - @bumper, @sill + 0.05}, {0.7, 0.18}, "i-black")
+          front({0.12, l - @bumper - 0.01, @sill + 0.25}, {0.22, 0.12}, "i-bulb"),
+          front({w - 0.34, l - @bumper - 0.01, @sill + 0.25}, {0.22, 0.12}, "i-bulb"),
+          front({w / 2 - 0.35, l - @bumper - 0.01, @sill + 0.05}, {0.7, 0.18}, "i-black")
         ]
 
     [
@@ -210,7 +213,7 @@ defmodule DIYWeb.Icon.Shapes do
         "i-glass-dark"
       ),
       face(
-        corners.([{0, @sill}, {y0, @sill}, {y0, @sill + 0.16}, {0, @sill + 0.16}]),
+        corners.([{@bumper, @sill}, {y0, @sill}, {y0, @sill + 0.16}, {@bumper, @sill + 0.16}]),
         {sign, 0, 0},
         "i-dark-~"
       )
@@ -591,14 +594,14 @@ defmodule DIYWeb.Icon.Shapes do
   def model("ceiling_fan") do
     blade = fn corners -> face(corners, {0, 0, 1}, "i-wood-t i-face") end
 
-    box({0.47, 0.47, 0.3}, {0.06, 0.06, 0.4}, "steel") ++
-      [
-        blade.([{0.5, 0.42, 0.3}, {1.1, 0.42, 0.3}, {1.1, 0.58, 0.3}, {0.5, 0.58, 0.3}]),
-        blade.([{0.42, 0.5, 0.3}, {0.42, 1.1, 0.3}, {0.58, 1.1, 0.3}, {0.58, 0.5, 0.3}]),
-        blade.([{0.5, 0.42, 0.3}, {-0.1, 0.42, 0.3}, {-0.1, 0.58, 0.3}, {0.5, 0.58, 0.3}]),
-        blade.([{0.42, 0.5, 0.3}, {0.42, -0.1, 0.3}, {0.58, -0.1, 0.3}, {0.58, 0.5, 0.3}]),
-        disc({0.5, 0.5, 0.31}, :top, 0.13, "i-steel-t")
-      ]
+    # The rod goes up from the middle of the disc: it paints last.
+    [
+      blade.([{0.5, 0.42, 0.3}, {1.1, 0.42, 0.3}, {1.1, 0.58, 0.3}, {0.5, 0.58, 0.3}]),
+      blade.([{0.42, 0.5, 0.3}, {0.42, 1.1, 0.3}, {0.58, 1.1, 0.3}, {0.58, 0.5, 0.3}]),
+      blade.([{0.5, 0.42, 0.3}, {-0.1, 0.42, 0.3}, {-0.1, 0.58, 0.3}, {0.5, 0.58, 0.3}]),
+      blade.([{0.42, 0.5, 0.3}, {0.42, -0.1, 0.3}, {0.58, -0.1, 0.3}, {0.58, 0.5, 0.3}]),
+      disc({0.5, 0.5, 0.31}, :top, 0.13, "i-steel-t")
+    ] ++ box({0.47, 0.47, 0.3}, {0.06, 0.06, 0.4}, "steel")
   end
 
   def model("always_on") do
@@ -662,7 +665,7 @@ defmodule DIYWeb.Icon.Shapes do
         ),
         cabin.(
           [{0.08, 0.6, 0.55}, {w - 0.08, 0.6, 0.55}, {w - 0.15, 0.85, 0.85}, {0.15, 0.85, 0.85}],
-          nil,
+          {0, -1, 0.83},
           "i-red-t"
         ),
         cabin.(
@@ -696,12 +699,14 @@ defmodule DIYWeb.Icon.Shapes do
     across = fn {y1, z1}, {y2, z2} -> [{0, y1, z1}, {w, y1, z1}, {w, y2, z2}, {0, y2, z2}] end
 
     # The two sides have the profile, and the back has its doors: they
-    # show after a turn. A slope of the cab looks to the front and up. The
+    # show after a turn. The sliding door is on the right side of the van
+    # (x = 0, `DIYWeb.Iso`). A slope of the cab looks to the front and up. The
     # hood is low: when the front looks away, the body is in front of it,
     # so it shows only with the front.
     [
       face(Enum.map(profile, fn {y, z} -> {0, y, z} end), {-1, 0, 0}, "i-white-~ i-face"),
       far_side({0, 0.75, 0.6}, {0.6, 0.35}, "i-glass-dark"),
+      far_side({0, 1.45, 0.2}, {0.55, 0.85}, "i-steel-l"),
       face(across.({0, 0.2}, {0, h}), {0, -1, 0}, "i-white-~ i-face"),
       face(Enum.map(profile, fn {y, z} -> {w, y, z} end), {1, 0, 0}, "i-white-~ i-face"),
       face(across.({0, h}, {2.0, h}), {0, 0, 1}, "i-white-t i-face"),
@@ -709,8 +714,7 @@ defmodule DIYWeb.Icon.Shapes do
       face(across.({2.3, 0.72}, {2.1, 1.12}), {0, 0.89, 0.45}, "i-glass-dark"),
       face(across.({l, 0.65}, {2.3, 0.72}), {0, 1, 0.5}, "i-white-t i-face"),
       front({0, l, 0.2}, {w, 0.45}, "i-white-~ i-face"),
-      side({w, 0.75, 0.6}, {0.6, 0.35}, "i-glass-dark"),
-      side({w, 1.45, 0.2}, {0.55, 0.85}, "i-steel-l")
+      side({w, 0.75, 0.6}, {0.6, 0.35}, "i-glass-dark")
     ] ++ wheels(w, [0.5, 2.25], 0.2) ++ wheels(0, [0.5, 2.25], 0.2)
   end
 

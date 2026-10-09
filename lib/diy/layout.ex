@@ -32,9 +32,10 @@ defmodule DIY.Layout do
   - Two rooms of the same layer do not overlap. A layer is a surface
     (`layer/1`): the ground (outside and floor 1), floor 2, floor 3, the
     attic and the roof. Each van has two layers: its floor and its roof.
-  - A zone of a van is in the van (`van_box/1`). A zone can be out of it:
-    with a different model, or in a stored text that a person changed.
-    Then all the zones of the van get the draft again (`van_draft/2`).
+  - A zone of a van is in the van (`van_box/1`), and the cab and the roof
+    are at their places for the model. A different model, or a stored text
+    that a person changed, can break this rule. Then all the zones of the
+    van get the draft again (`van_draft/2`).
   - An item is in its room: `0 <= x <= w(room) - w(item)`, and the same
     for `y`. An item that is larger than its room is at 0. It goes
     through the walls of the room, and the picture can paint a wall over
@@ -127,13 +128,14 @@ defmodule DIY.Layout do
     {cols * @panel_w, rows * @panel_d, 2}
   end
 
-  def size(%{size: %{w: w, d: d, h: h}}), do: {w, d, h}
-
-  # A camper van: its space has the mirrors too (7 in on each side).
+  # A camper van: the size of its model, and its space has the mirrors too
+  # (7 in on each side). A size that a stored build gives has no effect.
   def size(%{type: "camper_van", params: %{"model" => model}}) do
     van = Catalog.van_size(model)
     {van.width + 14, van.length, van.height}
   end
+
+  def size(%{size: %{w: w, d: d, h: h}}), do: {w, d, h}
 
   def size(%{type: type}), do: Catalog.size(type)
 
@@ -311,7 +313,8 @@ defmodule DIY.Layout do
 
   ## The van
 
-  # The depth of the cab zone: the seats in front of the cargo area.
+  # The depth of the cab zone: the seats in front of the cargo area. A guess
+  # of the app (no source): a seat and the space for the legs.
   @cab 36
 
   @doc "True for a zone of a van."
@@ -422,8 +425,9 @@ defmodule DIY.Layout do
   end
 
   # The zones of each van keep their plans when each plan is valid, in the
-  # van, and not over a different zone of its layer. Else all of them get
-  # the draft again. The shell has no plan.
+  # van, and not over a different zone of its layer. The cab and the roof
+  # must be at their places for the model (a new model moves them). Else all
+  # the zones get the draft again. The shell has no plan.
   defp vans(rooms, items) do
     vans = Map.new(for(i <- items, i.type == "camper_van", do: {"van:" <> i.id, i}))
 
@@ -436,14 +440,21 @@ defmodule DIY.Layout do
       for {level, list} <- zones, van = vans[level], van != nil, reduce: %{} do
         plans ->
           box = van_box(van)
+          draft = van_draft(van, list)
+
+          # The cab and the roof are fixed: at their places for the model.
+          fixed? =
+            Enum.all?(Enum.zip(list, draft), fn {zone, plan} ->
+              zone.place not in [:cab, :van_roof] or zone.plan == plan
+            end)
 
           good =
-            Enum.all?(list, &(valid_plan?(&1.plan) and inside?(&1.plan, box))) and
+            fixed? and Enum.all?(list, &(valid_plan?(&1.plan) and inside?(&1.plan, box))) and
               not Enum.any?(pairs(list), fn {a, b} ->
                 layer(a) == layer(b) and overlap?(a.plan, b.plan)
               end)
 
-          new = if good, do: Enum.map(list, & &1.plan), else: van_draft(van, list)
+          new = if good, do: Enum.map(list, & &1.plan), else: draft
 
           Enum.zip(list, new)
           |> Enum.reduce(plans, fn {z, p}, plans -> Map.put(plans, z.id, p) end)

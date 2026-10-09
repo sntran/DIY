@@ -158,35 +158,31 @@ defmodule DIYWeb.VanCutaway do
       ]
   end
 
-  # The walls of the van. The left side (the side of the driver) and the
-  # doors at the back are cut at the height of a table. The right side is
-  # cut near the floor, with the opening of the sliding door. Panels and
-  # insulation of the shell show on the walls and in their cut.
+  # The walls of the van. The right side (x = 0, with the opening of the
+  # sliding door) and the doors at the back are cut at the height of a
+  # table. The left side (the side of the driver) is cut near the floor.
+  # Panels and insulation of the shell show on the walls and in their cut.
+  # The wall at the back fills the two corners.
   defp walls(size, t, shell) do
     {cw, cargo, cab_end} = {size.cargo_width, size.cargo_length, size.cargo_length + Layout.cab()}
     material = if "walls" in shell, do: "p-vpanel", else: "p-vwall"
     top = if "insulation" in shell, do: "p-vinsul-t", else: material <> "-t"
     opening = {cargo - @door - 2, cargo - 2}
 
+    {door0, door1} = opening
+
     [
-      wall("left", {-t, -t}, {t, cab_end + t}, {0, 0, 0, cab_end}, @high, {material, top}),
-      wall("back", {0, -t}, {cw, t}, {0, 0, cw, 0}, @high, {material, top}),
-      wall(
-        "right-back",
-        {cw, 0},
-        {t, elem(opening, 0)},
-        {cw, 0, cw, elem(opening, 0)},
-        @low,
-        {material, top}
-      ),
+      wall("back", {-t, -t}, {cw + 2 * t, t}, {0, 0, cw, 0}, @high, {material, top}),
+      wall("right-back", {-t, 0}, {t, door0}, {0, 0, 0, door0}, @high, {material, top}),
       wall(
         "right-front",
-        {cw, elem(opening, 1)},
-        {t, cab_end - elem(opening, 1)},
-        {cw, elem(opening, 1), cw, cab_end},
-        @low,
+        {-t, door1},
+        {t, cab_end - door1},
+        {0, door1, 0, cab_end},
+        @high,
         {material, top}
-      )
+      ),
+      wall("left", {cw, 0}, {t, cab_end}, {cw, 0, cw, cab_end}, @low, {material, top})
     ]
   end
 
@@ -211,7 +207,7 @@ defmodule DIYWeb.VanCutaway do
     w = div(size.cargo_width - size.wells, 2)
     y = rear - div(@well_d, 2)
 
-    for {id, x} <- [{"left", 0}, {"right", size.cargo_width - w}] do
+    for {id, x} <- [{"right", 0}, {"left", size.cargo_width - w}] do
       fixture(
         "well-" <> id,
         solid({x * @m, y * @m, 0}, {w * @m, @well_d * @m, @well_h * @m}, "white"),
@@ -220,12 +216,13 @@ defmodule DIYWeb.VanCutaway do
     end
   end
 
-  # The seats of the driver (on the left) and of the passenger, in the cab.
-  # A swivel seat (an item) takes the place of the seat that it is on.
+  # The seats of the driver (on the left side, near x = w) and of the
+  # passenger, in the cab. A swivel seat (an item) takes the place of the
+  # seat that it is on.
   defp seats(size, swivels) do
     cargo = size.cargo_length
 
-    for {id, x} <- [{"driver", 3}, {"passenger", size.cargo_width - 23}],
+    for {id, x} <- [{"driver", size.cargo_width - 23}, {"passenger", 3}],
         plan = %{x: x, y: cargo + 6, w: 20, d: 22},
         not Enum.any?(swivels, fn {zone, item} ->
           Layout.overlap?(
@@ -247,12 +244,12 @@ defmodule DIYWeb.VanCutaway do
     end
   end
 
-  # The front of the cab: the dash, the steering wheel (on the left) and
-  # the hood, with its lights and its bumper.
+  # The front of the cab: the dash, the steering wheel (on the left side,
+  # in front of the driver) and the hood, with its lights and its bumper.
   defp cab(size, t, front, van) do
     {cw, dash} = {size.cargo_width, size.cargo_length + Layout.cab()}
     hood = max(0.25, Shapes.hood_height(van.params["model"]) - @floor * @m)
-    wheel = {13 * @m, (dash - 3) * @m, 0.62}
+    wheel = {(cw - 13) * @m, (dash - 3) * @m, 0.62}
     tilt = {0, -0.5, 0.866}
 
     [
@@ -303,7 +300,7 @@ defmodule DIYWeb.VanCutaway do
 
     %{
       id: "van-" <> id,
-      kind: :wall,
+      kind: :fixture,
       loose: false,
       box: {x0, y0, z0, x1, y1, z1},
       key: key || (x0 + x1 + y0 + y1) / 2,

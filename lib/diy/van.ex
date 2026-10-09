@@ -16,7 +16,8 @@ defmodule DIY.Van do
   The water of a tank weighs 8.34 lb for each gallon (USGS, "Water
   density"). The people sit in the cab, and the gear goes under the bed:
   at the middle of these zones. An item of the shell (the insulation, the
-  walls, the floor) is at the middle of the van.
+  walls, the floor) is at the middle of the plan of the van: the cargo
+  area and the cab.
 
   ## The power budget
 
@@ -42,7 +43,7 @@ defmodule DIY.Van do
   alias DIY.{Build, Catalog, Layout}
 
   # The thickness of the doors at the back of a van, in inches: the plan
-  # of the van starts after them.
+  # of the van starts after them. A guess of the app (no source).
   @doors 3
 
   @water_lb 8.34
@@ -90,7 +91,8 @@ defmodule DIY.Van do
   end
 
   # The place along the van of an item: the middle of the item on the plan
-  # of its zone. An item of the shell is at the middle of the van.
+  # of its zone. An item of the shell is at the middle of the plan of the
+  # van (the cargo area and the cab).
   defp along(_van, %{at: %{y: y}} = item, %{plan: %{y: zone_y}}) do
     {_w, d} = Layout.extent(item)
     zone_y + y + d / 2

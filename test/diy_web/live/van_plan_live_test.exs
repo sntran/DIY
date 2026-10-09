@@ -46,9 +46,31 @@ defmodule DIYWeb.VanPlanLiveTest do
     assert has_element?(view, "#van-plan-#{van} button[data-focus=roof]", "Roof of the van")
     assert has_element?(view, "polygon[data-room=#{galley.id}]")
     assert has_element?(view, "g[data-item=#{fridge}][data-in=#{galley.id}]")
-    assert has_element?(view, "#plan-wall-van-seat-driver")
-    assert has_element?(view, "#plan-wall-van-hood")
+    assert has_element?(view, "#plan-fixture-van-seat-driver")
+    assert has_element?(view, "#plan-fixture-van-hood")
     assert has_element?(view, "button[data-zoom=fit][aria-label='Show all the van']")
+
+    # In the house, the sheet of the van has no size: the model gives it.
+    render_patch(view, ~p"/inside?#{[item: van]}")
+    assert has_element?(view, "#item-place", "The model of the van gives its size")
+    refute has_element?(view, "#size-form")
+    render_patch(view, ~p"/van?#{[id: van]}")
+
+    # The sizes of the model have their source, with the guesses of the app.
+    assert has_element?(
+             view,
+             "#van-size-source",
+             "The place of the front axle is a guess of the app"
+           )
+
+    # The shell has no place on the plan: a tap adds an item to it.
+    shell = zone(view, van, :shell)
+    view |> element("#shell-add") |> render_click()
+    assert_patch(view, ~p"/van?#{[id: van, add: shell.id]}")
+    view |> element("#add-insulation") |> render_click()
+    [insulation] = Build.items_in(build(view), shell.id)
+    assert has_element?(view, "#shell-item-#{insulation.id}", "Insulation")
+    render_patch(view, ~p"/van?#{[id: van]}")
 
     # The list: each zone, with its items and a link to add an item.
     assert has_element?(view, "#van-list #zone-#{galley.id} h3", "Galley")
@@ -68,6 +90,20 @@ defmodule DIYWeb.VanPlanLiveTest do
     assert has_element?(view, "#zone-bar", "Living area")
     assert has_element?(view, "#plan-selection [data-handle=x0]")
 
+    # On the draft, the zone has no free place next to it: the buttons are
+    # disabled, and the bar says why. They use the words of a van.
+    assert has_element?(
+             view,
+             "#move-room-left[disabled][aria-label='Move the zone 6 in to the right side']"
+           )
+
+    assert has_element?(
+             view,
+             "#move-room-up[disabled][aria-label='Move the zone 6 in to the back']"
+           )
+
+    assert has_element?(view, "#move-room-full", "Make it smaller first")
+
     view |> element("#bar-change") |> render_click()
     assert has_element?(view, "#zone-sheet")
 
@@ -77,6 +113,8 @@ defmodule DIYWeb.VanPlanLiveTest do
     |> render_submit()
 
     assert %{w: 48, d: 24} = zone(view, van, :living).plan
+    refute has_element?(view, "#move-room-right[disabled]")
+    assert has_element?(view, "#move-room-left[disabled]")
 
     # The buttons move it in the van; it does not go out of the van.
     x = zone(view, van, :living).plan.x
@@ -84,6 +122,15 @@ defmodule DIYWeb.VanPlanLiveTest do
     assert zone(view, van, :living).plan.x == x + 6
     html = render_hook(view, "nudge_room", %{"id" => living.id, "dx" => 600, "dy" => 0})
     assert html =~ "A zone stays in the van."
+
+    # An arrow key tells the new place of the zone.
+    render_hook(view, "nudge_room", %{"id" => living.id, "dx" => 6, "dy" => 0})
+
+    assert has_element?(
+             view,
+             "#plan-status",
+             "Living area moved: 7 ft 1 in from the back of the van, 1 ft from its right side."
+           )
 
     # The cab is fixed: no handles, no sheet, and it does not move.
     cab = zone(view, van, :cab)
@@ -111,6 +158,8 @@ defmodule DIYWeb.VanPlanLiveTest do
     render_hook(view, "open_item", %{"id" => fridge})
     assert_patch(view, ~p"/van?#{[id: van, item: fridge]}")
     assert has_element?(view, "#item-sheet #item-place")
+    assert has_element?(view, "#item-where", "from the right side of Galley")
+    assert has_element?(view, "#move-item-down[aria-label='Move the item 6 in to the front']")
     view |> element("#turn-item") |> render_click()
     assert item(view, fridge).turn == 1
 
@@ -143,9 +192,9 @@ defmodule DIYWeb.VanPlanLiveTest do
     assert html =~ "p-vinsul-t"
     assert html =~ "p-vpanel-r"
     assert html =~ "p-floor p-wood"
-    # The swivel seat is at the back corner of the cab: on the left, at the
-    # place of the seat of the driver.
-    refute has_element?(view, "#plan-wall-van-seat-driver")
-    assert has_element?(view, "#plan-wall-van-seat-passenger")
+    # The swivel seat is at the back corner of the cab (x = 0, the right
+    # side of the van): at the place of the seat of the passenger.
+    refute has_element?(view, "#plan-fixture-van-seat-passenger")
+    assert has_element?(view, "#plan-fixture-van-seat-driver[class=p-fixture]")
   end
 end

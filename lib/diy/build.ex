@@ -666,20 +666,40 @@ defmodule DIY.Build do
 
   defp van_box(_build, _room), do: nil
 
-  defp put_room_plan(build, room, plan, {dx, dy}) do
+  @doc """
+  True when a room or a zone can move by `dx` and `dy` (inches): the move
+  of `move_room/4` keeps the rules. The page disables a button that cannot
+  move it.
+  """
+  @spec can_move?(t(), String.t(), integer(), integer()) :: boolean()
+  def can_move?(build, id, dx, dy) do
+    case movable_room(build, id) do
+      {:ok, room} ->
+        check_plan(build, room, %{room.plan | x: room.plan.x + dx, y: room.plan.y + dy}) == :ok
+
+      _error ->
+        false
+    end
+  end
+
+  # The rules of a new plan of a room or a zone.
+  defp check_plan(build, room, plan) do
     box = van_box(build, room)
 
     cond do
-      not Layout.valid_plan?(plan) ->
-        {:error, :plan}
+      not Layout.valid_plan?(plan) -> {:error, :plan}
+      box != nil and not Layout.inside?(plan, box) -> {:error, :van}
+      not Layout.free?(build, room, plan) -> {:error, :overlap}
+      true -> :ok
+    end
+  end
 
-      box != nil and not Layout.inside?(plan, box) ->
-        {:error, :van}
+  defp put_room_plan(build, room, plan, {dx, dy}) do
+    case check_plan(build, room, plan) do
+      {:error, reason} ->
+        {:error, reason}
 
-      not Layout.free?(build, room, plan) ->
-        {:error, :overlap}
-
-      true ->
+      :ok ->
         {:ok,
          change(build, fn build ->
            %{
@@ -739,9 +759,10 @@ defmodule DIY.Build do
   def size_item(build, id, size) do
     with {:ok, item} <- item(build, id),
          true <- (size == nil or Layout.valid_size?(size)) || {:error, :size},
-         # The watts of solar panels give their size: a size goes, and no
-         # size comes.
-         true <- (size == nil or item.type != "solar_panels") || {:error, :size},
+         # The watts of solar panels and the model of a van give their size:
+         # a size goes, and no size comes.
+         true <-
+           (size == nil or item.type not in ["solar_panels", "camper_van"]) || {:error, :size},
          do: {:ok, replace_item(build, %{item | size: size})}
   end
 

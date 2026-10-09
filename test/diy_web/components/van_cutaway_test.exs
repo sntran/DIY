@@ -6,6 +6,7 @@ defmodule DIYWeb.VanCutawayTest do
 
   alias DIY.{Build, Catalog, House}
   alias DIYWeb.{Cutaway, VanCutaway}
+  alias DIYWeb.Icon.Shapes
 
   # A house with a camper van of a model.
   defp van(model) do
@@ -41,6 +42,32 @@ defmodule DIYWeb.VanCutawayTest do
 
       for part <- ~w(well-left well-right seat-driver seat-passenger dash wheel hood bumper),
           do: assert("van-#{part}" in ids)
+    end
+  end
+
+  test "the driver sits on the left side of the van, and the sliding door is on its right side" do
+    m = 0.0254
+
+    for {model, _name, _numbers, _source} <- Catalog.van_models() do
+      {build, van} = van(model)
+      [floor, _roof] = view(build, van).levels
+      objects = Map.new(floor.objects, &{&1.id, &1})
+      # The axes show a mirror image (DIYWeb.Iso): the left side of the van
+      # is at the large x, near the eye.
+      half = Catalog.van_size(model).cargo_width * m / 2
+      assert elem(objects["van-wheel"].box, 0) > half
+      assert elem(objects["van-seat-driver"].box, 0) > half
+      assert elem(objects["van-seat-passenger"].box, 3) < half
+
+      # The opening of the sliding door is in the wall at x = 0.
+      door =
+        elem(objects["van-wall-right-front"].box, 1) - elem(objects["van-wall-right-back"].box, 4)
+
+      assert_in_delta door, 48 * m, 1.0e-9
+
+      # The model of the van has its sliding door on the same side.
+      [_bumper, _mirror, {:group, body}, _other_mirror, _front] = Shapes.van(model)
+      assert [{-1, 0, 0}] == for({:face, _corners, normal, "i-steel-l"} <- body, do: normal)
     end
   end
 

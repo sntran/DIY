@@ -93,6 +93,29 @@ defmodule DIY.BuildPlanTest do
     assert Build.place_item(build, "nothing", kitchen.id, %{x: 0, y: 0}) == {:error, :item}
   end
 
+  test "a check of a move: the move keeps the rules, with no change" do
+    build = house()
+    kitchen = room(build, "Kitchen")
+    assert Build.can_move?(build, kitchen.id, -24, 0)
+    refute Build.can_move?(build, kitchen.id, 24, 0)
+
+    {:ok, build, van} = Build.add_item(build, room(build, "Driveway").id, "camper_van")
+    refute Build.can_move?(build, Build.zone(build, van, :cab).id, 0, -6)
+    refute Build.can_move?(build, Build.zone(build, van, :shell).id, 0, 6)
+    refute Build.can_move?(build, "r999", 0, 6)
+  end
+
+  test "the model gives the size of a camper van" do
+    build = house()
+    {:ok, build, van} = Build.add_item(build, room(build, "Driveway").id, "camper_van")
+    assert Build.size_item(build, van, %{w: 30, d: 30, h: 30}) == {:error, :size}
+    assert {:ok, _build} = Build.size_item(build, van, nil)
+
+    # A size in a stored build has no effect.
+    {:ok, item} = Build.item(build, van)
+    assert Layout.size(%{item | size: %{w: 30, d: 30, h: 30}}) == Layout.size(item)
+  end
+
   test "an item turns a quarter turn around its center, and has a size" do
     build = house()
     tv = first(build, "Living room", "tv")
@@ -324,6 +347,9 @@ defmodule DIY.BuildPlanTest do
         do: assert(zone.plan == nil),
         else:
           assert(Layout.valid_plan?(zone.plan) and Layout.inside?(zone.plan, Layout.van_box(van)))
+
+      # The cab and the roof are at their places for the model.
+      if zone.place in [:cab, :van_roof], do: assert([zone.plan] == Layout.van_draft(van, [zone]))
     end
 
     placed = Enum.filter(build.rooms, & &1.plan)

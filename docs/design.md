@@ -669,7 +669,8 @@ The weight budget:
   the front axle. An item behind the rear axle takes some weight off the
   front axle.
 - The people sit at the middle of the cab, and the gear is at the middle
-  of the bed. An item of the shell is at the middle of the van.
+  of the bed. An item of the shell is at the middle of the plan of the
+  van (the cargo area and the cab).
 - The page shows the van in all, each axle against its rating (GAWR),
   and the weight of each zone. The places on the plan are a simple model.
   A truck scale gives the real weight of each axle.
