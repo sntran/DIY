@@ -1082,7 +1082,6 @@ defmodule DIYWeb.HomeLive do
 
   defp power?(_build), do: false
 
-  # The page Van is for a build with a camper van.
   # The plan lesson is for an area of Texas with retail choice.
   defp plans?(%Build{market: %{choice: true}}), do: true
   defp plans?(_build), do: false

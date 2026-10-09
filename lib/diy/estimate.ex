@@ -615,7 +615,7 @@ defmodule DIY.Estimate do
 
   defp steps(%{type: "camper_van"}, _m, _data, _estimate),
     do: [
-      "A camper van has its own build, with its own batteries and power: see the page Van. Its charge at home is not in this estimate."
+      "A camper van has its own build, with its own batteries and power. The button \"Open the build of the van\" opens it. Its charge at home is not in this estimate."
     ]
 
   defp steps(%{type: "smart_meter"}, _m, _data, _estimate),

@@ -42,11 +42,14 @@ defmodule DIYWeb.VanLiveTest do
     {build, id}
   end
 
+  # The bar at the bottom of the page: the parts of the build.
+  @bar "nav[aria-label='The parts of your build']"
+
   test "no van: the page says how to add one, and the nav has no van", %{conn: conn} do
     view = open(conn, ~p"/van", house())
     assert has_element?(view, "#no-van")
-    refute has_element?(view, "nav a", "Van")
-    assert has_element?(view, "#van-back[href='/inside']")
+    refute has_element?(view, "#{@bar} a", "Van")
+    refute has_element?(view, "#van-back")
   end
 
   test "a van in the driveway opens its own build", %{conn: conn} do
@@ -58,18 +61,24 @@ defmodule DIYWeb.VanLiveTest do
 
     # A van is a part of the house: the bar has no part Van. The sheet of
     # the van opens it, and the part Rooms stays the current part.
-    refute has_element?(view, "nav a", "Van")
+    refute has_element?(view, "#{@bar} a", "Van")
     view |> element("#open-van") |> render_click()
     assert_patch(view, ~p"/van?id=#{van.id}")
-    refute has_element?(view, "nav a", "Van")
-    assert has_element?(view, "nav a.dock-active[aria-current=true]", "Rooms")
+    refute has_element?(view, "#{@bar} a", "Van")
+    assert has_element?(view, "#{@bar} a.dock-active[aria-current=true]", "Rooms")
 
     # The link at the top goes back to the van in the rooms.
     view |> element("#van-back") |> render_click()
     assert_patch(view, ~p"/inside?item=#{van.id}")
-    assert has_element?(view, "nav a.dock-active[aria-current=page]", "Rooms")
+    assert has_element?(view, "#{@bar} a.dock-active[aria-current=page]", "Rooms")
     view |> element("#open-van") |> render_click()
     assert_patch(view, ~p"/van?id=#{van.id}")
+
+    # With two vans, the link at the top goes back to the van of the page.
+    {:ok, two, other} = Build.add_item(build(view), room(build(view), "Driveway"), "camper_van")
+    view = open(conn, ~p"/van?#{[id: other]}", two)
+    assert has_element?(view, "#van-back[href='/inside?item=#{other}']", "The van in the rooms")
+    view = open(conn, ~p"/van?#{[id: van.id]}", two)
     assert has_element?(view, "#van-weight")
     assert has_element?(view, "#van-power")
     assert has_element?(view, "#van-list h3", "Galley")
@@ -272,7 +281,7 @@ defmodule DIYWeb.VanLiveTest do
     {:ok, build, station} = Build.add_item(build, room(build, "Laundry"), "power_station")
     {:ok, build} = Build.take_to_van(build, station, van)
     view = open(conn, ~p"/power", build)
-    assert has_element?(view, "nav a", "Power")
+    assert has_element?(view, "#{@bar} a", "Power")
     assert has_element?(view, "#power-away", "is in the van now")
     refute has_element?(view, "#no-equipment")
 
@@ -287,7 +296,7 @@ defmodule DIYWeb.VanLiveTest do
     # A station of the van does not show the page Power.
     {own, other} = with_van()
     {:ok, own, _} = Build.add_item(own, Build.zone(own, other, :bay).id, "power_station")
-    refute has_element?(open(conn, ~p"/", own), "nav a", "Power")
+    refute has_element?(open(conn, ~p"/", own), "#{@bar} a", "Power")
   end
 
   test "an item of a van does not open on the page of the rooms", %{conn: conn} do

@@ -92,8 +92,9 @@ defmodule DIYWeb.Layouts do
     """
   end
 
-  # A van is a part of the house: its page is in the part Rooms. The page of
-  # a van is not the page of the rooms, so it is the current part only.
+  # A van is a part of the house: its page is in the part Rooms. On the page
+  # of a van, the link Rooms is the current part (aria-current "true"), but
+  # it is not the current page ("page").
   defp rooms_current(:inside), do: "page"
   defp rooms_current(:van), do: "true"
   defp rooms_current(_action), do: nil

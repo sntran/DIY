@@ -12,8 +12,10 @@ defmodule DIY.MixProject do
       deps: deps(),
       compilers: [:phoenix_live_view] ++ Mix.compilers(),
       listeners: [Phoenix.CodeReloader],
-      # mix test --cover: each line must run.
-      test_coverage: [summary: [threshold: 100]],
+      # mix test --cover: each line of the app must run. The wait of
+      # DIYWeb.ConnCase (a help of the tests) runs only when an answer is
+      # slow, so it is not in the count.
+      test_coverage: [summary: [threshold: 100], ignore_modules: [DIYWeb.ConnCase]],
       # RELEASE_ERTS=false: a release with no ERTS, for beam.com (see
       # scripts/edge-com.sh).
       releases: [diy: [include_erts: System.get_env("RELEASE_ERTS") != "false"]]

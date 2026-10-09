@@ -235,7 +235,8 @@ async function van(page, name) {
   await page.waitForSelector('[id^="away-"]:has-text("in the van now")', { state: "attached" })
   // The bar has no part Van: the list of the rooms opens the van (with the
   // keyboard).
-  assert.equal(await page.locator("nav >> text=Van").count(), 0, `${name}: the bar has no part Van`)
+  const bar = page.locator("nav[aria-label='The parts of your build']")
+  assert.equal(await bar.getByText("Van", { exact: true }).count(), 0, `${name}: the bar has no part Van`)
   await page.focus('[id^="away-"]')
   await page.keyboard.press("Enter")
   await page.waitForSelector("#van-stations")
