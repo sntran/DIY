@@ -80,9 +80,6 @@ The owner decides about each item.
 A second play test (October 2026) found these faults. The fixes of the
 other faults are in the next pull requests.
 
-- The bill: the kWh of the last bill is not in the estimate, and the
-  page does not ask its month. The estimate of a summer month can be far
-  from the bill.
 - "Plan" has two meanings: a planned item (the page Power) and a plan of
   a retail provider (the tab Plans).
 - A sheet did not scroll from a swipe at the bottom of the screen (with

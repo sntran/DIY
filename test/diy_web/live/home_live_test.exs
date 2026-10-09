@@ -424,12 +424,74 @@ defmodule DIYWeb.HomeLiveTest do
     view = open(conn, ~p"/", house())
     settle(view)
     assert has_element?(view, "#my-bill", "Is this near your bill?")
+    assert has_element?(view, "#my-bill", "The app also fits the estimate to its kWh.")
 
-    # A bill of $150.00 for 1,100 kWh: 13.6¢ for each kWh.
+    # A bill of $150.00 for 1,100 kWh: 13.6¢ for each kWh. The month is the
+    # month before now.
+    last = rem(Date.utc_today().month + 10, 12) + 1
     view |> form("#my-bill", %{"dollars" => "$150.00", "kwh" => "1,100"}) |> render_submit()
     assert_in_delta build(view).price, 150 / 1100 * 100, 1.0e-9
+    assert build(view).bill == %{month: last, kwh: 1100.0}
+
     assert render(view) =~ "The app now uses the price of your bill: 13.6¢ for each kWh."
-    refute has_element?(view, "#my-bill")
+    assert has_element?(view, "#bill-fit")
+
+    # The form stays, closed, to change the numbers.
+    refute has_element?(view, "#my-bill", "Is this near your bill?")
+    assert has_element?(view, "#my-bill-again summary", "Type the numbers of my bill")
+    assert has_element?(view, ~s(#my-bill select[name="month"] option[value="#{last}"][selected]))
+
+    # A bill of July: the estimate of July is the bill.
+    view
+    |> form("#my-bill", %{"dollars" => "168", "kwh" => "1150", "month" => "7"})
+    |> render_submit()
+
+    assert has_element?(
+             view,
+             "#bill-fit",
+             "The app changed its model to fit your bill of July: 1,150 kWh."
+           )
+
+    estimate = :sys.get_state(view.pid).socket.assigns.estimate
+    assert estimate.fit.factor < 1
+    render_patch(view, ~p"/estimate")
+    assert render(view) =~ "The app also multiplies by 0."
+    render_patch(view, ~p"/")
+
+    # A bill of a mild month: the app keeps its model.
+    view
+    |> form("#my-bill", %{"dollars" => "100", "kwh" => "700", "month" => "4"})
+    |> render_submit()
+
+    assert has_element?(view, "#bill-fit", "In April, the heat and the cooling are a small part")
+    assert :sys.get_state(view.pid).socket.assigns.estimate.fit.factor == 1.0
+
+    # A bill that the model cannot meet: the app tells it.
+    view
+    |> form("#my-bill", %{"dollars" => "15", "kwh" => "100", "month" => "7"})
+    |> render_submit()
+
+    assert has_element?(view, "#bill-fit", "but the estimate of July cannot be less than")
+
+    # No price in the settings: no bill either.
+    render_patch(view, ~p"/settings")
+    assert render(view) =~ "Then the app also forgets the kWh of your bill."
+    view |> form("#settings-price", %{"price" => ""}) |> render_submit()
+    assert {build(view).price, build(view).bill} == {nil, nil}
+
+    # With no month (a page of an older version), only the price: the app
+    # forgets the old bill.
+    render_patch(view, ~p"/")
+
+    view
+    |> form("#my-bill", %{"dollars" => "168", "kwh" => "1150", "month" => "7"})
+    |> render_submit()
+
+    assert build(view).bill == %{month: 7, kwh: 1150.0}
+    render_hook(view, "my_bill", %{"dollars" => "150", "kwh" => "1000"})
+    assert render(view) =~ "The app now uses the price of your bill: 15.0¢ for each kWh."
+    assert build(view).bill == nil
+    refute has_element?(view, "#bill-fit")
 
     # A total or a kWh that is not a number, that is 0, or that is too
     # large: an error, and the price stays.
@@ -458,6 +520,22 @@ defmodule DIYWeb.HomeLiveTest do
 
       assert build(view).price == nil
     end
+  end
+
+  test "the bill of a house that the person plans gives only the price", %{conn: conn} do
+    {:ok, plan} = Build.choose_door(house(), "planning")
+    view = open(conn, ~p"/", plan)
+    settle(view)
+    refute has_element?(view, "#my-bill", "The app also fits the estimate to its kWh.")
+    refute has_element?(view, ~s(#my-bill select[name="month"]))
+
+    view |> form("#my-bill", %{"dollars" => "150", "kwh" => "1000"}) |> render_submit()
+    assert {build(view).price, build(view).bill} == {15.0, nil}
+    refute has_element?(view, "#bill-fit")
+
+    # A bill with a month (a page of an older version): only the price too.
+    render_hook(view, "my_bill", %{"dollars" => "100", "kwh" => "900", "month" => "7"})
+    assert build(view).bill == nil
   end
 
   test "a camper van: the front page tells where it goes", %{conn: conn} do

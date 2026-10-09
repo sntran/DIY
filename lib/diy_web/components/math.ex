@@ -123,8 +123,10 @@ defmodule DIYWeb.Math do
           <li>
             The house: it gains {Format.int(@estimate.ua.ua)} BTU in one hour for each °F hotter outside
             ({Format.int(@build.house.size)} sq ft × {@estimate.ua.age} for its age × {@estimate.ua.floor} for its
-            floors). In the cold, it loses {Format.int(@estimate.ua.heat)} BTU in one hour for each °F colder
-            outside: 60%, because the sun and the people in the house help. These factors are a simple model of
+            floors).{DIY.Estimate.fit_text(@estimate)} In the cold, it loses {Format.int(
+              @estimate.ua.heat
+            )} BTU in
+            one hour for each °F colder outside: 60%, because the sun and the people in the house help. These factors are a simple model of
             the app, not a measurement.
           </li>
           <li>The price: {Format.cents(@price.cents)} for each kWh, {@price.source}.</li>

@@ -74,7 +74,9 @@ defmodule DIYWeb.Settings do
           </label>
           <button class="btn btn-sm">Save</button>
         </form>
-        <p class="text-xs opacity-70">Leave it empty to use the typical price.</p>
+        <p class="text-xs opacity-70">
+          Leave it empty to use the typical price. Then the app also forgets the kWh of your bill.
+        </p>
         <form id="settings-night" phx-submit="power" class="space-y-2">
           <p class="text-sm">
             A plan with a different price at night (for example, free nights): the price and the hours of the night.

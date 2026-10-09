@@ -5,7 +5,7 @@ defmodule DIYWeb.Front do
   """
   use DIYWeb, :html
 
-  alias DIY.{Catalog, Prices, Van, Zip}
+  alias DIY.{Catalog, Estimate, Prices, Van, Zip}
   alias DIYWeb.{Format, Scene}
 
   attr :build, :map, required: true
@@ -131,34 +131,24 @@ defmodule DIYWeb.Front do
         )} to {Format.money(@bill.cost_high / 12)} · {Format.kwh(@bill.kwh / 12)}
       </p>
     </div>
+    <p :if={@estimate.fit} id="bill-fit" class="text-sm">{fit_text(@estimate)}</p>
     <p id="bill-month" class="text-sm">
       {@month.name}: {Format.money(@month.cost)} (between {Format.money(@month.cost_low)} and {Format.money(
         @month.cost_high
       )})
     </p>
     <DIYWeb.Front.chart bill={@bill} />
-    <form
-      :if={@price.kind != :user}
-      id="my-bill"
-      phx-submit="my_bill"
-      class="rounded-box bg-base-200 p-3 space-y-2"
-    >
+    <.bill_form :if={@price.kind != :user} build={@build}>
       <p class="text-sm">
         <span class="font-semibold">Is this near your bill?</span>
         The app uses a typical price. Your last bill gives the price of your plan.
+        <span :if={@build.door != "planning"}>The app also fits the estimate to its kWh.</span>
       </p>
-      <div class="flex flex-wrap items-end gap-2">
-        <label class="text-sm">
-          The total of the bill ($)
-          <input name="dollars" inputmode="decimal" class="input input-sm w-28 block" />
-        </label>
-        <label class="text-sm">
-          The kWh of the bill
-          <input name="kwh" inputmode="numeric" class="input input-sm w-28 block" />
-        </label>
-        <button class="btn btn-sm">Use the price of my bill</button>
-      </div>
-    </form>
+    </.bill_form>
+    <details :if={@price.kind == :user} id="my-bill-again" class="text-sm">
+      <summary class="link">Type the numbers of my bill</summary>
+      <.bill_form build={@build} />
+    </details>
     <p class="text-xs opacity-80">
       A kWh (a kilowatt-hour) is 1,000 watts for one hour. The bill counts your use in kWh.
       At {Format.cents(@cents)} for each kWh: {@price.source}.{if @power.night_cents,
@@ -219,6 +209,83 @@ defmodule DIYWeb.Front do
     </div>
     """
   end
+
+  attr :build, :map, required: true
+  slot :inner_block
+
+  # The form of the last bill: its total, its kWh and its month. The month
+  # is the month of the bill that the app has, else the month before now.
+  defp bill_form(assigns) do
+    month =
+      case assigns.build.bill do
+        %{month: month} -> month
+        nil -> rem(Date.utc_today().month + 10, 12) + 1
+      end
+
+    assigns = assign(assigns, month: month, names: Estimate.month_names())
+
+    ~H"""
+    <form id="my-bill" phx-submit="my_bill" class="rounded-box bg-base-200 p-3 space-y-2">
+      {render_slot(@inner_block)}
+      <div class="flex flex-wrap items-end gap-2">
+        <label class="text-sm">
+          The total of the bill ($)
+          <input name="dollars" inputmode="decimal" class="input input-sm w-28 block" />
+        </label>
+        <label class="text-sm">
+          The kWh of the bill
+          <input name="kwh" inputmode="numeric" class="input input-sm w-28 block" />
+        </label>
+        <label :if={@build.door != "planning"} class="text-sm">
+          The month with most of its days
+          <select name="month" class="select select-sm w-36 block">
+            <option :for={{name, n} <- Enum.with_index(@names, 1)} value={n} selected={n == @month}>
+              {name}
+            </option>
+          </select>
+        </label>
+        <button class="btn btn-sm">Use my bill</button>
+      </div>
+    </form>
+    """
+  end
+
+  @doc """
+  The fit of the estimate to the bill of the person (`DIY.Estimate.fit/2`),
+  as a text.
+  """
+  def fit_text(%{fit: %{result: :solar}}),
+    do:
+      "Your solar panels give a part of your power, so the bill does not show all the use of the home. The app keeps its model."
+
+  def fit_text(%{fit: %{result: :mild, month: m, before: before, best: best}}) do
+    name = month_name(m)
+
+    if best,
+      do:
+        "In #{name}, the heat and the cooling are a small part of the bill, so the app keeps its model: #{Format.kwh(before)} in #{name}. The bill of #{month_name(best)} can change the model.",
+      else:
+        "In your home, the heat and the cooling are a small part of each bill, so the app keeps its model: #{Format.kwh(before)} in #{name}."
+  end
+
+  def fit_text(%{fit: %{result: :fit, month: m, kwh: kwh, before: before}}) do
+    name = month_name(m)
+
+    "The app changed its model to fit your bill of #{name}: #{Format.kwh(kwh)}. Before, the estimate of #{name} was #{Format.kwh(before)}."
+  end
+
+  def fit_text(%{fit: %{result: :limit} = fit}) do
+    name = month_name(fit.month)
+    limit = if fit.after < fit.kwh, do: "more", else: "less"
+
+    "Your bill of #{name} is #{Format.kwh(fit.kwh)}, but the estimate of #{name} cannot be #{limit} than #{Format.kwh(fit.after)}." <>
+      if(fit.factor != 1.0,
+        do: " Before, the estimate of #{name} was #{Format.kwh(fit.before)}.",
+        else: ""
+      ) <> " Check the items and the numbers of the bill."
+  end
+
+  defp month_name(m), do: Enum.at(Estimate.month_names(), m - 1)
 
   attr :whatif, :map, required: true
   attr :gas, :map, required: true
