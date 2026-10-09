@@ -512,6 +512,13 @@ defmodule DIYWeb.Inside do
         </label>
       </form>
 
+      <p :if={@item.type == "cpap"} id="item-medical" class="text-sm">
+        A power station can run it for some hours: the page Power gives them. Ask the maker which
+        batteries it can use. On a battery, turn off the humidifier: then it uses near 10 W. Also tell
+        the company that sells your power. Many keep a list of homes with a medical need, but the list
+        does not keep the power on.
+      </p>
+
       <form id="item-form" phx-change="item" phx-submit="item" class="space-y-3">
         <input type="hidden" name="item_id" value={@item.id} />
         <.param

@@ -736,6 +736,16 @@ defmodule DIYWeb.Icon.Shapes do
       rbox({0.52, d - 0.11, 0}, {0.06, 0.104, 0.03}, 0.025, "white")
   end
 
+  # A CPAP: a body with round corners and a water tank on its side. Its
+  # top has a screen and a knob, and its side has the port of its hose.
+  def model("cpap") do
+    rbox({0.03, 0, 0}, {0.14, 0.152, 0.11}, 0.03, "gray") ++
+      rbox({0.17, 0.01, 0}, {0.084, 0.132, 0.085}, 0.025, "blue") ++
+      [top({0.06, 0.03, 0.11}, {0.07, 0.05}, "i-screen")] ++
+      cylinder({0.14, 0.1, 0.11}, 0.015, 0.017, "dark") ++
+      tube({0, 0.076, 0.06}, 0.016, 0.03, :x, "gray")
+  end
+
   # A ceiling fan: four blades under the motor, the bowl of its light under
   # them, and the rod up to the canopy on the ceiling.
   def model("ceiling_fan") do

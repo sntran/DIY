@@ -53,8 +53,11 @@ defmodule DIY.Power do
   ## An outage
 
   In an outage, the station runs its items from the charge of its battery
-  at 18:00 of an average day, with the sun of the next days (at most 7
-  days).
+  at 18:00 of an average day. The sun of the next days helps (at most 7
+  days). `need_2_days` of a month is the least battery (kWh) that runs the
+  items for 48 hours from a full charge (`kwh_for/3`). The app computes it
+  only in the mode "backup", for a month with less than 48 hours. Else it
+  is false.
   """
 
   alias DIY.{Bill, Build, Estimate, Profile}
@@ -309,6 +312,7 @@ defmodule DIY.Power do
             settings
           )
 
+        outage = outage(need, pv_station, sys, Enum.at(day.soc, 17))
         times = fn value -> value * m.days end
 
         cost =
@@ -328,7 +332,10 @@ defmodule DIY.Power do
           lost: times.(day.lost + cut),
           cost: times.(cost),
           price: price(day.day, day.night, cents, night_cents),
-          outage: outage(need, pv_station, sys, Enum.at(day.soc, 17))
+          outage: outage,
+          need_2_days:
+            (settings.mode == "backup" and is_number(outage) and outage < 48) &&
+              kwh_for(need, pv_station, 48)
         }
       end
 
@@ -482,19 +489,19 @@ defmodule DIY.Power do
   defp charge_from_grid?(_settings, _h), do: true
 
   @doc false
-  # The hours that the stations run their items in an outage of a month:
-  # from the charge of the battery at 18:00, with the sun of the next days.
-  # `:days` when they run more than 7 days, and `nil` with no use on the
-  # stations in the month.
-  def outage(need, pv, sys, soc) do
+  # The hours that the stations run their items in an outage of a month,
+  # from the charge of the battery at 18:00. The sun of the next days helps.
+  # `:days` when they run more than 7 days (or the limit), and `nil` with no
+  # use on the stations in the month.
+  def outage(need, pv, sys, soc, limit \\ @outage_hours) do
     if Enum.sum(need) <= 0 or sys.kwh <= 0,
       do: nil,
-      else: outage(need, pv, sys, min(soc, sys.kwh * @usable), 18, 0)
+      else: outage(need, pv, sys, min(soc, sys.kwh * @usable), 18, 0, limit)
   end
 
-  defp outage(_need, _pv, _sys, _soc, _h, hours) when hours >= @outage_hours, do: :days
+  defp outage(_need, _pv, _sys, _soc, _h, hours, limit) when hours >= limit, do: :days
 
-  defp outage(need, pv, sys, soc, h, hours) do
+  defp outage(need, pv, sys, soc, h, hours, limit) do
     capacity = sys.kwh * @usable
     hour = rem(h, 24)
     want = Enum.at(need, hour)
@@ -505,11 +512,45 @@ defmodule DIY.Power do
 
     cond do
       rest <= stored * @discharge ->
-        outage(need, pv, sys, stored - rest / @discharge, h + 1, hours + 1)
+        outage(need, pv, sys, stored - rest / @discharge, h + 1, hours + 1, limit)
 
       true ->
         hours + stored * @discharge / rest
     end
+  end
+
+  @doc """
+  The least battery (kWh) that runs the items for `hours` hours in an
+  outage, from a full charge at 18:00, or nil with no use. The hours do
+  not decrease when the kWh increase, so a bisection finds the kWh. An
+  item that runs at night only (a CPAP) needs more than a straight line
+  of the hours gives.
+  """
+  def kwh_for(need, pv, hours) do
+    if Enum.sum(need) <= 0 do
+      nil
+    else
+      runs? = fn kwh ->
+        case outage(need, pv, %{kwh: kwh}, kwh * @usable, hours) do
+          :days -> true
+          run -> run >= hours
+        end
+      end
+
+      # The kWh of the items in the hours, with the losses: always enough.
+      high = Enum.sum(need) * (hours / 24 + 1) / (@usable * @discharge)
+      kwh_bisect(runs?, 0.0, high, 20)
+    end
+  end
+
+  defp kwh_bisect(_runs?, _low, high, 0), do: high
+
+  defp kwh_bisect(runs?, low, high, steps) do
+    mid = (low + high) / 2
+
+    if runs?.(mid),
+      do: kwh_bisect(runs?, low, mid, steps - 1),
+      else: kwh_bisect(runs?, mid, high, steps - 1)
   end
 
   @doc """

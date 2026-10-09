@@ -14,11 +14,15 @@ defmodule DIY.Profile do
     same power at each hour.
   - A car charges at the power of its charger, from the start of the night
     or from 18:00.
+  - A medical device (a CPAP) runs for its hours from 22:00, the start of
+    the sleep. With 24 hours, it uses the same power at each hour.
   - The sun shines from the sunrise to the sunset of the latitude and the
     month, most at the noon of the sun (13:00 with daylight time).
   """
 
   @flat List.duplicate(1, 24)
+  # The start of the sleep, for a CPAP.
+  @sleep 22
 
   @doc "The hours of a day."
   def hours, do: 0..23
@@ -32,6 +36,12 @@ defmodule DIY.Profile do
 
   def shape(_item, :cooling, _kwh_day, _night_from), do: normalize(cooling())
   def shape(_item, :heating, _kwh_day, _night_from), do: normalize(heating())
+
+  def shape(%{type: "cpap", params: %{"hours" => hours}}, _part, _kwh_day, _night_from)
+      when hours > 0 do
+    for(h <- hours(), do: min(max(hours - rem(h - @sleep + 24, 24), 0.0), 1.0))
+    |> normalize()
+  end
 
   def shape(%{type: "ev", params: p}, _part, kwh_day, night_from) do
     start = if p["when"] == "night", do: night_from, else: 18

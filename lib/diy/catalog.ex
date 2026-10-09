@@ -561,6 +561,27 @@ defmodule DIY.Catalog do
       ]
     },
     %{
+      type: "cpap",
+      name: "Medical device (CPAP)",
+      places: [:indoor],
+      features: [:estimate],
+      params: [
+        # ResMed, "Power consumption of Air10 devices" (2015): an AirSense
+        # 10 AutoSet uses 7 W, and 22 W with its humidifier. With the heated
+        # tube too, it uses 34 W. Its user guide gives a typical 53 W.
+        int(
+          "watts",
+          "Power",
+          "W",
+          50,
+          1,
+          1000,
+          "A CPAP uses near 10 W with no humidifier, and 20 to 50 W with a heated humidifier and tube (ResMed). Its manual gives the typical watts, not its label."
+        ),
+        float("hours", "Hours in one day", "h", 8.0, 0.0, 24.0, nil)
+      ]
+    },
+    %{
       type: "ceiling_fan",
       name: "Ceiling fans",
       places: [:indoor, :outdoor],
@@ -1215,6 +1236,8 @@ defmodule DIY.Catalog do
     "tv" => {44, 10, 28},
     # No source: a screen and a keyboard on a desk.
     "computer" => {24, 16, 20},
+    # ResMed AirSense 10, with its water tub: 255 by 150 by 116 mm (its user guide).
+    "cpap" => {10, 6, 5},
     # No source: the blades of a fan of 52 in, a common size.
     "ceiling_fan" => {52, 52, 12},
     # No source: a router and its power supply.

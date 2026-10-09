@@ -496,6 +496,21 @@ in the day and at night, the power to the grid, the sun of the panels,
 the sun that is lost (a full battery, or the sun above the solar input of
 a station), the cost, and the hours of an outage.
 
+A medical device (a CPAP) is an item of the house: its watts and its
+hours. It runs from 22:00, the start of the sleep. (These are not the
+hours of the night price.) An outage starts at 18:00, but a CPAP starts
+at 22:00. So on the page Power, the hours of an outage also give the
+time when the stations stop. For the same reason, the size for 2 days
+is the least battery that runs 48 hours, not a straight line of the
+hours. A bisection with the outage of each month finds it, and the page
+rounds it up. The sheet of the device tells that a station runs it for
+some hours, and to ask the maker which batteries it can use. On a
+battery, the person turns off the humidifier (ResMed): then a CPAP uses
+near 10 W. The sheet also tells the person to tell the company that
+sells the power. In Texas, a home with a medical need can be on a list
+(16 TAC §25.497), but the list does not keep the power on. A play test
+found no item for a CPAP.
+
 `DIY.Bill` gives the bill from the power of the grid, at the price of the
 day and of the night, with the range of the estimate of the use. With no
 equipment and one price, the bill is the same as the estimate times the
@@ -1229,6 +1244,8 @@ on a light page.
     wheels;
   - a pool pump has its motor, and a strainer with a clear lid;
   - a ceiling fan has four blades, its light and its rod;
+  - a CPAP has its water tank, its screen, a knob and the port of its
+    hose;
   - a sink has its cabinet, its basin and its faucet;
   - a bed has its drawers, its mattress, a duvet and two pillows;
   - a battery has its label, its handle and its terminals.
