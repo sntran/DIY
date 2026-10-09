@@ -234,9 +234,9 @@ near 10,400 kWh in one year with gas heat, 16,900 with a heat pump, and
   wall of a room. In the list of the rooms, an arrow key moves an item.
   The sheet of an item keeps the focus and closes with the Escape key. A
   reload keeps the build, a second tab follows the first, and a reconnect
-  restores the build. CI runs the same script against `wrangler dev` too:
-  the VM in workerd, with the real answers of NASA POWER and Power to
-  Choose through `fetch()`.
+  restores the build. CI runs the same script against `wrangler dev` too.
+  There, the VM runs in workerd, with the real answers of NASA POWER and
+  Power to Choose through `fetch()`.
 
 ## Real usage (phase 2)
 
@@ -835,8 +835,8 @@ its turn. A length is in inches.
 - The draft. A new house gets a plan from its size: a floor of 3 by 2
   with the area of one floor. The rooms of a floor are in rows, and a
   living room gets more space than a bathroom. The garage is on the right
-  of the house (24 by 24 feet), and the driveway is in front of the
-  garage (24 by 25 feet). A camper van fits in each. The yard is in front
+  of the house (24 by 24 feet). The driveway is in front of the garage
+  (24 by 25 feet). A camper van fits in each. The yard is in front
   of the house. The first items of a room stand along its back walls. A
   build of an older version gets the draft when it loads.
 - The person changes the plan. A drag moves an item, also to a different
@@ -846,15 +846,17 @@ its turn. A length is in inches.
   items, and a drag on a handle moves a wall. A drag on an empty place
   moves the view. Two fingers, the wheel or the buttons zoom.
 - A drop. The center of the space of the item on the floor moves with
-  the pointer. The item goes to the room that has this center: its own
-  room first, then a room of the layer under the pointer. The pointer
-  does not choose the room: it is on the body of the item, above its
-  space.
+  the pointer. The item goes to the room that has this center. The script
+  tries its own room first, then the rooms of the layer under the pointer,
+  then the rooms of its own layer. The pointer does not choose the room:
+  it is on the body of the item, above its space.
 - With no drag. The sheet of an item has buttons that move it (6 inches
-  for each tap), turn it a quarter turn, and give it a size. The sheet of
-  a room has buttons that move it (2 feet for each tap), and its size in
-  feet. So a person with one finger and no drag can do each change (WCAG
-  2.2, 2.5.7). A handle is 24 pixels wide (2.5.8).
+  for each tap), turn it a quarter turn, and give it a size. The sheet
+  tells the new place of the item in words. The bar of a room has buttons
+  that move it (2 feet for each tap): the plan over the bar shows the
+  move. The sheet of a room gives its size in feet. So a person with one
+  finger and no drag can do each change (WCAG 2.2, 2.5.7). A handle is 24
+  pixels wide (2.5.8).
 - The rules (`DIY.Layout.fill/1`, after each change; `specs/Plan.tla`).
   No two rooms of a layer overlap, and each item is in its room. A room
   does not move over a different room: the page tells why. When a wall
@@ -871,10 +873,10 @@ its turn. A length is in inches.
   For example, a fridge is the LG LRFXS2503S: 33 by 33 by 70 inches. A
   size with no source is for the plan only. The sheet of the item asks
   for the size of the real item.
-- The watts of an array of solar panels give its size: a panel of 400 W
-  is 45 by 68 inches (a module of 108 half cells, 1134 by 1722 mm). An
-  item on a wall, a ceiling or a counter (a mini split, a meter, a
-  switch, a fan, a microwave) has a lift.
+- The watts of an array of solar panels give its size. A panel of 400 W
+  is 45 by 68 inches: a module of 108 half cells, 1134 by 1722 mm. An
+  item on a wall or a ceiling (a mini split, a meter, a switch, a fan)
+  has a lift.
 - The shell. Each room has a slab under it, and a yard is on the ground.
   Each room inside has walls. A wall between two rooms is low. A wall on
   the outside is high at the back, where no room is behind it, and low
@@ -886,7 +888,7 @@ its turn. A length is in inches.
 - The order of the paint (`DIYWeb.Iso.order/1`). A wall or an item that
   is behind a different one paints first. A box is behind a different box
   when it is on the far side of it along x, y or z. A wall is flat for
-  this order: an item in a room is in front of the walls at the back,
+  this order. So an item in a room is in front of the walls at the back,
   and behind the walls at the front. An item that is larger than its
   room goes through walls: it paints by its place only. The parts of a
   model use the same order, so a turned item paints its back part first.
@@ -898,7 +900,7 @@ its turn. A length is in inches.
   The zoom is in the `viewBox`, which LiveView keeps
   (`JS.ignore_attributes/1`). The tab keeps it in its session storage.
 - The plan is for the eyes. A list of the rooms and of their items gives
-  the same facts, with the usage of each item: it shows when it has the
+  the same facts, with the usage of each item. It shows when it has the
   focus. In the list, the arrow keys move an item or a room (6 inches, or
   2 feet with Shift). A screen reader hears the new place, from the left
   wall and from the top wall.

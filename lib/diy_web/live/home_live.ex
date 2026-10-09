@@ -262,8 +262,8 @@ defmodule DIYWeb.HomeLive do
   def handle_event("open_item", %{"id" => id}, socket) when is_binary(id),
     do: {:noreply, push_patch(socket, to: ~p"/inside?#{[item: id]}")}
 
-  # An item that the person drops on the plan: x and y are its center on
-  # the plan, in inches; room is the room under the pointer.
+  # An item that the person drops on the plan. x and y are its center on
+  # the plan, in inches. The room is the room of that center (the hook).
   def handle_event("place_item", %{"id" => id, "room" => room, "x" => x, "y" => y}, socket)
       when is_number(x) and is_number(y) do
     build = socket.assigns.build
@@ -302,12 +302,16 @@ defmodule DIYWeb.HomeLive do
     end
   end
 
-  # The move buttons of the sheets send the steps as text.
+  # The move buttons (in the sheet of an item, and in the bar of a room)
+  # send the steps as text.
   def handle_event(event, %{"id" => id, "dx" => dx, "dy" => dy}, socket)
       when event in ["nudge_item", "nudge_room"] and is_binary(dx) and is_binary(dy) do
     case {parse_int(dx), parse_int(dy)} do
       {dx, dy} when is_integer(dx) and is_integer(dy) ->
-        handle_event(event, %{"id" => id, "dx" => dx, "dy" => dy}, socket)
+        {:noreply, socket} = handle_event(event, %{"id" => id, "dx" => dx, "dy" => dy}, socket)
+        # The sheet of the item shows its new place (`DIYWeb.Inside.where/2`):
+        # the status does not tell it a second time.
+        {:noreply, if(event == "nudge_item", do: assign(socket, :status, nil), else: socket)}
 
       _none ->
         {:noreply, socket}
@@ -674,7 +678,7 @@ defmodule DIYWeb.HomeLive do
     {:ok, item} = Build.item(build, id)
     {:ok, room} = Build.room(build, item.room)
 
-    "#{Catalog.name(item)}: #{Inside.feet(item.at.x)} from the left wall of #{room.name}, #{Inside.feet(item.at.y)} from the top wall."
+    "#{Catalog.name(item)}: #{Inside.where(item, room)}"
   end
 
   defp turn_status(build, id) do

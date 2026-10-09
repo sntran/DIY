@@ -9,13 +9,15 @@
 // The server draws the SVG. This script only moves parts of it while the
 // pointer moves, and then sends the change: the server then draws it again.
 //
-// The math. A point of the plan (x, y in inches, on the surface of a room)
-// goes to the SVG with the units of one inch (data-k: kx, ky, kz) and the
-// origin of the surface (data-origin: the SVG point of the plan point 0, 0):
+// The math. A point of the plan is x, y in inches, on the surface of a
+// room. It goes to the SVG with the units of one inch (data-k: kx, ky, kz).
+// It also uses the origin of the surface (data-origin: the SVG point of
+// 0, 0):
 //   sx = ox + kx (x - y)
 //   sy = oy + ky (x + y) - kz z
 // A floor is flat (z = 0). A roof (data-rise) has a ridge along x, at the
-// middle of its depth: z goes from 0 at the eaves to the rise at the ridge.
+// middle of its depth. On a roof, z is 0 at the eaves and the rise at the
+// ridge.
 
 // The numbers of a text attribute ("1 2 3").
 export const numbers = (text) => text.trim().split(/\s+/).map(Number)
@@ -86,8 +88,8 @@ export function delta(dsx, dsy, k) {
   return {dx: (a + b) / 2, dy: (b - a) / 2}
 }
 
-// The plan of a room after a move of one of its walls: x0 and y0 are the
-// walls at the back, x1 and y1 the walls at the front.
+// The plan of a room after a move of one of its walls. x0 and y0 are the
+// walls at the back, and x1 and y1 are the walls at the front.
 export function resize(plan, edge, dx, dy) {
   const [x, y, w, d] = plan
   switch (edge) {
@@ -384,10 +386,11 @@ export const planHook = {
 
   // An item that the person drops: the center of its space on the floor
   // moves with the pointer. It goes to the room whose surface has that
-  // center: its own room first, then a room of the layer under the
-  // pointer, then a room of its own layer. The pointer is on the body of
-  // the item, above its space: so the pointer does not choose the room.
-  // With no such room, the room under the pointer (else its own room).
+  // center. The script tries its own room first. Then it tries the rooms of
+  // the layer under the pointer, and then the rooms of its own layer. The
+  // pointer is on the body of the item, above its space: so the pointer
+  // does not choose the room. With no such room, the item goes to the room
+  // under the pointer (else to its own room).
   dropItem(drag, e) {
     const own = this.surface(drag.el.getAttribute("data-in"))
     const [cx, cy] = numbers(drag.el.getAttribute("data-at"))

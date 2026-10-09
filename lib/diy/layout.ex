@@ -10,9 +10,9 @@ defmodule DIY.Layout do
     same `x` and `y`: a room on floor 2 is above the room on floor 1 at the
     same point.
   - An item in a room of the house has `at`: `%{x, y}`, the back corner of
-    the item in its room. It has `turn` (0 to 3, a quarter turn each time)
-    and `size` (`%{w, d, h}`, or `nil` for the typical size of its kind,
-    `DIY.Catalog.size/1`).
+    the item in its room. It has `turn`: 0 to 3, a quarter turn each time.
+    It has `size`: `%{w, d, h}`, or `nil` for the typical size of its kind
+    (`DIY.Catalog.size/1`).
   - A zone of a van and an item in a van have no plan and no `at` (`nil`).
 
   The app makes a draft of the plan (`draft/2`). The size of the house
@@ -28,7 +28,7 @@ defmodule DIY.Layout do
     ground (outside and floor 1), floor 2, floor 3, the attic and the roof
     (`layer/1`).
   - An item is in its room: `0 <= x <= w(room) - w(item)`, and the same
-    for `y`. An item that is larger than its room is at 0: it goes
+    for `y`. An item that is larger than its room is at 0. It goes
     through the walls of the room, and the picture can paint a wall over
     it.
   """
@@ -43,8 +43,8 @@ defmodule DIY.Layout do
   @max_at 12_000
 
   # The size of one solar panel (on its side, the long side down the
-  # roof), and its watts: a module of 108 half cells, 1134 by 1722 mm, of
-  # 400 W (for example STAR-400W-M54H-M10, Greentech Renewables).
+  # roof), and its watts. It is a module of 108 half cells, 1134 by 1722
+  # mm, of 400 W: for example STAR-400W-M54H-M10 (Greentech Renewables).
   @panel_w 45
   @panel_d 68
   @panel_watts 400
@@ -71,8 +71,8 @@ defmodule DIY.Layout do
   def layer(%{level: level}), do: level
 
   @doc """
-  The floor of a house of a size, before the user changes it: `{w, d}`, a
-  rectangle of 3 by 2 with the area of one floor.
+  The floor of a house of a size, before the user changes it: `{w, d}`. It
+  is a rectangle of 3 by 2 with the area of one floor.
   """
   def footprint(%{size: size, floors: floors}) do
     area = size * 144 / floors
@@ -185,7 +185,7 @@ defmodule DIY.Layout do
   @doc """
   The draft plans of the rooms of a house, in the order of the rooms. The
   rooms of a floor (and of the attic, and of the roof) fill the floor of
-  the house in rows. Outside, a garage is on the right of the house, a
+  the house in rows. Outside, a garage is on the right of the house. A
   driveway is in front of the garage, and a yard is in front of the house.
   """
   def draft(house, rooms) do
@@ -295,7 +295,7 @@ defmodule DIY.Layout do
   ## The fill
 
   @doc """
-  Makes the plan whole: each room of the house has a plan, and each item
+  Makes the plan whole. Each room of the house has a plan, and each item
   in a room of the house has a place in its room. A room with no plan, or
   with a plan that overlaps a room before it in its layer, goes to a free
   place. An item with no place goes to a free place in its room, and an
@@ -349,9 +349,9 @@ defmodule DIY.Layout do
   defp put_plan(rooms, room, plan),
     do: Enum.map(rooms, &if(&1.id == room.id, do: %{&1 | plan: plan}, else: &1))
 
-  # A free place for a new room: on a floor, in the house where no room
-  # is, else at the back of the house; outside (and when no place is
-  # free), next to the rooms of its layer, on their right.
+  # A free place for a new room. A room of a floor goes in the house where
+  # no room is, else at the back of the house. A room outside goes next to
+  # the rooms of its layer, on their right (also when no place is free).
   defp free_plan(build, room) do
     {w, d} = new_size(room, build)
     others = for r <- build.rooms, r.plan, layer(r) == layer(room), do: r.plan
@@ -378,7 +378,7 @@ defmodule DIY.Layout do
   end
 
   # A free place for a new room of a floor at the back of the house (y less
-  # than the house), row by row: so the room is next to the house, not past
+  # than the house), row by row. So the room is next to the house, not past
   # the garage or the yard.
   defp back(%{level: "outside"}, _others, _house, _w, _d), do: nil
 
@@ -448,8 +448,8 @@ defmodule DIY.Layout do
 
   @doc """
   A free place for an item in a room, where it does not overlap the boxes
-  of the other items: the first place from the back corner, row by row.
-  With no free place, the back corner.
+  of the other items. It is the first place from the back corner, row by
+  row. With no free place, it is the back corner.
   """
   def free_at(item, room, others) do
     {w, d} = extent(item)

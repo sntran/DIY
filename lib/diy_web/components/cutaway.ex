@@ -1,8 +1,8 @@
 defmodule DIYWeb.Cutaway do
   @moduledoc """
   The plan of the house at scale, as a house that is cut open. Each floor
-  is a layer, with a gap between the layers: from the ground (the lot,
-  outside and floor 1) up to the attic and the roof. Each room shows at
+  is a layer, with a gap between the layers. The layers go from the ground
+  (the lot, outside and floor 1) up to the attic and the roof. Each room shows at
   its place and its size. Each item shows at its place, its size and its
   turn (`DIY.Layout`). The walls on the outside at the back are cut at
   the height of a table. The other walls are cut near the floor.
@@ -13,9 +13,9 @@ defmodule DIYWeb.Cutaway do
   - the SVG: `data-k`, the SVG units of one inch along `x`, along `y`, and
     up (`z`); and `data-fit`, the box of all the layers;
   - each surface of a room: `data-room`, `data-plan` (`x y w d`, inches)
-    and `data-origin` (the SVG point of the plan point 0, 0 on the surface
-    of the room). A roof also has `data-rise`: the height of its ridge
-    over its eaves, in inches;
+    and `data-origin`. The origin is the SVG point of the plan point 0, 0
+    on the surface of the room. A roof also has `data-rise`: the height of
+    its ridge over its eaves, in inches;
   - each item: `data-item`, `data-in` (its room) and `data-at` (the
     center of the item on the plan, in inches);
   - each layer: `data-box` (its box in the SVG), for a zoom to the layer.
@@ -33,8 +33,9 @@ defmodule DIYWeb.Cutaway do
   @m 0.0254
   # The SVG units of one inch along x, along y and up (`DIYWeb.Iso`).
   @k {8.66 * @m, 5.0 * @m, 10.0 * @m}
-  # The pitch of a roof (5 in 12), the height of the cut of a wall at the
-  # back and at the front, the thickness of a wall and of a floor (meters).
+  # The pitch of a roof (5 in 12). Then, in meters: the height of the cut
+  # of a wall at the back and at the front. Then the thickness of a wall
+  # and of a floor.
   @pitch 5 / 12
   @wall 1.1
   @low 0.25
@@ -112,8 +113,8 @@ defmodule DIYWeb.Cutaway do
     }
   end
 
-  # The height of the floor of a room over its layer: floor 1 is on its
-  # slab, a garage on a lower slab, and a yard on the ground.
+  # The height of the floor of a room over its layer. Floor 1 is on its
+  # slab, a garage is on a lower slab, and a yard is on the ground.
   defp floor_height("ground", %{level: "f1"}), do: @slab
   defp floor_height("ground", %{place: :outdoor}), do: 0.02
   defp floor_height("ground", _room), do: 0.1
@@ -183,9 +184,9 @@ defmodule DIYWeb.Cutaway do
 
   # The walls of the rooms of a layer: on each side of each room. A wall
   # between two rooms is low, and only the room in front of it draws it. A
-  # wall on the outside is high at the back (x0 and y0), where no room of
-  # the layer is behind it, and low at the front (x1 and y1). `base` gives
-  # the floor of a room and the height of a high wall (meters).
+  # wall on the outside is low at the front (x1 and y1). At the back (x0
+  # and y0), it is high where no room of the layer is behind it. `base`
+  # gives the floor of a room and the height of a high wall (meters).
   defp walls(id, rooms, base) do
     for room <- rooms,
         side <- ~w(x0 y0 x1 y1),
@@ -196,8 +197,8 @@ defmodule DIYWeb.Cutaway do
     end
   end
 
-  # The parts of a side of a room, in inches along the side: each with its
-  # kind (:high, :low, or :shared for a low wall between two rooms).
+  # The parts of a side of a room, in inches along the side. Each part has
+  # its kind: :high, :low, or :shared (a low wall between two rooms).
   defp spans(room, side, rooms) do
     others = Enum.reject(rooms, &(&1.id == room.id))
     {line, range} = edge(room.plan, side)
@@ -255,7 +256,7 @@ defmodule DIYWeb.Cutaway do
   # A wall on a side of a room. A wall on the outside stands just out of
   # the room, and fills the corner. A wall between two rooms stands on the
   # line between them. For the order of the paint, a wall is flat, on its
-  # line: so an item in the room is in front of a wall at the back, and
+  # line. So an item in the room is in front of a wall at the back, and
   # behind a wall at the front.
   defp wall(id, room, side, {a, b, kind}, z, height) do
     {line, {r0, r1}} = edge(room.plan, side)
@@ -610,7 +611,7 @@ defmodule DIYWeb.Cutaway do
   end
 
   # The outline of the room that the user chose, and a handle in the middle
-  # of each wall: x0 and y0 (the walls at the back), x1 and y1.
+  # of each wall. x0 and y0 are the walls at the back.
   defp selection(view, id) do
     case view.levels |> Enum.flat_map(&(&1.low ++ &1.rooms)) |> Enum.find(&(&1.id == id)) do
       nil ->

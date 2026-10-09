@@ -35,7 +35,7 @@ async function check(page, name) {
 }
 
 // Follows a link of the list of the rooms. The list is for a keyboard and
-// a screen reader (it shows when it has the focus): so the test uses the
+// a screen reader: it shows when it has the focus. So the test uses the
 // keyboard, as a person with a keyboard does.
 async function follow(page, selector) {
   await page.focus(selector)

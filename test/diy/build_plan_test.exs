@@ -102,6 +102,11 @@ defmodule DIY.BuildPlanTest do
 
     assert %{turn: 0, at: %{x: 100, y: 100}} = item(turned, tv.id)
 
+    # The watts give the size of solar panels.
+    roof = room(build, "Roof")
+    {:ok, with_panels, panels} = Build.add_item(build, roof.id, "solar_panels")
+    assert Build.size_item(with_panels, panels, %{w: 57, d: 12, h: 35}) == {:error, :size}
+
     {:ok, sized} = Build.size_item(build, tv.id, %{w: 57, d: 12, h: 35})
     assert Layout.size(item(sized, tv.id)) == {57, 12, 35}
     {:ok, typical} = Build.size_item(sized, tv.id, nil)

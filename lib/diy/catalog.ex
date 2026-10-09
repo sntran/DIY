@@ -974,9 +974,9 @@ defmodule DIY.Catalog do
 
   @by_type Map.new(@kinds, &{&1.type, &1})
 
-  # The typical size of an item of each kind, in inches: its width (from
-  # its left to its right), its depth (from its back to its front) and its
-  # height. The front is the side that a person uses. For solar panels, it
+  # The typical size of an item of each kind, in inches. The width is from
+  # its left to its right, and the depth from its back to its front. The
+  # third number is its height. The front is the side that a person uses. For solar panels, it
   # is one panel (`DIY.Layout.size/1` gives the size of the array).
   #
   # The source of each size is next to it: the spec sheet of a common
@@ -1091,8 +1091,8 @@ defmodule DIY.Catalog do
       not Map.has_key?(@sizes, type),
       do: raise("the kind #{type} has no size")
 
-  # The height of the bottom of an item on a wall, on a ceiling or on a
-  # counter, in inches. Another item stands on the floor.
+  # The height of the bottom of an item on a wall or on a ceiling, in
+  # inches. Another item stands on the floor.
   @lifts %{
     # No source: high on a wall.
     "mini_split" => 84,
@@ -1101,9 +1101,7 @@ defmodule DIY.Catalog do
     # No source: on a wall, near the panel.
     "transfer_switch" => 40,
     # No source: the blades are 7 ft over the floor.
-    "ceiling_fan" => 84,
-    # On a counter: most counters are 36 in high.
-    "microwave" => 36
+    "ceiling_fan" => 84
   }
 
   @doc "All the kinds, in the order of the list of a new item."

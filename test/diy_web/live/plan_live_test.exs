@@ -200,6 +200,15 @@ defmodule DIYWeb.PlanLiveTest do
     view |> element("#move-item-up") |> render_click()
     assert item_id(view, tv.id).at == at
 
+    # The sheet tells the new place; the status does not tell it again.
+    assert has_element?(
+             view,
+             "#item-where[aria-live=polite]",
+             "from the left wall of Living room"
+           )
+
+    refute has_element?(view, "#plan-status", "TV:")
+
     view |> form("#size-form", %{"w" => "57", "d" => "12", "h" => "35"}) |> render_submit()
     assert item_id(view, tv.id).size == %{w: 57, d: 12, h: 35}
     assert has_element?(view, "#item-place", "You gave this size.")
@@ -280,7 +289,7 @@ defmodule DIYWeb.PlanLiveTest do
     view = open(conn, ~p"/inside", build)
     assert has_element?(view, "#room-#{laundry} #away-#{station}", "in the van now")
     # An item in a van does not move on the plan, and a drop of it gives a
-    # message (a different tab can take it to the van while it moves).
+    # message. (A different tab can take it to the van while it moves.)
     before = build(view)
     render_hook(view, "nudge_item", %{"id" => station, "dx" => 6, "dy" => 0})
     assert build(view) == before

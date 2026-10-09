@@ -10,7 +10,7 @@ defmodule DIYWeb.Inside do
   with no drag.
 
   The plan is for the eyes. A list of the rooms and their items gives the
-  same facts to a screen reader and to a keyboard: it shows when it has
+  same facts to a screen reader and to a keyboard. It shows when it has
   the focus. In the list, the arrow keys move an item or a room.
   """
   use DIYWeb, :html
@@ -82,7 +82,7 @@ defmodule DIYWeb.Inside do
         <%!-- With a chosen room, the plan is shorter: its bar shows under it. --%>
         <div class={[
           "relative overflow-hidden rounded-box border border-base-300",
-          if(@chosen, do: "h-[calc(100dvh-19rem)]", else: "h-[calc(100dvh-14rem)]")
+          if(@chosen, do: "h-[calc(100dvh-22rem)]", else: "h-[calc(100dvh-14rem)]")
         ]}>
           <Cutaway.cutaway view={@view} selected={@chosen && @chosen.id} />
           <div class="absolute top-2 right-2 flex flex-col gap-2">
@@ -156,30 +156,45 @@ defmodule DIYWeb.Inside do
   # The bar of the chosen room: its name, its size, and its buttons.
   defp room_bar(assigns) do
     ~H"""
-    <div id="room-bar" class="card card-border bg-base-100 p-3 flex-row items-center gap-2">
-      <div class="grow min-w-0">
-        <p class="font-semibold truncate">{@room.name}</p>
-        <p class="text-xs opacity-70">
-          {Build.level_name(@room.level)} · {feet(@room.plan.w)} by {feet(@room.plan.d)}
-        </p>
+    <div id="room-bar" class="card card-border bg-base-100 p-3 gap-2">
+      <div class="flex items-center gap-2">
+        <div class="grow min-w-0">
+          <p class="font-semibold truncate">{@room.name}</p>
+          <p class="text-xs opacity-70">
+            {Build.level_name(@room.level)} · {feet(@room.plan.w)} by {feet(@room.plan.d)}
+          </p>
+        </div>
+        <.link
+          patch={~p"/inside?#{[add: @room.id, room: @room.id]}"}
+          id="bar-add"
+          class="btn btn-sm btn-primary"
+          aria-label={"Add an item to #{@room.name}"}
+        >
+          <.icon name="hero-plus" class="size-4" /> Item
+        </.link>
+        <.link
+          patch={~p"/inside?#{[room: @room.id, sheet: "room"]}"}
+          id="bar-change"
+          class="btn btn-sm"
+        >
+          Change
+        </.link>
+        <.link patch={~p"/inside"} class="btn btn-sm btn-ghost btn-square" aria-label="Close">
+          <.icon name="hero-x-mark" class="size-4" />
+        </.link>
       </div>
-      <.link
-        patch={~p"/inside?#{[add: @room.id, room: @room.id]}"}
-        id="bar-add"
-        class="btn btn-sm btn-primary"
-        aria-label={"Add an item to #{@room.name}"}
-      >
-        <.icon name="hero-plus" class="size-4" /> Item
-      </.link>
-      <.link patch={~p"/inside?#{[room: @room.id, sheet: "room"]}"} id="bar-change" class="btn btn-sm">
-        Change
-      </.link>
-      <.link patch={~p"/inside"} class="btn btn-sm btn-ghost btn-square" aria-label="Close">
-        <.icon name="hero-x-mark" class="size-4" />
-      </.link>
+      <.moves id="move-room" event="nudge_room" target={@room.id} step={24} what="the room" />
     </div>
     """
   end
+
+  @doc """
+  The place of an item in its room, in words. The left wall is the wall
+  that the Left key goes to. The top wall is the wall of the Up key.
+  """
+  def where(item, room),
+    do:
+      "#{feet(item.at.x)} from the left wall of #{room.name}, #{feet(item.at.y)} from the top wall."
 
   @doc "A length in inches as feet and inches, for example 12 ft 6 in."
   def feet(inches) do
@@ -300,8 +315,6 @@ defmodule DIYWeb.Inside do
         <button class="btn btn-sm">Rename</button>
       </form>
 
-      <.moves id="move-room" event="nudge_room" target={@room.id} step={24} what="the room" />
-
       <form id={"size-#{@room.id}"} phx-submit="room_size" class="space-y-2">
         <input type="hidden" name="room_id" value={@room.id} />
         <p class="text-sm font-semibold">Size, in feet</p>
@@ -311,11 +324,11 @@ defmodule DIYWeb.Inside do
             <input
               name="w"
               type="number"
-              step="0.5"
+              step="any"
               min={Layout.min_room() / 12}
               max={Layout.max_room() / 12}
               inputmode="decimal"
-              value={Format.value(@room.plan.w / 12)}
+              value={Format.value(Float.round(@room.plan.w / 12, 2))}
               class="input input-sm w-24"
             />
           </label>
@@ -324,11 +337,11 @@ defmodule DIYWeb.Inside do
             <input
               name="d"
               type="number"
-              step="0.5"
+              step="any"
               min={Layout.min_room() / 12}
               max={Layout.max_room() / 12}
               inputmode="decimal"
-              value={Format.value(@room.plan.d / 12)}
+              value={Format.value(Float.round(@room.plan.d / 12, 2))}
               class="input input-sm w-24"
             />
           </label>
@@ -510,6 +523,7 @@ defmodule DIYWeb.Inside do
       <div :if={@item.at} id="item-place" class="space-y-2 rounded-box bg-base-200 p-3">
         <p class="text-sm font-semibold">Its place, its size and its turn</p>
         <.moves id="move-item" event="nudge_item" target={@item.id} step={6} what="the item" />
+        <p id="item-where" class="text-sm" aria-live="polite">{where(@item, @room)}</p>
         <p :if={@item.type == "solar_panels"} class="text-xs opacity-70">
           The watts give the size of the array: {@panel} inches for each panel of 400 W.
         </p>
@@ -590,7 +604,7 @@ defmodule DIYWeb.Inside do
 
   # Four buttons that move an item or a room: for a person who does not
   # drag (WCAG 2.2, 2.5.7). Each arrow points as the move goes on the
-  # plan: the left wall is at the top left, and the top wall at the top
+  # plan. The left wall is at the top left, and the top wall is at the top
   # right.
   defp moves(assigns) do
     assigns =

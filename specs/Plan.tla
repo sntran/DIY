@@ -4,15 +4,17 @@
 (* DIY.Build). The rooms of one layer are rectangles. The item is a       *)
 (* rectangle of w by d, with a place in its room.                          *)
 (*                                                                         *)
-(* The person does these steps in any order: move a room, move the walls  *)
-(* of a room, put the item at a place, turn the item, give the item a new  *)
-(* size, remove a room, and add it again. The rules of the app:            *)
-(* - a room moves, or gets new walls, only to a place where no room is;    *)
-(*   else nothing changes (the page shows a message);                      *)
-(* - the item moves with its room;                                         *)
-(* - when the walls of its room move, the item keeps its place in the      *)
-(*   house, and then comes back in the room (Clamp);                       *)
-(* - a turn keeps the center of the item, and swaps w and d; a new size    *)
+(* The person does these steps in any order:                              *)
+(* - move a room, or move the walls of a room;                             *)
+(* - put the item at a place, turn the item, or give it a new size;        *)
+(* - remove a room, and add it again.                                      *)
+(* The rules of the app:                                                   *)
+(* - A room moves, or gets new walls, only to a place where no room is.    *)
+(*   Else nothing changes (the page shows a message).                      *)
+(* - The item moves with its room.                                         *)
+(* - When the walls of its room move, the item keeps its place in the      *)
+(*   house. Then it comes back in the room (Clamp).                        *)
+(* - A turn keeps the center of the item, and swaps w and d. A new size    *)
 (*   keeps its corner. Then the item comes back in its room (Clamp).       *)
 (*                                                                         *)
 (* Three modes have a fault:                                               *)
@@ -51,8 +53,8 @@ Min(a, b) == IF a < b THEN a ELSE b
 \* Half of a number, to 0 (as div in Elixir).
 Half(n) == IF n >= 0 THEN n \div 2 ELSE -((-n) \div 2)
 
-\* A place in a room of a side, for a side of the item: in the room, or at
-\* 0 when the item is larger than the room.
+\* A place in a room of a side, for a side of the item. It is in the room,
+\* or at 0 when the item is larger than the room.
 Clamp(v, side, length) == Max(0, Min(v, side - length))
 
 \* The place of the item in a room, for a size of the item.

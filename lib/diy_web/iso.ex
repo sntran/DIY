@@ -79,19 +79,19 @@ defmodule DIYWeb.Iso do
   ## The order of the paint
 
   @doc """
-  Objects in the order of the paint, from the back to the front: the walls
-  and the items of a plan (`DIYWeb.Cutaway`), or the parts of a model
-  (`DIYWeb.Icon.Shapes`). An object has an `id`, a `box` in the world
+  Objects in the order of the paint, from the back to the front. They are
+  the walls and the items of a plan (`DIYWeb.Cutaway`), or the parts of a
+  model (`DIYWeb.Icon.Shapes`). An object has an `id`, a `box` in the world
   (`{x0, y0, z0, x1, y1, z1}`), a `key`, `loose`, and its `polys`
   (`{corners, class}`).
 
   Where two objects cover the same part of the screen, the one at the
-  back comes first: its box is on the far side of the other box along x,
-  y or z, and the other box is not on the far side of it. Else the one
+  back comes first. Its box is on the far side of the other box along x,
+  y or z. The other box is not on the far side of it. Else the one
   with the smaller key (x + y of its center) comes first. A loose object
-  (an item that is larger than its room goes through walls) comes by its
-  key only. Three boxes can each be behind the next one (a cycle): then
-  the box with the fewest boxes before it comes first.
+  comes by its key only: it is an item that is larger than its room, and
+  it goes through walls. Three boxes can each be behind the next one (a
+  cycle). Then the box with the fewest boxes before it comes first.
   """
   def order(objects) do
     screens = Map.new(objects, &{&1.id, screen(&1.polys)})

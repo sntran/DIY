@@ -33,16 +33,18 @@ defmodule DIYWeb.Icon.Shapes do
   def shapes(type), do: draw(model(type), nil)
 
   @doc """
-  The shapes of an item at the scale of the world: the model of its kind,
-  with the size of the item (`{w, d, h}` in meters, before the turn), with
-  a turn (0 to 3 quarter turns), and with its back corner at a point of
-  the world (`at`). A face that looks away after the turn does not show.
+  The shapes of an item at the scale of the world. The model of its kind
+  has the size of the item (`{w, d, h}` in meters, before the turn). The
+  model has a turn (0 to 3 quarter turns), and its back corner is at a
+  point of the world (`at`). A face that looks away after the turn does
+  not show.
   """
   def placed(type, frame), do: draw(model(type), frame)
 
   @doc """
   The shapes of a model at the scale of the world, with its own size (in
-  meters): a turn, and its back corner at a point of the world (`at`).
+  meters). The model has a turn, and its back corner is at a point of the
+  world (`at`).
   """
   def placed_model(model, %{at: at, turn: turn}) do
     {{x0, y0, z0}, {x1, y1, z1}} = bounds(model)

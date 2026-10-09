@@ -39,8 +39,8 @@ test("the height of a roof: 0 at the eaves, the rise at the ridge", () => {
 })
 
 // A surface: a floor (rise 0) or a roof (a pitch of 5 in 12, as
-// DIYWeb.Cutaway), at any place of the plan; and a point of the plan (x
-// and y from 0 to 1 of the surface, or out of it).
+// DIYWeb.Cutaway), at any place of the plan. A point of the plan has x and
+// y from 0 to 1 of the surface, or out of it.
 const surfaces = fc
   .record({
     origin: fc.tuple(fc.double({min: -200, max: 200, noNaN: true}), fc.double({min: -200, max: 200, noNaN: true})),
@@ -167,7 +167,7 @@ class El {
 }
 
 // The page of the plan: a kitchen (chosen, with its outline and handles),
-// a living room, a roof, a fridge in the kitchen, and the buttons.
+// a living room, a roof, and a fridge in the kitchen. Then the buttons.
 function setup({storage = new Map(), chosen = true, width = 400, height = 800} = {}) {
   const els = []
   const add = (attrs, parent) => {

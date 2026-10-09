@@ -36,14 +36,16 @@ defmodule DIY.Build do
     of the house (`house_view/1`). A room of the house has a `plan`: its
     place and its size at scale, in inches (`DIY.Layout`). A zone has no
     plan.
-  - `items`: each item has an `id`, a `type` (`DIY.Catalog`), a `room`,
-    `typical` (true for an item of a preset that the user did not check),
-    `planned` (true for an item that the user does not have yet: the
-    what-if of `DIY.Power`), `backup` (true for an item that a power
-    station runs), `home` (for a power station in a van: the room of the
-    house where it goes back, or `nil`) and its `params`. An item in a room
-    of the house has `at` (its place in the room), `turn` and `size`
-    (`DIY.Layout`). An item in a van has no `at`.
+  - `items`: each item has these fields:
+    - `id`, `type` (`DIY.Catalog`), `room` and `params`;
+    - `typical`: true for an item of a preset that the user did not check;
+    - `planned`: true for an item that the user does not have yet (the
+      what-if of `DIY.Power`);
+    - `backup`: true for an item that a power station runs;
+    - `home`: for a power station in a van, the room of the house where it
+      goes back, or `nil`;
+    - `at` (its place in its room), `turn` and `size` (`DIY.Layout`). An
+      item in a van has no `at`.
   - `usage`: the real usage of the meter file (`DIY.Usage`), or `nil`.
   - `power`: how the house uses its power stations, and the prices of the
     night and of the power to the grid (`DIY.Power.settings/0`).
@@ -55,9 +57,8 @@ defmodule DIY.Build do
   - `seq`: the number of the last id.
   - `hints`: the hints that the user closed.
 
-  After each change, the plan of the house is whole again
-  (`DIY.Layout.fill/1`): each room of the house has a plan, and each item
-  of the house is in its room.
+  After each change, the plan is whole again (`DIY.Layout.fill/1`). Each
+  room of the house has a plan, and each item is in its room.
   """
 
   alias DIY.{Catalog, Layout}
@@ -669,9 +670,9 @@ defmodule DIY.Build do
   end
 
   @doc """
-  Puts an item of the house at a place in a room of the house: its room,
-  or a different room where its kind can go. `at` is the back corner of
-  the item in the room, in inches. The item stays in the room.
+  Puts an item at a place in a room: its room, or a different room where
+  its kind can go. `at` is the back corner of the item in the room, in
+  inches. The item stays in the room.
   """
   @spec place_item(t(), String.t(), String.t(), %{x: integer(), y: integer()}) ::
           {:ok, t()} | {:error, atom()}
@@ -706,6 +707,8 @@ defmodule DIY.Build do
   def size_item(build, id, size) do
     with {:ok, item} <- item(build, id),
          true <- (size == nil or Layout.valid_size?(size)) || {:error, :size},
+         # The watts of solar panels give their size.
+         true <- item.type != "solar_panels" || {:error, :size},
          do: {:ok, replace_item(build, %{item | size: size})}
   end
 
