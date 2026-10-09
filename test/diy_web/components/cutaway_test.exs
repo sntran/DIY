@@ -323,7 +323,7 @@ defmodule DIYWeb.CutawayTest do
     for part <- ~w(i-fire i-coil) do
       [_, time, count] =
         Regex.run(
-          ~r/\.cutaway-house \.p-item:not\(\.p-planned\) \.#{part} \{ animation: [\w-]+ ([\d.]+)s [\w-]+ (\d+) alternate \}/,
+          ~r/\.cutaway-house \.#{part} \{ animation: var\(--p-[a-z]+, none\) ([\d.]+)s [\w-]+ (\d+) alternate \}/,
           loops
         )
 
@@ -331,6 +331,16 @@ defmodule DIYWeb.CutawayTest do
       assert rem(String.to_integer(count), 2) == 0
       refute String.replace(css, loops, "") =~ ".#{part} { animation:"
     end
+
+    # A loop runs only in the layer that shows: the name of its animation is
+    # there. So a loop starts when the person opens the tab of its layer.
+    for id <- ~w(ground f2 f3 attic roof) do
+      assert loops =~
+               ".cutaway-house[data-dim=#{id}] > #plan-#{id} .p-item:not(.p-planned)"
+    end
+
+    assert loops =~ ".cutaway-house:not([data-dim]) .p-item:not(.p-planned)"
+    assert loops =~ "{ --p-fire: p-flicker; --p-coil: p-warm }"
 
     # Only the flame of a furnace and the hot coils have a loop: not a tail
     # light of a car or of a van.

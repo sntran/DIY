@@ -1389,12 +1389,14 @@ its turn. A length is in inches.
     in the picture.
   - At night (the dark mode), the colors are darker, and the floor of each
     room inside has the warm light of a lamp (`p-glow`).
-  - The items that run have small, slow loops when the page opens. The
-    flame of a furnace flickers, and the coils of heat strips and of a
-    space heater glow (the classes `i-fire` and `i-coil`). Each loop stops
-    after 4.8 seconds, at its first state (WCAG 2.2.2). A planned item does
-    not run: it has no loop. With "reduce motion" in the settings of the
-    device, no part moves. A tail light of a car or of a van has no loop.
+  - The items that run have small, slow loops. The flame of a furnace
+    flickers, and the coils of heat strips and of a space heater glow (the
+    classes `i-fire` and `i-coil`). A loop starts when the layer of its item
+    shows: when the page opens, or when the person goes to the layer. Each
+    loop stops after 4.8 seconds, at its first state (WCAG 2.2.2). A planned
+    item does not run: it has no loop. With "reduce motion" in the settings
+    of the device, no part moves. A tail light of a car or of a van has no
+    loop.
   - The furniture of a room (`DIYWeb.Decor`), as in the drawn picture. A
     word in the name of a room gives its pieces, in capital letters or
     not:

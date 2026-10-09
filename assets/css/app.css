@@ -492,12 +492,18 @@
 [data-theme=dark] .p-glow { display: inline }
 /* The items of the house that run have small, slow loops: the flame of a
    furnace flickers, and a hot coil glows (the classes i-fire and i-coil).
-   Each loop stops after 4.8 seconds (WCAG 2.2.2), at its first state. A
-   planned item does not run: it has no loop. With "reduce motion", no
-   part moves. */
+   A loop starts when the layer of its item shows (assets/js/plan.js), and
+   it stops after 4.8 seconds, at its first state (WCAG 2.2.2). A planned
+   item does not run: it has no loop. With "reduce motion", no part moves. */
 @media (prefers-reduced-motion: no-preference) {
-  .cutaway-house .p-item:not(.p-planned) .i-fire { animation: p-flicker 1.2s ease-in-out 4 alternate }
-  .cutaway-house .p-item:not(.p-planned) .i-coil { animation: p-warm 2.4s ease-in-out 2 alternate }
+  .cutaway-house:not([data-dim]) .p-item:not(.p-planned),
+  .cutaway-house[data-dim=ground] > #plan-ground .p-item:not(.p-planned),
+  .cutaway-house[data-dim=f2] > #plan-f2 .p-item:not(.p-planned),
+  .cutaway-house[data-dim=f3] > #plan-f3 .p-item:not(.p-planned),
+  .cutaway-house[data-dim=attic] > #plan-attic .p-item:not(.p-planned),
+  .cutaway-house[data-dim=roof] > #plan-roof .p-item:not(.p-planned) { --p-fire: p-flicker; --p-coil: p-warm }
+  .cutaway-house .i-fire { animation: var(--p-fire, none) 1.2s ease-in-out 4 alternate }
+  .cutaway-house .i-coil { animation: var(--p-coil, none) 2.4s ease-in-out 2 alternate }
 }
 @keyframes p-flicker { 0% { opacity: 1 } 40% { opacity: 0.75 } 70% { opacity: 0.9 } 100% { opacity: 0.65 } }
 @keyframes p-warm { from { opacity: 1 } to { opacity: 0.7 } }
