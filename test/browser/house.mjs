@@ -175,7 +175,8 @@ async function van(page, name) {
   assert.match(await page.textContent("#weight-total"), /of 8,900 lb/)
   await check(page, `${name} van`)
 
-  await page.click('a[aria-label="Add an item to Galley"]')
+  // The list of the zones is for a keyboard, as the list of the rooms.
+  await follow(page, 'a[id^="add-"][aria-label="Add an item to Galley"]')
   await page.waitForSelector("#add-sheet")
   await check(page, `${name} van add`)
   await page.click("#add-van_fridge")
@@ -184,6 +185,16 @@ async function van(page, name) {
   await page.click("#item-sheet .btn-ghost[aria-label=Close]")
   await page.waitForSelector("#item-sheet", { state: "detached" })
   await page.waitForSelector("#van-notes:has-text('no power station')")
+
+  // The van cut open: the person zooms to its floor, and drags the fridge.
+  await page.click('div[id^="van-plan-"] button[data-focus=floor]')
+  const vanFridge = `g[data-item="${await itemId(page, "12 V fridge")}"]`
+  const vanFridgeAt = await page.getAttribute(vanFridge, "data-at")
+  await page.locator(vanFridge).scrollIntoViewIfNeeded()
+  await drag(page, center(await page.locator(vanFridge).boundingBox()), 8, 6)
+  await page.waitForFunction(([s, at]) => document.querySelector(s).getAttribute("data-at") !== at, [vanFridge, vanFridgeAt])
+    .catch(() => assert.fail(`${name}: the fridge moves in the van with a drag`))
+  await check(page, `${name} van plan`)
 
   await page.click('#van-stations button:has-text("Take it in this van")')
   await page.waitForSelector("#van-stations:has-text('in this van')")
