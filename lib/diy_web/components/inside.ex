@@ -696,8 +696,8 @@ defmodule DIYWeb.Inside do
     ]
   end
 
-  # The words of a move on the plan: of a room in the house, or of a zone
-  # or an item in a van (its right side is at x = 0).
+  # The words of a move of a room in the house, or of a zone or an item in
+  # a van. In a van, the right side is at x = 0.
   defp direction(dx, _dy, van) when dx != 0 do
     case {dx < 0, van} do
       {true, true} -> "to the right side"

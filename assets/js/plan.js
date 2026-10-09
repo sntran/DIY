@@ -1,7 +1,7 @@
 // The hook Plan of the plan of the house at scale (DIYWeb.Cutaway). The
 // person moves the items and the rooms with a pointer (a finger or a
 // mouse). Two fingers, the wheel or the buttons zoom. A drag on an empty
-// place moves the picture. A tap on an item opens it, and a tap on a room
+// place moves the picture. A tap on an item opens it. A tap on a room
 // chooses it: the room then has handles on its walls, and the view zooms
 // in to it. In the list of the rooms (for a keyboard and a screen reader),
 // the arrow keys move an item or a room.
@@ -12,8 +12,8 @@
 // The math. A point of the plan is x, y in inches, on the surface of a
 // room. It goes to the SVG with the axes of the camera (data-axes: the SVG
 // vectors of one inch along x, along y and up, DIYWeb.Camera.axes/1). It
-// also uses the origin of the surface (data-origin: the SVG point of
-// 0, 0):
+// also uses the origin of the surface (data-origin, the SVG point of 0, 0).
+// The formula:
 //   sx = ox + ax x + bx y + cx z
 //   sy = oy + ay x + by y + cy z
 // A floor is flat (z = 0). A roof (data-rise) has a ridge along x, at the
@@ -49,8 +49,8 @@ export function forward(point, surface, axes) {
   return {x: ox + ax * point.x + bx * point.y + cx * z, y: oy + ay * point.x + by * point.y + cy * z}
 }
 
-// The x, y of a move on the SVG (u, v), with the SVG vectors of one inch
-// along x (a) and along y (b): it solves u = ax x + bx y, v = ay x + by y.
+// The x, y of a move on the SVG (u, v). The SVG vectors of one inch are a
+// (along x) and b (along y). It solves u = ax x + bx y, v = ay x + by y.
 function solve(u, v, [ax, ay], [bx, by]) {
   const det = ax * by - bx * ay
   return {x: (u * by - bx * v) / det, y: (ax * v - ay * u) / det}
@@ -135,9 +135,9 @@ export function zoom(view, factor, px, py, fit) {
 }
 
 // The move of an arrow key, in inches: 6, or 24 with Shift. The key moves
-// the item as it points on the screen. The arrows of the camera
-// (data-arrows: rx ry dx dy, DIYWeb.Camera.arrows/1) are the steps of the
-// plan for a move to the right and for a move down the screen.
+// the item as it points on the screen. The arrows of the camera are
+// data-arrows (rx ry dx dy, DIYWeb.Camera.arrows/1). They are the steps of
+// the plan for a move to the right, and for a move down the screen.
 export function arrow(key, shift, arrows) {
   const step = shift ? 24 : 6
   const [rx, ry, dx, dy] = arrows
@@ -156,9 +156,9 @@ export function overlaps(a, b) {
   return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
 }
 
-// The view that shows a box of the SVG (a room) on a screen of a shape
-// (w / h): the box with a margin, at the middle. A view that shows it in
-// more detail stays: a tap does not zoom out.
+// The view that shows a box of the SVG (a room) on a screen with a shape
+// (w / h). The box has a margin, and it is at the middle. A view that
+// shows it in more detail stays: a tap does not zoom out.
 export function focus(view, box, shape) {
   const margin = 1.15
   let w = box.w * margin

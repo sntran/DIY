@@ -82,8 +82,9 @@ defmodule DIYWeb.Camera do
   end
 
   @doc """
-  The axis of the plan that goes most to the eye: `:y` for the house (the
-  camera is in front of it), `:x` for a van (the camera is at its side).
+  The axis of the plan that goes most to the eye. It is `:y` for the house
+  (the camera is in front of it), and `:x` for a van (the camera is at its
+  side).
   """
   def depth_axis(%__MODULE__{lit: :front}), do: :y
   def depth_axis(%__MODULE__{lit: :side}), do: :x
@@ -95,8 +96,8 @@ defmodule DIYWeb.Camera do
   def shows?(camera, normal), do: dot(camera.eye, normal) > 1.0e-9
 
   @doc """
-  The light of a face with a normal: `t` (a top), `l` (the face that looks
-  more to the camera) or `r` (the face in the shade).
+  The light of a face with a normal: `t` (a top), `l` or `r`. `l` is the
+  face that looks more to the camera, and `r` is the face in the shade.
   """
   def light(camera, {x, y, z}) do
     cond do
@@ -127,10 +128,9 @@ defmodule DIYWeb.Camera do
   end
 
   @doc """
-  The steps of the plan (`{dx, dy}`, in parts of a step) for a move to the
-  right of the screen and for a move down the screen: the axes of the plan
-  that go most to the right and most down. The arrow keys and the move
-  buttons use them.
+  The steps of the plan (`{dx, dy}`) for two moves on the screen: to the
+  right, and down. They are the axes of the plan that go most to the right
+  and most down. The arrow keys and the move buttons use them.
   """
   def arrows(%__MODULE__{right: {rx, ry}, down: {dx, dy, _dz}}) do
     if abs(rx) >= abs(ry),
@@ -152,8 +152,8 @@ defmodule DIYWeb.Camera do
 
   Where two objects cover the same part of the screen, the one at the
   back comes first. Its box is on the far side of the other box along x,
-  y or z (the eye is at the large x, y and z). The other box is not on the
-  far side of it. Else the one with the smaller key (the depth of its
+  y or z. (The eye is at the large x, y and z.) And the other box is not
+  on the far side of it. Else the one with the smaller key (the depth of its
   center, `depth/2`) comes first. A loose object comes by its key only: it
   is an item that is larger than its room, and it goes through walls.
   Three boxes can each be behind the next one (a cycle). Then the box with

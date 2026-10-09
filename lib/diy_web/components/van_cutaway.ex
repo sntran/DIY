@@ -148,8 +148,8 @@ defmodule DIYWeb.VanCutaway do
       ]
   end
 
-  # The four wheels at the axles of the model, under the body: a tire and
-  # its hub on the outer face (x + w) of each, to the camera.
+  # The four wheels at the axles of the model, under the body. Each is a
+  # tire with its hub on its outer face (x + w), to the camera.
   defp wheels(size, t, axles, camera) do
     {r, z} = {@tire * @m, (-@floor + @tire) * @m}
 
@@ -209,9 +209,9 @@ defmodule DIYWeb.VanCutaway do
     ]
   end
 
-  # A wall: its box (inches), its line for the order of the paint (as the
-  # walls of the house), its height at its two ends along x (meters) and
-  # its classes.
+  # A wall: its box (inches), and its line for the order of the paint (as
+  # the walls of the house). Then its height at its two ends along x
+  # (meters), and its classes.
   defp wall(id, {x, y}, {w, d}, {lx0, ly0, lx1, ly1}, {h0, h1}, {material, top, camera}) do
     shape = Geometry.wedge({x * @m, y * @m, 0}, {w * @m, d * @m}, {h0, h1}, :x)
     [shade, lit, {corners, _top}] = Camera.faces(camera, shape, material)

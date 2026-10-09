@@ -840,17 +840,17 @@ the angle that it looks down at (the pitch). The app has two cameras:
 Why not the isometric view of the games (yaw 45°, pitch 35°)? On a phone,
 an isometric house is a diamond: much of the screen stays empty, and a
 drag moves on a slant. With the dollhouse, the house fills the width of
-the phone, a drag left or right moves an item along the house, and a
-drag up or down moves it to the back or to the front. A view straight on
-(a pitch near 0) makes the floor too thin to place an item, and a view
-with a vanishing point is not at scale. The owner chose these two
-cameras from screenshots of four cameras on a phone.
+the phone. A drag left or right moves an item along the house. A drag
+up or down moves it to the back or to the front. A view straight on (a
+pitch near 0) makes the floor too thin to place an item. A view with a
+vanishing point is not at scale. The owner chose these two cameras from
+screenshots of four cameras on a phone.
 
 For the two cameras, the eye is at the large x, the large y and the
 large z. So a box shows its top, its front (at y + d) and its side (at
-x + w), and the order of the paint is the same for the two cameras. The
-face that looks more to the camera is in the light (`-l`), and the other
-one is in the shade (`-r`).
+x + w). The order of the paint is the same for the two cameras. The face
+that looks more to the camera is in the light (`-l`), and the other one
+is in the shade (`-r`).
 
 - A picture of the house shows only what the house of today has (with no
   planned item). The picture on the page Van counts the planned items of
@@ -879,11 +879,11 @@ one is in the shade (`-r`).
   (`DIYWeb.Scene.parts/1`, `van_parts/2`). An assign with the same value
   does not change, so the page sends a picture again only when its parts
   change.
-- A point at x, y, z goes to the SVG at s (x sin a − y cos a) to the side,
-  and s ((x cos a + y sin a) sin b − z cos b) down, with the yaw a, the
-  pitch b, and s = 12.25 SVG units for each meter. A step along the eye
-  goes to the same point (a property test checks the math for each
-  camera). The code paints each object from the back to the front, in
+- The math of a camera: a is the yaw, b is the pitch, and s is 12.25 SVG
+  units for each meter. A point at x, y, z goes to the side by
+  s (x sin a − y cos a). It goes down by
+  s ((x cos a + y sin a) sin b − z cos b). A step along the eye goes to
+  the same point (a property test checks the math for each camera). The code paints each object from the back to the front, in
   an order that it sets by hand. The lines of the flows go behind the
   bushes, the person and the cars, and the labels go last.
 - A property test makes random parts of a house: each point of the
@@ -971,9 +971,10 @@ its turn. A length is in inches.
 - The shell. Each room has a slab under it, and a yard is on the ground.
   Each room inside has walls, as in a dollhouse. A wall on the outside at
   the back has its full height (8 feet), where no room is behind it. The
-  walls at the two sides of a room are cut on a slope: full at the back of
-  the house, and near the floor at its front. A wall at the front of a
-  room, or between a room and the room behind it, is cut near the floor.
+  walls at the two sides of a room are cut on a slope. They are full at
+  the back of the house, and near the floor at its front. A wall at the
+  front of a room, or between a room and the room behind it, is cut near
+  the floor.
   So a wall does not hide the items of a room.
 - The picture of an item is its icon at the size of the item
   (`DIYWeb.Icon.Shapes.placed/2`). A turn turns the model, and a face
@@ -990,9 +991,9 @@ its turn. A length is in inches.
   SVG while the pointer moves. It sends the change when the pointer
   stops, and the server then draws the plan again. The script has the
   math of the plan and of its inverse, on a floor and on the slopes of a
-  roof, with the axes of the camera of the SVG (`data-axes`). A property
-  test checks that a point goes to the screen and back, for random
-  cameras that look down more than a roof slopes.
+  roof. It uses the axes of the camera of the SVG (`data-axes`). A
+  property test checks that a point goes to the screen and back. It uses
+  random cameras that look down more than a roof slopes.
   The zoom is in the `viewBox`, which LiveView keeps
   (`JS.ignore_attributes/1`). The tab keeps it in its session storage.
 - The plan is for the eyes. A list of the rooms and of their items gives

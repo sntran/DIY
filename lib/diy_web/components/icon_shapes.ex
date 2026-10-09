@@ -2,8 +2,8 @@ defmodule DIYWeb.Icon.Shapes do
   @moduledoc """
   The shapes of the icon of each kind of item (`DIYWeb.Icon`), in the
   style of the pictures (`DIYWeb.Scene`). An icon is a few boxes, discs and
-  details of a material, with a light top, a face in the light and a face
-  in the shade (`DIYWeb.Camera`).
+  details of a material. It has a light top, a face in the light and a
+  face in the shade (`DIYWeb.Camera`).
 
   Each material has three classes: `i-NAME-t` (the top), `i-NAME-l` (in
   the light) and `i-NAME-r` (in the shade). The faces of a material also
@@ -29,7 +29,7 @@ defmodule DIYWeb.Icon.Shapes do
 
   @doc """
   The shapes of the icon of a kind for a camera (the camera of the house
-  by default), in the order of the paint: the model of the kind
+  by default), in the order of the paint. They are the model of the kind
   (`model/1`), as it is.
   """
   def shapes(type, camera \\ Camera.house()), do: draw(model(type), nil, camera)
@@ -365,8 +365,8 @@ defmodule DIYWeb.Icon.Shapes do
         do: {:poly, corners, class <> " i-face"}
   end
 
-  # A cylinder that stands at a center: the near half of its body (a part
-  # in the light and a part in the shade), and its top. A point of the ring
+  # A cylinder that stands at a center. It shows the near half of its body
+  # (a part in the light and a part in the shade), and its top. A point of the ring
   # is on the near half when it goes to the eye on the ground (`gx`, `gy`).
   # The screen shows its part along the ground to the right (gy, -gx).
   defp draw_one({:cyl, {x, y, z} = center, r, h, material}, %{point: point, camera: camera}) do

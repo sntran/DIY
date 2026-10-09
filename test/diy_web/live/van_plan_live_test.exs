@@ -98,9 +98,9 @@ defmodule DIYWeb.VanPlanLiveTest do
 
     # On the draft, the zone has no free place next to it: the buttons are
     # disabled (they keep the focus), and the bar says why. They use the
-    # words of a van, and they point as the move goes on the screen: the
-    # cab is at the left, and the right side of the van at the top. A tap
-    # on one gives the reason of the server.
+    # words of a van. They point as the move goes on the screen: the cab is
+    # at the left, and the right side of the van at the top. A tap on one
+    # gives the reason of the server.
     for {key, words} <- [
           {"left", "to the front"},
           {"up", "to the right side"},

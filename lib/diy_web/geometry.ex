@@ -6,8 +6,8 @@ defmodule DIYWeb.Geometry do
   The world has three axes: `x`, `y`, and `z` (up). A house has its back
   at y = 0 and its front at the largest y. A van has its back at y = 0 and
   its cab at the largest y. Its right side (the side of the sliding door)
-  is at x = 0, and its left side (the side of the driver) is at the
-  largest x. The front of an item looks to y.
+  is at x = 0. Its left side (the side of the driver) is at the largest x.
+  The front of an item looks to y.
   """
 
   @type point :: {number(), number(), number()}

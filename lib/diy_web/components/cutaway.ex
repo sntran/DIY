@@ -8,25 +8,27 @@ defmodule DIYWeb.Cutaway do
   (`DIY.Layout`).
 
   The walls on the outside at the back have their full height. The walls
-  at the two sides of a room are cut on a slope: full at the back of the
-  house, and near the floor at its front. The walls at the front of a room
-  are cut near the floor. So the camera sees each room and its items.
+  at the two sides of a room are cut on a slope. They are full at the back
+  of the house, and near the floor at its front. The walls at the front of
+  a room are cut near the floor. So the camera sees each room and its
+  items.
 
   The page moves the items and the rooms with a script (the hook Plan,
   `assets/js/plan.js`). The SVG gives the script what it needs:
 
-  - the SVG: `data-axes`, the SVG units of one inch along `x`, along `y`,
-    and up (`z`), as three vectors (`DIYWeb.Camera.axes/1`);
-    `data-arrows`, the steps of the plan for a move to the right and for a
-    move down the screen (`DIYWeb.Camera.arrows/1`); and `data-fit`, the
-    box of all the layers;
+  - the SVG: `data-axes`, `data-arrows` and `data-fit`. `data-axes` has
+    the SVG vectors of one inch along `x`, along `y`, and up
+    (`DIYWeb.Camera.axes/1`). `data-arrows` has the steps of the plan for a
+    move to the right and down (`DIYWeb.Camera.arrows/1`). `data-fit` is
+    the box of all the layers;
   - each surface of a room: `data-room`, `data-plan` (`x y w d`, inches)
     and `data-origin`. The origin is the SVG point of the plan point 0, 0
     on the surface of the room. A roof also has `data-rise`: the height of
     its ridge over its eaves, in inches;
   - each item: `data-item`, `data-in` (its room) and `data-at` (the
-    center of the item on the plan, in inches); each wall of a room of the
-    house: `data-of` (its room), for a zoom to the room;
+    center of the item on the plan, in inches);
+  - each wall of a room of the house: `data-of` (its room), for a zoom to
+    the room;
   - each label: `data-rank`, the area of its room;
   - each layer: `data-box` (its box in the SVG), for a zoom to the layer.
 
@@ -86,8 +88,8 @@ defmodule DIYWeb.Cutaway do
 
   @doc """
   The gap between two layers (meters), so that they do not overlap on the
-  screen: the height of the walls, the depth of the floor on the screen
-  (a box of `w` by `d` meters), and a margin.
+  screen. It is the height of the walls, plus the depth of the floor on the
+  screen, plus a margin. The floor is a box of `w` by `d` meters.
   """
   def gap(camera, %{w: w, d: d}, high) do
     {gx, gy} = camera.ground
@@ -231,16 +233,16 @@ defmodule DIYWeb.Cutaway do
       )
 
   # The walls of the rooms of a layer: on each side of each room. A wall
-  # between two rooms stands on the line between them, and only the room
-  # at its back draws it (the eye is at the large x and y). `base` gives
-  # the floor of a room and the full height of a wall (meters).
+  # between two rooms stands on the line between them. Only the room at
+  # its back draws it (the eye is at the large x and y). `base` gives the
+  # floor of a room and the full height of a wall (meters).
   #
   # The cut of a wall comes from its side (`cut/2`). A wall at the back of
-  # a room has its full height where it is on the outside and no room of
-  # the layer is behind it. Else it is cut near the floor. A wall at the
-  # front is cut near the floor. A wall at a side of a room is cut on a
-  # slope (`slope/3`): full at the back of the rooms of the layer, and near
-  # the floor at their front.
+  # a room can be on the outside, with no room of the layer behind it.
+  # Then it has its full height. Else it is cut near the floor. A wall at
+  # the front is cut near the floor. A wall at a side of a room is cut on a
+  # slope (`slope/3`). It is full at the back of the rooms of the layer,
+  # and near the floor at their front.
   defp walls(id, rooms, base, camera) do
     span = depth_span(rooms, camera)
 
@@ -264,9 +266,9 @@ defmodule DIYWeb.Cutaway do
 
   @doc """
   The cut of the wall on a side of a plan (`x0`, `y0`, `x1` or `y1`) for a
-  camera: `:back` (the side far from the eye, in front of the camera),
-  `:front` (the side near the eye), or `:side` (a side to the left or to
-  the right of the screen).
+  camera. It is `:back`, `:front` or `:side`. The back is the side far
+  from the eye, and the front is the side near the eye. A side is to the
+  left or to the right of the screen.
   """
   def cut(side, camera) do
     case {Camera.depth_axis(camera), side} do
@@ -278,8 +280,8 @@ defmodule DIYWeb.Cutaway do
     end
   end
 
-  # The range of the rooms of a layer along the axis to the eye (inches):
-  # the back and the front of the slope of the walls at the sides.
+  # The range of the rooms of a layer along the axis to the eye (inches).
+  # It gives the back and the front of the slope of the walls at the sides.
   defp depth_span([], _camera), do: {0, 1}
 
   defp depth_span(rooms, camera) do
@@ -294,8 +296,8 @@ defmodule DIYWeb.Cutaway do
 
   @doc """
   The height of a wall that is cut on a slope (meters), at a point along
-  the axis to the eye (inches): `high` at the back of the span, and `low`
-  at its front.
+  the axis to the eye (inches). It is `high` at the back of the span, and
+  `low` at its front.
   """
   def slope(at, {back, front}, {high, low}) do
     part = (front - at) / max(front - back, 1)

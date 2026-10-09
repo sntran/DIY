@@ -18,12 +18,11 @@ defmodule DIYWeb.Scene do
   when its parts change.
 
   The math of the points is in `DIYWeb.Geometry`, and the cameras are in
-  `DIYWeb.Camera`: the camera of the house for a house, and the camera of a
-  van for a van. The colors are CSS variables
-  (`assets/css/app.css`): one set for the light mode (a day) and one for
-  the dark mode (a night). The pictures are for the eyes only: the text of
-  the page gives the same facts, and a link with a picture has a label
-  (`label/1`).
+  `DIYWeb.Camera`. A house has the camera of the house, and a van has the
+  camera of a van. The colors are CSS variables (`assets/css/app.css`):
+  one set for the light mode (a day) and one for the dark mode (a night).
+  The pictures are for the eyes only: the text of the page gives the same
+  facts. A link with a picture has a label (`label/1`).
 
   A shape is one of:
 
@@ -788,7 +787,7 @@ defmodule DIYWeb.Scene do
       [{:poly, screen, "s-screen"}]
   end
 
-  # The top, the front and the side of a box, with a class for each: the
+  # The top, the front and the side of a box, with a class for each. The
   # camera of the house has the front in the light.
   defp faces(box, class), do: faces(box, class, Camera.house())
 
@@ -858,10 +857,10 @@ defmodule DIYWeb.Scene do
     end
   end
 
-  # A camper van, from its back corner at x, y, with the front to +y: the
-  # wheels, the side with its windows and its door, the roof (with panels
-  # and a fan), the windshield, the hood, and the front. The camera gives
-  # the light of the side and of the front.
+  # A camper van, from its back corner at x, y, with the front to +y. It has
+  # the wheels, the side with its windows and its door, and the roof (with
+  # panels and a fan). Then it has the windshield, the hood, and the front.
+  # The camera gives the light of the side and of the front.
   defp van_body({x, y}, parts, camera) do
     {w, low, high} = {@van_w, 0.45, @van_h}
     {cab, nose} = {y + 4.5, y + @van_l}

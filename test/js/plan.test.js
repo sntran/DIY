@@ -228,9 +228,9 @@ class El {
   }
 }
 
-// The page of the plan: a kitchen (chosen, with its outline and handles),
-// a living room with a wall, a roof, a fridge in the kitchen, and three
-// labels. Then the buttons.
+// The page of the plan. It has a kitchen (chosen, with its outline and
+// handles), a living room with a wall, and a roof. It has a fridge in the
+// kitchen, and three labels. Then the buttons.
 function setup({storage = new Map(), chosen = true, width = 400, height = 800} = {}) {
   const els = []
   const add = (attrs, parent) => {

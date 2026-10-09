@@ -78,9 +78,9 @@ defmodule DIYWeb.CutawayTest do
     assert Cutaway.slope(-10, {0, 100}, {2.4, 0.25}) == 2.4
     assert Cutaway.slope(130, {0, 100}, {2.4, 0.25}) == 0.25
 
-    # In the house, the wall at the back of the kitchen is full, and its
-    # wall at the left side is full at the back and lower at the front: its
-    # top slopes. The wall at its front is low.
+    # In the house, the wall at the back of the kitchen is full. Its wall at
+    # the left side is full at the back and lower at the front: its top
+    # slopes. The wall at its front is low.
     build = house()
     kitchen = room(build, "Kitchen")
     view = Cutaway.view(build)
@@ -90,9 +90,9 @@ defmodule DIYWeb.CutawayTest do
     assert height.(walls["ground-#{kitchen}-y0-0"]) == 2.4
     assert height.(walls["ground-#{kitchen}-y1-0"]) == 0.25
 
-    # The face of the wall at the left that looks to the side (x): its
-    # height on the screen at its back end (from p1 up to p4) is more than
-    # at its front end (from p2 up to p3).
+    # The face of the wall at the left that looks to the side (x). On the
+    # screen, its back end (from p1 up to p4) is higher than its front end
+    # (from p2 up to p3).
     {side, "p-wall-r"} = hd(walls["ground-#{kitchen}-x0-0"].polys)
 
     [p1, p2, p3, p4] =
@@ -319,8 +319,8 @@ defmodule DIYWeb.CutawayTest do
   end
 
   # The depth on a plane at a point of the screen. The points of the world
-  # on that point of the screen are on a line along the eye: p0 + t eye,
-  # where p0 is the point at z = 0.
+  # on that point of the screen are on a line along the eye: p0 + t eye.
+  # p0 is the point at z = 0.
   defp depth({n, c}, {sx, sy}, camera) do
     {rx, ry} = camera.right
     {dx, dy, _dz} = camera.down
