@@ -13,8 +13,8 @@ defmodule DIY.Layout do
     the item in its room. It has `turn`: 0 to 3, a quarter turn each time.
     It has `size`: `%{w, d, h}`, or `nil` for the typical size of its kind
     (`DIY.Catalog.size/1`).
-  - A zone of a van has a plan in the van: `x` goes across the van (from
-    its left side) and `y` along it, from the doors at the back. The cab
+  - A zone of a van has a plan in the van. `x` goes across the van (from
+    its left side), and `y` along it, from the doors at the back. The cab
     is the zone at the front of the cargo area (`van_box/1`). The roof of
     the van is a layer of its own. The shell (the insulation, the walls
     and the floor) has no plan: its items are the materials of the van,
@@ -29,12 +29,12 @@ defmodule DIY.Layout do
   The rules (`fill/1` keeps them after each change; `specs/Plan.tla`
   checks them on a small grid):
 
-  - Two rooms of the same layer do not overlap. A layer is a surface: the
-    ground (outside and floor 1), floor 2, floor 3, the attic and the roof
-    (`layer/1`), and the floor and the roof of each van.
-  - A zone of a van is in the van (`van_box/1`). When a zone is not (a
-    different model, or a stored text that a person changed), all the
-    zones of the van get the draft again (`van_draft/2`).
+  - Two rooms of the same layer do not overlap. A layer is a surface
+    (`layer/1`): the ground (outside and floor 1), floor 2, floor 3, the
+    attic and the roof. Each van has two layers: its floor and its roof.
+  - A zone of a van is in the van (`van_box/1`). A zone can be out of it:
+    with a different model, or in a stored text that a person changed.
+    Then all the zones of the van get the draft again (`van_draft/2`).
   - An item is in its room: `0 <= x <= w(room) - w(item)`, and the same
     for `y`. An item that is larger than its room is at 0. It goes
     through the walls of the room, and the picture can paint a wall over
@@ -336,10 +336,10 @@ defmodule DIY.Layout do
         plan.y + plan.d <= box.y + box.d
 
   @doc """
-  The draft plans of the zones of a van, in the order of the zones: from
-  the doors at the back, the bed, the electrical bay, the living area and
-  the galley, each across the van; the cab at the front; and the roof of
-  the van over all of it. The shell has no plan.
+  The draft plans of the zones of a van, in the order of the zones. From
+  the doors at the back: the bed, the electrical bay, the living area and
+  the galley, each across the van. The cab is at the front, and the roof
+  of the van is over all of it. The shell has no plan.
   """
   def van_draft(van, zones) do
     %{w: w, d: d} = van_box(van)
@@ -421,9 +421,9 @@ defmodule DIY.Layout do
     end)
   end
 
-  # The zones of each van: they keep their plans when each one is valid, in
-  # the van, and not over a different zone of its layer. Else all of them
-  # get the draft again. The shell has no plan.
+  # The zones of each van keep their plans when each plan is valid, in the
+  # van, and not over a different zone of its layer. Else all of them get
+  # the draft again. The shell has no plan.
   defp vans(rooms, items) do
     vans = Map.new(for(i <- items, i.type == "camper_van", do: {"van:" <> i.id, i}))
 

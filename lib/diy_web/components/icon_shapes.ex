@@ -52,9 +52,9 @@ defmodule DIYWeb.Icon.Shapes do
   end
 
   # The side profile of each model of van, in meters, from the back (y = 0)
-  # to the front: the roof to the start of the cap, the top of the
-  # windshield, the bottom of the windshield, the end of the hood, and the
-  # top of the nose. The ProMaster has a short hood; the Sprinter a long
+  # to the front. It gives the roof to the start of the cap, and the top
+  # and the bottom of the windshield. Then it gives the end of the hood,
+  # and the top of the nose. The ProMaster has a short hood; the Sprinter a long
   # one that slopes.
   @profiles %{
     "promaster_159" => %{
@@ -91,11 +91,12 @@ defmodule DIYWeb.Icon.Shapes do
 
   @doc """
   The model of a camper van of a model (`DIY.Catalog.van_size/1`), at its
-  real size in meters: the body with the nose, the hood and the windshield
-  of its brand, the wheels at its axles, the doors of the cab, the sliding
-  door on the right side, the doors at the back, the mirrors, the lights,
-  the grille and the bumpers. The front looks to y. A face looks out: after
-  a turn, a face that looks away does not show.
+  real size in meters. The body has the nose, the hood and the windshield
+  of its brand, and the wheels are at its axles. The model also has the
+  doors of the cab, the sliding door on the right side and the doors at
+  the back. It has the mirrors, the lights, the grille and the bumpers. The front
+  looks to y. A face looks out: after a turn, a face that looks away does
+  not show.
   """
   def van(model) do
     size = DIY.Catalog.van_size(model)
@@ -172,8 +173,9 @@ defmodule DIYWeb.Icon.Shapes do
     ]
   end
 
-  # The faces across the van between the points of its profile: the nose,
-  # the front of the hood, the hood, the windshield, the cap and the roof.
+  # The faces across the van between the points of its profile. They are
+  # the nose, the front of the hood, the hood, the windshield, the cap and
+  # the roof.
   # The bottom and the back are not here. An edge from a to b has its
   # outer side on its right: its normal is (dz, -dy).
   defp body(profile, w) do
@@ -188,9 +190,9 @@ defmodule DIYWeb.Icon.Shapes do
 
   defp across(w, {y1, z1}, {y2, z2}), do: [{0, y1, z1}, {w, y1, z1}, {w, y2, z2}, {0, y2, z2}]
 
-  # A side of a van (x = 0 with the normal -x, x = w with +x): the window of
-  # the door of the cab (its front follows the windshield), and a dark band
-  # at the bottom.
+  # A side of a van (x = 0 with the normal -x, x = w with +x). It has the
+  # window of the door of the cab (its front follows the windshield), and a
+  # dark band at the bottom.
   defp van_side(x, sign, cab_door, {{y0, z0}, {y1, z1}}, h) do
     on_glass = fn z -> y0 + (y1 - y0) * (z - z0) / (z1 - z0) - 0.06 end
     {bottom, top} = {z0 + 0.06, h - 0.4}

@@ -129,11 +129,13 @@ defmodule DIY.Catalog do
     {"other", "Another van", %{}, nil}
   ]
 
-  # The size of each model, in inches: outside (the length, the width with
-  # no mirrors, the height), the wheelbase, the front overhang (from the
-  # front of the van to the front axle), and the cargo area (its length and
-  # its width at the floor, its height, and the width between the wheel
-  # wells). Each model has the source of its size (the page shows it).
+  # The size of each model, in inches:
+  # - outside: the length, the width with no mirrors, and the height;
+  # - the wheelbase, and the front overhang (from the front of the van to
+  #   the front axle);
+  # - the cargo area: its length and its width at the floor, its height,
+  #   and the width between the wheel wells.
+  # Each model has the source of its size (the page shows it).
   @van_sizes %{
     "promaster_159" => %{
       length: 236,

@@ -1,9 +1,9 @@
 defmodule DIYWeb.VanPage do
   @moduledoc """
-  The build of a camper van (`DIY.Van`): the inside of the van at scale
-  (`DIYWeb.VanCutaway`), its two budgets (the weight on each axle, and the
-  days off the grid), the safety notes, and the power stations that go
-  from the house to the van.
+  The build of a camper van (`DIY.Van`). The page shows the inside of the
+  van at scale (`DIYWeb.VanCutaway`). It shows the two budgets: the weight
+  on each axle, and the days off the grid. It also shows the safety notes,
+  and the power stations that go from the house to the van.
 
   The inside of the van is cut open, as the house on the page Rooms. A
   drag moves an item, also to a different zone. A tap on a zone chooses
@@ -11,9 +11,9 @@ defmodule DIYWeb.VanPage do
   zones and their items gives the same facts to a screen reader and to a
   keyboard.
 
-  `?id=ID` chooses a van, `?item=ID` opens an item of the van (or the van
-  itself, for its numbers), `?add=ZONE` the list of the items for a zone,
-  and `?room=ZONE` chooses a zone (with `&sheet=zone`, its sheet).
+  `?id=ID` chooses a van. `?item=ID` opens an item of the van (or the van
+  itself, for its numbers), and `?add=ZONE` the list of the items for a
+  zone. `?room=ZONE` chooses a zone (with `&sheet=zone`, its sheet).
   """
   use DIYWeb, :html
 
@@ -318,7 +318,7 @@ defmodule DIYWeb.VanPage do
   attr :status, :string, default: nil
 
   # The inside of the van, cut open: the plan of its zones and its items
-  # (the hook Plan), the bar of the chosen zone, and the list of the zones.
+  # (the hook Plan). Then the bar of the chosen zone, and the list.
   defp plan(assigns) do
     ~H"""
     <div class="space-y-1">

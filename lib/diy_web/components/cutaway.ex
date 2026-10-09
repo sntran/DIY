@@ -105,12 +105,16 @@ defmodule DIYWeb.Cutaway do
   end
 
   @doc """
-  A layer of a view, from its parts in the world (meters): the polygons of
-  the ground and of the slabs (`{corners, class}`), the surfaces of the
-  rooms (`floor/3`) on the ground (`low`) and over the slabs (`rooms`), the
-  objects (walls and items, `item_view/3`) and the labels (`label/2`). The
-  objects go in the order of the paint (`DIYWeb.Iso.order/1`), and the
-  points go to the SVG.
+  A layer of a view, from its parts in the world (meters):
+
+  - the polygons of the ground and of the slabs (`{corners, class}`);
+  - the surfaces of the rooms (`floor/3`) on the ground (`low`) and over
+    the slabs (`rooms`);
+  - the objects (walls and items, `item_view/3`), and the labels
+    (`label/2`).
+
+  The objects go in the order of the paint (`DIYWeb.Iso.order/1`), and
+  the points go to the SVG.
   """
   def layer(%{id: id, name: name, z: z}, parts) do
     objects = Iso.order(parts.objects)
@@ -344,8 +348,8 @@ defmodule DIYWeb.Cutaway do
   defp room_view(room, z), do: floor(room, z, material(room))
 
   @doc """
-  The surface of a room on a flat floor at a height (meters), with its
-  material (the class `p-NAME`) and the data of its plan for the hook. A
+  The surface of a room on a flat floor at a height (meters). It has its
+  material (the class `p-NAME`), and the data of its plan for the hook. A
   zone that is `fixed` (the cab and the roof of a van) has no handles.
   """
   def floor(room, z, material, fixed \\ false) do

@@ -547,10 +547,10 @@ defmodule DIY.VanTest do
 
       # A ProMaster 159: 236 in long, the front axle 41 in from the front,
       # and the doors at the back 3 in thick. On the plan, the bed is from
-      # 0 to 61 in, the bay from 61 in, the galley from 115 in, and the cab
-      # from 146 to 182 in. The people sit at the middle of the cab (164),
-      # the gear is at the middle of the bed (30.5), the battery (7 in
-      # deep) at 64.5 and the tank (15 in deep) at 122.5.
+      # 0 to 61 in, and the bay from 61 in. The galley is from 115 in, and
+      # the cab from 146 to 182 in. The people sit at the middle of the cab
+      # (164), and the gear is at the middle of the bed (30.5). The battery
+      # (7 in deep) is at 64.5, and the tank (15 in deep) at 122.5.
       lever = fn y -> (236 - 3 - y - 41) / 159 end
       assert_in_delta Van.lever(van, 30.5), lever.(30.5), 1.0e-9
       tank = 10 + 10 * 8.34
@@ -620,8 +620,8 @@ defmodule DIY.VanTest do
     end
   end
 
-  # The place along the van of an item (as DIY.Van): the middle of the item
-  # on the plan, or the middle of the van for an item of the shell.
+  # The place along the van of an item (as DIY.Van). It is the middle of
+  # the item on the plan, or the middle of the van for an item of the shell.
   defp along(build, id) do
     {:ok, item} = Build.item(build, id)
     {:ok, zone} = Build.room(build, item.room)

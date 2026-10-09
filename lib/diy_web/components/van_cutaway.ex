@@ -5,16 +5,17 @@ defmodule DIYWeb.VanCutaway do
   it with a gap. The same component draws it (`DIYWeb.Cutaway.cutaway/1`),
   and the same hook moves the items and the zones.
 
-  The plan of the van (`DIY.Layout.van_box/1`): `x` goes across the van,
-  from its left side (the side of the driver), and `y` along it, from the
+  The plan of the van is `DIY.Layout.van_box/1`. `x` goes across the van,
+  from its left side (the side of the driver). `y` goes along it, from the
   doors at the back to the cab. The zones (`DIY.Catalog.zones/0`) are the
   rooms of the van. The cab and the roof of the van are fixed: they have
   no handles.
 
   The floor shows the parts of the model of the van
-  (`DIY.Catalog.van_size/1`): the walls, cut at the height of a table on
-  the left side and at the back, and near the floor on the right side. It
-  also shows the sliding door, the wheel wells, the wheels, the seats, the
+  (`DIY.Catalog.van_size/1`). The walls on the left side and at the back
+  are cut at the height of a table. The wall on the right side is cut near
+  the floor.
+  The floor also shows the sliding door, the wheel wells, the wheels, the seats, the
   dash, the steering wheel and the hood. The shell of the build gives the
   materials: the floor of wood, the walls with panels, and the insulation
   in the cut of the walls.
@@ -29,9 +30,9 @@ defmodule DIYWeb.VanCutaway do
   @m 0.0254
 
   # The numbers of the picture, in inches. They are near the real vans, but
-  # they are for the picture only: the cargo floor over the ground, the
-  # radius of a tire, the length and the height of a wheel well, the depth
-  # of the dash, and the opening of the sliding door.
+  # they are for the picture only. They are the cargo floor over the
+  # ground, the radius of a tire, and the length and the height of a wheel
+  # well. Then the depth of the dash, and the opening of the sliding door.
   @floor 24
   @tire 15
   @well_d 34
@@ -157,8 +158,8 @@ defmodule DIYWeb.VanCutaway do
       ]
   end
 
-  # The walls of the van: the left side (the side of the driver) and the
-  # doors at the back are cut at the height of a table; the right side is
+  # The walls of the van. The left side (the side of the driver) and the
+  # doors at the back are cut at the height of a table. The right side is
   # cut near the floor, with the opening of the sliding door. Panels and
   # insulation of the shell show on the walls and in their cut.
   defp walls(size, t, shell) do
@@ -292,8 +293,8 @@ defmodule DIYWeb.VanCutaway do
     ]
   end
 
-  # A fixed part of the van as an object of the order of the paint: its box
-  # from its polygons, and its key (the middle of its box, or a key).
+  # A fixed part of the van as an object of the order of the paint. Its box
+  # comes from its polygons. Its key is the middle of its box, or a key.
   defp fixture(id, polys, key) do
     points = Enum.flat_map(polys, &elem(&1, 0))
     {x0, x1} = points |> Enum.map(&elem(&1, 0)) |> Enum.min_max()

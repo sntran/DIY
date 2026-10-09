@@ -9,7 +9,7 @@ defmodule DIY.Van do
   weight. The items, the water, the people and the gear take it. Each item
   has its place along the van, on the plan of the van (`DIY.Layout`). The
   part of its weight on the rear axle comes from that place, the front
-  axle and the wheelbase of the model (`lever/2`): the rest is on the
+  axle and the wheelbase of the model (`lever/2`). The rest is on the
   front axle. An item behind the rear axle takes some weight off the
   front axle.
 
@@ -68,9 +68,10 @@ defmodule DIY.Van do
   def weight(%{params: %{"weight" => weight}}), do: weight / 1
 
   @doc """
-  The part of a weight on the rear axle of a van, at a place along the van
-  (`y`, in inches from the doors at the back, as on the plan): 0 at the
-  front axle, 1 at the rear axle, and more than 1 behind the rear axle.
+  The part of a weight on the rear axle of a van, at a place `y` along the
+  van. `y` is in inches from the doors at the back, as on the plan. The
+  part is 0 at the front axle, 1 at the rear axle, and more than 1 behind
+  it.
   """
   def lever(van, y) do
     size = Catalog.van_size(van.params["model"])
@@ -78,8 +79,9 @@ defmodule DIY.Van do
   end
 
   @doc """
-  The places of the rear axle and of the front axle on the plan of a van,
-  and of its front (the bumper): `y` in inches, from the doors at the back.
+  The places of the rear axle, of the front axle and of the front (the
+  bumper) on the plan of a van. Each is `y` in inches, from the doors at
+  the back.
   """
   def axles(van) do
     size = Catalog.van_size(van.params["model"])

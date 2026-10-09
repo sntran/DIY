@@ -636,8 +636,9 @@ layers: its floor, and its roof over it with a gap.
   each zone stays in the van, and each item is in its zone. The cab and
   the roof of the van are fixed: they do not move, and they have no
   handles. An item does not go between the house and a van.
-- The picture: the walls of the van, cut at the height of a table on the
-  left side and at the back, and near the floor on the right side. The
+- The picture shows the walls of the van. They are cut at the height of a
+  table on the left side and at the back, and near the floor on the right
+  side. The
   right side has the opening of the sliding door. The picture also shows
   the wheel wells, the wheels, the seats, the dash, the steering wheel,
   the hood and the bumper. A swivel seat (an item) takes the place of the
@@ -661,8 +662,7 @@ The weight budget:
 
 - The payload is the weight rating of the van (GVWR) less its empty
   weight. The items take it, with the water of the tanks (8.34 lb for
-  each gallon, USGS), the people (in the cab) and the gear (under the
-  bed).
+  each gallon, USGS). The people and the gear take it too.
 - Each item has its place along the van, on the plan of the van. The
   part of its weight on the rear axle comes from that place, the front
   axle and the wheelbase of the model (`DIY.Van.lever/2`). The rest is on
