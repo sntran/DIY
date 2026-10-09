@@ -995,6 +995,7 @@ defmodule DIYWeb.HomeLive do
               sheet={@sheet}
               status={@status}
               item_error={assigns[:item_error]}
+              outage={DIYWeb.PowerPage.outage_text(@power, @whatif)}
             />
           <% @live_action == :estimate -> %>
             <DIYWeb.Math.estimate

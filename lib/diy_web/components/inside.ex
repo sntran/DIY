@@ -36,6 +36,10 @@ defmodule DIYWeb.Inside do
   attr :status, :string, default: nil, doc: "a text for a screen reader after a move"
   attr :away, :list, default: [], doc: "the stations of the house in a van: {item, van}"
 
+  attr :outage, :string,
+    default: nil,
+    doc: "the hours of backup (`DIYWeb.PowerPage.outage_text/2`)"
+
   def inside(assigns) do
     room =
       case assigns.room && Build.room(assigns.build, assigns.room) do
@@ -115,6 +119,7 @@ defmodule DIYWeb.Inside do
         estimate={@estimate}
         price={@price}
         error={@item_error}
+        outage={@outage}
       />
       <.add_sheet
         :if={@add && match?({:ok, _}, Build.room(@build, @add))}
@@ -418,6 +423,7 @@ defmodule DIYWeb.Inside do
   attr :estimate, :map, required: true
   attr :price, :map, required: true
   attr :error, :string, default: nil
+  attr :outage, :string, default: nil
 
   # The numbers of an item, the math of its kWh, and the features that it
   # turns on.
@@ -479,6 +485,17 @@ defmodule DIYWeb.Inside do
           error={@error == param.key}
         />
       </form>
+
+      <p
+        :if={@item.type in ~w(power_station solar_panels) or (@outage && @item.backup)}
+        id="item-power"
+        class="text-sm"
+      >
+        <span :if={@outage && (@item.type == "power_station" or @item.backup)} class="font-semibold">
+          {@outage}
+        </span>
+        <.link patch={~p"/power"} class="link">Open the page Power</.link>
+      </p>
 
       <div :if={@estimate.ready} id="item-math" class="space-y-1 text-sm">
         <p class="font-semibold">

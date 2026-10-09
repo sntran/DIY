@@ -531,7 +531,7 @@ defmodule DIY.Catalog do
           1500,
           0,
           200_000,
-          "What you paid, or what it costs: for the payback."
+          "What you paid, or what it costs, with its extra batteries: for the payback."
         ),
         weight(50, "The label gives it. It counts in a van.")
       ]

@@ -528,6 +528,15 @@ defmodule DIY.Power do
   the years that the equipment lasts. The other planned items (a car, a
   freezer) have no price in the app: their result is their own
   (`others`), the change of the bill and the gas that a car saves.
+
+  With two parts of equipment or more, `parts` has each part. The planned
+  stations, and the panels that charge a station, are one part: they work
+  together. Each other item is a part alone. A part has its items, its
+  price, the savings that it adds to the plan, and its payback. It also
+  has the years that it lasts: the shortest life of its items. So a battery of 8 years
+  does not decide the payback of panels of 25 years on the grid. The
+  savings that a part adds are the savings of the plan, less the savings
+  of the plan with no such part.
   """
   def whatif(%Build{} = build, today, today_estimate, plan_estimate, climate, cents) do
     planned = Enum.filter(build.items, & &1.planned)
@@ -564,6 +573,7 @@ defmodule DIY.Power do
       ]
 
       price = equipment |> Enum.map(& &1.params["cost"]) |> Enum.sum()
+      parts = parts(equipment, build, others, {gear, gear_estimate}, climate, cents)
 
       %{
         today: today,
@@ -582,6 +592,7 @@ defmodule DIY.Power do
           |> Enum.map(&@life[&1.type])
           |> Enum.reject(&is_nil/1)
           |> Enum.min(fn -> nil end),
+        parts: parts,
         others: others(others, plan, gear, build.power, cents),
         warnings: warnings(plan)
       }
@@ -589,6 +600,42 @@ defmodule DIY.Power do
       _ -> nil
     end
   end
+
+  # The parts of the planned equipment, when there are two or more. The
+  # equipment uses no kWh of the estimate: the estimate of the plan with
+  # no other planned item is good for each part.
+  defp parts(equipment, build, others, {gear, estimate}, climate, cents) do
+    {together, alone} = Enum.split_with(equipment, &together?/1)
+    groups = Enum.reject([together | Enum.map(alone, &[&1])], &(&1 == []))
+
+    if length(groups) < 2 do
+      []
+    else
+      for items <- groups do
+        without = %{build | items: build.items -- (items ++ others)}
+        adds = run(without, estimate, climate, cents).year.cost - gear.year.cost
+        cost = items |> Enum.map(& &1.params["cost"]) |> Enum.sum()
+
+        %{
+          items: items,
+          price: cost,
+          savings: adds,
+          # Less than 50 cents in one year is no savings.
+          payback: if(adds >= 0.5, do: cost / adds),
+          life:
+            items
+            |> Enum.map(&@life[&1.type])
+            |> Enum.reject(&is_nil/1)
+            |> Enum.min(fn -> nil end)
+        }
+      end
+    end
+  end
+
+  # A station, and panels that charge a station, work together.
+  defp together?(%{type: "power_station"}), do: true
+  defp together?(%{type: "solar_panels", params: %{"to" => "station"}}), do: true
+  defp together?(_item), do: false
 
   # The result of the other planned items: the change of the bill (the
   # bill with them, less the bill without them), and for the cars, the
