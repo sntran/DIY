@@ -362,6 +362,71 @@ defmodule DIY.PowerTest do
       assert whatif.plan.year.cost <= whatif.plan_bill.cost_high
     end
 
+    test "two items of equipment: each one has the savings that it adds, and its own life" do
+      {build, station} = station()
+
+      {build, panels} =
+        add(build, "Roof", "solar_panels", %{"watts" => "6000", "to" => "grid", "cost" => "15000"})
+
+      whatif = whatif(build |> flag(station, :planned) |> flag(panels, :planned))
+      # The battery of 8 years is the shortest life of the plan.
+      assert whatif.life == 8
+
+      [solar] = for %{items: [%{type: "solar_panels"}]} = part <- whatif.parts, do: part
+      [battery] = for %{items: [%{type: "power_station"}]} = part <- whatif.parts, do: part
+      assert solar.price == 15000 and solar.life == 25
+      assert battery.life == 8
+      # In the mode backup, the station adds no savings: the panels add all.
+      assert_in_delta battery.savings, 0.0, 1.0e-6
+      assert battery.payback == nil
+      assert_in_delta solar.savings, whatif.savings, 1.0e-6
+      assert_in_delta solar.payback, 15000 / solar.savings, 1.0e-9
+
+      # One item of equipment: no parts.
+      assert whatif(flag(build, panels, :planned)).parts == []
+
+      # A planned freezer is out of the parts: each part adds the same.
+      {build, freezer} = add(build, "Garage", "freezer")
+
+      with_freezer =
+        whatif(
+          build
+          |> flag(station, :planned)
+          |> flag(panels, :planned)
+          |> flag(freezer, :planned)
+        )
+
+      assert Enum.map(with_freezer.parts, & &1.savings) == Enum.map(whatif.parts, & &1.savings)
+    end
+
+    test "panels that charge a station are one part with the station" do
+      {build, station} = station()
+      {build, panels} = add(build, "Roof", "solar_panels", %{"watts" => "1600", "cost" => "800"})
+      {build, switch} = add(build, "Garage", "transfer_switch", %{"cost" => "600"})
+
+      whatif =
+        whatif(
+          build
+          |> flag(station, :planned)
+          |> flag(panels, :planned)
+          |> flag(switch, :planned)
+        )
+
+      assert [
+               %{items: together, life: 8, price: price},
+               %{items: [%{type: "transfer_switch"}]} = alone
+             ] =
+               whatif.parts
+
+      assert Enum.map(together, & &1.type) == ["power_station", "solar_panels"]
+      assert price == 1500 + 800
+      # A switch adds no savings, and no life.
+      assert alone.payback == nil and alone.life == nil
+
+      # A station with its panels alone: one part, so no parts.
+      assert whatif(build |> flag(station, :planned) |> flag(panels, :planned)).parts == []
+    end
+
     test "a plan that does not pay back on savings alone" do
       {build, id} = station()
       build = flag(build, id, :planned)

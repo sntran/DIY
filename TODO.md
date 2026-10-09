@@ -61,3 +61,27 @@ The owner decides about each item.
   layout).
 - The sun of the place of a trip, in place of the sun at the house.
 - The axles of the Transit and of the Sprinter in the models of vans.
+
+## Ideas of the play test
+
+A play test in the role of a neighbor with no skill in power (October
+2026) gave these ideas. The fixes of the other findings are in #16 and
+the next pull requests.
+
+- A fridge or a freezer in a hot garage uses more in the summer. Today
+  the app uses the number of the label for each month.
+- A 12 V fridge of a van uses more in a hot month. Today it uses the same
+  Wh in each month.
+- The gas bill. The app knows the gas of a water heater, a furnace and a
+  stove, but it shows only the power bill.
+- "Am I on a good plan?" The app does not rank plans, and the lesson
+  comes before the worksheet. A person with little time may want the
+  worksheet first.
+- Solar: a typical price for each watt in Texas, with its source, and the
+  number of panels that the roof holds.
+- The sizes of stations as examples (kWh and watts), with no brand names
+  (honesty rule 4).
+- More models of each van: other roofs and lengths (for example a Transit
+  with a medium roof).
+- A medium house of 2 floors gets 2 bedrooms. Many such houses have 3.
+- A finger that scrolls the page over the plan has no momentum.

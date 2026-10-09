@@ -33,7 +33,7 @@ defmodule DIYWeb.PowerPage do
           <span>
             {Catalog.name(item)} ({Format.value(
               Float.round((item.params["kwh"] + item.params["extra_kwh"]) / 1, 3)
-            )} kWh) is in the van now. The numbers of the house do not count it until it comes home.
+            )} kWh) is in the van now. In an outage, the house has no backup from it. The numbers of the house do not count it until it comes home.
             <.link patch={~p"/van?#{[id: van.id]}"} class="link">Open the van</.link>
           </span>
         </li>
@@ -52,12 +52,27 @@ defmodule DIYWeb.PowerPage do
             <.link patch={~p"/inside"} class="link">Go to the rooms</.link>
           </p>
         <% true -> %>
+          <.backup
+            :if={top(@power, @whatif).system.stations != []}
+            power={top(@power, @whatif)}
+            planned={@whatif != nil}
+            mode={@build.power.mode}
+          />
           <div id="power-picture" class="overflow-hidden rounded-box">
             <Scene.house id="power-scene" parts={@scene} />
           </div>
           <.whatif :if={@whatif} whatif={@whatif} build={@build} />
-          <.view build={Build.today(@build)} power={@power} />
-          <.outage :if={@power.system.stations != []} power={@power} />
+          <.view
+            build={if @whatif, do: @build, else: Build.today(@build)}
+            power={top(@power, @whatif)}
+            today={@power}
+            planned={@whatif != nil}
+          />
+          <.outage
+            :if={top(@power, @whatif).system.backup != []}
+            power={top(@power, @whatif)}
+            planned={@whatif != nil}
+          />
           <.months power={@power} />
           <.cars build={@build} price={@price} />
           <.settings build={@build} power={@power} />
@@ -68,6 +83,107 @@ defmodule DIYWeb.PowerPage do
   end
 
   @power_types ~w(power_station solar_panels transfer_switch ev)
+
+  @doc """
+  The hours of backup in an outage (the month with the fewest hours), in
+  one sentence for the sheet of an item, or nil. With a plan, the hours of
+  the plan.
+  """
+  def outage_text(nil, _whatif), do: nil
+
+  def outage_text(power, whatif) do
+    power = top(power, whatif)
+
+    cond do
+      is_nil(low_month(power)) ->
+        nil
+
+      :overload in Power.warnings(power) ->
+        "In an outage, the items on the stations need more watts than the stations give."
+
+      true ->
+        "In an outage, the stations#{if whatif, do: " of the plan"} run their items for #{low_text(power)}."
+    end
+  end
+
+  # The power of the plan when there is one, else the power of today.
+  defp top(power, nil), do: power
+  defp top(_power, whatif), do: whatif.plan
+
+  attr :power, :map, required: true
+  attr :planned, :boolean, default: false
+  attr :mode, :string, required: true, doc: "the mode of the stations (`DIY.Power.modes/0`)"
+
+  # The first question of a person with a station: how long its items run
+  # in an outage. The answer is at the top of the page. In the mode that
+  # keeps the batteries full, the page also gives the size for 2 days: the
+  # hours grow with the kWh. In the other modes, the charge at the start of
+  # an outage changes with the use of the day.
+  defp backup(assigns) do
+    low = low_month(assigns.power)
+    sys = assigns.power.system
+
+    assigns =
+      assign(assigns,
+        sys: sys,
+        low: low,
+        overload: :overload in Power.warnings(assigns.power),
+        need:
+          assigns.mode == "backup" && low && is_number(low.outage) && low.outage >= 1 &&
+            low.outage < 48 && sys.kwh * 48 / low.outage
+      )
+
+    ~H"""
+    <div id="backup" class="card card-border bg-base-100 p-4 space-y-1">
+      <p class="text-sm opacity-70">In an outage{if @planned, do: ", with the plan"}</p>
+      <%= cond do %>
+        <% @sys.backup == [] -> %>
+          <p class="text-sm">
+            No item is on the stations yet. Open an item in a room. Then choose "A power station runs it".
+            <.link patch={~p"/inside"} class="link">Go to the rooms</.link>
+          </p>
+        <% @overload -> %>
+          <p class="text-sm font-semibold">
+            The items on the stations need more watts than the stations give. A station stops when it gets more than its output: see the warning below.
+          </p>
+        <% is_nil(@low) -> %>
+          <p class="text-sm">The items on the stations use no power.</p>
+        <% true -> %>
+          <p id="backup-hours" class="text-3xl font-bold">{hours_text(@low.outage)}</p>
+          <p class="text-sm">
+            The stations run {Enum.map_join(@sys.backup, ", ", &Catalog.name/1)} for {low_text(@power)}.
+          </p>
+          <p :if={@low.outage == 0} class="text-sm">
+            In this mode, the batteries can be empty at 18:00. The mode "Keep the batteries full for an outage" gives more hours.
+          </p>
+          <p :if={@need} id="backup-size" class="text-sm">
+            For 2 days (48 hours), the stations need near {Format.value(Float.round(@need, 1))} kWh. {if @planned,
+              do: "With the plan, they have",
+              else: "They have"} {Format.value(Float.round(@sys.kwh / 1, 1))} kWh. Extra batteries of a station add kWh.
+          </p>
+      <% end %>
+    </div>
+    """
+  end
+
+  # The month with the fewest hours of backup, or nil when no month has a
+  # use.
+  defp low_month(power) do
+    case Enum.filter(power.months, & &1.outage) do
+      [] -> nil
+      months -> Enum.min_by(months, &if(&1.outage == :days, do: :infinity, else: &1.outage))
+    end
+  end
+
+  # The hours of the month with the fewest hours, in words. When each month
+  # has the same hours, the words say so.
+  defp low_text(power) do
+    low = low_month(power)
+
+    if Enum.all?(power.months, &(&1.outage == low.outage)),
+      do: "#{hours_text(low.outage)} in each month",
+      else: "#{hours_text(low.outage)} in #{low.name}, the month with the fewest hours"
+  end
 
   defp equipment?(build), do: Enum.any?(build.items, &(&1.planned or &1.type in @power_types))
 
@@ -151,14 +267,28 @@ defmodule DIYWeb.PowerPage do
       </div>
 
       <div :if={@whatif.equipment != []} id="payback" class="space-y-1">
-        <p class="font-semibold">{payback_text(@whatif)}</p>
-        <p :if={@whatif.payback} class="text-sm">
+        <p class="font-semibold">
+          {payback_text(
+            if @whatif.parts == [], do: @whatif, else: %{@whatif | life: longest(@whatif.parts)}
+          )}
+        </p>
+        <p
+          :if={
+            @whatif.payback &&
+              Format.money(@whatif.savings_low) != Format.money(@whatif.savings_high)
+          }
+          id="savings-range"
+          class="text-sm"
+        >
           With the range of the bill, the equipment saves {Format.money(@whatif.savings_low)} to {Format.money(
             @whatif.savings_high
           )} in one year.
         </p>
+        <ul :if={@whatif.parts != []} id="parts" class="list-disc pl-5 text-sm space-y-1">
+          <li :for={part <- @whatif.parts}>{part_text(part)}</li>
+        </ul>
         <p :if={@station} class="text-xs opacity-80">
-          A battery of 3,000 cycles (a common label of the stations) lasts near 8 years with one cycle each day.
+          A battery of 3,000 cycles (a cycle is one full charge and one full use) lasts near 8 years with one cycle each day. 3,000 cycles is a common label of the stations.
         </p>
         <p :if={@panels} class="text-xs opacity-80">A panel lasts 25 to 35 years.</p>
       </div>
@@ -168,9 +298,9 @@ defmodule DIYWeb.PowerPage do
           <p class="text-sm">
             In an outage, the stations of the plan cannot run all their items at the same time: see the warning below.
           </p>
-        <% backup_hours(@whatif.plan) -> %>
+        <% low_month(@whatif.plan) -> %>
           <p class="text-sm">
-            A different reason: in an outage, the stations of the plan run their items for {backup_hours(
+            A different reason: in an outage, the stations of the plan run their items for {low_text(
               @whatif.plan
             )}.
           </p>
@@ -210,13 +340,60 @@ defmodule DIYWeb.PowerPage do
   defp years(years) when years < 1, do: "less than one year"
   defp years(years), do: "#{:erlang.float_to_binary(years / 1, decimals: 1)} years"
 
-  # The hours of backup of the month with the fewest hours.
-  defp backup_hours(power) do
-    months = Enum.filter(power.months, & &1.outage)
+  # The longest life of the parts of the equipment: the plan as one does
+  # not pay back after it.
+  defp longest(parts),
+    do: parts |> Enum.map(& &1.life) |> Enum.reject(&is_nil/1) |> Enum.max(fn -> nil end)
 
-    if months != [] do
-      m = Enum.min_by(months, &if(&1.outage == :days, do: :infinity, else: &1.outage))
-      "#{hours_text(m.outage)} in #{m.name} (the month with the fewest hours)"
+  @doc """
+  The line of a part of the planned equipment (the `parts` of
+  `DIY.Power.whatif/6`). It gives the price, the savings that the part
+  adds, and its payback in its own life. A station and the panels that
+  charge it are one part.
+  """
+  def part_text(%{items: items, price: price, payback: nil}) do
+    w = words(items)
+
+    "#{w.name} (#{Format.money(price)}): #{w.adds} no savings. On savings alone, #{w.does} not pay back.#{reason(items)}"
+  end
+
+  def part_text(%{items: items, price: price, savings: savings, payback: years, life: life}) do
+    w = words(items)
+
+    "#{w.name} (#{Format.money(price)}): #{w.adds} #{Format.money(savings)} of savings in one year. #{w.pays} back in #{years(years)}#{life_text(years, life)}."
+  end
+
+  # The words of a part of one item, or of more items.
+  defp words([item]),
+    do: %{name: Catalog.name(item), adds: "it adds", does: "it does", pays: "It pays"}
+
+  defp words([first | rest]),
+    do: %{
+      name:
+        Enum.map_join(
+          [Catalog.name(first) | Enum.map(rest, &String.downcase(Catalog.name(&1)))],
+          " and ",
+          & &1
+        ),
+      adds: "they add",
+      does: "they do",
+      pays: "They pay"
+    }
+
+  defp life_text(_years, nil), do: ""
+  defp life_text(years, life) when years > life, do: ": after a life of near #{life} years"
+  defp life_text(_years, life), do: ", in a life of near #{life} years"
+
+  defp reason(items) do
+    cond do
+      Enum.any?(items, &(&1.type == "power_station")) ->
+        " The reason is the backup in an outage."
+
+      Enum.any?(items, &(&1.type == "transfer_switch")) ->
+        " The reason is a safe backup of the circuits of the house."
+
+      true ->
+        ""
     end
   end
 
@@ -226,9 +403,11 @@ defmodule DIYWeb.PowerPage do
 
   attr :build, :map, required: true
   attr :power, :map, required: true
+  attr :today, :map, required: true, doc: "the power of today, for its warnings"
+  attr :planned, :boolean, default: false
 
-  # The power view: what feeds what. A list, so that a screen reader reads
-  # it in order.
+  # The power view: what feeds what, with the planned items when there is
+  # a plan. A list, so that a screen reader reads it in order.
   defp view(assigns) do
     sys = assigns.power.system
 
@@ -250,6 +429,7 @@ defmodule DIYWeb.PowerPage do
     ~H"""
     <div id="view" class="space-y-2">
       <h2 class="text-lg font-bold">What feeds what</h2>
+      <p :if={@planned} class="text-sm opacity-80">With the planned items.</p>
       <ul class="space-y-2 text-sm">
         <li class="card card-border p-3">
           <span class="font-semibold"><.icon name="hero-bolt" class="size-4" /> The grid</span>
@@ -285,12 +465,15 @@ defmodule DIYWeb.PowerPage do
             do: "feed the backup circuits through an inlet:",
             else: "feed the items that plug into them:"}
           {if @sys.backup == [],
-            do: "no item yet (open an item, and choose \"A power station runs it\")",
+            do: "no item yet",
             else: Enum.map_join(@sys.backup, ", ", &Catalog.name/1)}.
         </li>
       </ul>
 
-      <.warnings id="today" power={@power} build={@build} />
+      <p :if={@planned and Power.warnings(@today) != []} class="text-sm font-semibold">
+        Today, with no planned item:
+      </p>
+      <.warnings id="today" power={@today} build={Build.today(@build)} />
 
       <div :if={@panel and @sys.switch} id="outage-steps" class="text-sm">
         <%= if @sys.switch.params["device"] == "interlock" do %>
@@ -410,7 +593,7 @@ defmodule DIYWeb.PowerPage do
           <li :if={:charger in @permits}>A Level 2 charger needs a new circuit of 240 V.</li>
         </ul>
         <p>
-          Most cities need a permit for this work. Ask your city first. A licensed electrician must do the work when the city does not let you do it.
+          Most cities need a permit for this work. Ask your city first. A licensed electrician must do the work when the city does not let you do it. The rules are different in each city. Two examples:
         </p>
         <ul class="list-disc pl-5">
           <li>
@@ -442,35 +625,30 @@ defmodule DIYWeb.PowerPage do
         </span>
       </div>
       <p :if={:surge in @warnings} class="text-sm">
-        A motor ({Enum.map_join(@power.motors, ", ", &Catalog.name/1)}) needs 3 to 8 times its running power for about one second when it starts. Its label gives the LRA (locked rotor amps): check it against the surge watts of the station.
+        A motor ({Enum.map_join(@power.motors, ", ", &Catalog.name/1)}) needs 3 to 8 times its running power for about one second when it starts. Its label gives the LRA (locked rotor amps: the amps when the motor starts). Check it against the surge watts of the station (the most watts for a short time).
       </p>
     </div>
     """
   end
 
   attr :power, :map, required: true
+  attr :planned, :boolean, default: false
 
   # The hours that the stations run their items in an outage, by month.
   defp outage(assigns) do
     ~H"""
     <div id="outage" class="space-y-1">
-      <h2 class="text-lg font-bold">In an outage</h2>
-      <%= if @power.system.backup == [] do %>
-        <p class="text-sm">
-          No item is on the stations. Open an item in a room, and choose "A power station runs it".
-        </p>
-      <% else %>
-        <p class="text-sm">
-          From the charge of the battery at 18:00 of an average day, with the sun of the next days: the stations run {Enum.map_join(
-            @power.system.backup,
-            ", ",
-            &Catalog.name/1
-          )} for
-        </p>
-        <ul class="grid grid-cols-3 gap-1 text-sm">
-          <li :for={m <- @power.months}>{String.slice(m.name, 0, 3)}: {hours_text(m.outage)}</li>
-        </ul>
-      <% end %>
+      <h2 class="text-lg font-bold">In an outage{if @planned, do: ", with the plan"}</h2>
+      <p class="text-sm">
+        From the charge of the battery at 18:00 of an average day, with the sun of the next days: the stations run {Enum.map_join(
+          @power.system.backup,
+          ", ",
+          &Catalog.name/1
+        )} for
+      </p>
+      <ul class="grid grid-cols-3 gap-1 text-sm">
+        <li :for={m <- @power.months}>{String.slice(m.name, 0, 3)}: {hours_text(m.outage)}</li>
+      </ul>
     </div>
     """
   end
@@ -644,6 +822,9 @@ defmodule DIYWeb.PowerPage do
         </li>
         <li>
           The payback: the price of the planned equipment, divided by the savings of one year. A planned car has no price in the app: the page shows its charge and its gas.
+        </li>
+        <li>
+          With two parts of equipment or more, each part has its own payback. A part adds the savings of the plan, less the savings of the plan with no such part. A station and the panels that charge it are one part. The life of a part is the shortest life of its items.
         </li>
         <li>
           A car charger: Level 1 at 1.4 kW (12 A at 120 V), Level 2 at 7.2 kW (30 A at 240 V). The car gets 85% (Level 1) or 90% (Level 2) of the power from the wall: tests of Idaho National Laboratory got 84% to 89% for a Chevrolet Volt.

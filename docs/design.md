@@ -426,20 +426,53 @@ the app, not a measurement (`DIY.Profile`).
 ### The what-if
 
 `DIY.Power.whatif/6` runs the house of today and the house with the
-planned items: the cost of each month, and the bill of each house with
-its range (`DIY.Bill`, honesty rule 3). The payback is for the planned
-equipment with a price: its price, the savings of one year (with their
-range), and the years of the payback, next to the years that the
-equipment lasts. A payback after that time is not a payback. The other
-planned items (a car, a freezer) have no price in the app: the page shows
-the change of the bill that they give, and the gas that a car saves, out
-of the payback. The plan shows only the warnings that the house of today
-does not have, and the front of the house marks a plan with a danger or
-an overload. The page says it when the
-plan does not pay back on savings alone, and shows the hours of backup
-(the month with the fewest hours) as a different reason (honesty rule 2).
-With one price at all hours, the page says that a charge at night does
-not save money: the station loses near 15% of the power.
+planned items. It gives the cost of each month, and the bill of each
+house with its range (`DIY.Bill`, honesty rule 3). The payback is for the
+planned equipment with a price. It has the price, the savings of one
+year, and the years of the payback, next to the years that the equipment
+lasts. A payback after that time is not a payback. With one price at all
+hours, the weather of 10 years changes the two bills the same way. Then
+the two ends of the range of the savings are the same, and the page gives
+one number. With a price at night, the two ends can differ: then the
+page gives the range.
+
+With two parts of equipment or more, each part has its own line
+(`parts`). The planned stations and the panels that charge a station are
+one part: they work together, and the panels give nothing with no
+station. Each other item is a part alone. A line gives the price of the
+part, the savings that it adds, and its payback in its own life. The
+savings that a part adds are the savings of the plan, less the savings
+of the plan with no such part. The life of a part is the shortest life
+of its items. So the battery of a station (8 years) does not decide the
+payback of panels on the grid (25 years). The plan as one is then
+compared with the longest life of its parts. A play test found this
+fault: the page said that panels with a station "do not pay back", but
+the panels alone did.
+
+The other planned items (a car, a freezer) have no price in the app. For
+them, the page shows the change of the bill and the gas that a car
+saves, out of the payback. The plan shows only the warnings that the
+house of today does not have. The front of the house marks a plan with a
+danger or an overload. When the plan does not pay back on savings
+alone, the page says it. Then it shows the hours of backup as a
+different reason (honesty rule 2). With one price at all hours, a charge
+at night does not save money: the page says it. The station loses near
+15% of the power.
+
+The hours of backup are the first question of a person with a station.
+So they are at the top of the page Power, in large text. They are the
+hours of the month with the fewest hours, with the plan when there is
+one. When each month has the same hours, the page says "in each month".
+In the mode that keeps the batteries full, the page also gives the kWh
+for 2 days: the kWh of now × 48 ÷ the hours. This is near, because the
+sun of the next days also charges the station. In the other modes, the
+charge at the start of an outage changes with the use of the day: the
+page gives no size. With 0 hours (an empty battery at 18:00), the page
+tells the mode that keeps the batteries full. With an overload, the page
+gives the warning, not the hours. The sheet of a station, and of an item
+that a station runs, also gives the hours, with a link to the page
+Power. The view "What feeds what" shows the plan when there is one. The
+warnings of today under it have their own label.
 
 The page Bill shows the house of today (the planned items are on the page
 Power). With a station, panels on the grid, or a price at night, it also
@@ -448,19 +481,21 @@ the house, with its range.
 
 ### The power view and the safety
 
-The page Power shows what feeds what: the grid, the main panel and its
-interlock or transfer switch, the panels, the stations, and the items
-that the stations run. `DIY.Power.warnings/1` gives, for the house of
+The page Power shows what feeds what. It shows the grid, the main panel
+and its interlock or transfer switch, the panels, the stations, and the
+items that the stations run. `DIY.Power.warnings/1` gives, for the house of
 today and for the plan:
 
 - `:backfeed`: a station that powers circuits of the house with no
   interlock and no transfer switch. The page shows a danger: its power
   can go to the lines of the utility, and kill a worker there.
-- `:permit`: work that needs a permit in most cities (honesty rule 5), with
-  the rules of Dallas and New Braunfels as examples: work on the panel
-  (an inlet, an interlock, a transfer switch or a subpanel), panels on a
-  grid-tie inverter (the utility must also approve them), and a Level 2
-  charger (a new circuit of 240 V).
+- `:permit`: work that needs a permit in most cities (honesty rule 5).
+  The rules are different in each city. The page gives the rules of
+  Dallas and New Braunfels as two examples. The work:
+  - work on the panel (an inlet, an interlock, a transfer switch or a
+    subpanel);
+  - panels on a grid-tie inverter (the utility must also approve them);
+  - a Level 2 charger (a new circuit of 240 V).
 - `:grid_tie`: panels on a grid-tie inverter and a station on the panel.
   In an outage, the inverter can send its power into the output of the
   station. The steps of the page turn off its breaker first.
