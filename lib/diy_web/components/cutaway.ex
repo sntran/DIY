@@ -47,7 +47,9 @@ defmodule DIYWeb.Cutaway do
     room shows its walls;
   - each piece of furniture: `data-with` (its room). It moves with its
     room in a drag;
-  - each label: `data-rank`, the area of its room;
+  - each label: `data-rank` (the area of its room) and `data-label` (its
+    room). In the house, a label is on a pill (a `rect` with `data-pill`,
+    its room). The hook gives the pill the size of the label;
   - each layer: `data-box` (its box in the SVG), for a zoom to the layer.
 
   The math of the points is in `DIYWeb.Geometry` (one unit is a meter) and
@@ -1052,6 +1054,7 @@ defmodule DIYWeb.Cutaway do
         </g>
         <g :for={label <- level.labels} :key={label.id}>
           <rect
+            :if={@start}
             class={["p-pill", label.id == @selected && "p-pill-chosen"]}
             data-pill={label.id}
           />

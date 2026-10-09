@@ -86,7 +86,7 @@ defmodule DIYWeb.Inside do
         <%!-- Under the plan: the bar of the chosen room, or the button to add a room. --%>
         <div class={[
           "relative overflow-hidden rounded-box border border-base-300",
-          if(@chosen, do: "h-[calc(100dvh-22rem)]", else: "h-[calc(100dvh-17rem)]")
+          if(@chosen, do: "h-[calc(100dvh-24rem)]", else: "h-[calc(100dvh-17rem)]")
         ]}>
           <%!-- Only an item of the house: the hook puts its id in a selector. --%>
           <Cutaway.cutaway
@@ -120,6 +120,7 @@ defmodule DIYWeb.Inside do
 
       <.item_sheet
         :if={@item && match?({:ok, _}, Build.item(@build, @item))}
+        close={if @chosen, do: ~p"/inside?#{[room: @chosen.id]}", else: ~p"/inside"}
         build={@build}
         item={elem(Build.item(@build, @item), 1)}
         estimate={@estimate}
@@ -178,58 +179,67 @@ defmodule DIYWeb.Inside do
 
     ~H"""
     <div id="room-bar" class="card card-border bg-base-100 p-3 gap-2">
-      <div class="flex items-center gap-2">
+      <%!-- The name of the room between its arrows. A screen reader hears the new name. --%>
+      <div class="flex items-center gap-1">
         <.link
           :if={@neighbors}
           patch={~p"/inside?#{[room: elem(@neighbors, 0).id]}"}
+          replace
           id="room-before"
           class="btn btn-sm btn-ghost btn-square"
           aria-label={"Go to the room before: #{elem(@neighbors, 0).name}"}
         >
           <.icon name="hero-chevron-left" class="size-4" />
         </.link>
-        <div class="grow min-w-0">
+        <div class="grow min-w-0 text-center" aria-live="polite">
           <p class="font-semibold truncate">{@room.name}</p>
           <p class="text-xs opacity-70">
-            {Build.level_name(@room.level)} · {feet(@room.plan.w)} by {feet(@room.plan.d)}
+            <span class="whitespace-nowrap">{Build.level_name(@room.level)}</span>
+            · <span class="whitespace-nowrap">{feet(@room.plan.w)}</span>
+            by <span class="whitespace-nowrap">{feet(@room.plan.d)}</span>
           </p>
         </div>
         <.link
           :if={@neighbors}
           patch={~p"/inside?#{[room: elem(@neighbors, 1).id]}"}
+          replace
           id="room-next"
           class="btn btn-sm btn-ghost btn-square"
           aria-label={"Go to the next room: #{elem(@neighbors, 1).name}"}
         >
           <.icon name="hero-chevron-right" class="size-4" />
         </.link>
-        <.link
-          patch={~p"/inside?#{[add: @room.id, room: @room.id]}"}
-          id="bar-add"
-          class="btn btn-sm btn-primary"
-          aria-label={"Add an item to #{@room.name}"}
-        >
-          <.icon name="hero-plus" class="size-4" /> Item
-        </.link>
-        <.link
-          patch={~p"/inside?#{[room: @room.id, sheet: "room"]}"}
-          id="bar-change"
-          class="btn btn-sm"
-        >
-          Change
-        </.link>
         <.link patch={~p"/inside"} class="btn btn-sm btn-ghost btn-square" aria-label="Close">
           <.icon name="hero-x-mark" class="size-4" />
         </.link>
       </div>
-      <.moves
-        id="move-room"
-        event="nudge_room"
-        target={@room.id}
-        step={24}
-        what="the room"
-        blocked={blocked(@build, @room.id, 24)}
-      />
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <.moves
+          id="move-room"
+          event="nudge_room"
+          target={@room.id}
+          step={24}
+          what="the room"
+          blocked={blocked(@build, @room.id, 24)}
+        />
+        <div class="flex gap-2">
+          <.link
+            patch={~p"/inside?#{[add: @room.id, room: @room.id]}"}
+            id="bar-add"
+            class="btn btn-sm btn-primary"
+            aria-label={"Add an item to #{@room.name}"}
+          >
+            <.icon name="hero-plus" class="size-4" /> Item
+          </.link>
+          <.link
+            patch={~p"/inside?#{[room: @room.id, sheet: "room"]}"}
+            id="bar-change"
+            class="btn btn-sm"
+          >
+            Change
+          </.link>
+        </div>
+      </div>
     </div>
     """
   end
@@ -237,8 +247,8 @@ defmodule DIYWeb.Inside do
   @doc """
   The room before a room of the house and the next room, in the order of
   the list. The list goes from the roof down to the floors, and then
-  around the house. After
-  the last room comes the first room. A house with one room gives `nil`.
+  around the house. After the last room comes the first room. A house
+  with one room gives `nil`.
   """
   def neighbors(build, room) do
     rooms =
@@ -484,6 +494,7 @@ defmodule DIYWeb.Inside do
   attr :price, :map, required: true
   attr :error, :string, default: nil
   attr :outage, :string, default: nil
+  attr :close, :string, default: "/inside", doc: "the page of the close link"
 
   # The numbers of an item, the math of its kWh, and the features that it
   # turns on.
@@ -513,7 +524,7 @@ defmodule DIYWeb.Inside do
       )
 
     ~H"""
-    <.sheet id="item-sheet" title={Catalog.name(@item)} icon={@item.type}>
+    <.sheet id="item-sheet" title={Catalog.name(@item)} icon={@item.type} close={@close}>
       <p class="text-sm opacity-80">In {@room.name}{level_note(@room.level)}</p>
 
       <div :if={@item.typical} class="alert alert-warning text-sm">

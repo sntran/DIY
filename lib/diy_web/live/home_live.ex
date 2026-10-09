@@ -263,8 +263,13 @@ defmodule DIYWeb.HomeLive do
   def handle_event("select_room", %{"id" => id}, socket) when is_binary(id),
     do: {:noreply, push_patch(socket, to: plan_path(socket, room: id))}
 
-  def handle_event("open_item", %{"id" => id}, socket) when is_binary(id),
-    do: {:noreply, push_patch(socket, to: plan_path(socket, item: id))}
+  # A tap on an item opens it. In the house, the chosen room stays: the
+  # sheet of the item closes back to it.
+  def handle_event("open_item", %{"id" => id}, socket) when is_binary(id) do
+    room = if socket.assigns.live_action == :inside, do: socket.assigns.room
+    params = if room, do: [item: id, room: room], else: [item: id]
+    {:noreply, push_patch(socket, to: plan_path(socket, params))}
+  end
 
   # An item that the person drops on the plan. x and y are its center on
   # the plan, in inches. The room is the room of that center (the hook).

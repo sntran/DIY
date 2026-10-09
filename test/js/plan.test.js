@@ -188,9 +188,12 @@ test("a zoom in to a room: the room fills the screen, and a smaller view stays",
   same(focus(view, {x: 10, y: 10, w: 10, h: 100}, 1, fit), {x: -42.5, y: 2.5, w: 115, h: 115})
   // A small room: the view shows a third of the house at least.
   same(focus(view, {x: 10, y: 10, w: 10, h: 10}, 1, fit), {x: -20, y: -20, w: 70, h: 70})
-  // The view shows the room in more detail: it stays.
+  // The view shows all the room in more detail: it stays.
   const small = {x: 0, y: 0, w: 50, h: 100}
-  assert.equal(focus(small, {x: 10, y: 10, w: 100, h: 20}, 0.5, fit), small)
+  assert.equal(focus(small, {x: 10, y: 10, w: 30, h: 20}, 0.5, fit), small)
+  // A part of the room is out of the view: the view frames the room.
+  same(focus(small, {x: 10, y: 10, w: 100, h: 20}, 0.5, fit), {x: 2.5, y: -95, w: 115, h: 230})
+  same(focus(small, {x: 10, y: 90, w: 30, h: 20}, 0.5, fit), {x: -10, y: 30, w: 70, h: 140})
 })
 
 test("a frame shows a box with a margin, at the middle, on the shape of the screen", () => {
@@ -326,7 +329,8 @@ function setup({storage = new Map(), chosen = true, width = 400, height = 800, w
   bedroom.bbox = {x: 100, y: -60, width: 40, height: 20}
   const bedWall = add({"data-of": "r4"}, upper)
   bedWall.bbox = {x: 100, y: -70, width: 40, height: 40}
-  add({"data-item": "i2", "data-in": "r4", "data-at": "10 10"}, upper)
+  const lamp = add({"data-item": "i2", "data-in": "r4", "data-at": "10 10"}, upper)
+  lamp.bbox = {x: 110, y: -55, width: 5, height: 5}
   const empty = add({}, svg)
   let selection = null
   let outlineEl = null
@@ -446,9 +450,13 @@ test("the page starts on its first layer: its house fills the screen, and the ot
   // The walls and the slabs of floor 1 (40 by 40) fill the width of the
   // screen, with a margin. The view stays in the box of the layer (150 by
   // 80): it is higher than the layer, so it starts at its top.
-  const {svg, hook, kitchenG} = setup({start: "ground"})
+  const {svg, hook, kitchenG} = setup({start: "ground", chosen: false})
   assert.equal(svg.getAttribute("viewBox"), "98.40 0.00 43.20 86.40")
   assert.equal(svg.getAttribute("data-dim"), "ground")
+  // A chosen room at the start (a link with the room): the view zooms in
+  // to it. The kitchen of the test has no size, at 0, 0.
+  const start = setup({start: "ground"})
+  assert.equal(start.svg.getAttribute("viewBox"), "0.00 -20.00 50.00 100.00")
   // A layer with no walls and no slabs (a roof): its box fills the screen.
   kitchenG.setAttribute("data-box", "0 0 50 100")
   kitchenG.querySelectorAll = () => []
@@ -921,17 +929,23 @@ test("the buttons zoom; the tab of a layer shows the house of the layer, and the
 })
 
 test("a room that the person chooses in the list shows: its layer comes, and the view zooms in to it", () => {
-  const {hook, svg, outlineEl} = setup({start: "ground"})
-  // The kitchen is chosen, on floor 1: the view stays.
+  const {hook, svg, outlineEl, root, zoomIn} = setup({start: "ground"})
+  // The kitchen is chosen, on floor 1: the server draws the page again, and
+  // the view stays.
   hook.updated()
-  assert.equal(svg.getAttribute("viewBox"), "98.40 0.00 43.20 86.40")
-  // The arrow of the bar goes to the living room, on the same floor. The
-  // view zooms in to it (40 by 40 at 100, 30).
-  hook.show(hook.fit())
+  assert.equal(svg.getAttribute("viewBox"), "0.00 -20.00 50.00 100.00")
+  // The arrow of the bar goes to the living room, on the same floor. It is
+  // out of the view of the kitchen: the view zooms in to it (40 by 40 at
+  // 100, 30).
   outlineEl.setAttribute("data-outline", "r2")
   hook.updated()
   near(hook.view.x + hook.view.w / 2, 120)
   near(hook.view.w, 50)
+  // After a zoom in, the next room comes into the view too.
+  root.fire("click", {target: zoomIn})
+  outlineEl.setAttribute("data-outline", "r1")
+  hook.updated()
+  assert.equal(svg.getAttribute("viewBox"), "0.00 -20.00 50.00 100.00")
   // In the van, a choice on the layer that shows does not move the view.
   const van = setup()
   van.outlineEl.setAttribute("data-outline", "r2")
@@ -952,6 +966,33 @@ test("a room that the person chooses in the list shows: its layer comes, and the
   outlineEl.removeAttribute("data-outline")
   hook.updated()
   assert.equal(svg.getAttribute("data-dim"), "ground")
+})
+
+test("a tap zooms in to a room one time: a zoom of the person before the reply of the server stays", () => {
+  const {hook, pointer, living, outlineEl, root, zoomOut} = setup({start: "ground"})
+  pointer("pointerdown", 1, 50, 50, living)
+  pointer("pointerup", 1, 50, 50)
+  root.fire("click", {target: zoomOut})
+  const view = {...hook.view}
+  // The reply: the living room is chosen.
+  outlineEl.setAttribute("data-outline", "r2")
+  hook.updated()
+  assert.deepEqual(hook.view, view)
+})
+
+test("the label of the chosen room shows first", () => {
+  const {hook, labels, outlineEl} = setup()
+  assert.deepEqual(labels.map((l) => l.style.visibility), ["", "hidden", ""])
+  // The middle room is chosen: its label shows, and the label of the
+  // larger room over it hides.
+  labels[1].attrs["data-label"] = "r1"
+  outlineEl.setAttribute("data-outline", "r1")
+  hook.updated()
+  assert.deepEqual(labels.map((l) => l.style.visibility), ["hidden", "", ""])
+  // No choice: the larger room first.
+  outlineEl.removeAttribute("data-outline")
+  hook.updated()
+  assert.deepEqual(labels.map((l) => l.style.visibility), ["", "hidden", ""])
 })
 
 test("an item with an open sheet shows: its layer comes, also after a move to a different layer", () => {

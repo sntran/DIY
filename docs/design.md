@@ -1464,12 +1464,19 @@ its turn. A length is in inches.
   least: else they would hide the room.
 - From room to room. In the house, the name of a room is on a pill, as in
   the drawn picture. The pill is a round box, and the script gives it the
-  size of the text. The pill of the chosen room has the color of the choice. The bar
-  of the chosen room has two arrows: the room before it and the next
-  room, in the order of the list. After the last room comes the first
-  room. The view zooms in to each new chosen room, also on its floor. So
-  the person goes from room to room with one finger, and taps an item of
-  the room to change it.
+  size of the text. The pill of the chosen room has the color of the
+  choice, and the name of the chosen room shows first. The bar of the
+  chosen room has its name between two arrows. They go to the room before
+  it and to the next room, in the order of the list. After the last room comes the
+  first room. The arrows do not add steps to the history of the browser.
+  A screen reader hears the name of the new room. The buttons of the bar
+  are in a second row, so the name has space on a phone. The view zooms
+  in to each new chosen room, also on its floor, when a part of the room
+  is out of the view. A page that opens with a chosen room (a link with
+  the room) also zooms in to it. A tap on an item of the chosen room
+  opens its sheet, and the room stays chosen: the sheet closes back to
+  the room. So the person goes from room to room with one finger, and
+  taps an item of the room to change it.
 - The tests. Property tests check the draft (no overlap) and random
   changes (the rules, and the JSON gives the same plan). A property test
   draws random houses: each point is in the box of the SVG, and each id

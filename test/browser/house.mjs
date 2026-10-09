@@ -338,9 +338,14 @@ async function build(context, name) {
   await page.mouse.click(...Object.values(center(await page.locator(kitchen).boundingBox())))
   await page.waitForSelector("#room-bar:has-text('Kitchen')")
   await check(page, `${name} room`)
-  // The arrows of the bar go to the next room and back.
+  // The arrows of the bar go to the next room and back. The outline of
+  // the new room is on the plan on the screen.
   await page.click("#room-next")
   await page.waitForSelector("#room-bar:has-text('Living room')")
+  await page.waitForTimeout(300)
+  const [plan, line] = [await page.locator("#plan-svg").boundingBox(), await page.locator("[data-outline]").boundingBox()]
+  assert.ok(line.x >= plan.x - 1 && line.y >= plan.y - 1 && line.x + line.width <= plan.x + plan.width + 1 &&
+    line.y + line.height <= plan.y + plan.height + 1, `${name}: the next room is on the screen`)
   await page.click("#room-before")
   await page.waitForSelector("#room-bar:has-text('Kitchen')")
   const plan = await page.getAttribute(kitchen, "data-plan")

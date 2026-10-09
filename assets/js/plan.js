@@ -179,11 +179,13 @@ export function frame(box, shape, margin = 1.15, least = 0) {
 }
 
 // The view that shows a room: a third of the box of the house at least,
-// so that the person sees where the room is. A view that shows it in more
-// detail stays: a tap does not zoom out.
+// so that the person sees where the room is. A view that shows all the
+// room in more detail stays: a tap does not zoom out.
 export function focus(view, box, shape, fit) {
   const next = frame(box, shape, 1.15, fit.w / 3)
-  return next.w >= view.w ? view : next
+  const inside =
+    box.x >= view.x && box.y >= view.y && box.x + box.w <= view.x + view.w && box.y + box.h <= view.y + view.h
+  return next.w >= view.w && inside ? view : next
 }
 
 // A view that keeps the house (the box fit) on the screen. A view smaller
@@ -364,7 +366,7 @@ export const planHook = {
     const open = this.svg.getAttribute("data-open")
     const item = open && this.svg.querySelector(`[data-item="${open}"]`)
     const [chosen, opened] = [placeOf(room), placeOf(item)]
-    if (chosen !== this.chosen && room && (this.oneLayer() || this.hidden(room))) this.zoomTo(room)
+    if (chosen !== this.chosen && room && this.oneLayer()) this.zoomTo(room)
     else if (opened !== this.opened && item && this.hidden(item)) this.showLayer(layerOf(item))
     this.chosen = chosen
     this.opened = opened
@@ -396,12 +398,14 @@ export const planHook = {
   },
 
   // Where two labels overlap, or are nearer than 4 pixels, the label of
-  // the larger room shows (data-rank). The other one hides until a zoom in.
-  // In the house, a label is on a pill: a round box around its text.
+  // the chosen room shows, else the label of the larger room (data-rank).
+  // The other one hides until a zoom in. In the house, a label is on a
+  // pill: a round box around its text.
   declutter() {
-    const labels = [...this.svg.querySelectorAll("[data-rank]")].sort(
-      (a, b) => Number(b.getAttribute("data-rank")) - Number(a.getAttribute("data-rank")),
-    )
+    const outline = this.svg.querySelector("[data-outline]")
+    const chosen = outline && outline.getAttribute("data-outline")
+    const rank = (label) => (label.getAttribute("data-label") === chosen ? Infinity : Number(label.getAttribute("data-rank")))
+    const labels = [...this.svg.querySelectorAll("[data-rank]")].sort((a, b) => rank(b) - rank(a))
     const shown = []
     for (const label of labels) {
       label.style.visibility = ""
@@ -659,7 +663,12 @@ export const planHook = {
     if (drag.kind === "handle") return
     if (drag.kind === "item") return this.pushEvent("open_item", {id: drag.el.getAttribute("data-item")})
     const id = drag.room ? drag.room.getAttribute("data-room") : ""
-    if (drag.room) this.zoomTo(drag.room)
+    // The view zooms in now. The reply of the server is not a new choice:
+    // so a zoom of the person before the reply stays.
+    if (drag.room) {
+      this.zoomTo(drag.room)
+      this.chosen = placeOf(drag.room)
+    }
     this.pushEvent("select_room", {id})
   },
 

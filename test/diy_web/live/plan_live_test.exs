@@ -1,6 +1,7 @@
 defmodule DIYWeb.PlanLiveTest do
   @moduledoc "The page of the plan at scale (`DIYWeb.Inside`, the hook Plan)."
   use DIYWeb.ConnCase, async: true
+  use ExUnitProperties
 
   import Phoenix.LiveViewTest
 
@@ -61,6 +62,14 @@ defmodule DIYWeb.PlanLiveTest do
     assert_patch view, ~p"/inside?#{[room: room(view, "Living room").id]}"
     view |> element("#room-before") |> render_click()
     assert_patch view, ~p"/inside?#{[room: kitchen.id]}"
+
+    # A tap on an item of the chosen room: the room stays chosen, and the
+    # sheet of the item closes back to it.
+    fridge = item(view, "fridge")
+    render_hook(view, "open_item", %{"id" => fridge.id})
+    assert_patch view, ~p"/inside?#{[item: fridge.id, room: kitchen.id]}"
+    assert has_element?(view, "#room-bar", "Kitchen")
+    assert has_element?(view, ~s(#item-sheet a[data-close][href="/inside?room=#{kitchen.id}"]))
 
     view |> element("#bar-add") |> render_click()
     assert has_element?(view, "#add-sheet")
@@ -289,6 +298,39 @@ defmodule DIYWeb.PlanLiveTest do
     assert_patch view, ~p"/inside"
     refute room(view, "Kitchen")
     render_click(view, "delete_room", %{"id" => "r999"})
+  end
+
+  property "the arrows visit each room of the house one time, and come back" do
+    check all(floors <- integer(1..3), extra <- integer(0..4)) do
+      {house, rooms, items} =
+        House.preset(%{size: 1800, year: 2005, floors: floors, heat: "gas", lot: nil})
+
+      {:ok, build} = Build.choose_door(Build.new(), "my_house")
+      build = Build.put_house(build, house, rooms, items)
+
+      build =
+        Enum.reduce(1..extra//1, build, fn i, build ->
+          {:ok, build, _id} = Build.add_room(build, "Room #{i}", "f1", :indoor)
+          build
+        end)
+
+      [first | _] = build.rooms
+      walk = Stream.iterate(first, &elem(Inside.neighbors(build, &1), 1))
+      steps = Enum.take(walk, length(build.rooms) + 1)
+
+      # The next steps visit each room one time, and come back to the
+      # first room.
+      assert List.last(steps) == first
+
+      assert steps |> Enum.drop(-1) |> Enum.map(& &1.id) |> Enum.sort() ==
+               build.rooms |> Enum.map(& &1.id) |> Enum.sort()
+
+      # The room before the next room is the same room.
+      for room <- build.rooms do
+        {_before, next} = Inside.neighbors(build, room)
+        assert elem(Inside.neighbors(build, next), 0) == room
+      end
+    end
   end
 
   test "the room before a room and the next room: in the order of the list, in a loop" do
