@@ -550,11 +550,12 @@ charges, the reader takes them from the table of the utility
 of the EFLs of October 2026. For AEP Texas Central, AEP Texas North,
 TNMP and Lubbock Power & Light, it has the table of Xoom Energy, with
 the rates of 10/4/2026. A line that names more than one utility does not
-tell the utility. Else the reader finds the charges from the averages at
-500 and 2,000 kWh (only when it found the energy charge). The page tells
-where they come from; with a fit, only the average at 1,000 kWh checks
-the numbers. The form of a plan gives the delivery charges only of a
-utility of the table; for another utility, the user gives them.
+tell the utility. When the table does not know the utility, the reader
+uses the averages at 500 and 2,000 kWh. It does this only when it found
+the energy charge. The page tells where they come from; with a fit, only
+the average at 1,000 kWh checks the numbers. The form of a plan gives
+the delivery charges only of a utility of the table; for another
+utility, the user gives them.
 
 The reader joins at most 600 bytes of lines into one sentence, and reads
 at most 64 KB of text, so that a crafted message cannot make it slow. The
