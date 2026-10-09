@@ -66,6 +66,31 @@ defmodule DIYWeb.CutawayTest do
     refute html(build) =~ "data-outline"
   end
 
+  test "the slab under each room of the house has the id of its room" do
+    build = house()
+    view = Cutaway.view(build)
+
+    for level <- view.levels, {_points, "p-slab" <> _, room} <- level.slabs do
+      assert Enum.any?(level.rooms, &(&1.id == room))
+    end
+
+    # Each room on a slab has its slab: the yards are on the ground.
+    on_slab = for level <- view.levels, {_points, _class, room} <- level.slabs, do: room
+    rooms = for level <- view.levels, level.id != "roof", room <- level.rooms, do: room.id
+    assert Enum.sort(Enum.uniq(on_slab)) == Enum.sort(rooms)
+    assert html(build) =~ ~s(class="p-slab-t" data-of="#{room(build, "Kitchen")}")
+
+    # A floor with no room: the slab of the house, with no room.
+    build =
+      Enum.reduce(build.rooms, build, fn room, build ->
+        if room.level == "f2", do: elem(Build.delete_room(build, room.id), 1), else: build
+      end)
+
+    f2 = Enum.find(Cutaway.view(build).levels, &(&1.id == "f2"))
+    assert [_ | _] = f2.slabs
+    assert Enum.all?(f2.slabs, &match?({_points, _class, nil}, &1))
+  end
+
   test "the cut of the walls: full at the back, on a slope at the far end, else low" do
     cut = fn camera -> for side <- ~w(x0 y0 x1 y1), do: Cutaway.cut(side, camera) end
     assert cut.(Camera.house()) == [:far, :back, :near, :front]
