@@ -1,6 +1,7 @@
 defmodule DIYWeb.PlanLiveTest do
   @moduledoc "The page of the plan at scale (`DIYWeb.Inside`, the hook Plan)."
   use DIYWeb.ConnCase, async: true
+  use ExUnitProperties
 
   import Phoenix.LiveViewTest
 
@@ -51,8 +52,58 @@ defmodule DIYWeb.PlanLiveTest do
     assert has_element?(view, "polygon.p-chosen[data-room=#{kitchen.id}]")
     refute has_element?(view, "#add-room")
 
+    # The pill of the name of the chosen room has the color of the choice.
+    assert has_element?(view, "rect.p-pill-chosen[data-pill=#{kitchen.id}]")
+
+    # The arrows of the bar go to the room before it and to the next room,
+    # in the order of the list.
+    assert has_element?(view, "#room-before[aria-label='Go to the room before: Bedroom 3']")
+    view |> element("#room-next") |> render_click()
+    assert_patch view, ~p"/inside?#{[room: room(view, "Living room").id]}"
+    view |> element("#room-before") |> render_click()
+    assert_patch view, ~p"/inside?#{[room: kitchen.id]}"
+
+    # A tap on an item of the chosen room: the room stays chosen, and the
+    # sheet of the item closes back to it.
+    fridge = item(view, "fridge")
+    render_hook(view, "open_item", %{"id" => fridge.id})
+    assert_patch view, ~p"/inside?#{[item: fridge.id, room: kitchen.id]}"
+    assert has_element?(view, "#room-bar", "Kitchen")
+    assert has_element?(view, ~s(#item-sheet a[data-close][href="/inside?room=#{kitchen.id}"]))
+
+    # From the bar, the person adds an item to the room, and then deletes
+    # it. The room stays chosen. In the list, an item also keeps the room.
     view |> element("#bar-add") |> render_click()
     assert has_element?(view, "#add-sheet")
+    view |> element("#add-freezer") |> render_click()
+    freezer = item(view, "freezer")
+    assert_patch view, ~p"/inside?#{[item: freezer.id, room: kitchen.id]}"
+
+    assert has_element?(
+             view,
+             ~s(#item-#{freezer.id}[href="/inside?item=#{freezer.id}&room=#{kitchen.id}"])
+           )
+
+    assert has_element?(
+             view,
+             ~s(#add-#{kitchen.id}[href="/inside?add=#{kitchen.id}&room=#{kitchen.id}"])
+           )
+
+    view |> element("#delete-item") |> render_click()
+    assert_patch view, ~p"/inside?#{[room: kitchen.id]}"
+    assert has_element?(view, "#room-bar", "Kitchen")
+
+    # With no chosen room, a new item and a deleted item give the page of
+    # the rooms.
+    render_patch(view, ~p"/inside?#{[add: kitchen.id]}")
+    view |> element("#add-freezer") |> render_click()
+    freezer = item(view, "freezer")
+    assert_patch view, ~p"/inside?#{[item: freezer.id]}"
+    view |> element("#delete-item") |> render_click()
+    assert_patch view, ~p"/inside"
+
+    render_patch(view, ~p"/inside?#{[room: kitchen.id]}")
+    view |> element("#bar-add") |> render_click()
 
     render_hook(view, "select_room", %{"id" => ""})
     assert_patch view, ~p"/inside"
@@ -278,6 +329,70 @@ defmodule DIYWeb.PlanLiveTest do
     assert_patch view, ~p"/inside"
     refute room(view, "Kitchen")
     render_click(view, "delete_room", %{"id" => "r999"})
+  end
+
+  property "the arrows visit each room of the house one time, and come back" do
+    check all(
+            floors <- integer(1..3),
+            extra <-
+              list_of(tuple({integer(0..4), member_of([:indoor, :outdoor])}), max_length: 5),
+            max_runs: 40
+          ) do
+      {house, rooms, items} =
+        House.preset(%{size: 1800, year: 2005, floors: floors, heat: "gas", lot: nil})
+
+      {:ok, build} = Build.choose_door(Build.new(), "my_house")
+      build = Build.put_house(build, house, rooms, items)
+
+      # More rooms, on random levels. A room outside is around the house.
+      levels = Build.levels(floors)
+
+      build =
+        extra
+        |> Enum.with_index()
+        |> Enum.reduce(build, fn {{level, place}, i}, build ->
+          level =
+            if place == :outdoor,
+              do: "outside",
+              else: Enum.at(levels, rem(level, length(levels) - 1))
+
+          {:ok, build, _id} = Build.add_room(build, "Room #{i}", level, place)
+          build
+        end)
+
+      [first | _] = build.rooms
+      walk = Stream.iterate(first, &elem(Inside.neighbors(build, &1), 1))
+      steps = Enum.take(walk, length(build.rooms) + 1)
+
+      # The next steps visit each room one time, and come back to the
+      # first room.
+      assert List.last(steps) == first
+
+      assert steps |> Enum.drop(-1) |> Enum.map(& &1.id) |> Enum.sort() ==
+               build.rooms |> Enum.map(& &1.id) |> Enum.sort()
+
+      # The room before the next room is the same room.
+      for room <- build.rooms do
+        {_before, next} = Inside.neighbors(build, room)
+        assert elem(Inside.neighbors(build, next), 0) == room
+      end
+    end
+  end
+
+  test "the room before a room and the next room: in the order of the list, in a loop" do
+    build = house()
+    names = fn {a, b} -> {a.name, b.name} end
+    at = fn name -> Enum.find(build.rooms, &(&1.name == name)) end
+
+    # The list: the roof and the attic, floor 2, floor 1, and around the
+    # house.
+    assert names.(Inside.neighbors(build, at.("Roof"))) == {"Driveway", "Attic"}
+    assert names.(Inside.neighbors(build, at.("Bedroom 3"))) == {"Bathroom", "Kitchen"}
+    assert names.(Inside.neighbors(build, at.("Driveway"))) == {"Backyard", "Roof"}
+
+    # A house with one room: no arrows.
+    one = %{build | rooms: [at.("Kitchen")]}
+    assert Inside.neighbors(one, at.("Kitchen")) == nil
   end
 
   test "the list tells the usage and the flags of each item, and a station away" do

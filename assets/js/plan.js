@@ -179,11 +179,14 @@ export function frame(box, shape, margin = 1.15, least = 0) {
 }
 
 // The view that shows a room: a third of the box of the house at least,
-// so that the person sees where the room is. A view that shows it in more
-// detail stays: a tap does not zoom out.
-export function focus(view, box, shape, fit) {
+// so that the person sees where the room is. A view that shows the room in
+// more detail stays: a tap does not zoom out. With `all`, the view stays
+// only when all the room is in it (a choice in the list, or an arrow).
+export function focus(view, box, shape, fit, all = false) {
   const next = frame(box, shape, 1.15, fit.w / 3)
-  return next.w >= view.w ? view : next
+  const inside =
+    box.x >= view.x && box.y >= view.y && box.x + box.w <= view.x + view.w && box.y + box.h <= view.y + view.h
+  return next.w >= view.w && (inside || !all) ? view : next
 }
 
 // A view that keeps the house (the box fit) on the screen. A view smaller
@@ -199,6 +202,11 @@ export function clamp(view, fit) {
 
 // The id of the layer of an element of the plan.
 const layerOf = (el) => el.closest("[data-box]").getAttribute("id").replace("plan-", "")
+// The box of a pill around the box of a text. Its margin is half the
+// height of the text at the sides, and a quarter of it at the top and the
+// bottom.
+const pillBox = (b) => ({x: b.x - b.height / 2, y: b.y - b.height / 4, width: b.width + b.height, height: b.height * 1.5})
+
 // A room or an item, and its layer, as a text; or null.
 const placeOf = (el) => (el ? `${el.getAttribute("data-room") || el.getAttribute("data-item")} ${layerOf(el)}` : null)
 
@@ -349,17 +357,23 @@ export const planHook = {
   },
 
   // A room that the person chooses, or an item with an open sheet, shows
-  // (also from the list or a sheet). When it is on a layer that hides, the
-  // view zooms in to the room, or its layer shows. Only a new choice, or a
-  // move to a different layer, moves the view.
+  // (also from the list or a sheet). In the house, the view zooms in to a
+  // new chosen room. So the arrows of the bar of a room go from room to
+  // room. When an open item is on a layer that hides, its layer shows.
+  // Only a new choice, a move to a different layer, or a sheet that closes
+  // moves the view.
   reveal() {
     const outline = this.svg.querySelector("[data-outline]")
     const room = outline && this.surface(outline.getAttribute("data-outline"))
     const open = this.svg.getAttribute("data-open")
     const item = open && this.svg.querySelector(`[data-item="${open}"]`)
     const [chosen, opened] = [placeOf(room), placeOf(item)]
-    if (chosen !== this.chosen && room && this.hidden(room)) this.zoomTo(room)
+    if (chosen !== this.chosen && room && this.oneLayer()) this.zoomTo(room, true)
     else if (opened !== this.opened && item && this.hidden(item)) this.showLayer(layerOf(item))
+    // The sheet of an item closes, and the chosen room is on a layer that
+    // hides because the sheet moved the item. The view goes back to the
+    // room.
+    else if (opened !== this.opened && !item && room && this.hidden(room)) this.zoomTo(room, true)
     this.chosen = chosen
     this.opened = opened
   },
@@ -390,17 +404,26 @@ export const planHook = {
   },
 
   // Where two labels overlap, or are nearer than 4 pixels, the label of
-  // the larger room shows (data-rank). The other one hides until a zoom in.
+  // the chosen room shows, else the label of the larger room (data-rank).
+  // The other one hides until a zoom in. In the house, a label is on a
+  // pill: a round box around its text.
   declutter() {
-    const labels = [...this.svg.querySelectorAll("[data-rank]")].sort(
-      (a, b) => Number(b.getAttribute("data-rank")) - Number(a.getAttribute("data-rank")),
-    )
+    const outline = this.svg.querySelector("[data-outline]")
+    const chosen = outline && outline.getAttribute("data-outline")
+    const rank = (label) => (label.getAttribute("data-label") === chosen ? Infinity : Number(label.getAttribute("data-rank")))
+    const labels = [...this.svg.querySelectorAll("[data-rank]")].sort((a, b) => rank(b) - rank(a))
     const shown = []
     for (const label of labels) {
       label.style.visibility = ""
-      const box = label.getBBox()
+      const box = this.oneLayer() ? pillBox(label.getBBox()) : label.getBBox()
       if (shown.some((other) => overlaps(other, box, 4 * this.labelUnits))) label.style.visibility = "hidden"
       else shown.push(box)
+      const pill = this.svg.querySelector(`[data-pill="${label.getAttribute("data-label")}"]`)
+      if (pill) {
+        for (const [key, value] of Object.entries({x: box.x, y: box.y, width: box.width, height: box.height, rx: box.height / 2}))
+          pill.setAttribute(key, value.toFixed(2))
+        pill.style.visibility = label.style.visibility
+      }
     }
   },
 
@@ -646,13 +669,18 @@ export const planHook = {
     if (drag.kind === "handle") return
     if (drag.kind === "item") return this.pushEvent("open_item", {id: drag.el.getAttribute("data-item")})
     const id = drag.room ? drag.room.getAttribute("data-room") : ""
-    if (drag.room) this.zoomTo(drag.room)
+    // The view zooms in now. The reply of the server is not a new choice:
+    // so a zoom of the person before the reply stays.
+    if (drag.room) {
+      this.zoomTo(drag.room)
+      this.chosen = placeOf(drag.room)
+    }
     this.pushEvent("select_room", {id})
   },
 
   // The view zooms in to a room: all the surfaces of its floor (a roof has
   // three), its items, its walls and its slab. The other layers hide.
-  zoomTo(room) {
+  zoomTo(room, all = false) {
     const layer = layerOf(room)
     const dimmed = this.dimmed()
     if (this.oneLayer()) this.dim(layer)
@@ -664,7 +692,7 @@ export const planHook = {
     const y = Math.min(...boxes.map((b) => b.y))
     const w = Math.max(...boxes.map((b) => b.x + b.width)) - x
     const h = Math.max(...boxes.map((b) => b.y + b.height)) - y
-    this.show(focus(this.view, {x, y, w, h}, this.shape(), this.fit()))
+    this.show(focus(this.view, {x, y, w, h}, this.shape(), this.fit(), all))
   },
 
   // One layer stands out (the tab of a layer): the other layers hide (the

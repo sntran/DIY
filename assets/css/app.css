@@ -327,6 +327,7 @@
   --p-wood: #dca671; --p-tile: #ece5d8; --p-carpet: #d9c7ad; --p-concrete: #cfcac2; --p-ply: #e3c89a;
   --p-edge: rgb(64 44 32 / 0.45); --p-grain: rgb(110 60 20 / 0.2);
   --p-chosen: #1d4ed8; --p-sky: #23211e;
+  --p-pill: rgb(255 250 242 / 0.92); --p-pill-text: #3b2a1e;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme=light]) .cutaway-house {
@@ -334,6 +335,7 @@
     --p-wood: #8f5e36; --p-tile: #6e675d; --p-carpet: #74604c; --p-concrete: #5d5a55; --p-ply: #7a6343;
     --p-grain: rgb(0 0 0 / 0.3);
     --p-chosen: #93c5fd; --p-sky: #121110;
+    --p-pill: rgb(34 30 27 / 0.92); --p-pill-text: #f5ebdd;
   }
 }
 [data-theme=dark] .cutaway-house {
@@ -341,6 +343,7 @@
   --p-wood: #8f5e36; --p-tile: #6e675d; --p-carpet: #74604c; --p-concrete: #5d5a55; --p-ply: #7a6343;
   --p-grain: rgb(0 0 0 / 0.3);
   --p-chosen: #93c5fd; --p-sky: #121110;
+  --p-pill: rgb(34 30 27 / 0.92); --p-pill-text: #f5ebdd;
 }
 .p-lot-t { fill: var(--p-grass-t) } .p-lot-l { fill: var(--p-grass-l) } .p-lot-r { fill: var(--p-grass-r) }
 .p-slab-t { fill: var(--p-slab-t) } .p-slab-l { fill: var(--p-slab-l) } .p-slab-r { fill: var(--p-slab-r) }
@@ -507,6 +510,14 @@
   vector-effect: non-scaling-stroke; pointer-events: none
 }
 .p-outline { fill: none; stroke: var(--p-chosen); stroke-width: 2; stroke-dasharray: 6 4; vector-effect: non-scaling-stroke; pointer-events: none }
+/* In the house, the name of a room is on a pill (assets/js/plan.js gives
+   its size). The pill of the chosen room has the color of the choice. */
+.p-pill { display: none; pointer-events: none }
+.cutaway-house .p-pill {
+  display: inline; fill: var(--p-pill); stroke: var(--p-edge); stroke-width: 0.8; vector-effect: non-scaling-stroke
+}
+.cutaway-house .p-pill-chosen { stroke: var(--p-chosen); stroke-width: 2 }
+.cutaway-house .p-label { fill: var(--p-pill-text); stroke: none }
 /* The tab of a layer (assets/js/plan.js): in the van, the other layers are
    pale. In the house, they hide, and a tap goes through them. The ids of
    the layers come from DIYWeb.Cutaway.view/1 (the house) and

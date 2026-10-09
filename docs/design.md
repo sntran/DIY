@@ -1462,6 +1462,26 @@ its turn. A length is in inches.
   name of the larger room shows. The other one hides until a zoom in. The
   handles of a small room show only when they are 36 pixels apart at
   least: else they would hide the room.
+- From room to room. In the house, the name of a room is on a pill, as in
+  the drawn picture. The pill is a round box, and the script gives it the
+  size of the text. The pill of the chosen room has the color of the
+  choice, and the name of the chosen room shows first. The bar of the
+  chosen room has its name between two arrows. They go to the room before
+  it and to the next room, in the order of the list. After the last room
+  comes the first room. The arrows do not add steps to the history of the
+  browser. A screen reader hears the name of the new room. The buttons of
+  the bar are in a second row, so the name has space on a phone.
+- The zoom to a room. A tap on a room zooms in to it. But a view that
+  shows the room in more detail stays: a tap does not zoom out. The
+  arrows, the list or a link show all of the room that they choose. When
+  a part of the room is out of the view, the view zooms in to the room. A
+  page that opens with a chosen room also zooms in to it.
+- The chosen room stays while the person opens an item (on the plan or in
+  the list), adds an item, or deletes an item. The sheet of the item
+  closes back to the room. When the sheet moved the item to a room on a
+  different floor, the floor of the chosen room comes back. So the
+  person goes from room to room with one finger, and taps an item to
+  change it.
 - The tests. Property tests check the draft (no overlap) and random
   changes (the rules, and the JSON gives the same plan). A property test
   draws random houses: each point is in the box of the SVG, and each id

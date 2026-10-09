@@ -47,7 +47,9 @@ defmodule DIYWeb.Cutaway do
     room shows its walls;
   - each piece of furniture: `data-with` (its room). It moves with its
     room in a drag;
-  - each label: `data-rank`, the area of its room;
+  - each label: `data-rank` (the area of its room) and `data-label` (its
+    room). In the house, a label is on a pill (a `rect` with `data-pill`,
+    its room). The hook gives the pill the size of the label;
   - each layer: `data-box` (its box in the SVG), for a zoom to the layer.
 
   The math of the points is in `DIYWeb.Geometry` (one unit is a meter) and
@@ -1050,17 +1052,23 @@ defmodule DIYWeb.Cutaway do
           <title :if={object.kind == :item}>{object.name}</title>
           <polygon :for={{points, class} <- object.polys} points={points} class={class} />
         </g>
-        <text
-          :for={label <- level.labels}
-          :key={label.id}
-          x={label.x}
-          y={label.y}
-          text-anchor="middle"
-          class="p-label"
-          data-rank={label.rank}
-        >
-          {label.text}
-        </text>
+        <g :for={label <- level.labels} :key={label.id}>
+          <rect
+            :if={@start}
+            class={["p-pill", label.id == @selected && "p-pill-chosen"]}
+            data-pill={label.id}
+          />
+          <text
+            x={label.x}
+            y={label.y}
+            text-anchor="middle"
+            class="p-label"
+            data-rank={label.rank}
+            data-label={label.id}
+          >
+            {label.text}
+          </text>
+        </g>
       </g>
       <g :if={@selection} id="plan-selection">
         <polygon

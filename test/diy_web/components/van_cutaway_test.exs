@@ -32,6 +32,8 @@ defmodule DIYWeb.VanCutawayTest do
       html = render_component(&Cutaway.cutaway/1, view: view)
       refute html =~ "data-start"
       refute html =~ "cutaway-house"
+      # The van has no pill under the names of its zones.
+      refute html =~ "data-pill"
       assert html =~ ~s(class="cutaway block w-full h-full touch-none select-none")
       [floor, roof] = view.levels
       assert roof.z > floor.z
