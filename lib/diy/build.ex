@@ -393,7 +393,8 @@ defmodule DIY.Build do
 
     items =
       for item <- build.items,
-          not MapSet.member?(gone, item.room) or MapSet.member?(homes, item.home || ""),
+          not MapSet.member?(gone, item.room) or
+            (item.home != nil and MapSet.member?(homes, item.home)),
           do:
             if(MapSet.member?(gone, item.room),
               do: %{item | room: item.home, home: nil, at: nil},
