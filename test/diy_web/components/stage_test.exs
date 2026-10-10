@@ -29,8 +29,13 @@ defmodule DIYWeb.StageTest do
       assert yaws == Enum.sort(yaws)
     end
 
-    assert List.last(Stage.cameras("fridge")).pitch < 15
-    assert List.last(Stage.cameras("home_assistant")).pitch > 70
+    # A view of three quarters: the side shows a little, and the top of a
+    # hub shows more.
+    assert {List.last(Stage.cameras("fridge")).yaw, List.last(Stage.cameras("fridge")).pitch} ==
+             {80.0, 15.0}
+
+    assert {List.last(Stage.cameras("home_assistant")).yaw,
+            List.last(Stage.cameras("home_assistant")).pitch} == {72.0, 42.0}
   end
 
   # The x and y of the points of a frame.

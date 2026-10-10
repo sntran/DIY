@@ -38,6 +38,11 @@ defmodule DIYWeb.Inside do
 
   attr :item_error, :string, default: nil
   attr :item_page, :string, default: nil, doc: "the page of the panel of the open item"
+
+  attr :item_frames, :map,
+    default: nil,
+    doc: "the frames of the open item (`DIYWeb.Stage.frames/1`)"
+
   attr :status, :string, default: nil, doc: "a text for a screen reader after a move"
   attr :away, :list, default: [], doc: "the stations of the house in a van: {item, van}"
   attr :ha, :map, required: true, doc: "the link to Home Assistant (`DIYWeb.HomeAssistant`)"
@@ -150,8 +155,9 @@ defmodule DIYWeb.Inside do
       </div>
 
       <.item_stage
-        :if={@item && match?({:ok, _}, Build.item(@build, @item))}
+        :if={@item && @item_frames && match?({:ok, _}, Build.item(@build, @item))}
         page={@item_page}
+        frames={@item_frames}
         close={if @chosen, do: ~p"/inside?#{[room: @chosen.id]}", else: ~p"/inside"}
         build={@build}
         item={elem(Build.item(@build, @item), 1)}
@@ -537,7 +543,8 @@ defmodule DIYWeb.Inside do
   attr :outage, :string, default: nil
   attr :close, :string, default: "/inside", doc: "the page of the close link"
   attr :ha, :map, required: true
-  attr :page, :string, default: nil, doc: "the page of the panel (`pages/2`)"
+  attr :page, :string, default: nil, doc: "the page of the panel (`pages/1`)"
+  attr :frames, :map, required: true, doc: "the frames of its kind (`DIYWeb.Stage.frames/1`)"
 
   # An item in front of the person (DIYWeb.Stage). Its panel has pages:
   # the link of a Home Assistant hub, its use (the math of its kWh), its
@@ -577,6 +584,7 @@ defmodule DIYWeb.Inside do
     ~H"""
     <Stage.stage
       type={@item.type}
+      frames={@frames}
       item={@item.id}
       title={Catalog.name(@item)}
       note={"In #{@room.name}#{level_note(@room.level)}"}

@@ -585,6 +585,9 @@
 .stage-closing .stage-scrim { animation: stage-fade-out 600ms ease-in both }
 .stage-model { position: relative; z-index: 1; width: 100%; height: min(34dvh, 22rem); flex: none; pointer-events: none }
 .stage-model svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible }
+/* A soft light behind the model, so that a dark item shows on the scrim. */
+.stage-model::before { content: ""; position: absolute; inset: -12% -4%; z-index: -1;
+  background: radial-gradient(closest-side, rgb(255 255 255 / 0.28), rgb(255 255 255 / 0.08) 60%, transparent) }
 .stage-panel { position: relative; width: 100%; border-radius: 14px; padding: 14px; display: grid; gap: 12px;
   box-shadow: 0 18px 40px rgb(0 0 0 / 0.35); transform-origin: 50% 0;
   animation: stage-panel 320ms 700ms cubic-bezier(.2,.8,.2,1) both }
@@ -598,6 +601,13 @@
 .stage-key:focus-visible { outline: 3px solid #f59e0b; outline-offset: 2px }
 .stage-back { white-space: nowrap; flex: none }
 :is(.panel-led, .panel-screen) .checkbox { border-color: currentColor }
+.panel-label .checkbox { border-color: #1f1a12; color: #1f1a12 }
+/* Muted text on a panel has its own color, not a transparency: so it keeps
+   its contrast on each panel, in the light and the dark mode. */
+.stage-panel :is(.opacity-70, .opacity-80) { opacity: 1 }
+.panel-label :is(.opacity-70, .opacity-80, .stage-note) { color: #4a4130 }
+.panel-screen :is(.opacity-70, .opacity-80, .stage-note) { color: #c9dbe9 }
+.panel-led :is(.opacity-70, .opacity-80, .stage-note) { color: #74d98c }
 .stage-year { font-size: 1.15rem; font-weight: 700 }
 .stage-warn { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px;
   border-radius: 8px; padding: 8px 10px }
@@ -636,5 +646,4 @@
 .panel-label .stage-key[aria-selected=true] { background: #1f1a12; color: #fff6cf }
 .panel-label :is(.input, .select) { background: #fffdf2; color: #1f1a12; border-color: #8a7a35 }
 .panel-label .stage-warn { background: #ffe08a }
-.panel-label .stage-note, .panel-screen .stage-note, .panel-led .stage-note { opacity: 0.85 }
 .stage-key-remove { color: #fff !important; background: #b42318 !important; box-shadow: 0 2px 0 #7a1710 !important }

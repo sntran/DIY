@@ -42,7 +42,7 @@ defmodule DIYWeb.HomeLive do
     Weather
   }
 
-  alias DIYWeb.{Cutaway, Device, Format, HomeAssistant, Inside, Outside, Scene, VanCutaway}
+  alias DIYWeb.{Cutaway, Device, Format, HomeAssistant, Inside, Outside, Scene, Stage, VanCutaway}
 
   @impl true
   def mount(_params, _session, socket) do
@@ -97,6 +97,7 @@ defmodule DIYWeb.HomeLive do
      # The panel of a different item starts at its first page.
      |> assign(:item_page, if(item == socket.assigns[:item], do: socket.assigns[:item_page]))
      |> assign(:item, item)
+     |> item_frames()
      |> assign(:add, if(sheets?, do: params["add"]))
      |> assign(:room, params["room"])
      |> assign(:sheet, params["sheet"])
@@ -106,6 +107,22 @@ defmodule DIYWeb.HomeLive do
      |> assign(:lesson_step, parse_int(params["step"]))
      |> assign(checks: nil, answers: %{})
      |> assign(:hint, false)}
+  end
+
+  # The frames of the model of the open item (DIYWeb.Stage). The LiveView
+  # keeps them while the item is open: a render does not send them again.
+  defp item_frames(socket) do
+    type =
+      with id when is_binary(id) <- socket.assigns[:item],
+           %Build{} = build <- socket.assigns[:build],
+           {:ok, item} <- Build.item(build, id),
+           do: item.type,
+           else: (_none -> nil)
+
+    case socket.assigns[:item_frames] do
+      %{type: ^type} -> socket
+      _other -> assign(socket, :item_frames, type && Map.put(Stage.frames(type), :type, type))
+    end
   end
 
   # The sheet of the match of the rooms reads the areas of Home Assistant
@@ -928,6 +945,7 @@ defmodule DIYWeb.HomeLive do
 
   defp refresh(socket) do
     socket
+    |> item_frames()
     |> load_weather()
     |> load_market()
     |> estimate()
@@ -1129,6 +1147,7 @@ defmodule DIYWeb.HomeLive do
               outage={DIYWeb.PowerPage.outage_text(@power, @whatif)}
               ha={@ha}
               item_page={@item_page}
+              item_frames={@item_frames}
               ha_rooms={@ha_rooms}
               ha_sync={@ha_sync}
             />

@@ -1511,9 +1511,14 @@ hand. Then its panel shows (`DIYWeb.Stage`, and the hook `Stage` in
 
 - The flipbook. The server draws the model of the item from 12 cameras.
   The first camera is the camera of the house, so the first frame is the
-  drawing on the plan. The last camera looks at the front of the item.
-  For a Home Assistant hub, it looks down at its top. The cameras between
-  turn step by step. Each frame has the center of the model at the same
+  drawing on the plan. The last camera looks at the front of the item, a
+  little from its side and from over it (a view of three quarters). So
+  the item keeps its depth. For a flat item (a Home Assistant hub), it
+  looks more from over it. The cameras between turn step by step.
+- The cost. The frames of a water heater have 128 KB, and take 37 ms on
+  the BEAM of a computer. So the app keeps the frames of each kind after
+  the first time. The LiveView keeps the frames of the open item: a
+  render, for example of a different page, does not send them again. Each frame has the center of the model at the same
   point, so the model turns in place.
 - The flight. The hook puts the first frame on the item of the plan, at
   the same size. In 0.9 seconds, the model moves to the top of the page
@@ -1522,6 +1527,8 @@ hand. Then its panel shows (`DIYWeb.Stage`, and the hook `Stage` in
   does the same in the other direction in 0.65 seconds, and then closes
   the stage. The view of the plan can change while the item is on the
   stage: the item goes back to its place in the new view.
+- A soft light is behind the model, so a dark item shows on the dark
+  scrim.
 - The panel. It comes out of the model after the flight. It has the style
   of the item. A hub has an LED screen. A TV, a computer, a microwave, a
   power station, a smart meter and a CPAP have a screen. The other items

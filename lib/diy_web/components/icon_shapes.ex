@@ -796,16 +796,32 @@ defmodule DIYWeb.Icon.Shapes do
   end
 
   # A Home Assistant hub (a Home Assistant Green): a dark box with round
-  # corners. Its top has the mark of Home Assistant (a house), and its
-  # front has a light. The light shows the state of the link on the plan
-  # (`i-ha-light`).
+  # corners. Its top has the mark of Home Assistant: the outline of a house
+  # (a ring), with the dot of its network in the middle. The front has a
+  # light. The light shows the state of the link on the plan (`i-ha-light`).
   def model("home_assistant") do
     {w, h} = {0.1016, 0.0254}
-    mark = [{0.032, 0.074}, {0.07, 0.074}, {0.07, 0.046}, {0.051, 0.028}, {0.032, 0.046}]
+    top = h + 0.0005
+
+    # The house: its outside, and its inside (a line of 3.5 mm), as one
+    # polygon that goes around the two (a ring).
+    outside = [{0.033, 0.07}, {0.069, 0.07}, {0.069, 0.044}, {0.051, 0.029}, {0.033, 0.044}]
+
+    inside = [
+      {0.0365, 0.0665},
+      {0.0365, 0.0456},
+      {0.051, 0.0335},
+      {0.0655, 0.0456},
+      {0.0655, 0.0665}
+    ]
+
+    ring = outside ++ [hd(outside)] ++ inside ++ [hd(inside)]
+    dot = [{0.0485, 0.0525}, {0.0535, 0.0525}, {0.0535, 0.0575}, {0.0485, 0.0575}]
 
     rbox({0, 0, 0}, {w, w, h}, 0.012, "dark") ++
       [
-        face(for({x, y} <- mark, do: {x, y, h + 0.0005}), {0, 0, 1}, "i-blue-t"),
+        face(for({x, y} <- ring, do: {x, y, top}), {0, 0, 1}, "i-blue-t"),
+        face(for({x, y} <- dot, do: {x, y, top}), {0, 0, 1}, "i-blue-t"),
         front({0.04, w, 0.009}, {0.022, 0.006}, "i-ha-light", 0.0005)
       ]
   end

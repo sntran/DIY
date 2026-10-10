@@ -28,7 +28,7 @@ defmodule DIYWeb.Stage do
 
   # The frames of the flipbook, and the units of the largest side of the
   # drawing.
-  @frames 12
+  @count 12
   @size 100
 
   # The items with a screen, and the items with their panel on the top.
@@ -36,7 +36,7 @@ defmodule DIYWeb.Stage do
   @tops ~w(home_assistant)
 
   @doc "The number of frames of the flipbook."
-  def frame_count, do: @frames
+  def frame_count, do: @count
 
   @doc """
   The style of the panel of a kind of item:
@@ -50,16 +50,17 @@ defmodule DIYWeb.Stage do
   def style(_type), do: :label
 
   @doc """
-  The cameras of the frames: from the camera of the house to the front of
-  the item, a little from over it. An item with its panel on its top ends
-  with a camera over it.
+  The cameras of the frames: from the camera of the house to a view of
+  three quarters. The last camera looks at the front of the item, a little
+  from its side and from over it, so the item keeps its depth. A flat item
+  (a hub) ends with a camera more over it, so its top shows.
   """
   def cameras(type) do
     house = Camera.house()
-    {yaw, pitch} = if type in @tops, do: {89.0, 72.0}, else: {89.0, 12.0}
+    {yaw, pitch} = if type in @tops, do: {72.0, 42.0}, else: {80.0, 15.0}
 
-    for i <- 0..(@frames - 1) do
-      t = i / (@frames - 1)
+    for i <- 0..(@count - 1) do
+      t = i / (@count - 1)
 
       Camera.new(
         :stage,
@@ -80,9 +81,24 @@ defmodule DIYWeb.Stage do
     front, or of the top), in percent of the view.
 
   The center of the model is at 0, 0 in each frame. The largest side of all
-  the frames is #{@size} units.
+  the frames is #{@size} units. The frames of a kind do not change: the app
+  keeps them after the first time (`:persistent_term`).
   """
   def frames(type) do
+    key = {__MODULE__, type}
+
+    case :persistent_term.get(key, nil) do
+      nil ->
+        frames = draw(type)
+        :persistent_term.put(key, frames)
+        frames
+
+      frames ->
+        frames
+    end
+  end
+
+  defp draw(type) do
     model = Shapes.model(type)
     {{x0, y0, z0}, {x1, y1, z1}} = Shapes.bounds(model)
     center = {(x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2}
@@ -155,6 +171,12 @@ defmodule DIYWeb.Stage do
 
   attr :id, :string, default: "item-stage"
   attr :type, :string, required: true, doc: "the kind of the item"
+
+  attr :frames, :map,
+    required: true,
+    doc:
+      "the frames of the kind (`frames/1`): a LiveView keeps them, so a render does not send them again"
+
   attr :item, :string, required: true, doc: "the id of the item on the plan"
   attr :title, :string, required: true
   attr :close, :string, required: true, doc: "the page of the close link"
@@ -166,25 +188,15 @@ defmodule DIYWeb.Stage do
   modal dialog. The Escape key and the close link put the item back.
   """
   def stage(assigns) do
-    %{view: view, frames: frames, start: start, anchor: {ax, ay}} = frames(assigns.type)
-
-    assigns =
-      assign(assigns,
-        view: numbers(view),
-        frames: Enum.with_index(frames),
-        last: length(frames) - 1,
-        start: numbers(start),
-        anchor: numbers({ax, ay}),
-        style: style(assigns.type)
-      )
+    assigns = assign(assigns, style: style(assigns.type), frame_count: @count)
 
     ~H"""
     <div
       id={@id}
       phx-hook="Stage"
       data-item={@item}
-      data-start={@start}
-      data-anchor={@anchor}
+      data-start={numbers(@frames.start)}
+      data-anchor={numbers(@frames.anchor)}
       class="stage fixed inset-0 z-50 overflow-y-auto"
     >
       <.link
@@ -204,15 +216,15 @@ defmodule DIYWeb.Stage do
           id={"#{@id}-model-#{@item}"}
           phx-update="ignore"
           class="stage-model"
-          data-view={@view}
+          data-view={numbers(@frames.view)}
           aria-hidden="true"
         >
           <svg
-            :for={{polys, i} <- @frames}
-            viewBox={@view}
+            :for={{polys, i} <- Enum.with_index(@frames.frames)}
+            viewBox={numbers(@frames.view)}
             class="stage-frame"
             data-frame={i}
-            hidden={i != @last}
+            hidden={i != @frame_count - 1}
           >
             <polygon :for={{points, class} <- polys} points={points} class={class} />
           </svg>
