@@ -532,10 +532,10 @@ export const planHook = {
     drag.sdy = sdy
   },
 
-  // The elements that move with a drag: an item; or a room with its items,
-  // its furniture and its outline.
+  // The elements that move with a drag. An item moves with the pill of a
+  // hub. A room moves with its items, its furniture and its outline.
   moving(drag) {
-    if (drag.kind === "item") return [drag.el]
+    if (drag.kind === "item") return [...this.svg.querySelectorAll(`[data-item="${drag.el.getAttribute("data-item")}"]`)]
     const id = drag.el.getAttribute("data-room")
     return [
       drag.el.parentNode,

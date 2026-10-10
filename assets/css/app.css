@@ -560,6 +560,10 @@
 }
 .cutaway-house .p-pill-chosen { stroke: var(--p-chosen); stroke-width: 2 }
 .cutaway-house .p-label { fill: var(--p-pill-text); stroke: none }
+/* The pill of a Home Assistant hub opens the hub: a tap on its text goes
+   to its item (DIYWeb.Cutaway.hub_label/4). */
+.p-hub-label { cursor: pointer }
+.p-hub-label .p-label { pointer-events: auto }
 /* The tab of a layer (assets/js/plan.js): in the van, the other layers are
    pale. In the house, they hide, and a tap goes through them. The ids of
    the layers come from DIYWeb.Cutaway.view/1 (the house) and

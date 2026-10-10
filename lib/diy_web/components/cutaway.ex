@@ -50,6 +50,8 @@ defmodule DIYWeb.Cutaway do
   - each label: `data-rank` (the area of its room) and `data-label` (its
     room). In the house, a label is on a pill (a `rect` with `data-pill`,
     its room). The hook gives the pill the size of the label;
+  - the label of a Home Assistant hub (`hub_label/4`): it is a part of its
+    item, with `data-item`, `data-in` and `data-at`;
   - each layer: `data-box` (its box in the SVG), for a zoom to the layer.
 
   The math of the points is in `DIYWeb.Geometry` (one unit is a meter) and
@@ -166,7 +168,14 @@ defmodule DIYWeb.Cutaway do
       slabs: slabs,
       rooms: others,
       objects: walls ++ decor ++ item_views,
-      labels: Enum.map(rooms, &label(&1, floor_z.(&1), camera))
+      labels:
+        Enum.map(rooms, &label(&1, floor_z.(&1), camera)) ++
+          for(
+            room <- rooms,
+            item <- Map.get(items, room.id, []),
+            item.type == "home_assistant",
+            do: hub_label(item, room, floor_z.(room), camera)
+          )
     })
   end
 
@@ -740,6 +749,31 @@ defmodule DIYWeb.Cutaway do
     }
   end
 
+  # The rank of the label of a hub is more than the area of each room. So
+  # the hook shows it over the label of a room.
+  @hub_rank 100_000_000
+
+  @doc """
+  The label of a Home Assistant hub: a pill over the hub, with the light of
+  the link to Home Assistant. A hub is small: the pill makes it easy to see
+  and to tap. The pill is a part of the item for the hook (`item`). A tap
+  on it opens the hub, and a drag moves it with the hub.
+  """
+  def hub_label(item, room, z, camera) do
+    {ew, ed} = Layout.extent(item)
+    {cx, cy} = {room.plan.x + item.at.x + ew / 2, room.plan.y + item.at.y + ed / 2}
+    {sx, sy} = Camera.at(camera, {0, 0}, {cx * @m, cy * @m, z + 0.5})
+
+    %{
+      id: item.id,
+      x: Camera.round1(sx),
+      y: Camera.round1(sy),
+      text: "Home Assistant",
+      rank: @hub_rank,
+      item: %{room: room.id, at: "#{round(cx)} #{round(cy)}"}
+    }
+  end
+
   ## The furniture
 
   @doc """
@@ -1071,7 +1105,14 @@ defmodule DIYWeb.Cutaway do
           <title :if={object.kind == :item}>{object.name}</title>
           <polygon :for={{points, class} <- object.polys} points={points} class={class} />
         </g>
-        <g :for={label <- level.labels} :key={label.id}>
+        <g
+          :for={label <- level.labels}
+          :key={label.id}
+          class={label[:item] && "p-hub-label"}
+          data-item={label[:item] && label.id}
+          data-in={label[:item] && label.item.room}
+          data-at={label[:item] && label.item.at}
+        >
           <rect
             :if={@start}
             class={["p-pill", label.id == @selected && "p-pill-chosen"]}
@@ -1085,7 +1126,7 @@ defmodule DIYWeb.Cutaway do
             data-rank={label.rank}
             data-label={label.id}
           >
-            {label.text}
+            <tspan :if={label[:item]} class="i-ha-light">● </tspan>{label.text}
           </text>
         </g>
       </g>

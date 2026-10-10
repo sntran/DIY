@@ -1595,6 +1595,12 @@ link. A card shows it, in two places:
 - On the plan, the light of the hub shows the state of the link (`data-ha`
   on the page Rooms). It is gray with no link, amber while the link waits,
   and green when it is connected.
+- At its real size, a hub is too small to see and to tap on a phone. So a
+  pill over it has the same light and the name "Home Assistant"
+  (`DIYWeb.Cutaway.hub_label/4`). The pill is a part of the item for the
+  hook Plan. A tap on it opens the hub, and a drag moves it with the hub.
+  Its rank is larger than the area of each room, so it shows over the
+  label of a room.
 - Settings, with a link to the sheet of the hub, or a hint to add one.
 
 The app links to one Home Assistant. A second hub shows the same link.

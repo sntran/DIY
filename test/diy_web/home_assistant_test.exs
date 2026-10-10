@@ -242,7 +242,25 @@ defmodule DIYWeb.HomeAssistantTest do
     status(view, %{"state" => "connected", "url" => "https://ha.example.com", "name" => "Home"})
     assert has_element?(view, "#inside[data-ha=connected]")
     assert has_element?(view, "#item-sheet #ha-status", "Connected to Home")
-    assert render(view) =~ "i-ha-light"
+    assert has_element?(view, "#plan-item-#{id} .i-ha-light")
+
+    # Over the small hub, a pill with the light: a part of the item for the
+    # hook, so a tap on it opens the hub.
+    {:ok, item} = Build.item(build, id)
+    pill = "#plan-svg g.p-hub-label[data-item='#{id}'][data-in='#{item.room}']"
+    assert has_element?(view, pill <> " text[data-rank='100000000'] tspan.i-ha-light")
+    assert has_element?(view, pill <> " text", "Home Assistant")
+
+    [ground | _] = DIYWeb.Cutaway.view(Build.house_view(build)).levels
+    label = Enum.find(ground.labels, &(&1.id == id))
+    {ew, ed} = DIY.Layout.extent(item)
+    {:ok, room} = Build.room(build, item.room)
+
+    assert label.item.at ==
+             "#{round(room.plan.x + item.at.x + ew / 2)} #{round(room.plan.y + item.at.y + ed / 2)}"
+
+    # The label of a room has no item.
+    assert Enum.all?(ground.labels -- [label], &(not Map.has_key?(&1, :item)))
   end
 
   test "Settings: a link to the hub, or a hint to add one", %{conn: conn} do
