@@ -418,6 +418,9 @@ async function build(context, name) {
 
   // A tap on the fridge on the plan: it comes out of the house and turns to
   // the person. The frames of the flipbook change, and its panel shows.
+  // The list of the rooms shows while it has the focus: first the focus
+  // goes away, as with a tap on the page.
+  await page.evaluate(() => document.activeElement?.blur())
   const fridgeId = await itemId(page, "Fridge")
   const spot = await page.locator(`#plan-item-${fridgeId}`).boundingBox()
   await page.mouse.click(spot.x + spot.width / 2, spot.y + spot.height / 2)

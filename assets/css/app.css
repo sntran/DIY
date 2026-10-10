@@ -595,6 +595,8 @@
 /* The panel is as wide as its screen: its fields are not wider. */
 .stage-panel { overflow-x: hidden }
 .stage-panel :is(.input, .select, input, select) { max-width: 100%; min-width: 0 }
+.stage-panel :is(label, form) { max-width: 100%; min-width: 0 }
+.stage-panel .w-72 { width: 100% }
 .stage-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.5em }
 .stage-title { display: flex; align-items: center; gap: 0.4em; font-size: 1.1em; font-weight: 700; line-height: 1.2 }
 .stage-note { font-size: 0.9em }
