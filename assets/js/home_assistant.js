@@ -6,9 +6,10 @@
 //   browser to the sign-in page of Home Assistant, with a random state and
 //   a PKCE challenge. The state and the verifier stay in sessionStorage of
 //   the tab.
-// - Home Assistant sends the browser back to /settings with a code. The
-//   hook gets the tokens for the code, and keeps them in IndexedDB, for all
-//   the tabs. The server of the app never sees them.
+// - Home Assistant sends the browser back with a code, to the page of the
+//   sign-in: Settings, or the sheet of a hub. The hook gets the tokens for
+//   the code, and keeps them in IndexedDB, for all the tabs. The server of
+//   the app never sees them.
 // - The hook opens a WebSocket to Home Assistant with the access token.
 //   When a socket signs in, the hook first gets a new access token if the
 //   old one ends in 60 seconds or less. A socket that signed in stays open
@@ -29,7 +30,8 @@ export const STORE = "session"
 export const KEY = "session"
 export const CHANNEL = "diy.ha"
 export const PENDING = "diy.ha.pending"
-// The page of the app where Home Assistant sends the browser back.
+// The page of the app where Home Assistant sends the browser back, when
+// the LiveView gives no page.
 export const BACK = "/settings"
 // A socket that signs in gets a new access token when the old one ends in
 // 60 seconds or less.
@@ -59,6 +61,11 @@ export const socketUrl = (url) => url.replace(/^http/, "ws") + "/api/websocket"
 // The client of the app for Home Assistant: the address of the app.
 export const clientOf = (location) => location.origin + "/"
 
+// The way back: Settings, or the sheet of an item. It is the same rule as
+// in DIYWeb.HomeAssistant. Else BACK.
+export const wayBack = (back) =>
+  typeof back === "string" && /^\/(settings|inside\?item=[A-Za-z0-9_-]{1,40})$/.test(back) ? back : BACK
+
 const base64url = (bytes) =>
   btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")
 
@@ -72,12 +79,13 @@ export async function pkce(crypto) {
   return {verifier, challenge: base64url(new Uint8Array(digest))}
 }
 
-// The sign-in page of Home Assistant for this app.
-export function authorizeUrl(url, {client, state, challenge}) {
+// The sign-in page of Home Assistant for this app. Home Assistant accepts a
+// way back on the host of the client.
+export function authorizeUrl(url, {client, state, challenge, back = BACK}) {
   const query = new URLSearchParams({
     response_type: "code",
     client_id: client,
-    redirect_uri: client.replace(/\/$/, "") + BACK,
+    redirect_uri: client.replace(/\/$/, "") + back,
     state,
     code_challenge: challenge,
     code_challenge_method: "S256",
@@ -211,8 +219,9 @@ export class Link {
     this.open(epoch)
   }
 
-  // The person asks to connect: the browser goes to the sign-in page.
-  async connect(text) {
+  // The person asks to connect: the browser goes to the sign-in page, and
+  // then comes back to `back`.
+  async connect(text, back) {
     const url = address(text)
     if (!url) return this.show("none", {error: "url", url: null})
     if (blocked(this.location.protocol, url)) return this.show("none", {error: "blocked", url})
@@ -220,7 +229,9 @@ export class Link {
     const state = randomText(this.crypto)
     this.storage.setItem(PENDING, JSON.stringify({url, state, verifier}))
     this.show("signing_in", {url})
-    this.location.assign(authorizeUrl(url, {client: clientOf(this.location), state, challenge}))
+    this.location.assign(authorizeUrl(url, {
+      client: clientOf(this.location), state, challenge, back: wayBack(back),
+    }))
   }
 
   // The sign-in page sent the browser back: get the tokens for the code.
@@ -233,8 +244,15 @@ export class Link {
       pending = null
     }
     this.storage.removeItem(PENDING)
-    // Keep the state of LiveView in the history: Back needs it.
-    this.history.replaceState(this.history.state, "", this.location.pathname)
+    // Remove the answer of the sign-in from the address, and keep the rest
+    // (for example, the item of a sheet). Keep the state of LiveView in the
+    // history: Back needs it.
+    const rest = new URLSearchParams(this.location.search)
+    // Home Assistant adds storeToken when the person asks it to keep the
+    // sign-in.
+    for (const key of ["code", "state", "error", "storeToken"]) rest.delete(key)
+    const query = rest.toString()
+    this.history.replaceState(this.history.state, "", this.location.pathname + (query ? "?" + query : ""))
     if (!pending || pending.state !== params.get("state")) return this.load(epoch, "state")
     const code = params.get("code")
     if (!code) return this.load(epoch, "denied")
@@ -433,7 +451,7 @@ export function homeAssistantHook(deps) {
   return {
     mounted() {
       this.link = new Link({...deps(), push: (event, payload) => this.pushEvent(event, payload)})
-      this.handleEvent("ha:connect", ({url}) => this.link.connect(url))
+      this.handleEvent("ha:connect", ({url, back}) => this.link.connect(url, back))
       this.handleEvent("ha:disconnect", () => this.link.disconnect())
       this.link.start()
     },

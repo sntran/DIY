@@ -795,6 +795,21 @@ defmodule DIYWeb.Icon.Shapes do
       box({w - 0.06, 0.045, h}, {0.035, 0.06, 0.012}, "red")
   end
 
+  # A Home Assistant hub (a Home Assistant Green): a dark box with round
+  # corners. Its top has the mark of Home Assistant (a house), and its
+  # front has a light. The light shows the state of the link on the plan
+  # (`i-ha-light`).
+  def model("home_assistant") do
+    {w, h} = {0.1016, 0.0254}
+    mark = [{0.032, 0.074}, {0.07, 0.074}, {0.07, 0.046}, {0.051, 0.028}, {0.032, 0.046}]
+
+    rbox({0, 0, 0}, {w, w, h}, 0.012, "dark") ++
+      [
+        face(for({x, y} <- mark, do: {x, y, h + 0.0005}), {0, 0, 1}, "i-blue-t"),
+        front({0.04, w, 0.009}, {0.022, 0.006}, "i-ha-light", 0.0005)
+      ]
+  end
+
   # A pool pump: the motor lies along x, with the cap of its fan at its
   # back end. The pump and its strainer are at the front end. The strainer
   # has a clear lid, and the pipe goes up from the pump.

@@ -15,6 +15,13 @@ defmodule DIYWeb.Settings do
   attr :uploads, :map, required: true
   attr :ha, :map, required: true, doc: "the link to Home Assistant (`DIYWeb.HomeAssistant`)"
 
+  # The first Home Assistant hub of the house, and its room.
+  defp hub(build) do
+    with %{} = item <- Enum.find(build.items, &(&1.type == "home_assistant")),
+         {:ok, room} <- Build.room(build, item.room),
+         do: %{item: item, room: room}
+  end
+
   def settings(assigns) do
     {:ok, place} = Zip.lookup(assigns.build.zip)
     assigns = assign(assigns, :place, place)
@@ -165,7 +172,7 @@ defmodule DIYWeb.Settings do
         </p>
       </div>
 
-      <.home_assistant ha={@ha} />
+      <HomeAssistant.card ha={@ha} back={~p"/settings"} hub={hub(@build)} />
 
       <div class="space-y-2">
         <h2 class="text-lg font-bold">The file of your build</h2>
@@ -201,65 +208,6 @@ defmodule DIYWeb.Settings do
         </button>
       </div>
     </section>
-    """
-  end
-
-  attr :ha, :map, required: true
-
-  # The link to Home Assistant: the address and the sign-in, or the state
-  # of the link and a disconnect.
-  defp home_assistant(assigns) do
-    assigns =
-      assign(assigns,
-        status: HomeAssistant.status(assigns.ha),
-        linked: assigns.ha.state in ~w(signing_in connecting connected offline)
-      )
-
-    ~H"""
-    <div id="home-assistant-card" class="space-y-2">
-      <h2 class="text-lg font-bold">Home Assistant</h2>
-      <p class="text-sm">
-        Connect your Home Assistant to bring its rooms and devices into the app.
-        The sign-in stays on this device: the server of the app does not see it.
-      </p>
-      <p id="ha-status" role="status" class="text-sm font-medium">{@status}</p>
-      <p :if={@ha.error} id="ha-error" role="alert" class="text-sm text-error">
-        {HomeAssistant.message(@ha.error)}
-      </p>
-      <form
-        :if={not @linked}
-        id="ha-form"
-        phx-submit="ha_connect"
-        class="flex flex-wrap gap-2 items-end"
-      >
-        <label>
-          <span class="text-sm">The address of your Home Assistant</span>
-          <input
-            name="url"
-            value={@ha.url}
-            type="url"
-            inputmode="url"
-            autocomplete="url"
-            placeholder="https://home.example.com"
-            class="input input-sm w-72 max-w-full block"
-          />
-        </label>
-        <button class="btn btn-sm">Connect</button>
-      </form>
-      <p :if={not @linked} class="text-xs opacity-70">
-        The browser goes to the sign-in page of your Home Assistant, and then comes back here.
-        Use the HTTPS address (for example, from Home Assistant Cloud): this page blocks an http address.
-      </p>
-      <button
-        :if={@linked}
-        type="button"
-        id="ha-disconnect"
-        phx-click="ha_disconnect"
-        class="btn btn-sm"
-      >
-        Disconnect
-      </button>
-    </div>
     """
   end
 end

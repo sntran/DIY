@@ -45,7 +45,9 @@ export async function fakeHomeAssistant({ name = "Fake house", version = "2026.1
       if (client.origin !== back.origin) return json(response, 400, { error: "invalid_request" })
       const code = random()
       codes.set(code, { client: query.get("client_id"), challenge: query.get("code_challenge") })
-      back.search = new URLSearchParams({ code, state: query.get("state") }).toString()
+      // Home Assistant adds its answer to the query of the way back.
+      back.searchParams.append("code", code)
+      back.searchParams.append("state", query.get("state"))
       response.writeHead(302, { Location: back.toString() })
       return response.end()
     }

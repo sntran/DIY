@@ -14,10 +14,11 @@ defmodule DIYWeb.HomeAssistant do
     Assistant, when it is connected;
   - `error`: why the last step did not work (`message/1`), or `nil`.
 
-  The events of the page: `ha_connect` (with the address) and
-  `ha_disconnect`.
+  The events of the page: `ha_connect` (with the address and the way back)
+  and `ha_disconnect`. The card of the link (`card/1`) is in Settings and
+  in the sheet of a Home Assistant hub (an item of a room).
   """
-  import Phoenix.Component, only: [assign: 3]
+  use DIYWeb, :html
 
   alias Phoenix.LiveView
 
@@ -28,6 +29,11 @@ defmodule DIYWeb.HomeAssistant do
   # takes from the hook.
   @max_url 2048
   @max_text 200
+
+  # The pages where Home Assistant sends the browser back after the
+  # sign-in: Settings, or the sheet of a hub. The hook has the same rule
+  # (`wayBack` in `assets/js/home_assistant.js`).
+  @back ~r"\A/(settings|inside\?item=[A-Za-z0-9_-]{1,40})\z"
 
   @doc false
   def on_mount(:default, _params, _session, socket) do
@@ -52,10 +58,15 @@ defmodule DIYWeb.HomeAssistant do
 
   def handle_event("ha:status", _params, socket), do: {:halt, socket}
 
-  def handle_event("ha_connect", %{"url" => text}, socket) do
+  def handle_event("ha_connect", %{"url" => text} = params, socket) do
+    back =
+      if is_binary(params["back"]) and params["back"] =~ @back,
+        do: params["back"],
+        else: "/settings"
+
     case address(text) do
       {:ok, url} ->
-        {:halt, LiveView.push_event(socket, "ha:connect", %{url: url})}
+        {:halt, LiveView.push_event(socket, "ha:connect", %{url: url, back: back})}
 
       :error ->
         {:halt, assign(socket, :ha, %{socket.assigns.ha | error: "url"})}
@@ -129,4 +140,78 @@ defmodule DIYWeb.HomeAssistant do
     do: "This browser cannot keep the sign-in. Make sure that the storage of the site is on."
 
   def message("signed_out"), do: "Home Assistant ended the sign-in. Connect again."
+
+  attr :ha, :map, required: true, doc: "the link (the assign `:ha`)"
+  attr :back, :string, required: true, doc: "the page where the sign-in comes back"
+  attr :hub, :map, default: nil, doc: "the hub of the house and its room, for Settings"
+  attr :title, :boolean, default: true, doc: "false in the sheet of a hub: it has its title"
+
+  @doc """
+  The card of the link: the address and the sign-in, or the state of the
+  link and a disconnect.
+  """
+  def card(assigns) do
+    assigns =
+      assign(assigns,
+        status: status(assigns.ha),
+        linked: assigns.ha.state in ~w(signing_in connecting connected offline)
+      )
+
+    ~H"""
+    <div id="home-assistant-card" class="space-y-2">
+      <h2 :if={@title} class="text-lg font-bold">Home Assistant</h2>
+      <p class="text-sm">
+        Connect your Home Assistant to bring its rooms and devices into the app.
+        The sign-in stays on this device: the server of the app does not see it.
+      </p>
+      <p id="ha-status" role="status" class="text-sm font-medium">{@status}</p>
+      <p :if={@ha.error} id="ha-error" role="alert" class="text-sm text-error">
+        {message(@ha.error)}
+      </p>
+      <form
+        :if={not @linked}
+        id="ha-form"
+        phx-submit="ha_connect"
+        class="flex flex-wrap gap-2 items-end"
+      >
+        <input type="hidden" name="back" value={@back} />
+        <label>
+          <span class="text-sm">The address of your Home Assistant</span>
+          <input
+            name="url"
+            value={@ha.url}
+            type="url"
+            inputmode="url"
+            autocomplete="url"
+            placeholder="https://home.example.com"
+            class="input input-sm w-72 max-w-full block"
+          />
+        </label>
+        <button class="btn btn-sm">Connect</button>
+      </form>
+      <p :if={not @linked} class="text-xs opacity-70">
+        The browser goes to the sign-in page of your Home Assistant, and then comes back here.
+        Use the HTTPS address (for example, from Home Assistant Cloud): this page blocks an http address.
+      </p>
+      <button
+        :if={@linked}
+        type="button"
+        id="ha-disconnect"
+        phx-click="ha_disconnect"
+        class="btn btn-sm"
+      >
+        Disconnect
+      </button>
+      <p :if={@hub} id="ha-hub" class="text-sm">
+        Your hub is in {@hub.room.name}: <.link
+          patch={~p"/inside?#{[item: @hub.item.id]}"}
+          class="link"
+        >open it</.link>.
+      </p>
+      <p :if={@title and is_nil(@hub)} id="ha-hub" class="text-sm">
+        You can also add a Home Assistant hub to a room on the page Rooms: its sheet has this card.
+      </p>
+    </div>
+    """
+  end
 end

@@ -323,6 +323,10 @@ function setup({storage = new Map(), chosen = true, width = 400, height = 800, w
   slope.bbox = {x: 50, y: 0, width: 50, height: 20}
   const fridgeG = add({"data-item": "i1", "data-in": "r1", "data-at": "18 15"}, ground)
   const fridge = add({}, fridgeG)
+  // The pill of a Home Assistant hub is a part of its item: here, a pill
+  // of the fridge, for the test.
+  const fridgePill = add({"data-item": "i1", "data-in": "r1", "data-at": "18 15"}, ground)
+  const pillText = add({}, fridgePill)
   // A table of the kitchen (furniture).
   const tableG = add({"data-with": "r1"}, ground)
   // Floor 2, over floor 1: a bedroom with its wall, and a lamp in it.
@@ -417,7 +421,7 @@ function setup({storage = new Map(), chosen = true, width = 400, height = 800, w
   const pointer = (type, id, x, y, target = empty, pointerType = "mouse") =>
     svg.fire(type, {pointerId: id, clientX: x, clientY: y, target, pointerType, preventDefault() {}})
   return {
-    hook, svg, root, kitchen, living, roof, fridge, fridgeG, kitchenG, empty, selection, outlineEl, handles, labels, pills,
+    hook, svg, root, kitchen, living, roof, fridge, fridgeG, fridgePill, pillText, kitchenG, empty, selection, outlineEl, handles, labels, pills,
     pushed, pointer, storage, setUnder: (list) => (under = list), win, timers, hint, wallFace, slab,
     zoomIn, zoomOut, fitButton, focus, focusF2, listItem, listRoom, other, tableG, bedroom, upper,
   }
@@ -766,12 +770,14 @@ test("a view as wide as the house but not as high: the finger moves the view", (
 })
 
 test("an item goes to the room under the center of its space, not under the pointer", () => {
-  const {hook, pointer, pushed, fridge, fridgeG, kitchen, living, setUnder} = setup()
+  const {hook, pointer, pushed, fridge, fridgeG, fridgePill, kitchen, living, setUnder} = setup()
   // 40 inches along x: the center stays in the kitchen, but the pointer
   // (on the top of the fridge) is on the living room.
   pointer("pointerdown", 1, 100, 100, fridge)
   pointer("pointermove", 1, 100 + 2 * HOUSE[0] * 40, 100 + 2 * HOUSE[1] * 40)
   assert.equal(fridgeG.getAttribute("transform"), along(40))
+  // The pill of the item moves with it.
+  assert.equal(fridgePill.getAttribute("transform"), along(40))
   assert.ok(fridgeG.classes.has("p-dragging"))
   setUnder([fridge, living])
   pointer("pointerup", 1, 100, 100)
@@ -780,6 +786,7 @@ test("an item goes to the room under the center of its space, not under the poin
   // The reply of the server: the item goes back (the server draws it).
   hook.replies.pop()()
   assert.equal(fridgeG.getAttribute("transform"), null)
+  assert.equal(fridgePill.getAttribute("transform"), null)
   assert.ok(!fridgeG.classes.has("p-dragging"))
 
   // 100 inches: the center is in the living room, under the kitchen.
@@ -1165,4 +1172,11 @@ test("a pale state for a layer that is not there stops when the server draws the
   const house = setup({start: "ground"})
   house.hook.dim("attic")
   assert.deepEqual(house.hook.fit(), {x: 0, y: 0, w: 200, h: 400})
+})
+
+test("a tap on the pill of a hub opens the hub", () => {
+  const {pointer, pushed, pillText} = setup()
+  pointer("pointerdown", 1, 50, 50, pillText)
+  pointer("pointerup", 1, 50, 50)
+  assert.deepEqual(pushed, [["open_item", {id: "i1"}]])
 })

@@ -611,6 +611,26 @@ defmodule DIY.Catalog do
       ]
     },
     %{
+      type: "home_assistant",
+      name: "Home Assistant hub",
+      places: [:indoor],
+      features: [:estimate],
+      params: [
+        # Home Assistant Green, datasheet v1.1 (2024): 1.7 W at idle and 3 W
+        # under load, at 12 V. The hub is on all the time, and mostly idle:
+        # the app takes 2 W, between the two.
+        int(
+          "watts",
+          "Power all the time",
+          "W",
+          2,
+          1,
+          100,
+          "A Home Assistant Green uses 1.7 W at idle and 3 W under load (its datasheet). The app takes 2 W, between the two. A Raspberry Pi or a small PC uses more."
+        )
+      ]
+    },
+    %{
       type: "pool_pump",
       name: "Pool pump",
       places: [:outdoor],
@@ -1242,6 +1262,8 @@ defmodule DIY.Catalog do
     "ceiling_fan" => {52, 52, 12},
     # No source: a router and its power supply.
     "always_on" => {18, 6, 3},
+    # Home Assistant Green: 112 by 112 by 32 mm (its datasheet).
+    "home_assistant" => {4, 4, 1},
     # Hayward SP2610X15: 25 1/8 by 7 7/8 by 10 7/8 in (Pool360).
     "pool_pump" => {25, 8, 11},
     # No source: a tower heater.

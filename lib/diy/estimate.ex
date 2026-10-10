@@ -615,7 +615,8 @@ defmodule DIY.Estimate do
   def kwh(%{type: "ceiling_fan", params: p} = item, ctx),
     do: other(in_season(item, ctx) * p["count"] * p["watts"] * p["hours"] * ctx.days / 1_000)
 
-  def kwh(%{type: "always_on", params: p}, ctx), do: other(p["watts"] * 24 * ctx.days / 1_000)
+  def kwh(%{type: type, params: p}, ctx) when type in ["always_on", "home_assistant"],
+    do: other(p["watts"] * 24 * ctx.days / 1_000)
 
   # A meter measures the power of the house. Its own power is too small to
   # show. A camper van has its own build, with its own power (DIY.Van). The
@@ -938,8 +939,9 @@ defmodule DIY.Estimate do
       "#{fmt(p["miles"])} miles in one day × #{m.days} days ÷ #{num(p["mi_kwh"])} miles for each kWh ÷ #{num(charge_efficiency(p["charger"]))} (the charge loses some power)."
     ]
 
-  defp steps(%{type: "always_on", params: p}, m, _data, _estimate),
-    do: ["#{num(p["watts"])} W × 24 hours × #{m.days} days ÷ 1,000."]
+  defp steps(%{type: type, params: p}, m, _data, _estimate)
+       when type in ["always_on", "home_assistant"],
+       do: ["#{num(p["watts"])} W × 24 hours × #{m.days} days ÷ 1,000."]
 
   defp steps(%{params: p} = item, m, _data, _estimate) do
     cond do
