@@ -960,6 +960,56 @@ defmodule DIYWeb.Cutaway do
 
   ## The component
 
+  attr :camera, :any, required: true, doc: "the camera (`DIYWeb.Camera`)"
+
+  @doc """
+  The definitions of an SVG of the house: this plan, and the house from the
+  outside (`DIYWeb.Outside`). They are the light of the walls, the light
+  of a lamp, the shadow of an item, and the patterns of the floors.
+  """
+  def defs(assigns) do
+    {{ax, ay}, {bx, by}, _up} = Camera.axes(assigns.camera)
+
+    assigns =
+      assign(assigns,
+        textures: textures(),
+        pattern: "matrix(#{Enum.map_join([ax, ay, bx, by], " ", &Float.round(&1 / 1, 6))} 0 0)"
+      )
+
+    ~H"""
+    <defs>
+      <linearGradient id="p-wall-light" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" class="p-wall-top" />
+        <stop offset="1" class="p-wall-low" />
+      </linearGradient>
+      <linearGradient id="p-wall-side" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" class="p-side-top" />
+        <stop offset="1" class="p-side-low" />
+      </linearGradient>
+      <radialGradient id="p-glow-fill">
+        <stop offset="0" class="p-glow-0" />
+        <stop offset="1" class="p-glow-1" />
+      </radialGradient>
+      <radialGradient id="p-shadow-fill">
+        <stop offset="0" class="p-shadow-0" />
+        <stop offset="0.6" class="p-shadow-1" />
+        <stop offset="1" class="p-shadow-2" />
+      </radialGradient>
+      <pattern
+        :for={{name, w, h, lines} <- @textures}
+        id={"tex-" <> name}
+        patternUnits="userSpaceOnUse"
+        width={w}
+        height={h}
+        patternTransform={@pattern}
+      >
+        <rect :if={lines == :stripe} width={w / 2} height={h} class="p-tex-stripe" />
+        <path :if={lines != :stripe} d={lines} class="p-tex-line" />
+      </pattern>
+    </defs>
+    """
+  end
+
   attr :view, :map, required: true, doc: "the layers and the camera (`view/1`)"
   attr :selected, :string, default: nil, doc: "the id of the room that the user chose"
   attr :open, :string, default: nil, doc: "the id of the item with an open sheet"
@@ -976,8 +1026,6 @@ defmodule DIYWeb.Cutaway do
 
     assigns =
       assign(assigns,
-        textures: textures(),
-        pattern: "matrix(#{Enum.map_join([ax, ay, bx, by], " ", &Float.round(&1 / 1, 6))} 0 0)",
         axes: Enum.map_join([ax, ay, bx, by, cx, cy], " ", &Float.round(&1 / 1, 6)),
         arrows: "#{rx} #{ry} #{dx} #{dy}",
         fit: box_text(assigns.view.box),
@@ -998,36 +1046,7 @@ defmodule DIYWeb.Cutaway do
       aria-hidden="true"
       phx-mounted={JS.ignore_attributes(["viewBox", "style", "data-dim"])}
     >
-      <defs>
-        <linearGradient id="p-wall-light" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" class="p-wall-top" />
-          <stop offset="1" class="p-wall-low" />
-        </linearGradient>
-        <linearGradient id="p-wall-side" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" class="p-side-top" />
-          <stop offset="1" class="p-side-low" />
-        </linearGradient>
-        <radialGradient id="p-glow-fill">
-          <stop offset="0" class="p-glow-0" />
-          <stop offset="1" class="p-glow-1" />
-        </radialGradient>
-        <radialGradient id="p-shadow-fill">
-          <stop offset="0" class="p-shadow-0" />
-          <stop offset="0.6" class="p-shadow-1" />
-          <stop offset="1" class="p-shadow-2" />
-        </radialGradient>
-        <pattern
-          :for={{name, w, h, lines} <- @textures}
-          id={"tex-" <> name}
-          patternUnits="userSpaceOnUse"
-          width={w}
-          height={h}
-          patternTransform={@pattern}
-        >
-          <rect :if={lines == :stripe} width={w / 2} height={h} class="p-tex-stripe" />
-          <path :if={lines != :stripe} d={lines} class="p-tex-line" />
-        </pattern>
-      </defs>
+      <.defs camera={@view.camera} />
       <g :for={level <- @view.levels} id={"plan-#{level.id}"} data-box={box_text(level.box)}>
         <polygon :for={{points, class} <- level.ground} points={points} class={class} />
         <.surface :for={room <- level.low} :key={room.id} room={room} selected={@selected} />

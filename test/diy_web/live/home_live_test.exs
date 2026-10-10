@@ -147,6 +147,22 @@ defmodule DIYWeb.HomeLiveTest do
     assert build(view).house.lot == nil
   end
 
+  test "the House page: the house from the outside, and a tap on it goes in", %{conn: conn} do
+    view = open(conn, ~p"/", house())
+    settle(view)
+
+    # The picture has the look of the plan, with the pole of the grid. Only
+    # the page House makes it.
+    assert has_element?(view, "#house-picture svg.cutaway-outside")
+    assert has_element?(view, "#house-picture .p-chip-text", "Grid")
+    assert :sys.get_state(view.pid).socket.assigns.outside
+
+    view |> element("#house-picture") |> render_click()
+    assert_patch view, ~p"/inside"
+    assert has_element?(view, "#plan-svg")
+    assert :sys.get_state(view.pid).socket.assigns.outside == nil
+  end
+
   test "the door goes in: the rooms, the hint, and the items", %{conn: conn} do
     view = open(conn, ~p"/", house())
     settle(view)

@@ -42,7 +42,7 @@ defmodule DIYWeb.HomeLive do
     Weather
   }
 
-  alias DIYWeb.{Cutaway, Device, Format, Inside, Scene, VanCutaway}
+  alias DIYWeb.{Cutaway, Device, Format, Inside, Outside, Scene, VanCutaway}
 
   @impl true
   def mount(_params, _session, socket) do
@@ -72,6 +72,7 @@ defmodule DIYWeb.HomeLive do
      |> assign(:van_view, nil)
      |> assign(:shown_van, nil)
      |> assign(:cutaway, nil)
+     |> assign(:outside, nil)
      |> assign(:room, nil)
      |> assign(:sheet, nil)
      |> assign(:status, nil)
@@ -891,9 +892,9 @@ defmodule DIYWeb.HomeLive do
     |> pictures()
   end
 
-  # The parts of the pictures (DIYWeb.Scene): an assign keeps a value that
-  # does not change, so the page sends a picture again only when its parts
-  # change.
+  # The parts of the pictures (DIYWeb.Scene, DIYWeb.Outside and the plans).
+  # An assign keeps a value that does not change, so the page sends a
+  # picture again only when its parts change.
   defp pictures(%{assigns: %{build: %Build{house: house} = build}} = socket)
        when is_map(house) do
     vans = Van.vans(build)
@@ -910,6 +911,7 @@ defmodule DIYWeb.HomeLive do
       :cutaway,
       if(socket.assigns.live_action == :inside, do: Cutaway.view(Build.house_view(build)))
     )
+    |> assign(:outside, if(socket.assigns.live_action == :front, do: Outside.view(build)))
   end
 
   defp pictures(socket), do: socket
@@ -1150,6 +1152,7 @@ defmodule DIYWeb.HomeLive do
               weather={@weather}
               market={@market}
               scene={@scene}
+              outside={@outside}
               bill_month={@bill_month}
             />
         <% end %>

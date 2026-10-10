@@ -1109,9 +1109,10 @@ The app takes them; the comparison is open.
 ## The pictures
 
 The app draws its pictures in SVG on the server (`DIYWeb.Scene`, with the
-math in `DIYWeb.Geometry` and `DIYWeb.Camera`). The front page and the
-page Power show the house on its lot. The page Van shows the van. The
-first page shows a house and a plan.
+math in `DIYWeb.Geometry` and `DIYWeb.Camera`). The page Power shows
+the house on its lot. The page Van shows the van. The first page shows a
+house and a plan. The front page shows the house from the outside, in
+the look of the plan (see "The house from the outside").
 
 ### The cameras
 
@@ -1498,3 +1499,44 @@ its turn. A length is in inches.
   checks `specs/Plan.tla`, with the turn and the size of the item. Three
   faults show that the rules matter. The browser test drags an item and
   a wall, and moves an item with a key.
+
+## The house from the outside
+
+The page House shows the house from the outside (`DIYWeb.Outside`). It
+is the house of the plan of the page Rooms: the same rooms, the same
+camera and the same look. A tap on the picture opens the plan.
+
+- The picture shows the house of today: a planned item does not show.
+  Each floor stands on the floor under it. A floor is a slab of 30 cm,
+  then walls of 2.4 m on the sides with no room of the same floor.
+- A garage has its walls, a wide door and a flat roof. It has its own
+  wall on a side with a room of the house.
+- The front and the right end of a floor have windows: one window for
+  each 8 feet of wall. The largest room of floor 1 with a wall at the
+  front has the door. The person stands in front of it.
+- The roof is on the top floor with rooms. It has its slopes, its gable
+  and its panels. A house with no room on the roof gets a roof with no
+  item. The attic is in the roof, and the items in the rooms do not show.
+- The yards and the driveway show their furniture (`DIYWeb.Decor`) and
+  their items, as in the plan: the AC, the panels, a car.
+- The grid. A pole is at the back of the lot, and its wire goes to the
+  meter on the right end of the house. The power flows in the wire 5
+  times (4.5 seconds) when the page opens. It does not flow when the
+  person asks for less motion.
+- The labels tell the kW of the panels on the roof and in the yards, and
+  the kWh of the stations.
+- At night (the dark mode), the windows have the warm light of the
+  rooms.
+- The order of the paint is the order of the plan
+  (`DIYWeb.Camera.order/2`). For the order, a wall is flat, on its line.
+  The slabs on the ground paint first. An item in a yard that is taller
+  than floor 1 paints by its depth only. No order is right for it and the
+  floors over it.
+- The LiveView makes the picture only for the page House, as an assign
+  (`DIYWeb.Outside.view/1`). The page Power keeps the picture of
+  `DIYWeb.Scene`.
+- The tests. A property test draws random houses, with random items,
+  planned items and rooms that go away. Each point is in the box of the
+  SVG, and only the items of today in the yards and on the roof show. No
+  box paints after a box in front of it. The browser test taps the
+  picture and goes in.
