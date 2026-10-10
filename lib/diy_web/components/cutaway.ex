@@ -770,7 +770,7 @@ defmodule DIYWeb.Cutaway do
       y: Camera.round1(sy),
       text: "Home Assistant",
       rank: @hub_rank,
-      item: %{room: room.id, at: "#{round(cx)} #{round(cy)}"}
+      item: %{room: room.id, at: "#{round(cx)} #{round(cy)}", planned: item.planned}
     }
   end
 
@@ -1108,7 +1108,7 @@ defmodule DIYWeb.Cutaway do
         <g
           :for={label <- level.labels}
           :key={label.id}
-          class={label[:item] && "p-hub-label"}
+          class={label[:item] && ["p-hub-label", label.item.planned && "p-planned"]}
           data-item={label[:item] && label.id}
           data-in={label[:item] && label.item.room}
           data-at={label[:item] && label.item.at}

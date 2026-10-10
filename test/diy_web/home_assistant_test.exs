@@ -232,11 +232,27 @@ defmodule DIYWeb.HomeAssistantTest do
     assert_push_event(view, "ha:connect", %{url: "https://ha.example.com", back: back})
     assert back == "/inside?item=#{id}"
 
-    # A way back that is not a page of the sign-in gives Settings.
-    for bad <- ["//evil.example", "https://evil.example", "/plans", "/inside?item=a b", 5] do
+    # A way back that is not a page of the sign-in gives Settings, and no
+    # way back too. The id of an item has 40 letters at most.
+    for bad <- [
+          "//evil.example",
+          "/\\evil.example",
+          "https://evil.example",
+          "/plans",
+          "/inside?item=a b",
+          "/inside?item=x&y=1",
+          "/inside?item=" <> String.duplicate("a", 41),
+          5
+        ] do
       render_hook(view, "ha_connect", %{"url" => "https://ha.example.com", "back" => bad})
       assert_push_event(view, "ha:connect", %{back: "/settings"})
     end
+
+    render_hook(view, "ha_connect", %{"url" => "https://ha.example.com"})
+    assert_push_event(view, "ha:connect", %{back: "/settings"})
+    long = "/inside?item=" <> String.duplicate("a", 40)
+    render_hook(view, "ha_connect", %{"url" => "https://ha.example.com", "back" => long})
+    assert_push_event(view, "ha:connect", %{back: ^long})
 
     # The light of the hub on the plan follows the state of the link.
     status(view, %{"state" => "connected", "url" => "https://ha.example.com", "name" => "Home"})
@@ -261,6 +277,76 @@ defmodule DIYWeb.HomeAssistantTest do
 
     # The label of a room has no item.
     assert Enum.all?(ground.labels -- [label], &(not Map.has_key?(&1, :item)))
+  end
+
+  property "the way back is Settings or the sheet of an item, on the host of the app", %{
+    conn: conn
+  } do
+    {build, id} = hub()
+    view = page(conn, ~p"/inside?#{[item: id]}", build)
+
+    check all(
+            back <-
+              one_of([
+                string(:printable, max_length: 60),
+                map(
+                  string([?a..?z, ?0..?9, ?-, ?_, ?/, ?\\, ?&, ?=, ?.], max_length: 45),
+                  &("/inside?item=" <> &1)
+                ),
+                member_of(["/settings", "//x", "/\\x", "/settings/", "javascript:alert(1)"])
+              ])
+          ) do
+      render_hook(view, "ha_connect", %{"url" => "https://ha.example.com", "back" => back})
+      assert_push_event(view, "ha:connect", %{back: pushed})
+      assert pushed == "/settings" or pushed =~ ~r"\A/inside\?item=[A-Za-z0-9_-]{1,40}\z"
+      assert pushed == back or pushed == "/settings"
+      assert URI.parse("https://app.example" <> pushed).host == "app.example"
+    end
+  end
+
+  test "Rooms shows an error of the link when no sheet of a hub is open", %{conn: conn} do
+    {build, id} = hub()
+    view = page(conn, ~p"/inside", build)
+    refute has_element?(view, "#ha-alert")
+    status(view, %{"state" => "none", "error" => "denied"})
+    assert has_element?(view, "#ha-alert", "Home Assistant: Home Assistant did not give access.")
+    assert has_element?(view, "#ha-alert a[href='/settings']")
+
+    # The sheet of the hub has the card, with the error: no alert over it.
+    view |> render_patch(~p"/inside?#{[item: id]}")
+    refute has_element?(view, "#ha-alert")
+    assert has_element?(view, "#item-sheet #ha-error", "did not give access")
+
+    # The way back to a hub that went away: the alert shows.
+    view |> render_patch(~p"/inside?#{[item: "i999"]}")
+    assert has_element?(view, "#ha-alert")
+    status(view, %{"state" => "connected", "url" => "https://ha.example.com", "name" => "Home"})
+    refute has_element?(view, "#ha-alert")
+
+    # Only the errors of a sign-in that came back, or of a session that
+    # ended. Not an error of the store at each page, or of the card.
+    for error <- ~w(state denied token unreachable signed_out) do
+      status(view, %{"state" => "none", "error" => error})
+      assert has_element?(view, "#ha-alert"), error
+    end
+
+    for error <- ~w(storage url blocked) do
+      status(view, %{"state" => "none", "error" => error})
+      refute has_element?(view, "#ha-alert"), error
+    end
+  end
+
+  test "the pill of a planned hub is pale, as the hub", %{conn: conn} do
+    {build, id} = hub()
+    {:ok, build} = Build.flag_item(build, id, :planned, true)
+    view = page(conn, ~p"/inside", build)
+    assert has_element?(view, "#plan-item-#{id}.p-planned")
+    assert has_element?(view, "g.p-hub-label.p-planned[data-item='#{id}']")
+
+    {build, id} = hub()
+    view = page(conn, ~p"/inside", build)
+    assert has_element?(view, "g.p-hub-label[data-item='#{id}']")
+    refute has_element?(view, "g.p-hub-label.p-planned")
   end
 
   test "Settings: a link to the hub, or a hint to add one", %{conn: conn} do

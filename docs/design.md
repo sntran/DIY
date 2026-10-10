@@ -1586,22 +1586,28 @@ its WebSocket API takes each origin.
 
 `assets/js/home_assistant.js` (the hook `HomeAssistant`) and
 `DIYWeb.HomeAssistant` (the LiveView part, the assign `:ha`) do the
-link. A card shows it, in two places:
+link. A card (`DIYWeb.HomeAssistant.card/1`) shows it, in two places:
+the sheet of a Home Assistant hub, and Settings. Settings has a link to
+the sheet of the hub, or a hint to add one.
 
-- The sheet of a Home Assistant hub. The hub is an item of a room, as the
-  other items are. It is a Home Assistant Green of 112 by 112 by 32 mm,
-  so 4 by 4 by 1 inches. Its datasheet gives 1.7 W at idle and 3 W under
-  load. The hub uses 2 W all the time, and the estimate counts it.
-- On the plan, the light of the hub shows the state of the link (`data-ha`
-  on the page Rooms). It is gray with no link, amber while the link waits,
-  and green when it is connected.
+The hub is an item of a room, as the other items are:
+
+- It is a Home Assistant Green of 112 by 112 by 32 mm, so 4 by 4 by 1
+  inches. Its datasheet gives 1.7 W at idle and 3 W under load. The hub
+  is mostly idle: the app takes 2 W all the time, and the estimate counts
+  it.
 - At its real size, a hub is too small to see and to tap on a phone. So a
-  pill over it has the same light and the name "Home Assistant"
-  (`DIYWeb.Cutaway.hub_label/4`). The pill is a part of the item for the
-  hook Plan. A tap on it opens the hub, and a drag moves it with the hub.
-  Its rank is larger than the area of each room, so it shows over the
-  label of a room.
-- Settings, with a link to the sheet of the hub, or a hint to add one.
+  pill over it has a light and the name "Home Assistant"
+  (`DIYWeb.Cutaway.hub_label/4`). The light shows the state of the link
+  (`data-ha` on the page Rooms). It is gray with no link, amber while the
+  link waits, and green when it is connected.
+- The pill is a part of the item for the hook Plan. A tap on it opens the
+  hub, and a drag moves it with the hub. Its rank is larger than the area
+  of each room, so it shows over the label of a room.
+- Sometimes no sheet of a hub is open: for example, the hub went away in a
+  different tab during the sign-in. Then the page Rooms shows the error of
+  a sign-in that came back, or of a session that ended.
+- The pill of a planned hub is pale, as the hub is.
 
 The app links to one Home Assistant. A second hub shows the same link.
 
@@ -1611,10 +1617,12 @@ The app links to one Home Assistant. A second hub shows the same link.
    browser to the sign-in page of Home Assistant. The client is the
    address of the app. The way back is the page of the card: the sheet of
    the hub (`/inside?item=ID`) or Settings. Home Assistant accepts a way
-   back on the host of the client, and adds its answer to the query.
+   back on the host of the client, and adds its answer to the query. The
+   LiveView and the hook take only these two ways back.
 2. Home Assistant sends the browser back with a code and the state. The
-   hook removes them from the address, and keeps the rest (the item of the
-   sheet). It gets the tokens for the code
+   hook removes them from the address (and `storeToken`, which Home
+   Assistant adds when the person asks it to keep the sign-in). It keeps
+   the item of the sheet. It gets the tokens for the code
    with the verifier, and writes the session in IndexedDB. The session
    has the address, the two tokens and the end of the access token. A
    different session in the store is revoked.
@@ -1674,12 +1682,14 @@ The tests:
   order. It has the shortest steps to each fault as fixed examples, so it
   finds each fault in each run. A test with fixed steps checks the
   owner.
-- `test/diy_web/home_assistant_test.exs`: the LiveView part, the card of
-  Settings, and a property test of the check of the address.
-- The browser test signs in on a fake Home Assistant
-  (`test/browser/fake_ha.mjs`). It checks the code, the way back and the
-  PKCE verifier as Home Assistant does. Then the test disconnects, and
-  checks the revoke.
+- `test/diy_web/home_assistant_test.exs`: the LiveView part, and the card
+  in Settings and in the sheet of a hub. Property tests check the address
+  and the way back.
+- The browser test adds a hub, and signs in from its sheet on a fake Home
+  Assistant (`test/browser/fake_ha.mjs`). The fake checks the code, the
+  way back and the PKCE verifier as Home Assistant does. It adds its
+  answer to the query of the way back. The test checks the green light of
+  the pill. Then it disconnects, and checks the revoke.
 - A test by hand used Home Assistant 2026.10 with its demo. It signed in
   on the page of Home Assistant, loaded the page again, opened a second
   tab, and disconnected. Home Assistant then had no session of the app.

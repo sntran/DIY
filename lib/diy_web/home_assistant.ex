@@ -31,7 +31,8 @@ defmodule DIYWeb.HomeAssistant do
   @max_text 200
 
   # The pages where Home Assistant sends the browser back after the
-  # sign-in: Settings, or the sheet of a hub.
+  # sign-in: Settings, or the sheet of a hub. The hook has the same rule
+  # (`wayBack` in `assets/js/home_assistant.js`).
   @back ~r"\A/(settings|inside\?item=[A-Za-z0-9_-]{1,40})\z"
 
   @doc false

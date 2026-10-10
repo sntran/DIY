@@ -617,7 +617,8 @@ defmodule DIY.Catalog do
       features: [:estimate],
       params: [
         # Home Assistant Green, datasheet v1.1 (2024): 1.7 W at idle and 3 W
-        # under load, at 12 V. The hub is on all the time.
+        # under load, at 12 V. The hub is on all the time, and mostly idle:
+        # the app takes 2 W, between the two.
         int(
           "watts",
           "Power all the time",
@@ -625,7 +626,7 @@ defmodule DIY.Catalog do
           2,
           1,
           100,
-          "A Home Assistant Green uses 1.7 W at idle and 3 W under load (its datasheet). A Raspberry Pi or a small PC uses more."
+          "A Home Assistant Green uses 1.7 W at idle and 3 W under load (its datasheet). The app takes 2 W, between the two. A Raspberry Pi or a small PC uses more."
         )
       ]
     },

@@ -138,12 +138,24 @@ test("an HTTPS page cannot use an http address", () => {
   assert.equal(clientOf({origin: APP}), APP + "/")
 })
 
-test("the way back is a path of this app", () => {
+test("the way back is Settings or the sheet of an item", () => {
   assert.equal(wayBack("/inside?item=i42"), "/inside?item=i42")
+  assert.equal(wayBack("/inside?item=" + "a".repeat(40)), "/inside?item=" + "a".repeat(40))
   assert.equal(wayBack("/settings"), "/settings")
-  for (const bad of ["//evil.example/x", "https://evil.example", "inside", "/a b", "/" + "x".repeat(201), undefined, 5]) {
+  for (const bad of [
+    "//evil.example/x", "/\\evil.example", "https://evil.example", "inside", "/plans",
+    "/inside?item=x&y=1", "/inside?item=" + "a".repeat(41), "/settings/", undefined, 5,
+  ]) {
     assert.equal(wayBack(bad), "/settings", String(bad))
   }
+})
+
+test("each way back stays on this app", () => {
+  fc.assert(fc.property(fc.oneof(fc.string(), fc.webPath(), fc.webUrl()), (text) => {
+    const back = wayBack(text)
+    assert.equal(new URL(APP + back).origin, APP)
+    assert.ok(back === "/settings" || /^\/inside\?item=[A-Za-z0-9_-]{1,40}$/.test(back))
+  }))
 })
 
 test("the sign-in page gets the client, the way back, the state and the challenge", async () => {
@@ -310,7 +322,7 @@ test("the way back gets the tokens, keeps them, and connects", async () => {
 test("the way back to the sheet of a hub keeps the item in the address", async () => {
   const page = parts({
     pathname: "/inside",
-    search: "?item=i42&code=c1&state=s1",
+    search: "?item=i42&code=c1&state=s1&storeToken=true",
     respond: (url) => url.endsWith("/auth/token") ? tokens("a1", "r1") : answer(200),
   })
   page.storage.set(PENDING, JSON.stringify({url: HA, state: "s1", verifier: "v1"}))
@@ -334,6 +346,8 @@ test("a way back with a wrong state, no code, or a bad text keeps nothing", asyn
     assert.equal(page.calls.length, 0)
     assert.equal(last(page).error, error)
     assert.equal(await page.deps.store.read(), null)
+    // The answer of the sign-in goes away from the address.
+    assert.deepEqual(page.replaced.at(-1), [{type: "patch", id: "phx-1"}, "", "/settings"])
   }
 
   // A wrong state, with a stored session: the page connects with it.

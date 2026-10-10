@@ -61,10 +61,10 @@ export const socketUrl = (url) => url.replace(/^http/, "ws") + "/api/websocket"
 // The client of the app for Home Assistant: the address of the app.
 export const clientOf = (location) => location.origin + "/"
 
-// The way back: a path of this app (not "//", which is a different host),
-// else BACK.
+// The way back: Settings, or the sheet of an item. It is the same rule as
+// in DIYWeb.HomeAssistant. Else BACK.
 export const wayBack = (back) =>
-  typeof back === "string" && /^\/(?!\/)\S{0,200}$/.test(back) ? back : BACK
+  typeof back === "string" && /^\/(settings|inside\?item=[A-Za-z0-9_-]{1,40})$/.test(back) ? back : BACK
 
 const base64url = (bytes) =>
   btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")
@@ -248,7 +248,9 @@ export class Link {
     // (for example, the item of a sheet). Keep the state of LiveView in the
     // history: Back needs it.
     const rest = new URLSearchParams(this.location.search)
-    for (const key of ["code", "state", "error"]) rest.delete(key)
+    // Home Assistant adds storeToken when the person asks it to keep the
+    // sign-in.
+    for (const key of ["code", "state", "error", "storeToken"]) rest.delete(key)
     const query = rest.toString()
     this.history.replaceState(this.history.state, "", this.location.pathname + (query ? "?" + query : ""))
     if (!pending || pending.state !== params.get("state")) return this.load(epoch, "state")

@@ -445,6 +445,11 @@ async function build(context, name) {
   await page.waitForSelector("#item-sheet #ha-status:has-text('Connected to Fake house (Home Assistant 2026.10.0)')")
   assert.equal(new URL(page.url()).search, `?item=${hub}`)
   await page.waitForSelector("#inside[data-ha=connected]")
+  // The light on the pill of the hub is green.
+  assert.equal(
+    await page.$eval(`g.p-hub-label[data-item="${hub}"] .i-ha-light`, (el) => getComputedStyle(el).fill),
+    "rgb(34, 197, 94)",
+  )
   await check(page, `${name} Home Assistant`)
   const revoked = homeAssistant.revoked.length
   await page.click("#ha-disconnect")

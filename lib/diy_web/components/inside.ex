@@ -48,10 +48,31 @@ defmodule DIYWeb.Inside do
         _none -> nil
       end
 
-    assigns = assign(assigns, chosen: room, levels: Build.levels(assigns.build.house.floors))
+    # The card of the link to Home Assistant is in the sheet of a hub.
+    # Sometimes no such sheet is open: for example, the hub went away in a
+    # different tab. Then the page shows the error of a sign-in that came
+    # back, or of a session that ended. The other errors come from the card
+    # itself, or from the store for each page (the device error tells it).
+    hub_open =
+      match?(
+        {:ok, %{type: "home_assistant"}},
+        assigns.item && Build.item(assigns.build, assigns.item)
+      )
+
+    assigns =
+      assign(assigns,
+        chosen: room,
+        levels: Build.levels(assigns.build.house.floors),
+        ha_alert:
+          assigns.ha.error in ~w(state denied token unreachable signed_out) and not hub_open
+      )
 
     ~H"""
     <section id="inside" class="space-y-2" data-ha={@ha.state}>
+      <div :if={@ha_alert} id="ha-alert" role="alert" class="alert alert-warning text-sm">
+        <span>Home Assistant: {HomeAssistant.message(@ha.error)}</span>
+        <.link patch={~p"/settings"} class="link">Open Settings</.link>
+      </div>
       <div class="flex items-center justify-between">
         <h1 class="text-xl font-bold">Rooms</h1>
         <.link
