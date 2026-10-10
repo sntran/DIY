@@ -304,11 +304,17 @@ async function build(context, name) {
 
   // The house from the outside, in the look of the plan: the pole of the
   // grid and its wire. The power flows in the wire 5 times, then it stops.
+  // With less motion, it does not move.
   await page.waitForSelector("#house-picture svg.cutaway-outside .p-chip-text:has-text('Grid')")
-  assert.equal(
-    await page.$eval("#house-picture .p-flow", (path) => getComputedStyle(path).animationIterationCount),
-    "5",
-  )
+  const flow = await page.$eval("#house-picture .p-flow", (path) => {
+    const style = getComputedStyle(path)
+    return { name: style.animationName, count: style.animationIterationCount }
+  })
+  if (await page.evaluate(() => matchMedia("(prefers-reduced-motion: reduce)").matches)) {
+    assert.equal(flow.name, "none")
+  } else {
+    assert.equal(flow.count, "5")
+  }
 
   // The chart of the bill: a click on a month gives its dollars in the
   // line over the chart. The keyboard on the next month does it too.
@@ -418,6 +424,7 @@ async function build(context, name) {
 
   // A tap on the fridge on the plan: it comes out of the house and turns to
   // the person. The frames of the flipbook change, and its panel shows.
+  // With less motion, the fridge is at once in front.
   // The list of the rooms shows while it has the focus: first the focus
   // goes away, as with a tap on the page.
   await page.evaluate(() => document.activeElement?.blur())
@@ -425,13 +432,15 @@ async function build(context, name) {
   const spot = await page.locator(`#plan-item-${fridgeId}`).boundingBox()
   await page.mouse.click(spot.x + spot.width / 2, spot.y + spot.height / 2)
   await page.waitForSelector(`#item-stage-${fridgeId}`)
-  const shown = new Set()
-  for (let i = 0; i < 15; i++) {
-    shown.add(await page.evaluate(() =>
-      [...document.querySelectorAll(".stage-frame")].findIndex((frame) => !frame.hasAttribute("hidden"))))
-    await page.waitForTimeout(50)
+  if (!(await page.evaluate(() => matchMedia("(prefers-reduced-motion: reduce)").matches))) {
+    const shown = new Set()
+    for (let i = 0; i < 15; i++) {
+      shown.add(await page.evaluate(() =>
+        [...document.querySelectorAll(".stage-frame")].findIndex((frame) => !frame.hasAttribute("hidden"))))
+      await page.waitForTimeout(50)
+    }
+    assert.ok(shown.size > 3, `${name}: the frames change in the flight (${[...shown]})`)
   }
-  assert.ok(shown.size > 3, `${name}: the frames change in the flight (${[...shown]})`)
   await page.waitForSelector("#item-stage [data-stage=landed]")
   assert.equal(await page.evaluate(() =>
     [...document.querySelectorAll(".stage-frame")].findIndex((frame) => !frame.hasAttribute("hidden"))), 11)
@@ -555,10 +564,14 @@ async function build(context, name) {
   return page
 }
 
+// On a desktop, the person wants less motion: an item is at once on its
+// stage. So the walk checks the flights and the way with less motion, and
+// it is shorter.
 for (const colorScheme of ["light", "dark"]) {
   for (const width of [390, 1280]) {
     const name = `${colorScheme}, ${width} px`
-    const context = await browser.newContext({ colorScheme, viewport: { width, height: 900 } })
+    const reducedMotion = width > 1000 ? "reduce" : "no-preference"
+    const context = await browser.newContext({ colorScheme, reducedMotion, viewport: { width, height: 900 } })
     const page = await build(context, name)
 
     // The build stays on the device: a reload shows it.

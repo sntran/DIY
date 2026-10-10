@@ -1626,8 +1626,12 @@ The tests:
   - a state that the LiveView does not keep (`Stage.nokeep.cfg`): after
     a patch, the stage has no state, and the panel is not on the item.
 - The browser test taps the fridge on the plan: the frames change in the
-  flight. It also opens items in the list, changes their numbers, and
-  turns an item on the page Place. Axe checks the stage after it lands.
+  flight. Then the key of the first page has the focus. After a key of
+  the panel, the stage keeps its state, and the panel stays on the page.
+  The walk also opens items in the list, changes their numbers, and turns
+  an item on the page Place. Axe checks the stage after it lands. On a
+  desktop, the walk asks for less motion: so it checks the two ways, and
+  the flights do not make it too long.
 
 ## The house from the outside
 
