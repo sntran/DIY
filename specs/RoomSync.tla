@@ -6,20 +6,25 @@
 (*                                                                         *)
 (* Two tabs can do the match at the same time, and a person can add an     *)
 (* area in Home Assistant. Each tab reads the areas when its sheet opens   *)
-(* (a snapshot). The person chooses the rooms with no area of the same     *)
-(* name in the snapshot. Home Assistant refuses a second area with the     *)
-(* same name ("invalid_info"). The names of two rooms can be the same.     *)
+(* (a snapshot). Home Assistant refuses a second area with the same name   *)
+(* ("invalid_info"). The names of two rooms can be the same.               *)
 (*                                                                         *)
-(* The rule of the hook: Home Assistant refuses the name. Then the tab     *)
-(* reads the areas again. It links the room to the area of that name. The  *)
-(* hook adds the floors with the same rule.                                *)
+(* The rules:                                                              *)
+(* - The hook: Home Assistant refuses the name. Then the tab reads the     *)
+(*   areas again. It links the room to the area of that name. The hook     *)
+(*   adds the floors with the same rule (and the same level).              *)
+(* - The server: the person can choose a room only when no area and no     *)
+(*   room before it has its name (DIY.HomeAssistant.blocked). An area has  *)
+(*   one room at most (DIY.Build.link_area).                               *)
 (*                                                                         *)
-(* Two modes have a fault:                                                 *)
+(* Three modes have a fault:                                               *)
 (* - "suffix": the tab adds the area with a new name ("Den 2"). Home       *)
 (*   Assistant then has two areas for one room (RoomSync.suffix.cfg).      *)
 (* - "snapshot": the tab looks for the area in its snapshot. The area of a *)
 (*   different tab is not there, so the room gets no area                  *)
 (*   (RoomSync.snapshot.cfg).                                              *)
+(* - "twins": the server has no rules for the names. Two rooms with one    *)
+(*   name then get one area (RoomSync.twins.cfg).                          *)
 (***************************************************************************)
 EXTENDS Naturals, FiniteSets
 
@@ -67,15 +72,32 @@ Init ==
   /\ failed = {}
   /\ person = 0
 
-\* The rooms only in the app for a list of areas (DIY.HomeAssistant.match).
-\* A room has no link to an area of the list, and no area of its name.
-OnlyApp(list) == {r \in Rooms : link[r] \notin list /\ Area(NameOf(r)) \notin list}
+\* The rooms with no link to an area of a list, and no area of their name.
+Free(list) == {r \in Rooms : link[r] \notin list /\ Area(NameOf(r)) \notin list}
+
+\* The rooms that the person can choose for a list of areas: the first room
+\* of each name in Free (DIY.HomeAssistant.blocked). In the mode "twins",
+\* each room with no link to an area of the list.
+Offered(list) ==
+  IF Mode = "twins"
+    THEN {r \in Rooms : link[r] \notin list}
+    ELSE {r \in Free(list) : \A s \in Free(list) : NameOf(s) = NameOf(r) => r[2] <= s[2]}
+
+\* The server links a room to an area (DIYWeb.HomeAssistant.areas_added).
+\* It refuses an area of a different room: the room gets no area. The mode
+\* "twins" has no such check.
+Link(r, a) ==
+  IF Mode # "twins" /\ \E s \in Rooms \ {r} : link[s] = a
+    THEN /\ failed' = failed \cup {r}
+         /\ UNCHANGED link
+    ELSE /\ link' = [link EXCEPT ![r] = a]
+         /\ UNCHANGED failed
 
 \* The sheet of a tab opens: the tab reads the areas, and the person
-\* chooses some of the rooms only in the app.
+\* chooses some of the rooms.
 Open(t) ==
   /\ pc[t] = "idle"
-  /\ \E chosen \in SUBSET OnlyApp(areas) :
+  /\ \E chosen \in SUBSET Offered(areas) :
        /\ snap' = [snap EXCEPT ![t] = areas]
        /\ todo' = [todo EXCEPT ![t] = chosen]
   /\ pc' = [pc EXCEPT ![t] = "work"]
@@ -90,15 +112,14 @@ Create(t) ==
        /\ todo' = [todo EXCEPT ![t] = @ \ {r}]
        /\ IF Area(NameOf(r)) \notin areas
             THEN /\ areas' = areas \cup {Area(NameOf(r))}
-                 /\ link' = [link EXCEPT ![r] = Area(NameOf(r))]
-                 /\ UNCHANGED <<cur, failed>>
-            ELSE CASE Mode = "ok" ->
+                 /\ Link(r, Area(NameOf(r)))
+                 /\ UNCHANGED cur
+            ELSE CASE Mode \in {"ok", "twins"} ->
                         /\ cur' = [cur EXCEPT ![t] = r]
                         /\ UNCHANGED <<areas, link, failed>>
                    [] Mode = "snapshot" ->
                         /\ IF Area(NameOf(r)) \in snap[t]
-                             THEN /\ link' = [link EXCEPT ![r] = Area(NameOf(r))]
-                                  /\ UNCHANGED failed
+                             THEN Link(r, Area(NameOf(r)))
                              ELSE /\ failed' = failed \cup {r}
                                   /\ UNCHANGED link
                         /\ UNCHANGED <<areas, cur>>
@@ -106,8 +127,8 @@ Create(t) ==
                         \E k \in 1..MaxCopy :
                           /\ [name |-> NameOf(r), copy |-> k] \notin areas
                           /\ areas' = areas \cup {[name |-> NameOf(r), copy |-> k]}
-                          /\ link' = [link EXCEPT ![r] = [name |-> NameOf(r), copy |-> k]]
-                          /\ UNCHANGED <<cur, failed>>
+                          /\ Link(r, [name |-> NameOf(r), copy |-> k])
+                          /\ UNCHANGED cur
   /\ UNCHANGED <<snap, pc, person>>
 
 \* Home Assistant refused the name: the tab reads the areas again, and
@@ -115,8 +136,7 @@ Create(t) ==
 Relist(t) ==
   /\ cur[t] # None
   /\ IF Area(NameOf(cur[t])) \in areas
-       THEN /\ link' = [link EXCEPT ![cur[t]] = Area(NameOf(cur[t]))]
-            /\ UNCHANGED failed
+       THEN Link(cur[t], Area(NameOf(cur[t])))
        ELSE /\ failed' = failed \cup {cur[t]}
             /\ UNCHANGED link
   /\ cur' = [cur EXCEPT ![t] = None]
@@ -151,6 +171,9 @@ OneAreaEach == \A a, b \in areas : a.name = b.name => a = b
 
 \* Each room that the person chose gets an area.
 NoneFailed == failed = {}
+
+\* An area has one room at most.
+OneRoomEach == \A r, s \in Rooms : link[r] = link[s] /\ link[r] # None => r = s
 
 \* The area of a room has the name of the room.
 SameName == \A r \in Rooms : link[r] # None => link[r] = Area(NameOf(r))

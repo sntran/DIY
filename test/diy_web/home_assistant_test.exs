@@ -417,22 +417,32 @@ defmodule DIYWeb.HomeAssistantTest do
     assert has_element?(view, "#ha-rooms-sheet #ha-rooms-wait", "The app reads the areas")
     status(view, %{"state" => "none"})
     assert has_element?(view, "#ha-rooms-wait", "Connect Home Assistant first")
+    status(view, %{"state" => "connecting", "url" => "https://ha.example.com"})
+    assert has_element?(view, "#ha-rooms-wait", "The app waits for the link")
 
     # The hook has no link yet: it tells offline. When the link comes, the
     # page asks again.
     render_hook(view, "ha:rooms", %{"error" => "offline"})
-    assert has_element?(view, "#ha-rooms-wait", "Connect Home Assistant first")
+    assert has_element?(view, "#ha-rooms-wait", "The app waits for the link")
     connected(view)
     assert_push_event(view, "ha:rooms_fetch", %{})
     assert has_element?(view, "#ha-rooms-wait", "The app reads the areas")
     render_hook(view, "ha:rooms", %{"error" => "offline"})
     assert has_element?(view, "#ha-rooms-wait[role=alert]", "does not answer now")
+    render_hook(view, "ha:rooms", %{"error" => "failed"})
+    assert has_element?(view, "#ha-rooms-wait[role=alert]", "Home Assistant 2024.4 or later")
 
     # The areas come. A new status does not read them again.
     render_hook(view, "ha:rooms", ha_rooms())
     assert has_element?(view, "#ha-rooms")
     connected(view)
     refute_push_event(view, "ha:rooms_fetch", %{})
+
+    # The link goes and comes back: the areas can be different now.
+    status(view, %{"state" => "offline", "url" => "https://ha.example.com"})
+    refute has_element?(view, "#ha-rooms")
+    connected(view)
+    assert_push_event(view, "ha:rooms_fetch", %{})
 
     # On a different sheet, a status does not read the areas.
     render_patch(view, ~p"/inside")
@@ -472,6 +482,22 @@ defmodule DIYWeb.HomeAssistantTest do
     render_hook(view, "ha:rooms", ha_rooms())
     assert has_element?(view, "#ha-both li", "Kitchen (in Home Assistant: Den)")
 
+    # A room with the name of an area of a different room, and the second of
+    # two rooms with one name, cannot get an area.
+    {:ok, build} = Build.rename_room(build, room_id(build, "Laundry"), "LIVING ROOM")
+    {:ok, build, _id} = Build.add_room(build, "Den 2", "f1", :indoor)
+    {:ok, build, _id} = Build.add_room(build, "den2", "f2", :indoor)
+    view = page(conn, ~p"/inside?#{[sheet: "ha_rooms"]}", build)
+    connected(view)
+    render_hook(view, "ha:rooms", ha_rooms())
+    assert has_element?(view, "#ha-app p", "LIVING ROOM (Floor 1): a different room or area")
+    assert has_element?(view, "#ha-app p", "den2 (Floor 2): a different room or area")
+    assert has_element?(view, "#ha-app label", "Add Den 2 to Home Assistant")
+    laundry = room_id(build, "LIVING ROOM")
+    refute has_element?(view, "#ha-app input[value='#{laundry}']")
+    view |> form("#ha-rooms") |> render_submit(%{"app" => [laundry]})
+    refute_push_event(view, "ha:add_areas", %{})
+
     # Not an admin: no rooms to add to Home Assistant.
     render_hook(view, "ha:rooms", ha_rooms(false))
     assert has_element?(view, "#ha-app", "Your user of Home Assistant is not an admin")
@@ -479,39 +505,61 @@ defmodule DIYWeb.HomeAssistantTest do
     refute has_element?(view, "#ha-app input[checked]")
   end
 
-  test "the hook gives floors and areas that the page cannot read: no change", %{conn: conn} do
+  test "the floors and the areas that the page cannot read do not count", %{conn: conn} do
     view = page(conn, ~p"/inside?#{[sheet: "ha_rooms"]}")
     connected(view)
     good = ha_rooms()
     floor = hd(good["floors"])
     area = hd(good["areas"])
 
-    for bad <- [
-          %{},
-          %{good | "admin" => "yes"},
-          %{good | "floors" => "x"},
-          %{good | "floors" => List.duplicate(floor, 101)},
-          %{good | "areas" => List.duplicate(area, 501)},
-          %{good | "floors" => [%{floor | "level" => "one"}]},
-          %{good | "floors" => [%{floor | "id" => String.duplicate("f", 101)}]},
-          %{good | "floors" => [1]},
-          %{good | "areas" => [%{area | "floor" => 5}]},
-          %{good | "areas" => [%{area | "name" => String.duplicate("n", 201)}]},
-          %{good | "areas" => [%{area | "floor" => String.duplicate("f", 101)}]},
-          %{good | "areas" => [nil]}
-        ] do
+    # A payload that is not floors and areas: no change.
+    for bad <- [%{}, %{good | "admin" => "yes"}, %{good | "floors" => "x"}, %{"error" => "x"}] do
       render_hook(view, "ha:rooms", bad)
       assert has_element?(view, "#ha-rooms-wait", "The app reads the areas")
     end
 
-    # A floor with no level, and an area with no floor, are good.
+    # Too many floors or areas: the sheet tells it.
+    for bad <- [
+          %{good | "floors" => List.duplicate(floor, 101)},
+          %{good | "areas" => List.duplicate(area, 501)}
+        ] do
+      render_hook(view, "ha:rooms", bad)
+      assert has_element?(view, "#ha-rooms-wait[role=alert]", "more than 500 areas")
+    end
+
+    # A bad floor or area does not count. The other areas show.
+    long = String.duplicate("ü", 128)
+
+    for bad <- [
+          %{floor | "level" => "one"},
+          %{floor | "id" => String.duplicate("f", 256)},
+          1
+        ] do
+      render_hook(view, "ha:rooms", %{good | "floors" => [bad]})
+      assert has_element?(view, "select[name='ha[den]'] option[value='f1 indoor'][selected]")
+    end
+
+    for bad <- [
+          %{area | "floor" => 5},
+          %{area | "name" => long},
+          %{area | "floor" => String.duplicate("f", 256)},
+          %{area | "id" => 5},
+          nil
+        ] do
+      render_hook(view, "ha:rooms", %{good | "areas" => [bad | tl(good["areas"])]})
+      assert has_element?(view, "#ha-ha h3", "Only in Home Assistant (3)")
+      assert has_element?(view, "#ha-both h3", "In both (0)")
+    end
+
+    # A floor with no level, an area with no floor, and long names and ids
+    # (255 bytes) are good.
     render_hook(view, "ha:rooms", %{
       good
-      | "floors" => [%{floor | "level" => nil}],
-        "areas" => [%{area | "floor" => nil}]
+      | "floors" => [%{floor | "level" => nil, "id" => String.duplicate("f", 255)}],
+        "areas" => [%{area | "floor" => nil, "name" => String.duplicate("ü", 127) <> "x"}]
     })
 
-    assert has_element?(view, "#ha-rooms")
+    assert has_element?(view, "#ha-ha h3", "Only in Home Assistant (1)")
   end
 
   test "a match links the rooms, adds the areas as rooms, and asks the hook for new areas", %{
@@ -563,7 +611,8 @@ defmodule DIYWeb.HomeAssistantTest do
         %{"room" => kitchen, "area" => "kitchen"},
         %{"room" => garage, "area" => "garage"},
         %{"room" => "r999", "area" => "x"},
-        %{"room" => kitchen, "area" => String.duplicate("a", 101)},
+        %{"room" => kitchen, "area" => String.duplicate("a", 256)},
+        %{"room" => living, "area" => "kitchen"},
         %{"room" => 5}
       ],
       "errors" => [
@@ -581,8 +630,9 @@ defmodule DIYWeb.HomeAssistantTest do
     assert has_element?(
              view,
              "#ha-sync",
-             "The app linked 1 room and added 2 rooms. Home Assistant added 3 areas. " <>
-               "Home Assistant did not add: Attic (Unauthorized), Kitchen (no reason)."
+             "The app linked 1 room and added 2 rooms. Home Assistant added 2 areas. " <>
+               "Home Assistant did not add: Attic (Unauthorized), Kitchen (no reason), " <>
+               "Living room (a different room has the area)."
            )
 
     # The areas come again: the rooms are in both.
@@ -623,6 +673,9 @@ defmodule DIYWeb.HomeAssistantTest do
     # A match with no areas, or a bad answer of the hook: no change.
     render_hook(view, "ha_sync", %{})
     render_hook(view, "ha:areas_added", %{"links" => "x"})
+    link = %{"room" => room_id(build(), "Kitchen"), "area" => "kitchen"}
+    render_hook(view, "ha:areas_added", %{"links" => List.duplicate(link, 501), "errors" => []})
+    render_hook(view, "ha:areas_added", %{"links" => [], "errors" => List.duplicate(link, 501)})
     assert has_element?(view, "#ha-sync", "The app linked 0 rooms and added 0 rooms.")
 
     # An answer after the sheet opened again (no status of a match).
@@ -641,6 +694,23 @@ defmodule DIYWeb.HomeAssistantTest do
              "#ha-sync",
              "The app linked 0 rooms and added 0 rooms. Home Assistant added 1 area."
            )
+  end
+
+  test "a match adds 50 areas as rooms at most, and a bad payload changes nothing", %{
+    conn: conn
+  } do
+    view = page(conn, ~p"/inside?#{[sheet: "ha_rooms"]}")
+    connected(view)
+    areas = for n <- 1..51, do: %{"id" => "a#{n}", "name" => "Area #{n}", "floor" => "ground"}
+    render_hook(view, "ha:rooms", %{ha_rooms(false) | "areas" => areas})
+    view |> form("#ha-rooms") |> render_submit()
+    assert has_element?(view, "#ha-sync", "added 50 rooms. It did not add: Area 51.")
+    assert length(saved(view).rooms) == length(build().rooms) + 50
+
+    # A payload that is not a map.
+    render_hook(view, "ha:rooms", %{ha_rooms(false) | "areas" => areas})
+    render_hook(view, "ha_sync", ["x"])
+    assert render(view) =~ "ha-rooms"
   end
 
   test "the words of a match" do

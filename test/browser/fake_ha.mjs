@@ -18,7 +18,7 @@ const read = (request) => new Promise((resolve) => {
 })
 
 // The name of a floor or an area for a match: no case and no spaces.
-const key = (name) => name.toLowerCase().replaceAll(" ", "")
+const key = (name) => name.toUpperCase().toLowerCase().replaceAll(" ", "")
 
 export async function fakeHomeAssistant({
   name = "Fake house",

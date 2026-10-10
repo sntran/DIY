@@ -20,6 +20,7 @@ defmodule DIY.HomeAssistantTest do
   test "a name for a match has no case and no spaces" do
     assert HomeAssistant.key("Living Room") == "livingroom"
     assert HomeAssistant.key(" living  ROOM") == "livingroom"
+    assert HomeAssistant.key("Große Halle") == "grossehalle"
   end
 
   test "the rooms that can have an area: not the roof, not a zone of a van" do
@@ -38,8 +39,8 @@ defmodule DIY.HomeAssistantTest do
     living = room_named(build, "Living room")
     garage = room_named(build, "Garage")
     {:ok, build} = Build.link_area(build, kitchen.id, "cook")
-    # Two rooms with a link to one area: only the first keeps it.
-    {:ok, build} = Build.link_area(build, garage.id, "cook")
+    # One room for each area.
+    assert Build.link_area(build, garage.id, "cook") == {:error, :taken}
     # A link to an area that is not there now does not count.
     {:ok, build} = Build.link_area(build, living.id, "gone")
 
@@ -56,6 +57,25 @@ defmodule DIY.HomeAssistantTest do
     assert garage in match.app
     assert match.ha == [area("pool", "Pool")]
     assert length(match.app) == length(HomeAssistant.rooms(build)) - 2
+  end
+
+  test "a room only in the app cannot get an area of a name that is in use" do
+    build = preset()
+    {:ok, build} = Build.rename_room(build, room_named(build, "Laundry").id, "KITCHEN")
+    {:ok, build, den} = Build.add_room(build, "Den", "f1", :indoor)
+    {:ok, build, den2} = Build.add_room(build, "den", "f2", :indoor)
+    {:ok, build, office} = Build.add_room(build, "Office", "f1", :indoor)
+    areas = [area("kitchen", "Kitchen")]
+    match = HomeAssistant.match(build, areas)
+    laundry = room_named(build, "KITCHEN").id
+
+    # The kitchen has the area. The laundry (now "KITCHEN") cannot get a
+    # second area of that name. Of the two dens, only the first can.
+    blocked = HomeAssistant.blocked(match, areas)
+    assert MapSet.member?(blocked, laundry)
+    assert MapSet.member?(blocked, den2)
+    refute MapSet.member?(blocked, den)
+    refute MapSet.member?(blocked, office)
   end
 
   test "the place of a new room: the floor of its area, else a guess from its name" do
@@ -93,18 +113,22 @@ defmodule DIY.HomeAssistantTest do
     kitchen = room_named(build, "Kitchen")
 
     {build, missed} =
-      HomeAssistant.apply(build, [{kitchen.id, "cook"}, {"r999", "x"}], [
+      HomeAssistant.apply(build, [{kitchen.id, "cook"}, {"r999", "x"}, {kitchen.id, "cook"}], [
         {area("patio", "Patio"), "outside", :outdoor},
         {area("loft", "Loft"), "f3", :indoor},
-        {area("blank", " "), "f1", :indoor}
+        {area("blank", " "), "f1", :indoor},
+        {area("cook", "Cook"), "f1", :indoor}
       ])
 
-    assert missed == ["Loft", " "]
+    # The app does not add a room for an area of a different room: the area
+    # is missed.
+    assert missed == ["Loft", " ", "Cook"]
     assert build.areas[kitchen.id] == "cook"
     patio = room_named(build, "Patio")
     assert %{level: "outside", place: :outdoor} = patio
     assert build.areas[patio.id] == "patio"
     assert map_size(build.areas) == 2
+    refute room_named(build, "Cook")
   end
 
   # A random name like a name of a room: the same name with a different case
@@ -156,6 +180,20 @@ defmodule DIY.HomeAssistantTest do
       # Assistant: the match takes each name that it can.
       app = MapSet.new(match.app, &HomeAssistant.key(&1.name))
       refute Enum.any?(match.ha, &MapSet.member?(app, HomeAssistant.key(&1.name)))
+
+      # The rooms that can get a new area have names that are not in use:
+      # Home Assistant takes them all.
+      blocked = HomeAssistant.blocked(match, areas)
+      free = for room <- match.app, not MapSet.member?(blocked, room.id), do: room
+      keys = Enum.map(free, &HomeAssistant.key(&1.name))
+      assert Enum.uniq(keys) == keys
+      refute Enum.any?(areas, &(HomeAssistant.key(&1.name) in keys))
+
+      # Each room that is blocked has a name in use.
+      for room <- match.app, MapSet.member?(blocked, room.id) do
+        assert HomeAssistant.key(room.name) in keys or
+                 Enum.any?(areas, &(HomeAssistant.key(&1.name) == HomeAssistant.key(room.name)))
+      end
     end
   end
 end

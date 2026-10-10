@@ -259,7 +259,7 @@ defmodule DIY.Build do
   @spec put_house(t(), house(), [map()], [map()]) :: t()
   def put_house(build, house, rooms, items) do
     change(build, fn build ->
-      build = %{build | house: house, rooms: [], items: []}
+      build = %{build | house: house, rooms: [], items: [], areas: %{}}
 
       {build, ids} =
         Enum.reduce(rooms, {build, %{}}, fn room, {build, ids} ->
@@ -1358,15 +1358,16 @@ defmodule DIY.Build do
   defp hints(_hints), do: {:error, :hints}
 
   # The links of the rooms to the areas of Home Assistant. A build of an
-  # older version has none. A link of a room that is not there goes away.
+  # older version has none. A link of a room that cannot have an area (it
+  # is not there, or it is the roof) goes away. Two rooms cannot have one
+  # area.
   defp areas(nil, _rooms), do: {:ok, %{}}
 
   defp areas(areas, rooms) when is_map(areas) do
-    ids = MapSet.new(rooms, & &1.id)
+    ids = MapSet.new(for room <- rooms, area_room?(room), do: room.id)
 
-    if Enum.all?(areas, fn {room, area} ->
-         is_binary(area) and area_id?(area) and is_binary(room)
-       end),
+    if Enum.all?(areas, fn {_room, area} -> is_binary(area) and area_id?(area) end) and
+         length(Enum.uniq(Map.values(areas))) == map_size(areas),
        do: {:ok, Map.filter(areas, fn {room, _area} -> MapSet.member?(ids, room) end)},
        else: {:error, :areas}
   end
@@ -1374,20 +1375,34 @@ defmodule DIY.Build do
   defp areas(_areas, _rooms), do: {:error, :areas}
 
   # The id of an area of Home Assistant: a short text.
-  defp area_id?(id), do: id != "" and byte_size(id) <= 100
+  defp area_id?(id), do: id != "" and byte_size(id) <= 255
+
+  @doc """
+  True for a room that can have an area of Home Assistant. It is a room of
+  the house: not the roof, and not a zone of a van.
+  """
+  def area_room?(room), do: not van_level?(room.level) and room.place != :roof
 
   @doc """
   Links a room of the house to an area of Home Assistant (its id), or
-  removes the link (`nil`).
+  removes the link (`nil`). An area has one room at most: a link to an
+  area of a different room is an error (`:taken`).
   """
   @spec link_area(t(), String.t(), String.t() | nil) :: {:ok, t()} | {:error, atom()}
   def link_area(build, room_id, area) do
-    with {:ok, _room} <- house_room(build, room_id),
-         true <- (is_nil(area) or (is_binary(area) and area_id?(area))) || {:error, :area} do
+    with {:ok, room} <- room(build, room_id),
+         true <- area_room?(room) || {:error, :room},
+         true <- (is_nil(area) or (is_binary(area) and area_id?(area))) || {:error, :area},
+         true <- not taken?(build, room_id, area) || {:error, :taken} do
       areas =
         if area, do: Map.put(build.areas, room_id, area), else: Map.delete(build.areas, room_id)
 
       {:ok, change(build, &%{&1 | areas: areas})}
     end
   end
+
+  defp taken?(_build, _room_id, nil), do: false
+
+  defp taken?(build, room_id, area),
+    do: Enum.any?(build.areas, fn {room, other} -> other == area and room != room_id end)
 end

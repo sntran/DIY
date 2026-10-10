@@ -23,7 +23,8 @@ defmodule DIYWeb.HomeAssistant do
 
   - `:ha_rooms`: the floors and the areas of Home Assistant, and `admin`
     (only an admin can add floors and areas). It is `nil` while the hook
-    reads them (`fetch_rooms/1`), and `%{error: "offline"}` with no link.
+    reads them (`fetch_rooms/1`). It is `%{error: error}` when the hook
+    cannot read them (`rooms_message/1`).
   - `:ha_sync`: what the last match did, or `nil`.
   """
   use DIYWeb, :html
@@ -40,14 +41,20 @@ defmodule DIYWeb.HomeAssistant do
   @max_url 2048
   @max_text 200
 
+  # The longest id, and the longest name, of a floor or an area.
+  @max_id 255
+  @max_name 255
+
   # The pages where Home Assistant sends the browser back after the
   # sign-in: Settings, or the sheet of a hub. The hook has the same rule
   # (`wayBack` in `assets/js/home_assistant.js`).
   @back ~r"\A/(settings|inside\?item=[A-Za-z0-9_-]{1,40})\z"
 
-  # The most floors and areas that the page takes from the hook.
+  # The most floors and areas that the page takes from the hook, and the
+  # most areas that one match adds as rooms.
   @max_floors 100
   @max_areas 500
+  @max_adds 50
 
   @doc false
   def on_mount(:default, _params, _session, socket) do
@@ -79,30 +86,36 @@ defmodule DIYWeb.HomeAssistant do
       error: if(params["error"] in @errors, do: params["error"])
     }
 
+    before = socket.assigns.ha.state
     socket = assign(socket, :ha, ha)
 
-    # The sheet of the match waits for Home Assistant: the link is back.
+    # The link comes back while the sheet of the match is open: the sheet
+    # reads the areas again. They can be different now.
     if state == "connected" and socket.assigns[:live_action] == :inside and
          socket.assigns[:sheet] == "ha_rooms" and
-         not match?(%{areas: _}, socket.assigns.ha_rooms),
+         (before != "connected" or not match?(%{areas: _}, socket.assigns.ha_rooms)),
        do: {:halt, fetch_rooms(socket)},
        else: {:halt, socket}
   end
 
   def handle_event("ha:status", _params, socket), do: {:halt, socket}
 
-  def handle_event("ha:rooms", %{"error" => "offline"}, socket),
-    do: {:halt, assign(socket, :ha_rooms, %{error: "offline"})}
+  def handle_event("ha:rooms", %{"error" => error}, socket) when error in ~w(offline failed),
+    do: {:halt, assign(socket, :ha_rooms, %{error: error})}
 
   def handle_event("ha:rooms", %{"floors" => floors, "areas" => areas, "admin" => admin}, socket)
-      when is_list(floors) and length(floors) <= @max_floors and is_list(areas) and
-             length(areas) <= @max_areas and is_boolean(admin) do
-    floors = Enum.map(floors, &read_floor/1)
-    areas = Enum.map(areas, &read_area/1)
+      when is_list(floors) and is_list(areas) and is_boolean(admin) do
+    # A floor or an area that the page cannot read does not count.
+    ha_rooms =
+      if length(floors) <= @max_floors and length(areas) <= @max_areas,
+        do: %{
+          floors: floors |> Enum.map(&read_floor/1) |> Enum.reject(&is_nil/1),
+          areas: areas |> Enum.map(&read_area/1) |> Enum.reject(&is_nil/1),
+          admin: admin
+        },
+        else: %{error: "too_many"}
 
-    if :error in floors or :error in areas,
-      do: {:halt, socket},
-      else: {:halt, assign(socket, :ha_rooms, %{floors: floors, areas: areas, admin: admin})}
+    {:halt, assign(socket, :ha_rooms, ha_rooms)}
   end
 
   def handle_event("ha:rooms", _params, socket), do: {:halt, socket}
@@ -130,24 +143,21 @@ defmodule DIYWeb.HomeAssistant do
   defp text(value, max) when is_binary(value) and byte_size(value) <= max, do: value
   defp text(_value, _max), do: nil
 
-  # A floor or an area from the hook, or :error.
+  # A floor or an area from the hook, or nil. An id has at most 255 bytes,
+  # as in the build (`DIY.Build.link_area/3`).
   defp read_floor(%{"id" => id, "name" => name, "level" => level})
-       when is_binary(id) and is_binary(name) and (is_integer(level) or is_nil(level)) do
-    if text(id, 100) && text(name, @max_text),
-      do: %{id: id, name: name, level: level},
-      else: :error
+       when is_integer(level) or is_nil(level) do
+    if text(id, @max_id) && text(name, @max_name), do: %{id: id, name: name, level: level}
   end
 
-  defp read_floor(_floor), do: :error
+  defp read_floor(_floor), do: nil
 
-  defp read_area(%{"id" => id, "name" => name, "floor" => floor})
-       when is_binary(id) and is_binary(name) and (is_binary(floor) or is_nil(floor)) do
-    if text(id, 100) && text(name, @max_text) && (is_nil(floor) or text(floor, 100)),
-      do: %{id: id, name: name, floor: floor},
-      else: :error
+  defp read_area(%{"id" => id, "name" => name, "floor" => floor}) do
+    if text(id, @max_id) && text(name, @max_name) && (is_nil(floor) or text(floor, @max_id)),
+      do: %{id: id, name: name, floor: floor}
   end
 
-  defp read_area(_area), do: :error
+  defp read_area(_area), do: nil
 
   @doc """
   The address of Home Assistant in a text of the person. It has the
@@ -296,7 +306,7 @@ defmodule DIYWeb.HomeAssistant do
   @doc """
   The changes of a match that the person chose (the form of
   `rooms_sheet/1`). The app links the rooms in both, and adds the areas of
-  Home Assistant that the person chose as rooms. It gives the new build,
+  Home Assistant that the person chose as rooms: 50 at most. It gives the new build,
   the rooms for Home Assistant to add, and the status. The hook gets the
   rooms with `ha:add_areas`, with the level and the name of the floor of
   each room. Only an admin of Home Assistant can add areas.
@@ -309,18 +319,26 @@ defmodule DIYWeb.HomeAssistant do
 
     choices = if is_map(params["ha"]), do: params["ha"], else: %{}
 
-    adds =
-      for area <- match.ha,
+    {adds, over} =
+      Enum.split(
+        for(
+          area <- match.ha,
           {level, place} <- choice(choices[area.id], build),
           do: {area, level, place}
+        ),
+        @max_adds
+      )
 
     {build, missed} = HomeAssistant.apply(build, links, adds)
-    chosen = if is_list(params["app"]), do: params["app"], else: []
+    missed = missed ++ for({area, _level, _place} <- over, do: area.name)
+    chosen = if is_list(params["app"]), do: MapSet.new(params["app"]), else: MapSet.new()
+    blocked = HomeAssistant.blocked(match, areas)
 
     out =
       for room <- match.app,
           admin,
-          room.id in chosen,
+          MapSet.member?(chosen, room.id),
+          not MapSet.member?(blocked, room.id),
           do: %{
             room: room.id,
             name: room.name,
@@ -330,7 +348,7 @@ defmodule DIYWeb.HomeAssistant do
 
     status = %{
       linked: length(links),
-      added: length(adds) - length(missed),
+      added: length(adds) + length(over) - length(missed),
       missed: missed,
       sent: length(out),
       done: nil,
@@ -360,37 +378,52 @@ defmodule DIYWeb.HomeAssistant do
   @doc """
   The answer of Home Assistant to `ha:add_areas`: the new areas, each with
   its room, and the rooms that it did not add. The app links each room to
-  its area. It gives the new build and the status.
+  its area, when no different room has the area. It gives the new build
+  and the status.
   """
   def areas_added(build, status, %{"links" => links, "errors" => errors})
-      when is_list(links) and is_list(errors) do
+      when is_list(links) and length(links) <= @max_areas and is_list(errors) and
+             length(errors) <= @max_areas do
     pairs =
       for %{"room" => room, "area" => area} <- links,
-          text(room, 40) && text(area, 100),
+          text(room, 40) && text(area, @max_id),
           do: {room, area}
 
-    build =
-      Enum.reduce(pairs, build, fn {room, area}, build ->
+    {build, done, taken} =
+      Enum.reduce(pairs, {build, 0, []}, fn {room, area}, {build, done, taken} ->
         case Build.link_area(build, room, area) do
-          {:ok, build} -> build
-          {:error, _reason} -> build
+          {:ok, build} -> {build, done + 1, taken}
+          {:error, :taken} -> {build, done, taken ++ [room]}
+          {:error, _reason} -> {build, done, taken}
         end
       end)
 
     names = Map.new(build.rooms, &{&1.id, &1.name})
 
     failed =
-      for %{"room" => room, "message" => message} <- errors,
-          is_binary(names[room]),
-          do: "#{names[room]} (#{text(message, @max_text) || "no reason"})"
+      for(
+        %{"room" => room, "message" => message} <- errors,
+        is_binary(names[room]),
+        do: "#{names[room]} (#{text(message, @max_text) || "no reason"})"
+      ) ++ for(room <- taken, do: "#{names[room]} (a different room has the area)")
 
     status =
       status || %{linked: 0, added: 0, missed: [], sent: length(pairs), done: nil, errors: []}
 
-    {build, %{status | done: length(pairs), errors: failed}}
+    {build, %{status | done: done, errors: failed}}
   end
 
   def areas_added(build, status, _params), do: {build, status}
+
+  @doc "Why the sheet of the match has no floors and no areas, in words."
+  def rooms_message("offline"), do: "Home Assistant does not answer now. Try again later."
+
+  def rooms_message("failed"),
+    do:
+      "Home Assistant did not give its floors and areas. The match needs Home Assistant 2024.4 or later."
+
+  def rooms_message("too_many"),
+    do: "Home Assistant has more than 500 areas or more than 100 floors: too many for the match."
 
   @doc "What the last match did, in words."
   def sync_text(status) do
@@ -425,8 +458,11 @@ defmodule DIYWeb.HomeAssistant do
         %{areas: areas, floors: floors} ->
           floors_count = assigns.build.house.floors
 
+          match = HomeAssistant.match(assigns.build, areas)
+
           assign(assigns,
-            match: HomeAssistant.match(assigns.build, areas),
+            match: match,
+            blocked: HomeAssistant.blocked(match, areas),
             suggest: &HomeAssistant.place_of(&1, floors, floors_count),
             options: options(assigns.build)
           )
@@ -437,8 +473,16 @@ defmodule DIYWeb.HomeAssistant do
 
     ~H"""
     <Inside.sheet id="ha-rooms-sheet" title="Match the rooms with Home Assistant">
-      <p :if={@ha.state not in ~w(connected loading)} id="ha-rooms-wait" class="text-sm">
+      <p :if={@ha.state in ~w(none signed_out)} id="ha-rooms-wait" class="text-sm">
         Connect Home Assistant first: open the sheet of the hub, or Settings.
+      </p>
+      <p
+        :if={@ha.state in ~w(signing_in connecting offline)}
+        id="ha-rooms-wait"
+        role="status"
+        class="text-sm"
+      >
+        The app waits for the link to Home Assistant.
       </p>
       <p
         :if={@ha.state == "loading" or (@ha.state == "connected" and is_nil(@ha_rooms))}
@@ -454,7 +498,7 @@ defmodule DIYWeb.HomeAssistant do
         role="alert"
         class="text-sm"
       >
-        Home Assistant does not answer now. Try again later.
+        {rooms_message(@ha_rooms.error)}
       </p>
       <form
         :if={@ha.state == "connected" and @match}
@@ -482,16 +526,25 @@ defmodule DIYWeb.HomeAssistant do
           <p :if={not @ha_rooms.admin and @match.app != []} class="text-sm">
             Only an admin of Home Assistant can add areas. Your user of Home Assistant is not an admin.
           </p>
-          <label :for={room <- @match.app} class="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              name="app[]"
-              value={room.id}
-              checked={@ha_rooms.admin}
-              disabled={not @ha_rooms.admin}
-              class="checkbox checkbox-sm"
-            /> Add {room.name} to Home Assistant ({Build.level_name(room.level)})
-          </label>
+          <%= for room <- @match.app do %>
+            <p :if={MapSet.member?(@blocked, room.id)} class="py-1 text-sm">
+              {room.name} ({Build.level_name(room.level)}): a different room or area has this name.
+              Give the room a different name to add it.
+            </p>
+            <label
+              :if={not MapSet.member?(@blocked, room.id)}
+              class="flex items-center gap-2 py-1 text-sm"
+            >
+              <input
+                type="checkbox"
+                name="app[]"
+                value={room.id}
+                checked={@ha_rooms.admin}
+                disabled={not @ha_rooms.admin}
+                class="checkbox"
+              /> Add {room.name} to Home Assistant ({Build.level_name(room.level)})
+            </label>
+          <% end %>
         </section>
 
         <section id="ha-ha">

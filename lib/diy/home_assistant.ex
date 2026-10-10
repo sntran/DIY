@@ -26,20 +26,19 @@ defmodule DIY.HomeAssistant do
   @attic ~w(attic loft)
 
   @doc """
-  The name of a room or of an area for a match: no case and no spaces, as
-  Home Assistant does (`normalize_name`).
+  The name of a room or of an area for a match: no case and no spaces.
+  Home Assistant does the same (`normalize_name`). It uses a case fold, so
+  "ß" is "ss".
   """
-  def key(name), do: name |> String.downcase() |> String.replace(" ", "")
+  def key(name), do: name |> :string.casefold() |> String.replace(" ", "")
 
-  @doc "The rooms of the house that can have an area: not the roof."
-  def rooms(build) do
-    for room <- Build.house_view(build).rooms, room.place != :roof, do: room
-  end
+  @doc "The rooms of the house that can have an area (`DIY.Build.area_room?/1`)."
+  def rooms(build), do: Enum.filter(build.rooms, &Build.area_room?/1)
 
   @doc """
   The match of the rooms and the areas: `%{both: [{room, area}], app:
   [room], ha: [area]}`. A link to an area that is not there now does not
-  count.
+  count. The build has one room for each area at most.
   """
   def match(build, areas) do
     rooms = rooms(build)
@@ -47,11 +46,10 @@ defmodule DIY.HomeAssistant do
 
     {linked, rooms} =
       Enum.reduce(rooms, {[], []}, fn room, {pairs, rest} ->
-        area = by_id[build.areas[room.id]]
-
-        if area && not Enum.any?(pairs, fn {_room, other} -> other.id == area.id end),
-          do: {[{room, area} | pairs], rest},
-          else: {pairs, [room | rest]}
+        case by_id[build.areas[room.id]] do
+          nil -> {pairs, [room | rest]}
+          area -> {[{room, area} | pairs], rest}
+        end
       end)
 
     used = MapSet.new(linked, fn {_room, area} -> area.id end)
@@ -70,6 +68,25 @@ defmodule DIY.HomeAssistant do
       app: Enum.reverse(app),
       ha: ha
     }
+  end
+
+  @doc """
+  The rooms only in the app that cannot get a new area (their ids). Home
+  Assistant refuses a second area with one name. So a room cannot get an
+  area when Home Assistant has an area with its name. It also cannot when
+  a room before it in the list has its name.
+  """
+  def blocked(match, areas) do
+    used = MapSet.new(areas, &key(&1.name))
+
+    {blocked, _used} =
+      Enum.reduce(match.app, {MapSet.new(), used}, fn room, {blocked, used} ->
+        if MapSet.member?(used, key(room.name)),
+          do: {MapSet.put(blocked, room.id), used},
+          else: {blocked, MapSet.put(used, key(room.name))}
+      end)
+
+    blocked
   end
 
   @doc """

@@ -152,8 +152,13 @@ defmodule DIY.BuildTest do
     assert Build.from_json(Build.to_json(build)) == {:ok, build}
     assert Build.link_area(build, "r999", "den") == {:error, :room}
     assert Build.link_area(build, kitchen.id, "") == {:error, :area}
-    assert Build.link_area(build, kitchen.id, String.duplicate("a", 101)) == {:error, :area}
+    assert Build.link_area(build, kitchen.id, String.duplicate("a", 256)) == {:error, :area}
+    assert {:ok, _build} = Build.link_area(build, kitchen.id, String.duplicate("a", 255))
     assert Build.link_area(build, kitchen.id, 5) == {:error, :area}
+    # One room for each area. The roof has no area.
+    assert Build.link_area(build, room_named(build, "Garage").id, "kitchen") == {:error, :taken}
+    assert {:ok, _build} = Build.link_area(build, kitchen.id, "kitchen")
+    assert Build.link_area(build, room_named(build, "Roof").id, "roof") == {:error, :room}
     assert {:ok, %{areas: areas}} = Build.link_area(build, kitchen.id, nil)
     assert areas == %{}
 
@@ -162,9 +167,11 @@ defmodule DIY.BuildTest do
     [zone | _zones] = Build.zones(build, van)
     assert Build.link_area(build, zone.id, "van") == {:error, :room}
 
-    # The link goes with its room.
+    # The link goes with its room, and with the rooms of a new house.
     assert {:ok, %{areas: areas}} = Build.delete_room(build, kitchen.id)
     assert areas == %{}
+    {house, rooms, items} = House.preset(house(%{}))
+    assert Build.put_house(build, house, rooms, items).areas == %{}
   end
 
   test "items: add, change, check, move and remove" do
@@ -316,6 +323,10 @@ defmodule DIY.BuildTest do
     assert bad.(%{"areas" => ["kitchen"]}) == {:error, :areas}
     assert bad.(%{"areas" => %{"r1" => 5}}) == {:error, :areas}
     assert bad.(%{"areas" => %{"r1" => ""}}) == {:error, :areas}
+    [one, two | _rooms] = good["rooms"]
+    assert bad.(%{"areas" => %{one["id"] => "den", two["id"] => "den"}}) == {:error, :areas}
+    roof = Enum.find(good["rooms"], &(&1["place"] == "roof"))
+    assert {:ok, %{areas: %{}}} = bad.(%{"areas" => %{roof["id"] => "roof"}})
     # A link of a room that is not there goes away. A build of an older
     # version has no links.
     assert {:ok, %{areas: %{}}} = bad.(%{"areas" => %{"r999" => "den"}})

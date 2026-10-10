@@ -398,7 +398,8 @@ defmodule DIYWeb.HomeLive do
         "ha_sync",
         params,
         %{assigns: %{ha_rooms: %{areas: _} = ha_rooms, build: %{house: %{}}}} = socket
-      ) do
+      )
+      when is_map(params) do
     {build, out, status} = HomeAssistant.sync(socket.assigns.build, ha_rooms, params)
     socket = socket |> put(build) |> assign(:ha_sync, status)
 

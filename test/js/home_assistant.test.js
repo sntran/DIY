@@ -957,6 +957,7 @@ async function serve(ha, sockets, pick = () => 0) {
 test("the key of a name has no case and no spaces", () => {
   assert.equal(key("Living Room"), "livingroom")
   assert.equal(key(" LIVING  room "), "livingroom")
+  assert.equal(key("Große Halle"), "grossehalle")
 })
 
 test("the hook reads the floors, the areas and the user of Home Assistant", async () => {
@@ -1003,14 +1004,14 @@ test("the rooms are offline with no socket, a socket that closes, or an error", 
   assert.deepEqual(other.pushes.at(-1), ["ha:rooms", {error: "offline"}])
   assert.equal(second.commands.size, 0)
 
-  // An old Home Assistant with no floors: an error.
+  // An old Home Assistant with no floors: a command fails.
   const third = parts()
   const {link: link3, socket: socket3} = await connected(third)
   const ha = registry({fail: (message) => message.type === "config/floor_registry/list" ? {code: "unknown_command"} : null})
   const done = link3.rooms()
   await serve(ha, [socket3])
   await done
-  assert.deepEqual(last(third), {error: "offline"})
+  assert.deepEqual(last(third), {error: "failed"})
 
   // A disconnect ends the commands on the socket, and the ids start again.
   const late = assert.rejects(link3.command("auth/current_user"), (error) => error instanceof CommandError && error.code === "offline")
@@ -1068,7 +1069,7 @@ test("the hook adds the floors and the areas of the rooms, and uses an area of t
   link.stop()
 })
 
-test("the hook uses a floor of the same name, and tells the rooms that it did not add", async () => {
+test("a floor of the same name at a different level, and the rooms that the hook did not add", async () => {
   const page = parts()
   const {link, socket} = await connected(page)
   const ha = registry({
@@ -1091,14 +1092,17 @@ test("the hook uses a floor of the same name, and tells the rooms that it did no
   ])
   await serve(ha, [socket])
   await done
+  // Home Assistant has "Floor 2" at level 5: the bath (level 1) does not go
+  // on it.
   assert.deepEqual(page.pushes.at(-1), ["ha:areas_added", {
-    links: [{room: "r1", area: "area_1"}],
+    links: [],
     errors: [
+      {room: "r1", message: "The name Floor 2 (floor2) is already in use"},
       {room: "r2", message: "Unauthorized"},
       {room: "r3", message: "The name Den (den) is already in use"},
     ],
   }])
-  assert.deepEqual(ha.areas, [{area_id: "area_1", name: "Bath", floor_id: "upstairs"}])
+  assert.deepEqual(ha.areas, [])
   assert.equal(ha.floors.length, 1)
 
   // The socket closes: the rooms that wait are not added.
@@ -1116,8 +1120,11 @@ test("the hook uses a floor of the same name, and tells the rooms that it did no
 })
 
 test("two tabs add rooms in any order: one area for each name, and each room gets its area", async () => {
-  const names = ["Den", "den", "Office", "Living Room", "livingroom", "Bath"]
-  const room = fc.record({name: fc.constantFrom(...names), level: fc.constantFrom(null, 0, 1)})
+  // The server sends one room for each name (DIY.HomeAssistant.blocked/2),
+  // so a name has one level.
+  const levels = {Den: 1, den: 1, Office: 0, "Living Room": 0, livingroom: 0, Bath: null}
+  const names = Object.keys(levels)
+  const room = fc.constantFrom(...names).map((name) => ({name, level: levels[name]}))
   const plan = fc.record({
     first: fc.array(room, {maxLength: 5}),
     second: fc.array(room, {maxLength: 5}),
@@ -1141,9 +1148,8 @@ test("two tabs add rooms in any order: one area for each name, and each room get
     await serve(ha, tabs.map((tab) => tab.socket), (n) => order[turn++ % order.length] % n)
     await Promise.all(done)
 
-    // One area and one floor for each name, as in Home Assistant.
-    assert.equal(new Set(ha.areas.map((area) => key(area.name))).size, ha.areas.length)
-    assert.equal(new Set(ha.floors.map((floor) => key(floor.name))).size, ha.floors.length)
+    // Each room gets an area of its name, on the floor of its level. (The
+    // fake, as Home Assistant, refuses a second area or floor of one name.)
     for (const {page, rooms} of tabs) {
       const {links, errors} = page.pushes.at(-1)[1]
       assert.deepEqual(errors, [])
@@ -1151,6 +1157,9 @@ test("two tabs add rooms in any order: one area for each name, and each room get
       links.forEach((link, i) => {
         const area = ha.areas.find((one) => one.area_id === link.area)
         assert.equal(key(area.name), key(rooms[i].name))
+        if (area.floor_id) {
+          assert.equal(ha.floors.find((floor) => floor.floor_id === area.floor_id).level, rooms[i].level)
+        }
       })
     }
     for (const {link} of tabs) link.stop()

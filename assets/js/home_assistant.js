@@ -30,7 +30,8 @@
 // (DIYWeb.HomeAssistant.rooms_sheet, and the TLA+ model specs/RoomSync.tla).
 // Home Assistant refuses a second area with the same name. Then the hook
 // uses the area that has the name: a different tab, or a person in Home
-// Assistant, added it first.
+// Assistant, added it first. It uses a floor of the same name only when
+// the floor has the same level.
 
 export const DB = "diy-ha"
 export const STORE = "session"
@@ -68,9 +69,10 @@ export const blocked = (protocol, url) => protocol === "https:" && url.startsWit
 
 export const socketUrl = (url) => url.replace(/^http/, "ws") + "/api/websocket"
 
-// The name of a floor or of an area for a match: no case and no spaces, as
-// Home Assistant does (normalize_name). DIY.HomeAssistant.key/1 is the same.
-export const key = (name) => name.toLowerCase().replaceAll(" ", "")
+// The name of a floor or of an area for a match: no case and no spaces.
+// Home Assistant does the same (normalize_name). It uses a case fold, so
+// "ß" is "ss". DIY.HomeAssistant.key/1 is the same.
+export const key = (name) => name.toUpperCase().toLowerCase().replaceAll(" ", "")
 
 // An error of a command on the socket: the code and the message of Home
 // Assistant, or "offline" when the socket is not there.
@@ -494,7 +496,8 @@ export class Link {
 
   // Sends the floors and the areas of Home Assistant to the LiveView
   // (ha:rooms), and tells if the user is an admin. With no socket, it
-  // sends {error: "offline"}.
+  // sends {error: "offline"}. When Home Assistant refuses a command (for
+  // example, a version with no floors), it sends {error: "failed"}.
   async rooms() {
     try {
       const [floors, areas, user] = await Promise.all([
@@ -507,8 +510,8 @@ export class Link {
         areas: areas.map((area) => ({id: area.area_id, name: area.name, floor: area.floor_id ?? null})),
         admin: user.is_admin === true,
       })
-    } catch {
-      this.push("ha:rooms", {error: "offline"})
+    } catch (error) {
+      this.push("ha:rooms", {error: error.code === "offline" ? "offline" : "failed"})
     }
   }
 
@@ -525,10 +528,10 @@ export class Link {
         floors ??= await this.command("config/floor_registry/list")
         let at = level === null ? null : floors.find((one) => one.level === level)
         if (level !== null && !at) {
-          at = await this.add("config/floor_registry", {name: floor, level}, floor)
+          at = await this.add("config/floor_registry", {name: floor, level}, (one) => one.level === level)
           floors.push(at)
         }
-        const area = await this.add("config/area_registry", at ? {name, floor_id: at.floor_id} : {name}, name)
+        const area = await this.add("config/area_registry", at ? {name, floor_id: at.floor_id} : {name})
         links.push({room, area: area.area_id})
       } catch (error) {
         errors.push({room, message: error.message})
@@ -538,13 +541,14 @@ export class Link {
   }
 
   // Adds a floor or an area. When Home Assistant already has one with the
-  // same name, it gives that one.
-  async add(registry, fields, name) {
+  // same name, it gives that one, if it fits (a floor: the same level).
+  async add(registry, fields, fits = () => true) {
     try {
       return await this.command(registry + "/create", fields)
     } catch (error) {
       if (error.code !== "invalid_info") throw error
-      const same = (await this.command(registry + "/list")).find((one) => key(one.name) === key(name))
+      const same = (await this.command(registry + "/list"))
+        .find((one) => key(one.name) === key(fields.name) && fits(one))
       if (!same) throw error
       return same
     }
