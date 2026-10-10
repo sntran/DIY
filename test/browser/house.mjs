@@ -455,6 +455,10 @@ async function build(context, name) {
   const revoked = homeAssistant.revoked.length
   await page.click("#ha-disconnect")
   await page.waitForSelector("#ha-status:has-text('Not connected.')")
+  // The hook does not wait for the revoke: wait for it here.
+  for (let i = 0; i < 50 && homeAssistant.revoked.length === revoked; i++) {
+    await new Promise((resolve) => setTimeout(resolve, 100))
+  }
   assert.equal(homeAssistant.revoked.length, revoked + 1)
   assert.equal(homeAssistant.sessions.size, 0)
   return page

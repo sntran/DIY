@@ -57,7 +57,11 @@ function parts({search = "", protocol = "http:", respond = () => answer(200), st
   page.notified = notified
   page.deps = {
     store: store ?? sessionStore(factory ?? new IDBFactory(), () => notified.push("changed")),
-    listen: (onNews, onOnline) => { listened.news = onNews; listened.online = onOnline },
+    listen: (onNews, onOnline) => {
+      listened.news = onNews
+      listened.online = onOnline
+      return () => { listened.stopped = true }
+    },
     fetch: async (url, init) => {
       const fields = Object.fromEntries(init.body)
       calls.push({url, fields})
@@ -68,7 +72,7 @@ function parts({search = "", protocol = "http:", respond = () => answer(200), st
       origin: APP, protocol, pathname: "/settings", search,
       assign: (url) => page.assigned.push(url),
     },
-    history: {replaceState: (...args) => page.replaced.push(args)},
+    history: {state: {type: "patch", id: "phx-1"}, replaceState: (...args) => page.replaced.push(args)},
     storage: {
       getItem: (key) => storage.has(key) ? storage.get(key) : null,
       setItem: (key, value) => storage.set(key, value),
@@ -257,7 +261,8 @@ test("the way back gets the tokens, keeps them, and connects", async () => {
     fields: {grant_type: "authorization_code", code: "c1", client_id: APP + "/", code_verifier: "v1"},
   })
   assert.equal(page.storage.has(PENDING), false)
-  assert.deepEqual(page.replaced, [[null, "", "/settings"]])
+  // The state of LiveView stays in the history.
+  assert.deepEqual(page.replaced, [[{type: "patch", id: "phx-1"}, "", "/settings"]])
   assert.deepEqual(await page.deps.store.read(), {
     url: HA, client: APP + "/", access: "a1", refresh: "r1", expires: page.clock + 1_800_000,
   })
@@ -313,6 +318,7 @@ test("the exchange of the code can fail", async () => {
   for (const [respond, error] of [
     [() => { throw new Error("offline") }, "unreachable"],
     [() => answer(400, {error: "invalid_request"}), "token"],
+    [() => ({ok: true, status: 200, json: async () => { throw new SyntaxError("not JSON") }}), "token"],
   ]) {
     const page = parts({search: "?code=c&state=s1", respond})
     page.storage.set(PENDING, JSON.stringify({url: HA, state: "s1", verifier: "v"}))
@@ -438,8 +444,14 @@ test("the access token gets a refresh before its end, with a compare and set", a
 test("a refresh can fail, end the session, or come too late", async () => {
   const expired = session("r1", {expires: 0})
 
-  // A server error or no network: no auth, the socket closes later.
-  for (const respond of [() => answer(500), () => { throw new Error("offline") }]) {
+  // A server error, no network, a refusal that can pass (403), or a bad
+  // answer: no auth, the socket closes later, and the session stays.
+  for (const respond of [
+    () => answer(500),
+    () => { throw new Error("offline") },
+    () => answer(403, {error: "access_denied"}),
+    () => ({ok: true, status: 200, json: async () => { throw new SyntaxError("not JSON") }}),
+  ]) {
     const page = parts({respond})
     await page.deps.store.write(expired)
     await new Link(page.deps).start()
@@ -503,6 +515,15 @@ test("a refresh can fail, end the session, or come too late", async () => {
   assert.equal(await late.deps.store.read(), null)
   assert.deepEqual(socket.sent, [])
 
+  // A store that fails at the write of the new access token.
+  const full = parts({respond: () => answer(200, {access_token: "a-full", expires_in: 1800})})
+  await full.deps.store.write(expired)
+  full.deps.store.update = async () => { throw new Error("full") }
+  await new Link(full.deps).start()
+  FakeSocket.all.at(-1).receive({type: "auth_required"})
+  await settle()
+  assert.deepEqual(FakeSocket.all.at(-1).sent, [])
+
   // The refresh ends after a disconnect, in the store write.
   const slow = parts({respond: () => answer(200, {access_token: "a-slow", expires_in: 1800})})
   await slow.deps.store.write(expired)
@@ -515,6 +536,45 @@ test("a refresh can fail, end the session, or come too late", async () => {
   assert.deepEqual(FakeSocket.all.at(-1).sent, [])
 })
 
+test("a late refusal of an old session does not end the new session", async () => {
+  // Tab A sends a refresh of r1. A different tab signs in again (r2) and
+  // revokes r1. Tab A gets the news, and uses r2. Then the refusal of r1
+  // comes: tab A keeps r2.
+  let refuse
+  const page = parts({respond: (url) => url.endsWith("/token")
+    ? new Promise((resolve) => { refuse = () => resolve(answer(400, {error: "invalid_grant"})) })
+    : answer(200)})
+  await page.deps.store.write(session("r1", {expires: 0}))
+  const link = new Link(page.deps)
+  await link.start()
+  FakeSocket.all.at(-1).receive({type: "auth_required"})
+  await settle()
+  await page.deps.store.write(session("r2"))
+  await page.listened.news()
+  const second = FakeSocket.all.at(-1)
+  refuse()
+  await settle()
+  assert.equal(second.closed, false)
+  assert.equal(link.session.refresh, "r2")
+  assert.equal((await page.deps.store.read()).refresh, "r2")
+  assert.equal(last(page).state, "connecting")
+
+  // The other tab disconnects instead: tab A shows "none", not the end of
+  // a session.
+  const other = parts({respond: (url) => url.endsWith("/token")
+    ? new Promise((resolve) => { refuse = () => resolve(answer(400, {error: "invalid_grant"})) })
+    : answer(200)})
+  await other.deps.store.write(session("r1", {expires: 0}))
+  await new Link(other.deps).start()
+  FakeSocket.all.at(-1).receive({type: "auth_required"})
+  await settle()
+  await other.deps.store.clear()
+  await other.listened.news()
+  refuse()
+  await settle()
+  assert.deepEqual(last(other), {state: "none", url: null, name: null, version: null, error: null})
+})
+
 test("a refused access token: one new try, then the session ended", async () => {
   const page = parts({respond: () => answer(200, {access_token: "a2", expires_in: 1800})})
   const {socket} = await connected(page)
@@ -525,9 +585,14 @@ test("a refused access token: one new try, then the session ended", async () => 
   second.receive({type: "auth_required"})
   await settle()
   assert.deepEqual(second.sent[0], {type: "auth", access_token: "a2"})
+  const before = page.pushes.length
   second.receive({type: "auth_invalid"})
+  // Home Assistant closes the socket too: the page does not show offline.
+  second.drop()
   await settle()
-  assert.equal(last(page).state, "signed_out")
+  assert.equal(second.closed, true)
+  assert.deepEqual(page.pushes.slice(before).map(([, state]) => state.state), ["signed_out"])
+  assert.equal(page.timers.size, 0)
   assert.equal(await page.deps.store.read(), null)
 
   // The store cannot clear: the page shows the end anyway.
@@ -570,13 +635,16 @@ test("a socket that closes: offline, then new tries with longer waits", async ()
   socket.receive({type: "auth_ok"})
   assert.deepEqual(socket.sent.length, 2)
 
-  // A timer after a stop does nothing.
+  // A stop: no news, no session, and a timer or the device online again
+  // opens no socket.
   now.drop()
   const [, timer] = [...page.timers][0]
   link.stop()
+  assert.equal(page.listened.stopped, true)
+  assert.equal(link.session, null)
   timer.f()
-  assert.equal(FakeSocket.all.at(-1), now)
   link.again()
+  assert.equal(FakeSocket.all.at(-1), now)
 })
 
 test("the news of a different tab: the tab reads the store", async () => {
@@ -641,6 +709,7 @@ test("the parts of the browser", async () => {
     BroadcastChannel: Channel,
     indexedDB: new IDBFactory(),
     addEventListener: (event, f) => events.push([event, f]),
+    removeEventListener: (event, f) => events.push(["remove " + event, f]),
     fetch: async (...args) => ["fetched", ...args],
     WebSocket: FakeSocket,
     location: {},
@@ -655,9 +724,12 @@ test("the parts of the browser", async () => {
   assert.deepEqual(posted, [[CHANNEL, "changed"]])
   const news = () => {}
   const online = () => {}
-  browser.listen(news, online)
+  const unlisten = browser.listen(news, online)
   assert.equal(Channel.last.onmessage, news)
   assert.deepEqual(events, [["online", online]])
+  unlisten()
+  assert.equal(Channel.last.onmessage, null)
+  assert.deepEqual(events.at(-1), ["remove online", online])
   assert.deepEqual(await browser.fetch("u", {method: "POST"}), ["fetched", "u", {method: "POST"}])
   assert.ok(Math.abs(browser.now() - Date.now()) < 1000)
   assert.deepEqual(browser.setTimer(() => {}, 5), ["timer", 5])
@@ -667,7 +739,7 @@ test("the parts of the browser", async () => {
   // A browser with no BroadcastChannel: the hook works in this tab only.
   const alone = browserParts({...window, BroadcastChannel: undefined, indexedDB: new IDBFactory()})
   await alone.store.write(session())
-  alone.listen(news, online)
+  alone.listen(news, online)()
   assert.equal(posted.length, 1)
 })
 
@@ -696,18 +768,23 @@ test("two tabs in any order: no revoked session in the store, no socket after a 
     const off = new Set()
 
     // The answers of Home Assistant for a tab. A revoke is at once. The
-    // other answers wait for an "answer" step.
+    // other answers wait for an "answer" step. Home Assistant answers a
+    // refresh as the session is at the request: a new access token, or a
+    // refusal of a revoked session.
     const respond = (tab) => (url, fields) => {
       if (url.endsWith("/auth/revoke")) {
         revoked.add(fields.token)
         return answer(200)
       }
+      const refused = fields.grant_type === "refresh_token" && revoked.has(fields.refresh_token)
       return new Promise((resolve) => {
         inFlight.push(() => {
           if (fields.grant_type === "authorization_code") {
             sessions += 1
             writer.set("r" + sessions, tab)
             resolve(tokens("a" + sessions, "r" + sessions))
+          } else if (refused) {
+            resolve(answer(400, {error: "invalid_grant"}))
           } else {
             resolve(answer(200, {access_token: "a-" + fields.refresh_token, expires_in: 1800}))
           }
@@ -757,5 +834,16 @@ test("two tabs in any order: no revoked session in the store, no socket after a 
       }
     }
     for (const {link} of tabs) link.stop()
-  }), {numRuns: 300})
+  }), {
+    numRuns: 1000,
+    // The shortest steps to each fault of the model, for the runs where
+    // the random steps miss them. The first is a refresh that comes after
+    // a disconnect of the other tab. The second is a sign-in that ends
+    // after a disconnect.
+    examples: [
+      [[{kind: "signIn", tab: 0}, {kind: "answer", index: 0}, {kind: "refresh", tab: 0},
+        {kind: "disconnect", tab: 1}, {kind: "answer", index: 0}]],
+      [[{kind: "signIn", tab: 0}, {kind: "disconnect", tab: 0}, {kind: "answer", index: 0}]],
+    ],
+  })
 })

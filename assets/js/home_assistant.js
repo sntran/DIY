@@ -9,17 +9,20 @@
 // - Home Assistant sends the browser back to /settings with a code. The
 //   hook gets the tokens for the code, and keeps them in IndexedDB, for all
 //   the tabs. The server of the app never sees them.
-// - The hook opens a WebSocket to Home Assistant with the access token. It
-//   gets a new access token before the old one ends.
+// - The hook opens a WebSocket to Home Assistant with the access token.
+//   When a socket signs in, the hook first gets a new access token if the
+//   old one ends in 60 seconds or less. A socket that signed in stays open
+//   after the end of its access token.
 // - A disconnect clears the store, and revokes the session on Home
 //   Assistant. A BroadcastChannel tells the other tabs to read the store.
 //
-// Two rules come from the model:
+// Three rules come from the model:
 // - The epoch: a disconnect makes a new epoch of the tab. An answer of an
 //   old epoch keeps nothing. An exchange of an old epoch revokes its new
 //   session.
 // - The compare and set: a refresh writes its access token only when the
 //   store still has the same refresh token.
+// - The owner: a refused refresh ends only the socket of its own session.
 
 export const DB = "diy-ha"
 export const STORE = "session"
@@ -28,7 +31,8 @@ export const CHANNEL = "diy.ha"
 export const PENDING = "diy.ha.pending"
 // The page of the app where Home Assistant sends the browser back.
 export const BACK = "/settings"
-// The hook gets a new access token 60 seconds before the old one ends.
+// A socket that signs in gets a new access token when the old one ends in
+// 60 seconds or less.
 export const EARLY = 60_000
 // The first and the longest wait before the hook opens the socket again.
 export const FIRST_WAIT = 1_000
@@ -177,14 +181,18 @@ export class Link {
   // The start of the page: a sign-in that comes back, or the stored
   // session.
   start() {
-    this.listen(() => this.load(this.epoch), () => this.again())
+    this.unlisten = this.listen(() => this.load(this.epoch), () => this.again())
     const params = new URLSearchParams(this.location.search)
     return params.has("state") ? this.finish(params) : this.load(this.epoch)
   }
 
+  // The hook goes away (LiveView mounts the page again): no more news, no
+  // more tries, and no socket.
   stop() {
     this.epoch += 1
     this.close()
+    this.session = null
+    this.unlisten()
   }
 
   // Reads the store, and uses its session (the news of a different tab).
@@ -225,7 +233,8 @@ export class Link {
       pending = null
     }
     this.storage.removeItem(PENDING)
-    this.history.replaceState(null, "", this.location.pathname)
+    // Keep the state of LiveView in the history: Back needs it.
+    this.history.replaceState(this.history.state, "", this.location.pathname)
     if (!pending || pending.state !== params.get("state")) return this.load(epoch, "state")
     const code = params.get("code")
     if (!code) return this.load(epoch, "denied")
@@ -241,8 +250,13 @@ export class Link {
     } catch {
       return this.show("none", {url, error: "unreachable"})
     }
-    if (!answer.ok) return this.show("none", {url, error: "token"})
-    const tokens = await answer.json()
+    let tokens
+    try {
+      if (!answer.ok) throw new Error(`HTTP ${answer.status}`)
+      tokens = await answer.json()
+    } catch {
+      return this.show("none", {url, error: "token"})
+    }
     const session = {
       url, client, access: tokens.access_token, refresh: tokens.refresh_token,
       expires: this.now() + tokens.expires_in * 1000,
@@ -315,7 +329,12 @@ export class Link {
   // and try again. The second time, the session ended.
   invalid(epoch) {
     this.invalids += 1
-    if (this.invalids > 1) return this.signedOut(this.session, epoch)
+    if (this.invalids > 1) {
+      // The session of the socket is the session of the tab: end the
+      // socket now, so that its close does not show "offline".
+      this.close()
+      return this.signedOut(this.session, epoch)
+    }
     this.session = {...this.session, expires: 0}
     this.close()
     this.open(epoch)
@@ -357,11 +376,21 @@ export class Link {
       return null
     }
     if (epoch !== this.epoch) return null
-    if (answer.status >= 400 && answer.status < 500) return this.signedOut(session, epoch)
-    if (!answer.ok) return null
-    const tokens = await answer.json()
-    const fields = {access: tokens.access_token, expires: this.now() + tokens.expires_in * 1000}
-    if (!(await this.store.update(session.refresh, fields))) {
+    let fields, written
+    try {
+      const tokens = await answer.json()
+      // Only invalid_grant means that the session ended. A 403 can pass:
+      // for example, a user that Home Assistant allows only at home.
+      if (answer.status === 400 && tokens.error === "invalid_grant") return this.signedOut(session, epoch)
+      if (!answer.ok) return null
+      fields = {access: tokens.access_token, expires: this.now() + tokens.expires_in * 1000}
+      written = await this.store.update(session.refresh, fields)
+    } catch {
+      // A bad answer, or a store that fails: the socket closes, and the
+      // hook tries again later.
+      return null
+    }
+    if (!written) {
       // A different tab changed the store.
       this.load(this.epoch)
       return null
@@ -372,15 +401,16 @@ export class Link {
   }
 
   // Home Assistant ended the session (for example, the person removed it
-  // in Home Assistant).
+  // in Home Assistant). The tab clears the store and ends its socket only
+  // when they still have that session: a different tab can have a new one.
   async signedOut(session, epoch) {
-    this.close()
     try {
       await this.store.clear(session.refresh)
     } catch {
       // The store keeps it: the next start finds the same end.
     }
-    if (epoch !== this.epoch) return null
+    if (epoch !== this.epoch || this.session?.refresh !== session.refresh) return null
+    this.close()
     this.session = null
     this.show("signed_out", {url: session.url, error: "signed_out"})
     return null
@@ -396,8 +426,9 @@ export class Link {
 }
 
 // The hook of LiveView. deps() gives the parts of the browser: store,
-// listen(onNews, onOnline), fetch, WebSocket, location, history, storage
+// listen, fetch, WebSocket, location and history. It also gives storage
 // (sessionStorage), crypto, now, setTimer and clearTimer.
+// listen(onNews, onOnline) gives a function that stops the two listeners.
 export function homeAssistantHook(deps) {
   return {
     mounted() {
@@ -419,6 +450,10 @@ export function browserParts(window) {
     listen: (onNews, onOnline) => {
       if (channel) channel.onmessage = onNews
       window.addEventListener("online", onOnline)
+      return () => {
+        if (channel) channel.onmessage = null
+        window.removeEventListener("online", onOnline)
+      }
     },
     fetch: (...args) => window.fetch(...args),
     WebSocket: window.WebSocket,
