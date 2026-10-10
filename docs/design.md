@@ -209,9 +209,11 @@ The page Rooms shows the plan of the house at scale (`DIYWeb.Inside`, see
 "The plan at scale" below). The roof, the attic, the garage, the backyard
 and the driveway are rooms too.
 
-An item opens in a sheet over the page (a modal dialog). The hook `Sheet`
-(`assets/js/sheet.js`) closes it with the Escape key, keeps the focus in
-it with the Tab key, and gives the focus back to the item when it closes.
+A tap on an item brings it to the front of the page, with its panel (see
+"The stage of an item" below). The other sheets (a room, a new item, a
+new room) are over the page (a modal dialog). The hook `Sheet`
+(`assets/js/sheet.js`) closes a sheet with the Escape key. It keeps the
+focus in the sheet with the Tab key, and gives the focus back at the close.
 
 ### The data of a place
 
@@ -365,7 +367,7 @@ near 10,400 kWh in one year with gas heat, 16,900 with a heat pump, and
   Chromium, in the light and the dark mode, on a phone and on a desk.
   Axe-core checks each screen. On the plan, a drag moves an item and a
   wall of a room. In the list of the rooms, an arrow key moves an item.
-  The sheet of an item keeps the focus and closes with the Escape key. A
+  The stage of an item keeps the focus and closes with the Escape key. A
   reload keeps the build, a second tab follows the first, and a reconnect
   restores the build. CI runs the same script against `wrangler dev` too.
   There, the VM runs in workerd, with the real answers of NASA POWER and
@@ -1320,9 +1322,9 @@ its turn. A length is in inches.
   tries its own room first, then the rooms of the layer under the pointer,
   then the rooms of its own layer. The pointer does not choose the room:
   it is on the body of the item, above its space.
-- With no drag. The sheet of an item has buttons that move it (6 inches
-  for each tap), turn it a quarter turn, and give it a size. The sheet
-  tells the new place of the item in words. The bar of a room has buttons
+- With no drag. The page Place of the panel of an item has buttons that
+  move it (6 inches for each tap). Other buttons turn it a quarter turn,
+  and give it a size. The panel tells the new place of the item in words. The bar of a room has buttons
   that move it (2 feet for each tap): the plan over the bar shows the
   move. The sheet of a room gives its size in feet. So a person with one
   finger and no drag can do each change (WCAG 2.2, 2.5.7). A handle is 24
@@ -1452,8 +1454,8 @@ its turn. A length is in inches.
   floor 1 fill the screen, and the other layers hide. The tab of a layer,
   or a tap on a room, also hides the other layers. A room that the person
   chooses in the list, or that an arrow key moves, also shows its layer.
-  So does an item with an open sheet, also after the sheet moves it to a
-  room of a different layer (`data-open`).
+  So does an item on the stage, also after its panel moves it to a room
+  of a different layer (`data-open`).
   While one layer shows, the view stays in the box of that layer. So on a
   phone, the floor is in the middle of the screen. The button "Show all
   the house" shows all the layers.
@@ -1486,8 +1488,8 @@ its turn. A length is in inches.
   a part of the room is out of the view, the view zooms in to the room. A
   page that opens with a chosen room also zooms in to it.
 - The chosen room stays while the person opens an item (on the plan or in
-  the list), adds an item, or deletes an item. The sheet of the item
-  closes back to the room. When the sheet moved the item to a room on a
+  the list), adds an item, or deletes an item. The stage of the item
+  closes back to the room. When the panel moved the item to a room on a
   different floor, the floor of the chosen room comes back. So the
   person goes from room to room with one finger, and taps an item to
   change it.
@@ -1499,6 +1501,59 @@ its turn. A length is in inches.
   checks `specs/Plan.tla`, with the turn and the size of the item. Three
   faults show that the rules matter. The browser test drags an item and
   a wall, and moves an item with a key.
+
+## The stage of an item
+
+A tap on an item of the plan does not open a card. The item comes out of
+the house and turns to the person, as an item that a person takes in the
+hand. Then its panel shows (`DIYWeb.Stage`, and the hook `Stage` in
+`assets/js/stage.js`).
+
+- The flipbook. The server draws the model of the item from 12 cameras.
+  The first camera is the camera of the house, so the first frame is the
+  drawing on the plan. The last camera looks at the front of the item.
+  For a Home Assistant hub, it looks down at its top. The cameras between
+  turn step by step. Each frame has the center of the model at the same
+  point, so the model turns in place.
+- The flight. The hook puts the first frame on the item of the plan, at
+  the same size. In 0.9 seconds, the model moves to the top of the page
+  and grows. On its way, the hook shows the frames one after the other.
+  The item of the plan does not show while it is on the stage. A close
+  does the same in the other direction in 0.65 seconds, and then closes
+  the stage. The view of the plan can change while the item is on the
+  stage: the item goes back to its place in the new view.
+- The panel. It comes out of the model after the flight. It has the style
+  of the item. A hub has an LED screen. A TV, a computer, a microwave, a
+  power station, a smart meter and a CPAP have a screen. The other items
+  have a printed label. A label is paper, so it has the same
+  colors in the light and the dark mode.
+- The pages. The keys of the panel show its pages:
+  - Use: the kWh and the money of a year, with the math;
+  - Numbers: the numbers of the item, and its flags;
+  - Place: its room, its place, its size and its turn;
+  - Remove. A hub first shows Link (the card of the link to Home
+  Assistant). The remove asks on the panel: Remove the item, or Keep it.
+  A different item starts at its first page.
+- The keyboard and the screen reader. The stage is a modal dialog. The
+  keys are tabs, and each page is a tab panel. The Tab key keeps the focus
+  on the stage. The Escape key, the key Put it back, or a tap next to the
+  panel puts the item back. Then the focus goes back to the item.
+- Less motion. With `prefers-reduced-motion`, the model is at once in
+  front, and a close is at once.
+- The van. The items of a van still open in a sheet. They come to the
+  stage in a later change.
+
+The tests:
+
+- `test/diy_web/components/stage_test.exs`: the frames of each kind. The
+  first frame is the drawing of the plan, and each point is in the view.
+  A property test checks that the center of the model stays at 0, 0.
+- `test/diy_web/live/stage_live_test.exs`: the stage, the pages, the
+  keys, and the remove.
+- `test/js/stage.test.js`: the math of the rest pose (a property test with
+  fast-check), the flight with a fake clock, and the hook on a fake page.
+- The browser test opens items on the plan and in the list. It changes
+  their numbers on the page Numbers, and turns an item on the page Place.
 
 ## The house from the outside
 
@@ -1587,8 +1642,8 @@ its WebSocket API takes each origin.
 `assets/js/home_assistant.js` (the hook `HomeAssistant`) and
 `DIYWeb.HomeAssistant` (the LiveView part, the assign `:ha`) do the
 link. A card (`DIYWeb.HomeAssistant.card/1`) shows it, in two places:
-the sheet of a Home Assistant hub, and Settings. Settings has a link to
-the sheet of the hub, or a hint to add one.
+the panel of a Home Assistant hub (its LED screen, on the page Link), and
+Settings. Settings has a link to the hub, or a hint to add one.
 
 The hub is an item of a room, as the other items are:
 
@@ -1604,7 +1659,7 @@ The hub is an item of a room, as the other items are:
 - The pill is a part of the item for the hook Plan. A tap on it opens the
   hub, and a drag moves it with the hub. Its rank is larger than the area
   of each room, so it shows over the label of a room.
-- Sometimes no sheet of a hub is open: for example, the hub went away in a
+- Sometimes no hub is on the stage: for example, the hub went away in a
   different tab during the sign-in. Then the page Rooms shows the error of
   a sign-in that came back, or of a session that ended.
 - The pill of a planned hub is pale, as the hub is.
@@ -1615,14 +1670,14 @@ The app links to one Home Assistant. A second hub shows the same link.
    `ha:connect`. The hook makes a random state and a PKCE pair (RFC 7636,
    S256), and keeps them in sessionStorage of the tab. Then it sends the
    browser to the sign-in page of Home Assistant. The client is the
-   address of the app. The way back is the page of the card: the sheet of
-   the hub (`/inside?item=ID`) or Settings. Home Assistant accepts a way
+   address of the app. The way back is the page of the card: the hub on
+   the stage (`/inside?item=ID`) or Settings. Home Assistant accepts a way
    back on the host of the client, and adds its answer to the query. The
    LiveView and the hook take only these two ways back.
 2. Home Assistant sends the browser back with a code and the state. The
    hook removes them from the address (and `storeToken`, which Home
    Assistant adds when the person asks it to keep the sign-in). It keeps
-   the item of the sheet. It gets the tokens for the code
+   the item of the stage. It gets the tokens for the code
    with the verifier, and writes the session in IndexedDB. The session
    has the address, the two tokens and the end of the access token. A
    different session in the store is revoked.
@@ -1683,9 +1738,9 @@ The tests:
   finds each fault in each run. A test with fixed steps checks the
   owner.
 - `test/diy_web/home_assistant_test.exs`: the LiveView part, and the card
-  in Settings and in the sheet of a hub. Property tests check the address
+  in Settings and on the panel of a hub. Property tests check the address
   and the way back.
-- The browser test adds a hub, and signs in from its sheet on a fake Home
+- The browser test adds a hub, and signs in from its panel on a fake Home
   Assistant (`test/browser/fake_ha.mjs`). The fake checks the code, the
   way back and the PKCE verifier as Home Assistant does. It adds its
   answer to the query of the way back. The test checks the green light of
@@ -1788,7 +1843,7 @@ The tests:
   Each room gets an area of its name, on the floor of its level.
 - `test/diy_web/home_assistant_test.exs`: the sheet, the choices, the
   answers of the hook, and the payloads that the LiveView refuses.
-- The browser test opens the sheet from the sheet of the hub. A fake Home
+- The browser test opens the sheet from the panel of the hub. A fake Home
   Assistant has a floor and three areas: the living room matches, and
   two areas come in as rooms. Home Assistant adds the other rooms, with
   a new floor for floor 2.

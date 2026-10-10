@@ -94,6 +94,8 @@ defmodule DIYWeb.HomeLive do
      socket
      # The error of a field is for the item that the sheet showed.
      |> assign(:item_error, if(item == socket.assigns[:item], do: socket.assigns[:item_error]))
+     # The panel of a different item starts at its first page.
+     |> assign(:item_page, if(item == socket.assigns[:item], do: socket.assigns[:item_page]))
      |> assign(:item, item)
      |> assign(:add, if(sheets?, do: params["add"]))
      |> assign(:room, params["room"])
@@ -219,6 +221,11 @@ defmodule DIYWeb.HomeLive do
   def handle_event("clear_usage", _params, socket) do
     {:noreply, put(socket, Build.set_usage(socket.assigns.build, nil))}
   end
+
+  # A page of the panel of the open item (DIYWeb.Stage): the panel keeps
+  # only the pages that it has.
+  def handle_event("item_page", %{"page" => page}, socket) when is_binary(page),
+    do: {:noreply, assign(socket, :item_page, page)}
 
   def handle_event("check_item", %{"id" => id}, socket) do
     with_build(socket, Build.check_item(socket.assigns.build, id))
@@ -1121,6 +1128,7 @@ defmodule DIYWeb.HomeLive do
               item_error={assigns[:item_error]}
               outage={DIYWeb.PowerPage.outage_text(@power, @whatif)}
               ha={@ha}
+              item_page={@item_page}
               ha_rooms={@ha_rooms}
               ha_sync={@ha_sync}
             />
