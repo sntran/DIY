@@ -591,7 +591,7 @@
 .stage-model::before { content: ""; position: absolute; inset: -12% -4%; z-index: -1;
   background: radial-gradient(closest-side, rgb(255 255 255 / 0.28), rgb(255 255 255 / 0.08) 60%, transparent) }
 .stage-panel { position: relative; z-index: 2; width: 100%; padding: 0.7em 0.8em; display: flex; flex-direction: column;
-  gap: 0.6em; border-radius: 6px; overflow: auto; font-size: clamp(0.72rem, calc(var(--pw, 400px) / 26), 0.95rem) }
+  gap: 0.6em; border-radius: 6px; overflow: auto; font-size: clamp(0.8rem, calc(var(--pw, 400px) / 24), 1rem) }
 /* The panel is as wide as its screen: its fields are not wider. */
 .stage-panel { overflow-x: hidden }
 .stage-panel :is(.input, .select, input, select) { max-width: 100%; min-width: 0 }
@@ -615,7 +615,7 @@
 .stage-page .text-sm { font-size: 1em }
 .stage-keys { display: flex; flex-wrap: wrap; gap: 0.35em }
 .stage-key { display: inline-flex; align-items: center; justify-content: center; min-height: 1.9rem; padding: 0 0.75em;
-  border-radius: 999px; font-size: 0.9em; font-weight: 600; cursor: pointer; border: 0;
+  border-radius: 999px; font-size: 0.95em; font-weight: 600; cursor: pointer; border: 0;
   transition: transform 80ms, box-shadow 80ms }
 .stage-key:active, .stage-key[aria-selected=true] { transform: translateY(2px) }
 .stage-key:focus-visible { outline: 3px solid #f59e0b; outline-offset: 2px }
@@ -625,6 +625,12 @@
 .panel-label .checkbox { --input-color: #1f1a12; border-color: #1f1a12; color: #fff6cf }
 .panel-screen .checkbox { --input-color: #eef5fb; border-color: #eef5fb; color: #0d1b28 }
 .panel-led .checkbox { --input-color: #8dffa8; border-color: #8dffa8; color: #0c1410 }
+/* A checkbox on a panel is 24 px, large enough for a finger. */
+.stage-panel .checkbox { --size: 1.5rem }
+/* A file field on a panel: its button in the colors of the panel. */
+.stage-panel .file-input::file-selector-button { color: inherit; background: rgb(128 128 128 / 0.25); border-color: currentColor }
+/* The icon of the item is a dark drawing: on a dark screen it does not show. */
+:is(.panel-led, .panel-screen) .stage-title svg { display: none }
 /* A box of a different color on a page (the place, the real usage). */
 .stage-panel .bg-base-200 { color: inherit }
 .panel-label .bg-base-200 { background: rgb(31 26 18 / 0.07) }
@@ -662,7 +668,7 @@
 .panel-led h2, .panel-led .stage-year { text-shadow: 0 0 6px rgb(141 255 168 / 0.5) }
 .panel-led .stage-key { color: #e3e7ea; background: #4a5055; box-shadow: 0 3px 0 #1d2023 }
 .panel-led .stage-key[aria-selected=true] { background: #1565c0; color: #fff; box-shadow: 0 1px 0 #0d3c78 }
-.panel-led :is(.input, .select) { background: rgb(141 255 168 / 0.08); color: #8dffa8; border-color: #3f7a4c }
+.panel-led :is(.input, .select, .file-input) { background: rgb(141 255 168 / 0.08); color: #8dffa8; border-color: #3f7a4c }
 .panel-led :is(.btn) { background: #4a5055; color: #e3e7ea; border-color: #4a5055 }
 .panel-led .link { color: #b8ffc9 }
 
@@ -673,7 +679,7 @@
     linear-gradient(160deg, #1b3a55, #0d1b28 65%) }
 .panel-screen .stage-key { color: #fff; background: #2b4a64; box-shadow: 0 3px 0 #13283a }
 .panel-screen .stage-key[aria-selected=true] { background: #eef5fb; color: #0d1b28; box-shadow: 0 1px 0 #9fb4c6 }
-.panel-screen :is(.input, .select) { background: rgb(255 255 255 / 0.1); color: #eef5fb; border-color: #5b7a94 }
+.panel-screen :is(.input, .select, .file-input) { background: rgb(255 255 255 / 0.1); color: #eef5fb; border-color: #5b7a94 }
 .panel-screen .link { color: #bfe0ff }
 .panel-screen .stage-warn { background: rgb(245 158 11 / 0.2) }
 
@@ -686,6 +692,6 @@
 .panel-label .stage-year { border-block: 1px solid #1f1a12; padding-block: 4px }
 .panel-label .stage-key { color: #1f1a12; background: #fffdf2; box-shadow: inset 0 0 0 1px #8a7a35, 0 2px 0 #8a7a35 }
 .panel-label .stage-key[aria-selected=true] { background: #1f1a12; color: #fff6cf }
-.panel-label :is(.input, .select) { background: #fffdf2; color: #1f1a12; border-color: #8a7a35 }
+.panel-label :is(.input, .select, .file-input) { background: #fffdf2; color: #1f1a12; border-color: #8a7a35 }
 .panel-label .stage-warn { background: #ffe08a }
 .stage-key-remove { color: #fff !important; background: #b42318 !important; box-shadow: 0 2px 0 #7a1710 !important }

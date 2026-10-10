@@ -111,9 +111,11 @@ defmodule DIYWeb.HomeLive do
 
   # The frames of the model of the open item (DIYWeb.Stage). The LiveView
   # keeps them while the item is open: a render does not send them again.
+  # An item of a van opens in a sheet, with no frames.
   defp item_frames(socket) do
     type =
-      with id when is_binary(id) <- socket.assigns[:item],
+      with :inside <- socket.assigns.live_action,
+           id when is_binary(id) <- socket.assigns[:item],
            %Build{} = build <- socket.assigns[:build],
            {:ok, item} <- Build.item(build, id),
            do: item.type,

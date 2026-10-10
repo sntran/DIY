@@ -51,6 +51,26 @@ defmodule DIYWeb.StageTest do
     assert y > y1
     assert z > z0 and z + h < z1
     assert h <= w * 1.3 + 1.0e-9
+
+    # A label on a front that is not high is 0.6 of its width. It hangs
+    # from the top of the front, as a tag.
+    {{_x0, _y0, _z0}, {_x1, _y1, z1}} = Shapes.bounds(Shapes.model("ceiling_fan"))
+    {:front, {_x, _y, z}, {w, h}} = Stage.region("ceiling_fan")
+    assert_in_delta h, w * 0.6, 1.0e-9
+    assert_in_delta z + h, z1, 1.0e-9
+  end
+
+  test "the panel of each kind can be 260 by 150 px on a page of 360 px" do
+    # The panel is 336 px wide at most on a page of 360 px (12 px on each
+    # side). So each panel is 150 / 336 of its width high, at least.
+    for type <- @types do
+      {ax, ay, bx, by, cx, cy} = Stage.frames(type).region
+
+      ratio =
+        :math.sqrt((cx - ax) ** 2 + (cy - ay) ** 2) / :math.sqrt((bx - ax) ** 2 + (by - ay) ** 2)
+
+      assert ratio >= 150 / 336, "#{type}: #{ratio}"
+    end
   end
 
   # The x and y of the points of a frame.

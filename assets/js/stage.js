@@ -67,29 +67,39 @@ export function restPose(box, view, start, rect) {
 
 export const FRONT = {x: 0, y: 0, s: 1}
 
-// The sizes of the panel on the stage, in px: the least width and height
-// to read it, and the most width.
+// The sizes of the panel on the stage, in px for a font of 16 px. The
+// least width and height let a person read it. A larger font makes them
+// larger. The panel stays EDGE px from the sides of the page.
 export const MIN_W = 260
 export const MIN_H = 150
 export const MAX_W = 440
+export const EDGE = 12
 
 // The places of the model and of its panel on the stage (an area of the
 // page). The region is the place of the panel on the last frame. It has
 // three corners: at the top left, at the top right and at the bottom left.
-// They are in units of the view. The whole model fits in the area when the panel is
-// then large enough to read. Else the model comes nearer. The middle of
-// the panel is at the middle of the width, and at 45% of the height.
-export function placement(view, region, area) {
+// They are in units of the view. The whole model fits in the area when the
+// panel is then large enough to read. Else the model comes nearer. The
+// panel is not wider or higher than the page. The middle of the panel is
+// at the middle of the width, and at 45% of the height. When a side of the
+// panel is then out of the page, the panel moves into the page.
+export function placement(view, region, area, rem = 16) {
   const [vx, vy, vw, vh] = view
   const [ax, ay, bx, by, cx, cy] = region
   const ru = Math.hypot(bx - ax, by - ay)
   const rv = Math.hypot(cx - ax, cy - ay)
+  const font = rem / 16
   const fit = Math.min((area.width * 0.9) / vw, (area.height * 0.75) / vh)
-  const widest = Math.min(area.width - 24, MAX_W)
-  const k = Math.min(Math.max(fit, MIN_W / ru, MIN_H / rv), widest / ru)
+  const most = Math.min(Math.min(area.width - 2 * EDGE, MAX_W * font) / ru, (area.height - 2 * EDGE) / rv)
+  const k = Math.min(Math.max(fit, (MIN_W * font) / ru, (MIN_H * font) / rv), most)
+  // The middle of the panel, and the half of its box on the page.
   const [mx, my] = [(bx + cx) / 2, (by + cy) / 2]
-  const left = area.width / 2 - (mx - vx) * k
-  const top = area.height * 0.45 - (my - vy) * k
+  const hx = Math.max(Math.abs(ax - mx), Math.abs(bx - mx)) * k
+  const hy = Math.max(Math.abs(ay - my), Math.abs(by - my)) * k
+  const px = Math.max(EDGE + hx, Math.min(area.width / 2, area.width - EDGE - hx))
+  const py = Math.max(EDGE + hy, Math.min(area.height * 0.45, area.height - EDGE - hy))
+  const left = px - (mx - vx) * k
+  const top = py - (my - vy) * k
   return {
     model: {left, top, width: vw * k, height: vh * k},
     panel: {
@@ -145,6 +155,8 @@ export const browserParts = (win) => ({
   now: () => win.performance.now(),
   frame: (f) => win.requestAnimationFrame(f),
   reduce: () => Boolean(win.matchMedia?.("(prefers-reduced-motion: reduce)").matches),
+  // The size of the font of the page, in px.
+  rem: () => Number.parseFloat(win.getComputedStyle(win.document.documentElement).fontSize) || 16,
 })
 
 // The parts of the browser of the page of an element.
@@ -169,7 +181,7 @@ export function stageHook(parts = pageParts) {
       doc.addEventListener("keydown", this.onKey)
       doc.defaultView?.addEventListener("resize", this.onResize)
       this.el.addEventListener("click", this.onClick)
-      this.js().addClass(this.el, "stage-placed")
+      this.mark("stage-placed")
       this.place()
 
       // The item on the plan does not show while it is on the stage.
@@ -191,7 +203,7 @@ export function stageHook(parts = pageParts) {
       const id = ++this.flight
       // The panel shows when the model lands: then it takes the focus.
       const landed = () => {
-        this.js().addClass(this.el, "stage-landed")
+        this.mark("stage-landed")
         this.el.querySelector('[role="tab"][aria-selected="true"]')?.focus({preventScroll: true})
       }
       if (this.parts.reduce()) {
@@ -205,18 +217,33 @@ export function stageHook(parts = pageParts) {
       })
     },
 
-    // The box of the item on the plan, when it shows in the plan.
+    // The box of the item on the plan. The item must show in the plan, and
+    // on the page. The stage is as large as the page.
     planRect() {
       const doc = this.el.ownerDocument
       const rect = rectOf(doc.getElementById(`plan-item-${this.el.dataset.item}`))
       const plan = doc.getElementById("plan-svg")?.getBoundingClientRect()
-      return rect && plan && inside(rect, plan) ? rect : null
+      return rect && plan && inside(rect, plan) && inside(rect, this.el.getBoundingClientRect()) ? rect : null
     },
 
-    // The model and its panel on the stage, for the size of the page.
+    // A class on the stage, at once. The LiveView adds it too, so that a
+    // patch keeps it. But the LiveView adds it only at the next frame of the
+    // page, and the focus needs the panel before that.
+    mark(add, remove = null) {
+      if (remove) {
+        this.el.classList.remove(remove)
+        this.js().removeClass(this.el, remove)
+      }
+      this.el.classList.add(add)
+      this.js().addClass(this.el, add)
+    },
+
+    // The model and its panel on the stage, for the size of the page and of
+    // its font.
     place() {
       const area = this.el.getBoundingClientRect()
-      const {model, panel} = placement(numbers(this.model.dataset.view), numbers(this.el.dataset.region), area)
+      const view = numbers(this.model.dataset.view)
+      const {model, panel} = placement(view, numbers(this.el.dataset.region), area, this.parts.rem())
       Object.assign(this.model.style, {
         left: `${model.left}px`, top: `${model.top}px`, width: `${model.width}px`, height: `${model.height}px`,
       })
@@ -288,8 +315,7 @@ export function stageHook(parts = pageParts) {
       const id = ++this.flight
       const close = () => this.js().patch(href)
       if (this.parts.reduce()) return close()
-      this.js().removeClass(this.el, "stage-landed")
-      this.js().addClass(this.el, "stage-closing")
+      this.mark("stage-closing", "stage-landed")
       // The plan can have a different place now (a zoom, or a move).
       const rect = this.planRect()
       const rest = rect ? this.restPose(rect) : (this.rest ?? this.restPose(null))

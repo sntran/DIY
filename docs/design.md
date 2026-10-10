@@ -1524,25 +1524,37 @@ label on its front (`DIYWeb.Stage`, and the hook `Stage` in
   on the stage and grows. On its way, the hook shows the frames one after
   the other. The item of the plan does not show while it is on the stage.
   A close does the same in the other direction in 0.65 seconds, from where
-  the model is (also in the flight out). Then the stage closes. When the
-  item is not in the view of the plan, it comes from the middle of the
-  stage.
+  the model is (also in the flight out). Then the stage closes. An item
+  that is not in the view of the plan comes from the middle of the stage.
+  An item of a plan that is not on the page does the same. For example,
+  the page is down at the list of the rooms.
 - The panel is on the item (`DIYWeb.Stage.region/1`):
   - A TV, a computer, a microwave, a power station, a smart meter and a
     CPAP show the panel on their screen. A hub has an LED screen on its
     top.
   - The other items have a printed label on the front: 3/4 of the width,
     a little over the middle of the height. A label is paper, so it has
-    the same colors in the light and the dark mode.
+    the same colors in the light and the dark mode. Its height is 0.6 of
+    its width at least. A front that is not high (a ceiling fan, for
+    example) has a tag: the label hangs from the top of the front.
   - The server gives three corners of the panel on the last frame. The
     hook puts the panel on them with a CSS matrix, so the panel follows
     the slant of the face.
 - The size. The panel must be large enough to read: 260 by 150 pixels at
-  least, and 440 pixels wide at most. When the whole model fits on the
-  page with such a panel, the whole model shows. Else the model comes
-  nearer, as an item in front of the eyes. Then a part of a fridge, for
-  example, is out of the page. The panel shows when the model lands, as
-  a screen that turns on.
+  least, and 440 pixels wide at most. These sizes are for a font of 16
+  pixels: a larger font in the browser makes them larger. When the whole
+  model fits on the page with such a panel, the whole model shows. Else
+  the model comes nearer, as an item in front of the eyes. Then a part of
+  a fridge, for example, is out of the page. The panel is not wider or
+  higher than the page, with 12 pixels on each side. It is at the middle
+  of the width and at 45% of the height, but it moves into the page when
+  a side is out. On a page of 360 pixels or more, each panel can be 260
+  by 150 pixels. A test checks the shape of the panel of each kind. On a
+  very small page (a zoom of 400%), the panel is smaller and its text
+  scrolls. The panel shows when the model lands, as a screen that turns
+  on. Then its key takes the focus. The hook adds the class of the
+  landing at once. The LiveView adds a class only at the next frame, and a
+  panel that does not show cannot take the focus.
 - The pages. The keys of the panel show its pages:
   - Use: the kWh and the money of a year, with the math;
   - Numbers: the numbers of the item, and its flags, with the year at the
@@ -1565,12 +1577,16 @@ label on its front (`DIYWeb.Stage`, and the hook `Stage` in
   front, and a close is at once.
 - The cost. The frames of a water heater have about 100 KB, and take 37
   ms on the BEAM of a computer. So the app keeps the frames of each kind
-  after the first time, for each version of the code. The LiveView keeps
+  after the first time. A new version of the stage, of the shapes or of
+  the camera makes new frames. The LiveView keeps
   the frames of the open item: a render, for example of a different page,
   does not send them again. The points have one decimal: a step of 0.1%
   of the model.
-- The van. The items of a van still open in a sheet. They come to the
-  stage in a later change.
+- The van. The items of a van still open in a sheet, with no frames. They
+  come to the stage in a later change.
+- The look of the panel. A checkbox is 24 pixels. A field and its button
+  have the colors of the panel. The icon of the item is not on a dark
+  screen: it is a dark drawing.
 
 The tests:
 

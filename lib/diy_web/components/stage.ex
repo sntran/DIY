@@ -7,8 +7,8 @@ defmodule DIYWeb.Stage do
 
   The server draws the model of the item (`DIYWeb.Icon.Shapes`) from
   #{12} cameras, as the frames of a flipbook. The first camera is the
-  camera of the house (`DIYWeb.Camera.house/0`), so the first frame is the
-  drawing of the plan. The last camera looks at the front of the item, or
+  camera of the house (`DIYWeb.Camera.house/0`), so the first frame looks
+  as the item on the plan. The last camera looks at the front of the item, or
   down at its top for a panel on the top. Each frame has the center of the
   model at the same point, so the model turns in place.
 
@@ -65,7 +65,9 @@ defmodule DIYWeb.Stage do
   @doc """
   The place of the panel on the model of a kind: its screen, or a label on
   its front. A label is at the middle of the width (3/4 of it), and a
-  little over the middle of the height.
+  little over the middle of the height. Its height is 0.6 of its width at
+  least, so that the panel is large enough to read. A label that is too
+  high for the front hangs from the top of the front, as a tag.
   """
   def region(type) do
     case @screens do
@@ -75,8 +77,8 @@ defmodule DIYWeb.Stage do
       _none ->
         {{x0, _y0, z0}, {x1, y1, z1}} = Shapes.bounds(Shapes.model(type))
         w = (x1 - x0) * 0.75
-        h = min((z1 - z0) * 0.6, w * 1.3)
-        z = z0 + (z1 - z0) * 0.58 - h / 2
+        h = max(min((z1 - z0) * 0.6, w * 1.3), w * 0.6)
+        z = min(z0 + (z1 - z0) * 0.58 - h / 2, z1 - h)
         {:front, {x0 + (x1 - x0 - w) / 2, y1 + 0.003, z}, {w, h}}
     end
   end
@@ -123,8 +125,8 @@ defmodule DIYWeb.Stage do
   keeps them after the first time (`:persistent_term`).
   """
   def frames(type) do
-    # A new version of the code has new frames.
-    key = {__MODULE__, type, __MODULE__.module_info(:md5)}
+    # A new version of the code that draws the frames has new frames.
+    key = {__MODULE__, type, Enum.map([__MODULE__, Shapes, Camera], & &1.module_info(:md5))}
 
     case :persistent_term.get(key, nil) do
       nil ->
@@ -152,8 +154,16 @@ defmodule DIYWeb.Stage do
             do: {Enum.map(corners, at), class}
       end
 
+    # The corners of the panel on the last frame. A tag can go past the
+    # model: the view has the whole panel too.
+    last = List.last(cameras)
+    {lx, ly} = Camera.at(last, {0, 0}, center)
+    region = Enum.map(corners(region(type)), &Camera.at(last, {-lx, -ly}, &1))
+    [{ax, ay}, {bx, by}, {cx, cy}] = region
+    panel = box([{[{ax, ay}, {bx, by}, {cx, cy}, {bx + cx - ax, by + cy - ay}], nil}])
+
     boxes = Enum.map(drawn, &box/1)
-    {vx0, vy0, vx1, vy1} = union(boxes)
+    {vx0, vy0, vx1, vy1} = union([panel | boxes])
     k = @size / max(vx1 - vx0, vy1 - vy0)
     pad = 2
     view = {vx0 * k - pad, vy0 * k - pad, (vx1 - vx0) * k + 2 * pad, (vy1 - vy0) * k + 2 * pad}
@@ -165,23 +175,11 @@ defmodule DIYWeb.Stage do
 
     {sx0, sy0, sx1, sy1} = hd(boxes)
 
-    last = List.last(cameras)
-    {lx, ly} = Camera.at(last, {0, 0}, center)
-
-    region =
-      region(type)
-      |> corners()
-      |> Enum.flat_map(fn corner ->
-        {x, y} = Camera.at(last, {-lx, -ly}, corner)
-        [x * k, y * k]
-      end)
-      |> List.to_tuple()
-
     %{
       view: view,
       frames: frames,
       start: {sx0 * k, sy0 * k, (sx1 - sx0) * k, (sy1 - sy0) * k},
-      region: region
+      region: region |> Enum.flat_map(fn {x, y} -> [x * k, y * k] end) |> List.to_tuple()
     }
   end
 
