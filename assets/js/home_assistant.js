@@ -24,6 +24,13 @@
 // - The compare and set: a refresh writes its access token only when the
 //   store still has the same refresh token.
 // - The owner: a refused refresh ends only the socket of its own session.
+//
+// The match of the rooms reads the floors and the areas of Home Assistant.
+// It adds the areas of the rooms that the person chose
+// (DIYWeb.HomeAssistant.rooms_sheet, and the TLA+ model specs/RoomSync.tla).
+// Home Assistant refuses a second area with the same name. Then the hook
+// uses the area that has the name: a different tab, or a person in Home
+// Assistant, added it first.
 
 export const DB = "diy-ha"
 export const STORE = "session"
@@ -39,6 +46,9 @@ export const EARLY = 60_000
 // The first and the longest wait before the hook opens the socket again.
 export const FIRST_WAIT = 1_000
 export const MAX_WAIT = 60_000
+// The id of the first command on a socket: get_config. The other commands
+// get the next ids.
+const CONFIG = 1
 
 // The address of Home Assistant in a text of the person: its origin and
 // its path with no "/" at the end. Else null.
@@ -57,6 +67,21 @@ export function address(text) {
 export const blocked = (protocol, url) => protocol === "https:" && url.startsWith("http:")
 
 export const socketUrl = (url) => url.replace(/^http/, "ws") + "/api/websocket"
+
+// The name of a floor or of an area for a match: no case and no spaces, as
+// Home Assistant does (normalize_name). DIY.HomeAssistant.key/1 is the same.
+export const key = (name) => name.toLowerCase().replaceAll(" ", "")
+
+// An error of a command on the socket: the code and the message of Home
+// Assistant, or "offline" when the socket is not there.
+export class CommandError extends Error {
+  constructor(code, message) {
+    super(message)
+    this.code = code
+  }
+}
+
+const offline = () => new CommandError("offline", "Home Assistant does not answer")
 
 // The client of the app for Home Assistant: the address of the app.
 export const clientOf = (location) => location.origin + "/"
@@ -173,6 +198,8 @@ export class Link {
     this.session = null
     this.socket = null
     this.retry = null
+    this.commands = new Map()
+    this.next = CONFIG + 1
     this.wait = FIRST_WAIT
     this.invalids = 0
     this.version = null
@@ -323,7 +350,24 @@ export class Link {
     this.retry = null
     const socket = this.socket
     this.socket = null
+    this.drop()
     socket?.close()
+  }
+
+  // The socket is gone: the commands on it get no answer.
+  drop() {
+    for (const {reject} of this.commands.values()) reject(offline())
+    this.commands.clear()
+    this.next = CONFIG + 1
+  }
+
+  // Sends a command on the socket, and gives its result. Only a socket
+  // that is connected takes commands.
+  command(type, fields = {}) {
+    if (!this.socket || this.state.state !== "connected") return Promise.reject(offline())
+    const id = this.next++
+    this.socket.send(JSON.stringify({...fields, id, type}))
+    return new Promise((resolve, reject) => this.commands.set(id, {resolve, reject}))
   }
 
   async message(socket, epoch, message) {
@@ -334,12 +378,17 @@ export class Link {
     } else if (message.type === "auth_ok") {
       this.invalids = 0
       this.version = message.ha_version
-      socket.send(JSON.stringify({id: 1, type: "get_config"}))
+      socket.send(JSON.stringify({id: CONFIG, type: "get_config"}))
     } else if (message.type === "auth_invalid") {
       this.invalid(epoch)
-    } else if (message.type === "result" && message.id === 1 && message.success) {
+    } else if (message.type === "result" && message.id === CONFIG && message.success) {
       this.wait = FIRST_WAIT
       this.show("connected", {name: message.result.location_name, version: this.version})
+    } else if (message.type === "result" && this.commands.has(message.id)) {
+      const {resolve, reject} = this.commands.get(message.id)
+      this.commands.delete(message.id)
+      if (message.success) resolve(message.result)
+      else reject(new CommandError(message.error?.code, message.error?.message ?? "error"))
     }
   }
 
@@ -362,6 +411,7 @@ export class Link {
   closed(socket, epoch) {
     if (socket !== this.socket) return
     this.socket = null
+    this.drop()
     this.show("offline")
     this.retry = this.setTimer(() => {
       this.retry = null
@@ -441,6 +491,64 @@ export class Link {
   post(url, path, fields) {
     return this.fetch(url + path, {method: "POST", body: new URLSearchParams(fields)})
   }
+
+  // Sends the floors and the areas of Home Assistant to the LiveView
+  // (ha:rooms), and tells if the user is an admin. With no socket, it
+  // sends {error: "offline"}.
+  async rooms() {
+    try {
+      const [floors, areas, user] = await Promise.all([
+        this.command("config/floor_registry/list"),
+        this.command("config/area_registry/list"),
+        this.command("auth/current_user"),
+      ])
+      this.push("ha:rooms", {
+        floors: floors.map((floor) => ({id: floor.floor_id, name: floor.name, level: floor.level ?? null})),
+        areas: areas.map((area) => ({id: area.area_id, name: area.name, floor: area.floor_id ?? null})),
+        admin: user.is_admin === true,
+      })
+    } catch {
+      this.push("ha:rooms", {error: "offline"})
+    }
+  }
+
+  // Adds an area for each room: [{room, name, level, floor}]. The level is
+  // the level of the floor in Home Assistant (null: no floor), and floor is
+  // the name of a new floor. It sends the areas of the rooms, and the rooms
+  // that it did not add, to the LiveView (ha:areas_added).
+  async addAreas(rooms) {
+    const links = []
+    const errors = []
+    let floors = null
+    for (const {room, name, level, floor} of rooms) {
+      try {
+        floors ??= await this.command("config/floor_registry/list")
+        let at = level === null ? null : floors.find((one) => one.level === level)
+        if (level !== null && !at) {
+          at = await this.add("config/floor_registry", {name: floor, level}, floor)
+          floors.push(at)
+        }
+        const area = await this.add("config/area_registry", at ? {name, floor_id: at.floor_id} : {name}, name)
+        links.push({room, area: area.area_id})
+      } catch (error) {
+        errors.push({room, message: error.message})
+      }
+    }
+    this.push("ha:areas_added", {links, errors})
+  }
+
+  // Adds a floor or an area. When Home Assistant already has one with the
+  // same name, it gives that one.
+  async add(registry, fields, name) {
+    try {
+      return await this.command(registry + "/create", fields)
+    } catch (error) {
+      if (error.code !== "invalid_info") throw error
+      const same = (await this.command(registry + "/list")).find((one) => key(one.name) === key(name))
+      if (!same) throw error
+      return same
+    }
+  }
 }
 
 // The hook of LiveView. deps() gives the parts of the browser: store,
@@ -453,6 +561,8 @@ export function homeAssistantHook(deps) {
       this.link = new Link({...deps(), push: (event, payload) => this.pushEvent(event, payload)})
       this.handleEvent("ha:connect", ({url, back}) => this.link.connect(url, back))
       this.handleEvent("ha:disconnect", () => this.link.disconnect())
+      this.handleEvent("ha:rooms_fetch", () => this.link.rooms())
+      this.handleEvent("ha:add_areas", ({areas}) => this.link.addAreas(areas))
       this.link.start()
     },
     reconnected() { this.link.report() },

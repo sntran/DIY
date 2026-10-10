@@ -42,7 +42,7 @@ defmodule DIYWeb.HomeLive do
     Weather
   }
 
-  alias DIYWeb.{Cutaway, Device, Format, Inside, Outside, Scene, VanCutaway}
+  alias DIYWeb.{Cutaway, Device, Format, HomeAssistant, Inside, Outside, Scene, VanCutaway}
 
   @impl true
   def mount(_params, _session, socket) do
@@ -98,12 +98,20 @@ defmodule DIYWeb.HomeLive do
      |> assign(:add, if(sheets?, do: params["add"]))
      |> assign(:room, params["room"])
      |> assign(:sheet, params["sheet"])
+     |> ha_rooms(socket.assigns.live_action, params["sheet"])
      |> assign(:van_id, params["id"])
      |> pictures()
      |> assign(:lesson_step, parse_int(params["step"]))
      |> assign(checks: nil, answers: %{})
      |> assign(:hint, false)}
   end
+
+  # The sheet of the match of the rooms reads the areas of Home Assistant
+  # each time that it opens.
+  defp ha_rooms(socket, :inside, "ha_rooms"),
+    do: socket |> assign(:ha_sync, nil) |> HomeAssistant.fetch_rooms()
+
+  defp ha_rooms(socket, _action, _sheet), do: socket
 
   @doc false
   # A build from the device (DIYWeb.Device): update the data of the pages.
@@ -383,6 +391,32 @@ defmodule DIYWeb.HomeLive do
   def handle_event("rename_room", %{"room_id" => id, "name" => name}, socket) do
     with_build(socket, Build.rename_room(socket.assigns.build, id, name))
   end
+
+  # The match of the rooms with Home Assistant (DIYWeb.HomeAssistant): the
+  # app changes the build, and the hook adds the areas to Home Assistant.
+  def handle_event(
+        "ha_sync",
+        params,
+        %{assigns: %{ha_rooms: %{areas: _} = ha_rooms, build: %{house: %{}}}} = socket
+      ) do
+    {build, out, status} = HomeAssistant.sync(socket.assigns.build, ha_rooms, params)
+    socket = socket |> put(build) |> assign(:ha_sync, status)
+
+    if out == [],
+      do: {:noreply, HomeAssistant.fetch_rooms(socket)},
+      else: {:noreply, push_event(socket, "ha:add_areas", %{areas: out})}
+  end
+
+  def handle_event("ha_sync", _params, socket), do: {:noreply, socket}
+
+  def handle_event("ha:areas_added", params, %{assigns: %{build: %{house: %{}}}} = socket) do
+    {build, status} =
+      HomeAssistant.areas_added(socket.assigns.build, socket.assigns.ha_sync, params)
+
+    {:noreply, socket |> put(build) |> assign(:ha_sync, status) |> HomeAssistant.fetch_rooms()}
+  end
+
+  def handle_event("ha:areas_added", _params, socket), do: {:noreply, socket}
 
   def handle_event("delete_room", %{"id" => id}, socket) do
     case Build.delete_room(socket.assigns.build, id) do
@@ -1086,6 +1120,8 @@ defmodule DIYWeb.HomeLive do
               item_error={assigns[:item_error]}
               outage={DIYWeb.PowerPage.outage_text(@power, @whatif)}
               ha={@ha}
+              ha_rooms={@ha_rooms}
+              ha_sync={@ha_sync}
             />
           <% @live_action == :estimate -> %>
             <DIYWeb.Math.estimate

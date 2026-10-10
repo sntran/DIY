@@ -9,7 +9,7 @@ import {IDBFactory} from "fake-indexeddb"
 import {
   DB, STORE, KEY, CHANNEL, PENDING, EARLY, FIRST_WAIT, MAX_WAIT,
   address, blocked, socketUrl, clientOf, wayBack, randomText, pkce, authorizeUrl,
-  open, sessionStore, Link, homeAssistantHook, browserParts,
+  open, sessionStore, Link, homeAssistantHook, browserParts, key, CommandError,
 } from "../../assets/js/home_assistant.js"
 
 const HA = "http://ha.test:8123"
@@ -737,6 +737,13 @@ test("the hook of LiveView", async () => {
   assert.equal(new URL(page.assigned[0]).searchParams.get("redirect_uri"), APP + "/inside?item=i1")
   await handlers["ha:disconnect"]()
   assert.equal(page.pushes.at(-1)[1].state, "none")
+  // With no socket, the match of the rooms gets no floors and no areas.
+  await handlers["ha:rooms_fetch"]()
+  assert.deepEqual(page.pushes.at(-1), ["hook:ha:rooms", {error: "offline"}])
+  await handlers["ha:add_areas"]({areas: [{room: "r1", name: "Den", level: null, floor: null}]})
+  assert.deepEqual(page.pushes.at(-1), ["hook:ha:areas_added", {
+    links: [], errors: [{room: "r1", message: "Home Assistant does not answer"}],
+  }])
   self.reconnected()
   assert.equal(page.pushes.at(-1)[1].state, "none")
   self.destroyed()
@@ -891,4 +898,261 @@ test("two tabs in any order: no revoked session in the store, no socket after a 
       [[{kind: "signIn", tab: 0}, {kind: "disconnect", tab: 0}, {kind: "answer", index: 0}]],
     ],
   })
+})
+
+// A fake registry of Home Assistant: the floors, the areas and the user.
+// Home Assistant refuses a second floor or area with the same name
+// (invalid_info). fail(message) can give the error of a command.
+function registry({floors = [], areas = [], admin = true, fail = () => null} = {}) {
+  const ha = {floors: structuredClone(floors), areas: structuredClone(areas), admin, fail, answered: new WeakMap()}
+  ha.reply = (message) => {
+    const error = ha.fail(message, ha)
+    if (error) return {success: false, error}
+    const ok = (result) => ({success: true, result: structuredClone(result)})
+    const taken = (list) => list.some((one) => key(one.name) === key(message.name))
+    const inUse = () => ({code: "invalid_info", message: `The name ${message.name} (${key(message.name)}) is already in use`})
+    switch (message.type) {
+      case "config/floor_registry/list": return ok(ha.floors)
+      case "config/area_registry/list": return ok(ha.areas)
+      case "auth/current_user": return ok({id: "u1", name: "Owner", is_admin: ha.admin})
+      case "config/floor_registry/create": {
+        if (taken(ha.floors)) return {success: false, error: inUse()}
+        const floor = {floor_id: "floor_" + (ha.floors.length + 1), name: message.name, level: message.level, aliases: []}
+        ha.floors.push(floor)
+        return ok(floor)
+      }
+      case "config/area_registry/create": {
+        if (taken(ha.areas)) return {success: false, error: inUse()}
+        const area = {area_id: "area_" + (ha.areas.length + 1), name: message.name, floor_id: message.floor_id ?? null}
+        ha.areas.push(area)
+        return ok(area)
+      }
+      default: return {success: false, error: {code: "unknown_command", message: "Unknown command."}}
+    }
+  }
+  return ha
+}
+
+// Home Assistant answers each new command on the socket, until no command
+// waits. pick(n) chooses which of n waiting commands it answers next.
+async function serve(ha, sockets, pick = () => 0) {
+  for (let round = 0; round < 500; round++) {
+    await settle(4)
+    const waiting = []
+    for (const socket of sockets) {
+      const done = ha.answered.get(socket) ?? new Set()
+      ha.answered.set(socket, done)
+      for (const message of socket.sent) {
+        if (message.id > 1 && !done.has(message.id) && !socket.closed) waiting.push({socket, message, done})
+      }
+    }
+    if (waiting.length === 0) return
+    const {socket, message, done} = waiting[pick(waiting.length) % waiting.length]
+    done.add(message.id)
+    socket.receive({id: message.id, type: "result", ...ha.reply(message)})
+  }
+  throw new Error("the commands do not end")
+}
+
+test("the key of a name has no case and no spaces", () => {
+  assert.equal(key("Living Room"), "livingroom")
+  assert.equal(key(" LIVING  room "), "livingroom")
+})
+
+test("the hook reads the floors, the areas and the user of Home Assistant", async () => {
+  const page = parts()
+  const {link, socket} = await connected(page)
+  const ha = registry({
+    floors: [{floor_id: "ground", name: "Ground", level: 0}, {floor_id: "loft", name: "Loft"}],
+    areas: [{area_id: "kitchen", name: "Kitchen", floor_id: "ground"}, {area_id: "yard", name: "Yard"}],
+    admin: false,
+  })
+  const done = link.rooms()
+  await serve(ha, [socket])
+  await done
+  assert.deepEqual(socket.sent.slice(2).map((message) => [message.id, message.type]), [
+    [2, "config/floor_registry/list"], [3, "config/area_registry/list"], [4, "auth/current_user"],
+  ])
+  assert.deepEqual(last(page), {
+    floors: [{id: "ground", name: "Ground", level: 0}, {id: "loft", name: "Loft", level: null}],
+    areas: [{id: "kitchen", name: "Kitchen", floor: "ground"}, {id: "yard", name: "Yard", floor: null}],
+    admin: false,
+  })
+  assert.equal(page.pushes.at(-1)[0], "ha:rooms")
+  link.stop()
+})
+
+test("the rooms are offline with no socket, a socket that closes, or an error", async () => {
+  // A socket that does not have the sign-in yet takes no commands.
+  const page = parts()
+  await page.deps.store.write(session())
+  const link = new Link(page.deps)
+  await link.start()
+  await settle()
+  assert.equal(link.state.state, "connecting")
+  await link.rooms()
+  assert.deepEqual(last(page), {error: "offline"})
+  link.stop()
+
+  // The socket closes before the answers.
+  const other = parts()
+  const {link: second, socket} = await connected(other)
+  const waiting = second.rooms()
+  socket.drop()
+  await waiting
+  assert.deepEqual(other.pushes.at(-1), ["ha:rooms", {error: "offline"}])
+  assert.equal(second.commands.size, 0)
+
+  // An old Home Assistant with no floors: an error.
+  const third = parts()
+  const {link: link3, socket: socket3} = await connected(third)
+  const ha = registry({fail: (message) => message.type === "config/floor_registry/list" ? {code: "unknown_command"} : null})
+  const done = link3.rooms()
+  await serve(ha, [socket3])
+  await done
+  assert.deepEqual(last(third), {error: "offline"})
+
+  // A disconnect ends the commands on the socket, and the ids start again.
+  const late = assert.rejects(link3.command("auth/current_user"), (error) => error instanceof CommandError && error.code === "offline")
+  await link3.disconnect()
+  await late
+  assert.equal(link3.next, 2)
+  link3.stop()
+})
+
+test("an error of Home Assistant gives its code and its message", async () => {
+  const page = parts()
+  const {link, socket} = await connected(page)
+  const one = assert.rejects(link.command("x/one", {a: 1}), {code: "unauthorized", message: "Unauthorized"})
+  const two = assert.rejects(link.command("x/two"), {code: undefined, message: "error"})
+  assert.deepEqual(socket.sent.slice(2), [{a: 1, id: 2, type: "x/one"}, {id: 3, type: "x/two"}])
+  socket.receive({id: 2, type: "result", success: false, error: {code: "unauthorized", message: "Unauthorized"}})
+  socket.receive({id: 3, type: "result", success: false})
+  await one
+  await two
+  // An answer that no command waits for changes nothing.
+  socket.receive({id: 9, type: "result", success: true, result: {}})
+  assert.equal(link.state.state, "connected")
+  link.stop()
+})
+
+test("the hook adds the floors and the areas of the rooms, and uses an area of the same name", async () => {
+  const page = parts()
+  const {link, socket} = await connected(page)
+  const ha = registry({
+    floors: [{floor_id: "ground", name: "Ground", level: 0}],
+    areas: [{area_id: "kitchen", name: "Kitchen", floor_id: "ground"}],
+  })
+  const done = link.addAreas([
+    {room: "r1", name: "Office", level: 0, floor: "Floor 1"},
+    {room: "r2", name: "Den", level: 1, floor: "Floor 2"},
+    {room: "r3", name: "KITCHEN", level: 1, floor: "Floor 2"},
+    {room: "r4", name: "Shed", level: null, floor: "Around the house"},
+  ])
+  await serve(ha, [socket])
+  await done
+
+  assert.deepEqual(page.pushes.at(-1), ["ha:areas_added", {
+    links: [
+      {room: "r1", area: "area_2"}, {room: "r2", area: "area_3"},
+      {room: "r3", area: "kitchen"}, {room: "r4", area: "area_4"},
+    ],
+    errors: [],
+  }])
+  // One new floor for level 1, and each area on its floor.
+  assert.deepEqual(ha.floors.map((floor) => [floor.name, floor.level]), [["Ground", 0], ["Floor 2", 1]])
+  assert.deepEqual(ha.areas.map((area) => [area.name, area.floor_id]), [
+    ["Kitchen", "ground"], ["Office", "ground"], ["Den", "floor_2"], ["Shed", null],
+  ])
+  assert.equal(socket.sent.filter((message) => message.type === "config/floor_registry/list").length, 1)
+  link.stop()
+})
+
+test("the hook uses a floor of the same name, and tells the rooms that it did not add", async () => {
+  const page = parts()
+  const {link, socket} = await connected(page)
+  const ha = registry({
+    floors: [{floor_id: "upstairs", name: "Floor 2", level: 5}],
+    fail: (message, ha) => {
+      if (message.type === "config/area_registry/create" && message.name === "Vault") {
+        return {code: "unauthorized", message: "Unauthorized"}
+      }
+      // A name in use that the list does not show (for example, an alias).
+      if (message.type === "config/area_registry/create" && message.name === "Den") {
+        return {code: "invalid_info", message: "The name Den (den) is already in use"}
+      }
+      return null
+    },
+  })
+  const done = link.addAreas([
+    {room: "r1", name: "Bath", level: 1, floor: "Floor 2"},
+    {room: "r2", name: "Vault", level: null, floor: "Around the house"},
+    {room: "r3", name: "Den", level: null, floor: "Around the house"},
+  ])
+  await serve(ha, [socket])
+  await done
+  assert.deepEqual(page.pushes.at(-1), ["ha:areas_added", {
+    links: [{room: "r1", area: "area_1"}],
+    errors: [
+      {room: "r2", message: "Unauthorized"},
+      {room: "r3", message: "The name Den (den) is already in use"},
+    ],
+  }])
+  assert.deepEqual(ha.areas, [{area_id: "area_1", name: "Bath", floor_id: "upstairs"}])
+  assert.equal(ha.floors.length, 1)
+
+  // The socket closes: the rooms that wait are not added.
+  const waiting = link.addAreas([{room: "r4", name: "Nook", level: 0, floor: "Floor 1"}, {room: "r5", name: "Hall", level: null, floor: "x"}])
+  socket.drop()
+  await waiting
+  assert.deepEqual(page.pushes.at(-1), ["ha:areas_added", {
+    links: [],
+    errors: [
+      {room: "r4", message: "Home Assistant does not answer"},
+      {room: "r5", message: "Home Assistant does not answer"},
+    ],
+  }])
+  link.stop()
+})
+
+test("two tabs add rooms in any order: one area for each name, and each room gets its area", async () => {
+  const names = ["Den", "den", "Office", "Living Room", "livingroom", "Bath"]
+  const room = fc.record({name: fc.constantFrom(...names), level: fc.constantFrom(null, 0, 1)})
+  const plan = fc.record({
+    first: fc.array(room, {maxLength: 5}),
+    second: fc.array(room, {maxLength: 5}),
+    existing: fc.subarray(names, {maxLength: 2}),
+    order: fc.array(fc.nat(), {minLength: 1, maxLength: 40}),
+  })
+  await fc.assert(fc.asyncProperty(plan, async ({first, second, existing, order}) => {
+    const areas = []
+    for (const name of existing) {
+      if (!areas.some((area) => key(area.name) === key(name))) areas.push({area_id: "old_" + key(name), name, floor_id: null})
+    }
+    const ha = registry({areas})
+    const tabs = []
+    for (const rooms of [first, second]) {
+      const page = parts()
+      tabs.push({page, rooms, ...(await connected(page))})
+    }
+    let turn = 0
+    const done = tabs.map(({link, rooms}, tab) =>
+      link.addAreas(rooms.map((one, i) => ({room: `t${tab}r${i}`, ...one, floor: `Floor ${one.level + 1}`}))))
+    await serve(ha, tabs.map((tab) => tab.socket), (n) => order[turn++ % order.length] % n)
+    await Promise.all(done)
+
+    // One area and one floor for each name, as in Home Assistant.
+    assert.equal(new Set(ha.areas.map((area) => key(area.name))).size, ha.areas.length)
+    assert.equal(new Set(ha.floors.map((floor) => key(floor.name))).size, ha.floors.length)
+    for (const {page, rooms} of tabs) {
+      const {links, errors} = page.pushes.at(-1)[1]
+      assert.deepEqual(errors, [])
+      assert.equal(links.length, rooms.length)
+      links.forEach((link, i) => {
+        const area = ha.areas.find((one) => one.area_id === link.area)
+        assert.equal(key(area.name), key(rooms[i].name))
+      })
+    }
+    for (const {link} of tabs) link.stop()
+  }), {numRuns: 300})
 })
