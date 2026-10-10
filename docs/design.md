@@ -1509,22 +1509,33 @@ camera and the same look. A tap on the picture opens the plan.
 - The picture shows the house of today: a planned item does not show.
   Each floor stands on the floor under it. A floor is a slab of 30 cm,
   then walls of 2.4 m on the sides with no room of the same floor.
+- A part of a floor with no room over it stays open at the top. For
+  example, with no bathroom on floor 2, the kitchen under it shows from
+  above. The plan of the page Rooms has the same hole.
 - A garage has its walls, a wide door and a flat roof. It has its own
   wall on a side with a room of the house.
 - The front and the right end of a floor have windows: one window for
   each 8 feet of wall. The largest room of floor 1 with a wall at the
-  front has the door. The person stands in front of it.
+  front has the door, at the middle of the longest part of that wall. The
+  person stands beside the door.
 - The roof is on the top floor with rooms. It has its slopes, its gable
-  and its panels. A house with no room on the roof gets a roof with no
-  item. The attic is in the roof, and the items in the rooms do not show.
+  and its panels. Only a room on the roof on the level of the roof is the
+  roof. A house with no such room gets a roof with no item. The attic is
+  in the roof, and the items in the rooms do not show.
 - The yards and the driveway show their furniture (`DIYWeb.Decor`) and
   their items, as in the plan: the AC, the panels, a car.
+- A room outside on a floor (a balcony or a patio) is on its slab, with
+  its floor, its furniture and its items. It has no wall. A room outside
+  on the roof does not show.
 - The grid. A pole is at the back of the lot, and its wire goes to the
   meter on the right end of the house. The power flows in the wire 5
   times (4.5 seconds) when the page opens. It does not flow when the
   person asks for less motion.
 - The labels tell the kW of the panels on the roof and in the yards, and
-  the kWh of the stations.
+  the kWh of the stations (with one decimal).
+- The picture is the link into the house. Its label for a screen reader
+  tells what the picture shows. These are the floors, the garage, the
+  panels, the items outside, the stations, the wire and the person.
 - At night (the dark mode), the windows have the warm light of the
   rooms.
 - The order of the paint is the order of the plan
@@ -1535,8 +1546,9 @@ camera and the same look. A tap on the picture opens the plan.
 - The LiveView makes the picture only for the page House, as an assign
   (`DIYWeb.Outside.view/1`). The page Power keeps the picture of
   `DIYWeb.Scene`.
-- The tests. A property test draws random houses, with random items,
-  planned items and rooms that go away. Each point is in the box of the
-  SVG, and only the items of today in the yards and on the roof show. No
+- The tests. A property test draws random houses: rooms go away, move,
+  change their size or are new, and random items are in random rooms.
+  Each point of a polygon, a label, a text and the wire is in the box of
+  the SVG. Only the items of today in the yards and on the roof show. No
   box paints after a box in front of it. The browser test taps the
   picture and goes in.

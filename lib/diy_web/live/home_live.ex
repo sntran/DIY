@@ -1151,7 +1151,6 @@ defmodule DIYWeb.HomeLive do
               price={@price}
               weather={@weather}
               market={@market}
-              scene={@scene}
               outside={@outside}
               bill_month={@bill_month}
             />

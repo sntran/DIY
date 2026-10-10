@@ -179,6 +179,12 @@ defmodule DIYWeb.OutsideTest do
     view = Outside.view(build)
     assert Enum.map(view.chips, & &1.text) == ["Grid", "6.4 kW", "400 W", "4 kWh"]
 
+    # The text for a screen reader tells the same facts.
+    assert view.label ==
+             "a house with 2 floors, a garage, solar panels of 6.4 kW on the roof, " <>
+               "outside: Central AC, Solar panels, 1 power station of 4 kWh, " <>
+               "the wire of the grid, you in front of the door"
+
     # The panels on the roof show. A planned item does not.
     roof = object(view, "roof-" <> room(build, "Roof").id)
     assert length(roof.polys) > 5
@@ -189,6 +195,101 @@ defmodule DIYWeb.OutsideTest do
 
     for %{box: {cx, cy, cw, ch}} <- view.chips,
         do: assert(cx >= x and cy >= y and cx + cw <= x + w and cy + ch <= y + h)
+  end
+
+  test "the kWh of the stations: rounded, and at the front with no room on floor 1" do
+    # The sum of the batteries has one decimal.
+    {build, _} =
+      add(house(), "Living room", "power_station", %{"kwh" => 1.1, "extra_kwh" => 2.2})
+
+    assert List.last(Outside.view(build).chips).text == "3.3 kWh"
+
+    # With no room on floor 1, the label is at the front of the other
+    # rooms. With no room at all, it is at the front of the lot.
+    build = delete(house(), ["f1"])
+    {build, _} = add(build, "Garage", "power_station", %{"kwh" => 2.0})
+    view = Outside.view(build)
+    assert List.last(view.chips).text == "2 kWh"
+    refute view.label =~ "you in front of the door"
+
+    build = delete(house(), ["f1", "f2", "roof"])
+    {:ok, build} = Build.delete_room(build, room(build, "Garage").id)
+    {build, _} = add(build, "Backyard", "power_station", %{"kwh" => 2.0})
+    view = Outside.view(build)
+    assert view.label =~ "a lot, outside: Central AC, Power station, 1 power station of 2 kWh"
+    %{box: {_, y, _, h}} = List.last(view.chips)
+    {_, lot_y, _, lot_h} = view.level.box
+    assert y + h > lot_y + lot_h / 2
+  end
+
+  test "the panels outside: their label is over their yard, or over the lot" do
+    {build, _} = add(house(), "Driveway", "solar_panels", %{"watts" => 400})
+    view = Outside.view(build)
+    [_grid, chip] = view.chips
+    assert chip.text == "400 W"
+
+    # Panels on a balcony over floor 1: their label is over the balcony.
+    {:ok, build, deck} = Build.add_room(house(), "Balcony", "f2", :outdoor)
+    {:ok, build, id} = Build.add_item(build, deck, "solar_panels")
+    {:ok, build} = Build.update_item(build, id, %{"watts" => 400})
+    [_grid, high] = Outside.view(build).chips
+    assert high.top < chip.top
+
+    # Panels on a room outside on the roof: the room does not show, and
+    # their label is over the middle of the lot.
+    {:ok, build, deck} = Build.add_room(house(), "Roof deck", "roof", :outdoor)
+    {:ok, build, id} = Build.add_item(build, deck, "solar_panels")
+    {:ok, build} = Build.update_item(build, id, %{"watts" => 400})
+    view = Outside.view(build)
+    refute Enum.any?(ids(view), &String.contains?(&1, deck))
+    assert List.last(view.chips).text == "400 W"
+  end
+
+  test "a room on the roof is the roof only on the level of the roof" do
+    # A room on the roof of floor 1 (a porch) is not the roof of the house.
+    # With no room on the roof, the house gets its plain roof.
+    build = delete(house(), ["roof"])
+    {:ok, build, porch} = Build.add_room(build, "Porch roof", "f1", :roof)
+    ids = ids(Outside.view(build))
+    assert "roof-roof" in ids
+    refute Enum.any?(ids, &String.ends_with?(&1, porch))
+  end
+
+  test "a balcony: on its slab, with its floor and its items, and no wall" do
+    {:ok, build, deck} = Build.add_room(house(), "Balcony", "f2", :outdoor)
+    {:ok, build, item} = Build.add_item(build, deck, "ac")
+    view = Outside.view(build)
+
+    # Floor 2 is 3 m over the ground: 2 slabs and the walls of floor 1.
+    slab = object(view, "slab-" <> deck)
+    assert_in_delta elem(slab.box, 5), 3.0, 1.0e-9
+    assert Enum.any?(classes(slab), &String.starts_with?(&1, "p-floor"))
+    assert_in_delta elem(object(view, item).box, 2), 3.0, 1.0e-9
+    refute Enum.any?(ids(view), &String.starts_with?(&1, "wall-#{deck}-"))
+
+    # A patio on floor 1 is on its slab on the ground. Its floor paints
+    # after the slabs.
+    {:ok, build, patio} = Build.add_room(house(), "Patio", "f1", :outdoor)
+    view = Outside.view(build)
+    assert [%{id: ^patio}] = view.level.rooms
+    refute object(view, "slab-" <> patio)
+  end
+
+  test "you stand in front of the door, also when a room is in front of a part of the wall" do
+    # The laundry is in front of the right part of the living room. The
+    # door is on the left part, and you are in front of it.
+    build = house()
+    plan = &Build.size_room(&1, room(&1, &2).id, &3)
+    {:ok, build} = plan.(build, "Living room", %{x: 144, y: 0, w: 216, d: 200})
+    {:ok, build} = plan.(build, "Laundry", %{x: 200, y: 200, w: 160, d: 94})
+    view = Outside.view(build)
+
+    %{box: {x0, y0, _, x1, _, _}} = object(view, "you")
+    laundry = room(build, "Laundry").plan
+    assert x1 <= laundry.x * @m or y0 >= (laundry.y + laundry.d) * @m
+    door = object(view, "door-" <> room(build, "Living room").id)
+    assert count(door, "p-door") == 1
+    assert x0 >= 144 * @m
   end
 
   test "a house with no roof, no floor 2, or no room" do
@@ -213,6 +314,7 @@ defmodule DIYWeb.OutsideTest do
     html = html(view)
     refute html =~ "p-wire"
     assert html =~ "Grid"
+    assert view.label == "a lot"
   end
 
   test "the SVG: the look of the plan, the wire, the labels, and the items" do
@@ -258,12 +360,26 @@ defmodule DIYWeb.OutsideTest do
 
   ## The property
 
-  # A random house: random items in random rooms, at random places, with
-  # random turns and sizes. Some rooms go away.
+  # A random house. First, random changes of its rooms: some go away, some
+  # move, some change their size, and some are new. Then random items go
+  # in random rooms, at random places, with random turns and sizes.
   defp builds do
     gen all(
           floors <- integer(1..3),
-          gone <- list_of(integer(0..20), max_length: 3),
+          changes <-
+            list_of(
+              one_of([
+                tuple({constant(:delete), integer(0..20)}),
+                tuple({constant(:move), integer(0..20), integer(-200..900), integer(-200..900)}),
+                tuple({constant(:size), integer(0..20), integer(24..600), integer(24..600)}),
+                tuple({
+                  constant(:add),
+                  member_of(~w(f1 f2 f3 roof outside)),
+                  member_of([:indoor, :outdoor, :roof])
+                })
+              ]),
+              max_length: 12
+            ),
           steps <-
             list_of(
               tuple({
@@ -278,11 +394,7 @@ defmodule DIYWeb.OutsideTest do
               max_length: 15
             )
         ) do
-      build =
-        Enum.reduce(gone, house(floors), fn r, build ->
-          rooms = Enum.reject(build.rooms, &Build.van_level?(&1.level))
-          if rooms == [], do: build, else: delete_at(build, rooms, r)
-        end)
+      build = Enum.reduce(changes, house(floors), &change/2)
 
       Enum.reduce(steps, build, fn {r, type, x, y, turn, side, planned}, build ->
         rooms = Enum.reject(build.rooms, &Build.van_level?(&1.level))
@@ -301,9 +413,34 @@ defmodule DIYWeb.OutsideTest do
     end
   end
 
-  defp delete_at(build, rooms, r) do
-    {:ok, build} = Build.delete_room(build, Enum.at(rooms, rem(r, length(rooms))).id)
-    build
+  # A change of a room. A change that breaks a rule of the plan is an
+  # error, and the build stays.
+  defp change({:add, level, place}, build) do
+    case Build.add_room(build, "New room", level, place) do
+      {:ok, build, _id} -> build
+      _error -> build
+    end
+  end
+
+  defp change(change, build) do
+    case Enum.reject(build.rooms, &Build.van_level?(&1.level)) do
+      [] -> build
+      rooms -> change(change, Enum.at(rooms, rem(elem(change, 1), length(rooms))), build)
+    end
+  end
+
+  defp change(change, room, build) do
+    result =
+      case change do
+        {:delete, _} -> Build.delete_room(build, room.id)
+        {:move, _, x, y} -> Build.move_room(build, room.id, x, y)
+        {:size, _, w, d} -> Build.size_room(build, room.id, %{room.plan | w: w, d: d})
+      end
+
+    case result do
+      {:ok, build} -> build
+      _error -> build
+    end
   end
 
   property "each point is in the box of the SVG, only the items of today outside show, and the back paints first" do
@@ -312,8 +449,25 @@ defmodule DIYWeb.OutsideTest do
       html = html(view)
       [x, y, w, h] = box(html)
 
-      for [px, py] <- points(html),
-          do: assert(px >= x - 0.1 and px <= x + w + 0.1 and py >= y - 0.1 and py <= y + h + 0.1)
+      inside = fn px, py ->
+        px >= x - 0.1 and px <= x + w + 0.1 and py >= y - 0.1 and py <= y + h + 0.1
+      end
+
+      # The points of the polygons, the corners of the labels, the points of
+      # the text, and the points of the wire.
+      for [px, py] <- points(html), do: assert(inside.(px, py))
+
+      for [_, rx, ry, rw, rh] <-
+            Regex.scan(~r/<rect x="([^"]+)" y="([^"]+)" width="([^"]+)" height="([^"]+)"/, html),
+          [rx, ry, rw, rh] = Enum.map([rx, ry, rw, rh], &number/1),
+          do: assert(inside.(rx, ry) and inside.(rx + rw, ry + rh))
+
+      for [_, tx, ty] <- Regex.scan(~r/<text x="([^"]+)" y="([^"]+)"/, html),
+          do: assert(inside.(number(tx), number(ty)))
+
+      for [_, d] <- Regex.scan(~r/ d="([^"]+)"/, html),
+          [_, px, py] <- Regex.scan(~r/(-?[\d.]+),(-?[\d.]+)/, d),
+          do: assert(inside.(number(px), number(py)))
 
       ids = for [_, id] <- Regex.scan(~r/ id="([^"]+)"/, html), do: id
       assert Enum.uniq(ids) == ids

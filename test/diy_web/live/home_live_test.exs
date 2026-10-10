@@ -155,12 +155,25 @@ defmodule DIYWeb.HomeLiveTest do
     # the page House makes it.
     assert has_element?(view, "#house-picture svg.cutaway-outside")
     assert has_element?(view, "#house-picture .p-chip-text", "Grid")
-    assert :sys.get_state(view.pid).socket.assigns.outside
+
+    assert has_element?(
+             view,
+             ~s(#house-picture[aria-label="See the rooms. The picture: a house with 2 floors, ) <>
+               ~s(a garage, outside: Central AC, the wire of the grid, you in front of the door."])
+           )
+
+    outside = fn -> :sys.get_state(view.pid).socket.assigns.outside end
+    assert outside.()
 
     view |> element("#house-picture") |> render_click()
     assert_patch view, ~p"/inside"
     assert has_element?(view, "#plan-svg")
-    assert :sys.get_state(view.pid).socket.assigns.outside == nil
+    assert outside.() == nil
+
+    for page <- [~p"/power", ~p"/estimate", ~p"/settings"] do
+      render_patch(view, page)
+      assert outside.() == nil, page
+    end
   end
 
   test "the door goes in: the rooms, the hint, and the items", %{conn: conn} do

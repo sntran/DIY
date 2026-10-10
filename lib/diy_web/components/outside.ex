@@ -15,13 +15,16 @@ defmodule DIYWeb.Outside do
   - the roof, with its panels, on the top floor;
   - a room outside of the house that is not a yard (a garage), with a
     flat roof and a wide door;
+  - a balcony on its slab, with its furniture and its items;
   - the pole of the grid, and its wire to the house. A label tells the
     watts of the panels and the kWh of the stations.
+
+  The view also has a text for a screen reader (`label`).
   """
   use DIYWeb, :html
 
-  alias DIY.{Build, Layout}
-  alias DIYWeb.{Camera, Cutaway, Decor, Geometry}
+  alias DIY.{Build, Catalog, Layout}
+  alias DIYWeb.{Camera, Cutaway, Decor, Format, Geometry}
   alias DIYWeb.Icon.Shapes
 
   # One inch in meters. Then, in meters: the height of a wall, the depth of
@@ -46,12 +49,20 @@ defmodule DIYWeb.Outside do
     rooms = Enum.filter(house.rooms, & &1.plan)
     items = Enum.group_by(house.items, & &1.room)
 
-    {yards, built} = Enum.split_with(rooms, &(&1.place == :outdoor))
-    # The attic is in the roof: it does not show.
+    # A yard is on the ground. A room outside on a floor (a balcony) is on
+    # its slab, with no wall. A room outside on the roof does not show.
+    {outdoor, built} = Enum.split_with(rooms, &(&1.place == :outdoor))
+    {yards, decks} = Enum.split_with(outdoor, &(&1.level == "outside"))
+    decks = Enum.filter(decks, &String.starts_with?(&1.level, "f"))
+
+    # The attic is in the roof: it does not show. The roof is a room on the
+    # roof, on the level of the roof.
     {roofs, inside} =
       built
       |> Enum.reject(&(&1.level == "roof" and &1.place == :indoor))
       |> Enum.split_with(&(&1.place == :roof))
+
+    roofs = Enum.filter(roofs, &(&1.level == "roof"))
 
     # The roof is on the top floor with rooms.
     top = Enum.max(for(%{level: "f" <> n} <- inside, do: String.to_integer(n)), fn -> 1 end)
@@ -60,20 +71,26 @@ defmodule DIYWeb.Outside do
 
     lot = lot(rooms, house)
     pole = {lot.x + lot.w - 0.8, lot.y + 0.8}
+    door = door(inside)
+    furnished = &yard(&1, Map.get(items, &1.id, []), z.(&1), camera)
 
     # The slabs on the ground are under all the objects: they paint first,
     # as in the plan. A slab over a floor is an object.
-    {ground, upper} = Enum.split_with(inside, &(&1.level in ["f1", "outside"]))
+    {ground, upper} = Enum.split_with(inside ++ decks, &(&1.level in ["f1", "outside"]))
+    {low_decks, high_decks} = Enum.split_with(decks, &(&1.level == "f1"))
 
     objects =
       Enum.flat_map(upper, &slab(&1, z.(&1), camera)) ++
         walls(inside, z, camera) ++
-        Enum.flat_map(inside, &front(&1, inside, z.(&1), camera)) ++
+        Enum.flat_map(inside, &front(&1, inside, door, z.(&1), camera)) ++
         Enum.flat_map(roofs, &roof(&1, Map.get(items, &1.id, []), z.(&1), camera)) ++
         garage_roofs(inside, z, camera) ++
-        Enum.flat_map(yards, &yard(&1, Map.get(items, &1.id, []), camera)) ++
-        door_person(inside, z, camera) ++
+        Enum.flat_map(yards ++ decks, furnished) ++
+        person(door, z, camera) ++
         [pole(pole, camera)]
+
+    # The floor of a balcony over floor 1 is on its slab.
+    objects = Enum.map(objects, &on_deck(&1, high_decks, z, camera))
 
     level =
       Cutaway.layer(%{id: "outside", name: "The house", z: 0.0, camera: camera}, %{
@@ -81,26 +98,36 @@ defmodule DIYWeb.Outside do
           Camera.faces(camera, Geometry.box({lot.x, lot.y, -0.45}, {lot.w, lot.d, 0.45}), "p-lot"),
         low: Enum.map(yards, &Cutaway.floor(&1, 0.02, Cutaway.material(&1), camera)),
         slabs: Enum.flat_map(ground, &(&1 |> slab(z.(&1), camera) |> hd() |> Map.fetch!(:polys))),
-        rooms: [],
+        rooms: Enum.map(low_decks, &Cutaway.floor(&1, z.(&1), Cutaway.material(&1), camera)),
         objects: objects,
         labels: []
       })
 
-    {wire, meter} = wire(pole, inside, z, camera)
-    chips = chips(house, pole, roofs, z, camera)
-    box = around([level.box | Enum.map(chips, & &1.box)], 4.0)
+    {wire, wire_box, meter, meter_box} = wire(pole, inside, z, camera)
+    chips = chips(house, pole, roofs, yards ++ decks, inside, lot, z, camera)
+    boxes = [level.box, wire_box, meter_box | Enum.map(chips, & &1.box)]
+    box = around(Enum.reject(boxes, &is_nil/1), 4.0)
+    shown = for %{kind: :item, id: id} <- objects, do: id
 
-    %{level: level, wire: wire, meter: meter, chips: chips, box: box, camera: camera}
+    %{
+      level: level,
+      wire: wire,
+      meter: meter,
+      chips: chips,
+      box: box,
+      camera: camera,
+      label: label(house, inside, shown, wire, door)
+    }
   end
 
   # The height of the floor of a room (meters). Floor 1 is on its slab, and
   # each floor is on the floor under it. A garage is on a lower slab. The
-  # roof is on the walls of the top floor (`top`). A yard is on the ground
-  # (`yard/3`).
+  # roof is on the walls of the top floor (`top`). A yard is on the ground.
   defp floor_z(%{level: "f" <> n}, _top),
     do: @slab + (String.to_integer(n) - 1) * (@full + @slab)
 
   defp floor_z(%{level: "roof"}, top), do: @slab + (top - 1) * (@full + @slab) + @full
+  defp floor_z(%{place: :outdoor}, _top), do: 0.02
   defp floor_z(_garage, _top), do: 0.1
 
   defp meters(%{x: x, y: y, w: w, d: d}), do: %{x: x * @m, y: y * @m, w: w * @m, d: d * @m}
@@ -150,6 +177,20 @@ defmodule DIYWeb.Outside do
     box = {p.x - t, p.y - t, low, p.x + p.w + t, p.y + p.d + t, z}
     [object("slab-" <> room.id, box, Camera.faces(camera, shape, "p-slab"), camera)]
   end
+
+  # The slab of a balcony over floor 1 also has the floor of the balcony.
+  defp on_deck(%{id: "slab-" <> id} = object, decks, z, camera) do
+    case Enum.find(decks, &(&1.id == id)) do
+      nil ->
+        object
+
+      deck ->
+        floor = Cutaway.floor(deck, z.(deck), Cutaway.material(deck), camera)
+        %{object | polys: object.polys ++ floor.polys}
+    end
+  end
+
+  defp on_deck(object, _decks, _z, _camera), do: object
 
   # The walls on the outside of the rooms of each floor. A wall is on each
   # side of a room where no room of the same floor touches it. A wall
@@ -273,19 +314,18 @@ defmodule DIYWeb.Outside do
     end
   end
 
-  # The doors at the front. The door of the house is on the largest room of
-  # floor 1 with a wall at the front. A garage has a wide door.
-  defp front(room, rooms, z, camera) do
+  # The doors at the front. A garage has a wide door, and the door of the
+  # house is on its room (`door/1`).
+  defp front(room, rooms, door, z, camera) do
     parts = outside_parts(room, "y1", rooms)
-    {line, _range} = edge(room.plan, "y1")
-    face = (line + @thick / @m) * @m
+    face = front_face(room)
+    plane = &plane("y1", face, &1, &2, z)
 
     cond do
       room.level == "outside" and parts != [] ->
         {a, b} = Enum.max_by(parts, fn {a, b} -> b - a end)
         middle = (a + b) / 2
         half = min(96, (b - a) / 2 - 12)
-        plane = &plane("y1", face, &1, &2, z)
 
         lines =
           for k <- 1..3,
@@ -294,10 +334,8 @@ defmodule DIYWeb.Outside do
         door = [{plane.({middle - half, middle + half}, {0.0, 2.1}), "p-garage"} | lines]
         [object("door-" <> room.id, door_box(room, face, z), door, camera)]
 
-      room == door_room(rooms) ->
-        {a, b} = Enum.max_by(parts, fn {a, b} -> b - a end)
-        middle = (a + b) / 2
-        plane = &plane("y1", face, &1, &2, z)
+      match?(%{room: ^room}, door) ->
+        middle = door.middle
 
         door = [
           {plane.({middle - 22, middle + 22}, {0.0, 2.2}), "p-frame"},
@@ -312,6 +350,12 @@ defmodule DIYWeb.Outside do
     end
   end
 
+  # The outer face of the wall at the front of a room (meters).
+  defp front_face(room) do
+    {line, _range} = edge(room.plan, "y1")
+    (line + @thick / @m) * @m
+  end
+
   # The box of a door: just in front of the wall, so the door paints after
   # it.
   defp door_box(room, face, z) do
@@ -319,43 +363,54 @@ defmodule DIYWeb.Outside do
     {p.x, face, z, p.x + p.w, face + 0.01, z + 2.2}
   end
 
-  # The room of the door of the house: the largest room of floor 1 with a
-  # wall at the front.
-  defp door_room(rooms) do
-    rooms
-    |> Enum.filter(&(&1.level == "f1" and outside_parts(&1, "y1", rooms) != []))
-    |> Enum.max_by(&(&1.plan.w * &1.plan.d), fn -> nil end)
+  # The door of the house is on the largest room of floor 1 with a wall at
+  # the front. It is at the middle of the longest part of that wall
+  # (inches). With no such room, there is no door (`nil`).
+  defp door(rooms) do
+    fronts =
+      for room <- rooms,
+          room.level == "f1",
+          parts = outside_parts(room, "y1", rooms),
+          parts != [],
+          do: {room, parts}
+
+    case fronts do
+      [] ->
+        nil
+
+      fronts ->
+        {room, parts} = Enum.max_by(fronts, fn {room, _} -> room.plan.w * room.plan.d end)
+        {a, b} = Enum.max_by(parts, fn {a, b} -> b - a end)
+        %{room: room, middle: (a + b) / 2, half: (b - a) / 2}
+    end
   end
 
-  # You, in front of the door of the house: a body and a head.
-  defp door_person(rooms, z, camera) do
-    case door_room(rooms) do
-      nil ->
-        []
+  # You, in front of the door of the house: a body and a head. You stand
+  # beside the door, in front of its part of the wall.
+  defp person(nil, _z, _camera), do: []
 
-      room ->
-        p = meters(room.plan)
-        {x, y} = {p.x + p.w / 2 + 0.6, p.y + p.d + @thick + 0.7}
+  defp person(%{room: room} = door, z, camera) do
+    side = min(0.6, max(door.half * @m - 0.25, 0.0))
+    {x, y} = {door.middle * @m + side, front_face(room) + 0.7}
 
-        model = [
-          {:cyl, {-0.07, 0, 0}, 0.06, 0.8, "dark"},
-          {:cyl, {0.07, 0, 0}, 0.06, 0.8, "dark"},
-          {:cyl, {0, 0, 0.78}, 0.17, 0.62, "copper"},
-          {:cyl, {0, 0, 1.42}, 0.11, 0.22, "pink"},
-          {:cyl, {0, 0, 1.6}, 0.115, 0.07, "dark"}
-        ]
+    model = [
+      {:cyl, {-0.07, 0, 0}, 0.06, 0.8, "dark"},
+      {:cyl, {0.07, 0, 0}, 0.06, 0.8, "dark"},
+      {:cyl, {0, 0, 0.78}, 0.17, 0.62, "copper"},
+      {:cyl, {0, 0, 1.42}, 0.11, 0.22, "pink"},
+      {:cyl, {0, 0, 1.6}, 0.115, 0.07, "dark"}
+    ]
 
-        polys =
-          for {:poly, corners, class} <-
-                Shapes.placed_model(model, %{
-                  at: {x, y, z.(room) - @slab + 0.02},
-                  turn: 0,
-                  camera: camera
-                }),
-              do: {corners, class}
+    polys =
+      for {:poly, corners, class} <-
+            Shapes.placed_model(model, %{
+              at: {x, y, z.(room) - @slab + 0.02},
+              turn: 0,
+              camera: camera
+            }),
+          do: {corners, class}
 
-        [object("you", {x - 0.17, y - 0.17, 0.0, x + 0.17, y + 0.17, 1.5}, polys, camera)]
-    end
+    [object("you", {x - 0.17, y - 0.17, 0.0, x + 0.17, y + 0.17, 1.5}, polys, camera)]
   end
 
   # The roof on the walls of the top floor. It has two slopes with their
@@ -407,12 +462,10 @@ defmodule DIYWeb.Outside do
     end
   end
 
-  # A yard (or the driveway): its furniture and its items. An item that is
-  # taller than floor 1 has no right order with the floors over it. It
-  # paints by its depth only (`loose`), as an item larger than its room.
-  defp yard(room, items, camera) do
-    z = 0.02
-
+  # A yard, the driveway or a balcony: its furniture and its items. An item
+  # that is taller than floor 1 has no right order with the floors over it.
+  # It paints by its depth only (`loose`), as an item larger than its room.
+  defp yard(room, items, z, camera) do
     decor =
       for {piece, i} <- Enum.with_index(Decor.pieces(room, items)),
           do: Cutaway.decor_view("#{room.id}-#{i}", piece, room, z, camera)
@@ -434,55 +487,75 @@ defmodule DIYWeb.Outside do
 
   # The wire of the grid goes from the top of the pole to the meter of the
   # house. The meter is on the right end of the room most to the right on
-  # the ground (a garage too). The wire hangs a little.
+  # the ground (a garage too). The wire hangs a little. The boxes of the
+  # wire and of the meter are on the screen.
   defp wire(pole, rooms, z, camera) do
     ground = Enum.filter(rooms, &(&1.level in ["f1", "outside"]))
 
     case Enum.max_by(ground, &(&1.plan.x + &1.plan.w), fn -> nil end) do
       nil ->
-        {nil, []}
+        {nil, nil, [], nil}
 
       room ->
         p = meters(room.plan)
         at = {p.x + p.w + @thick, p.y + 0.6, z.(room) + 2.0}
         {px, py} = pole
-        from = Camera.at(camera, {0, 0}, {px, py, @pole - 0.4})
-        to = Camera.at(camera, {0, 0}, at)
-        {mx, my} = {(elem(from, 0) + elem(to, 0)) / 2, (elem(from, 1) + elem(to, 1)) / 2 + 6}
-
-        d =
-          "M#{pt(from)} Q#{Camera.round1(mx)},#{Camera.round1(my)} #{pt(to)}"
+        {fx, fy} = from = Camera.at(camera, {0, 0}, {px, py, @pole - 0.4})
+        {tx, ty} = to = Camera.at(camera, {0, 0}, at)
+        middle = {(fx + tx) / 2, (fy + ty) / 2 + 6}
+        d = "M#{pt(from)} Q#{pt(middle)} #{pt(to)}"
 
         {ax, ay, az} = at
-        meter = Geometry.box({ax, ay - 0.15, az - 0.25}, {0.08, 0.3, 0.4})
 
-        polys =
-          for {corners, class} <- Camera.faces(camera, meter, "p-meter"),
-              do: {Camera.points(camera, {0, 0}, corners), class}
+        meter =
+          Camera.faces(
+            camera,
+            Geometry.box({ax, ay - 0.15, az - 0.25}, {0.08, 0.3, 0.4}),
+            "p-meter"
+          )
 
-        {d, polys}
+        polys = for {corners, class} <- meter, do: {Camera.points(camera, {0, 0}, corners), class}
+        corners = for {corners, _class} <- meter, c <- corners, do: Camera.at(camera, {0, 0}, c)
+
+        {d, screen_box([from, middle, to]), polys, screen_box(corners)}
     end
   end
 
   defp pt({x, y}), do: "#{Camera.round1(x)},#{Camera.round1(y)}"
 
-  # The labels: the grid at the pole, and the watts of the panels on the
-  # roof and in the yards. The kWh of the stations is at the front of the
-  # house.
-  defp chips(house, {px, py}, roofs, z, camera) do
-    of = fn type -> Enum.filter(house.items, &(&1.type == type)) end
+  defp screen_box(points) do
+    {xs, ys} = Enum.unzip(points)
+    {x0, x1} = Enum.min_max(xs)
+    {y0, y1} = Enum.min_max(ys)
+    {x0, y0, x1 - x0, y1 - y0}
+  end
+
+  # The power of the house: the watts of the panels on the roof and outside,
+  # and the count and the kWh of the stations.
+  defp power(house) do
     places = Map.new(house.rooms, &{&1.id, &1.place})
-    panels = of.("solar_panels")
+    of = fn type -> Enum.filter(house.items, &(&1.type == type)) end
 
     watts = fn place ->
-      panels
-      |> Enum.filter(&(places[&1.room] == place))
-      |> Enum.map(& &1.params["watts"])
+      for(item <- of.("solar_panels"), places[item.room] == place, do: item.params["watts"])
       |> Enum.sum()
     end
 
     stations = of.("power_station")
-    kwh = stations |> Enum.map(&(&1.params["kwh"] + &1.params["extra_kwh"])) |> Enum.sum()
+    kwh = for(s <- stations, do: s.params["kwh"] + s.params["extra_kwh"]) |> Enum.sum()
+
+    %{
+      roof: watts.(:roof),
+      outdoor: watts.(:outdoor),
+      stations: length(stations),
+      kwh: Format.value(Float.round(kwh / 1, 1))
+    }
+  end
+
+  # The labels: the grid at the pole, and the watts of the panels on the
+  # roof and outside. The kWh of the stations is at the front of the house.
+  defp chips(house, {px, py}, roofs, outdoor, inside, lot, z, camera) do
+    power = power(house)
 
     roof_at =
       case roofs do
@@ -495,28 +568,71 @@ defmodule DIYWeb.Outside do
       end
 
     [chip({px, py, @pole + 0.9}, "Grid", camera)] ++
-      if(watts.(:roof) > 0, do: [chip(roof_at, kw(watts.(:roof)), camera)], else: []) ++
-      if(watts.(:outdoor) > 0, do: [chip(yard_at(house), kw(watts.(:outdoor)), camera)], else: []) ++
-      if(kwh > 0,
-        do: [chip(front_at(house), "#{DIYWeb.Format.value(kwh / 1)} kWh", camera)],
+      if(power.roof > 0, do: [chip(roof_at, kw(power.roof), camera)], else: []) ++
+      if(power.outdoor > 0,
+        do: [chip(panels_at(house, outdoor, lot, z), kw(power.outdoor), camera)],
+        else: []
+      ) ++
+      if(power.stations > 0,
+        do: [chip(front_at(inside, lot), "#{power.kwh} kWh", camera)],
         else: []
       )
   end
 
-  defp yard_at(house) do
-    room = Enum.find(house.rooms, &(&1.place == :outdoor and &1.plan))
-    p = meters(room.plan)
-    {p.x + p.w / 2, p.y + p.d / 2, 2.0}
+  # The label of the panels outside: over the first yard or balcony with
+  # panels, else over the middle of the lot.
+  defp panels_at(house, outdoor, lot, z) do
+    rooms =
+      for item <- house.items, item.type == "solar_panels", into: MapSet.new(), do: item.room
+
+    case Enum.find(outdoor, &MapSet.member?(rooms, &1.id)) do
+      nil ->
+        {lot.x + lot.w / 2, lot.y + lot.d / 2, 2.0}
+
+      room ->
+        p = meters(room.plan)
+        {p.x + p.w / 2, p.y + p.d / 2, z.(room) + 2.0}
+    end
   end
 
-  defp front_at(house) do
-    rooms = Enum.filter(house.rooms, &(&1.level == "f1" and &1.plan))
-    p = rooms |> Enum.map(&meters(&1.plan)) |> Enum.max_by(&(&1.y + &1.d))
-    {p.x + p.w / 2, p.y + p.d + 1.0, 3.2}
+  # The label of the stations is in front of the room at the front of
+  # floor 1, else of any floor. With no room, it is at the front of the lot.
+  defp front_at(inside, lot) do
+    plans = for room <- inside, do: {room.level == "f1", meters(room.plan)}
+
+    case plans do
+      [] ->
+        {lot.x + lot.w / 2, lot.y + lot.d - 1.0, 1.5}
+
+      plans ->
+        {_f1, p} = Enum.max_by(plans, fn {f1, p} -> {f1, p.y + p.d} end)
+        {p.x + p.w / 2, p.y + p.d + 1.0, 3.2}
+    end
   end
 
-  defp kw(watts) when watts >= 1000, do: "#{DIYWeb.Format.value(Float.round(watts / 1000, 1))} kW"
+  defp kw(watts) when watts >= 1000, do: "#{Format.value(Float.round(watts / 1000, 1))} kW"
   defp kw(watts), do: "#{watts} W"
+
+  # A text for a screen reader: what the picture shows.
+  defp label(house, inside, shown, wire, door) do
+    power = power(house)
+    floors = inside |> Enum.map(& &1.level) |> Enum.filter(&String.starts_with?(&1, "f"))
+    floors = floors |> Enum.uniq() |> length()
+    types = Map.new(house.items, &{&1.id, &1.type})
+    names = shown |> Enum.map(&Catalog.kind(types[&1]).name) |> Enum.uniq()
+
+    [
+      if(floors > 0, do: "a house with #{Format.count(floors, "floor")}", else: "a lot"),
+      Enum.any?(inside, &(&1.level == "outside")) && "a garage",
+      power.roof > 0 && "solar panels of #{kw(power.roof)} on the roof",
+      names != [] && "outside: #{Enum.join(names, ", ")}",
+      power.stations > 0 && "#{Format.count(power.stations, "power station")} of #{power.kwh} kWh",
+      wire && "the wire of the grid",
+      door && "you in front of the door"
+    ]
+    |> Enum.filter(& &1)
+    |> Enum.join(", ")
+  end
 
   # A label at a point of the world: a pill with its text. The width of the
   # pill comes from the count of the letters.
@@ -559,6 +675,9 @@ defmodule DIYWeb.Outside do
         <polygon :for={{points, class} <- room.polys} points={points} class={class} />
       </g>
       <polygon :for={{points, class, _room} <- @view.level.slabs} points={points} class={class} />
+      <g :for={room <- @view.level.rooms}>
+        <polygon :for={{points, class} <- room.polys} points={points} class={class} />
+      </g>
       <g :for={object <- @view.level.objects} class={object.kind == :item && "p-item"}>
         <polygon :for={{points, class} <- object.polys} points={points} class={class} />
       </g>

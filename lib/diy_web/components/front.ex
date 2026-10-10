@@ -6,7 +6,7 @@ defmodule DIYWeb.Front do
   use DIYWeb, :html
 
   alias DIY.{Catalog, Estimate, Prices, Van, Zip}
-  alias DIYWeb.{Format, Outside, Scene}
+  alias DIYWeb.{Format, Outside}
 
   attr :build, :map, required: true
   attr :estimate, :map, required: true
@@ -15,7 +15,6 @@ defmodule DIYWeb.Front do
   attr :price, :map, required: true
   attr :weather, :map, required: true
   attr :market, :map, required: true
-  attr :scene, :map, required: true, doc: "the parts of the picture (`DIYWeb.Scene.parts/1`)"
   attr :outside, :map, required: true, doc: "the house from the outside (`DIYWeb.Outside.view/1`)"
   attr :bill_month, :integer, default: nil, doc: "the month that the person chose on the chart"
 
@@ -37,7 +36,7 @@ defmodule DIYWeb.Front do
         </p>
       </div>
 
-      <.house scene={@scene} outside={@outside} />
+      <.house outside={@outside} />
 
       <.bill
         estimate={@estimate}
@@ -70,7 +69,6 @@ defmodule DIYWeb.Front do
     """
   end
 
-  attr :scene, :map, required: true
   attr :outside, :map, required: true
 
   # The picture of the house from the outside (`DIYWeb.Outside`), in the
@@ -81,7 +79,7 @@ defmodule DIYWeb.Front do
       patch={~p"/inside"}
       id="house-picture"
       class="block overflow-hidden rounded-box"
-      aria-label={"See the rooms. The picture: #{Scene.label(@scene)}, and you in front of the door."}
+      aria-label={"See the rooms. The picture: #{@outside.label}."}
     >
       <Outside.house view={@outside} />
     </.link>
