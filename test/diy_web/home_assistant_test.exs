@@ -361,6 +361,380 @@ defmodule DIYWeb.HomeAssistantTest do
     assert has_element?(view, "#item-sheet #home-assistant-card")
   end
 
+  ## The match of the rooms
+
+  # The last build that the page saved on the device.
+  defp saved(view) do
+    assert_push_event(view, "device:save", %{text: text})
+    %{proxy: {ref, _topic, _pid}} = view
+    text = last_text(ref, text)
+    {:ok, build} = Build.from_json(text)
+    build
+  end
+
+  defp last_text(ref, text) do
+    receive do
+      {^ref, {:push_event, "device:save", %{text: newer}}} -> last_text(ref, newer)
+    after
+      0 -> text
+    end
+  end
+
+  defp connected(view),
+    do:
+      status(view, %{"state" => "connected", "url" => "https://ha.example.com", "name" => "Home"})
+
+  defp room_id(build, name), do: Enum.find(build.rooms, &(&1.name == name)).id
+
+  # The floors and the areas of Home Assistant, as the hook sends them.
+  defp ha_rooms(admin \\ true) do
+    %{
+      "floors" => [%{"id" => "ground", "name" => "Ground", "level" => 0}],
+      "areas" => [
+        %{"id" => "living", "name" => "Living Room", "floor" => "ground"},
+        %{"id" => "patio", "name" => "Patio", "floor" => nil},
+        %{"id" => "suite", "name" => "Guest Suite", "floor" => "ground"},
+        %{"id" => "den", "name" => "Den", "floor" => nil}
+      ],
+      "admin" => admin
+    }
+  end
+
+  test "the card links to the match when Home Assistant is connected", %{conn: conn} do
+    view = settings(conn)
+    refute has_element?(view, "#ha-match")
+    connected(view)
+    assert has_element?(view, "#ha-match[href='/inside?sheet=ha_rooms']")
+    # Settings has no sheet of the match: it does not read the areas.
+    refute_push_event(view, "ha:rooms_fetch", %{})
+  end
+
+  test "the sheet of the match waits for the link and for the areas", %{conn: conn} do
+    view = page(conn, ~p"/inside")
+    render_patch(view, ~p"/inside?#{[sheet: "ha_rooms"]}")
+    assert_push_event(view, "ha:rooms_fetch", %{})
+    # The hook did not tell the state of the link yet.
+    assert has_element?(view, "#ha-rooms-sheet #ha-rooms-wait", "The app reads the areas")
+    status(view, %{"state" => "none"})
+    assert has_element?(view, "#ha-rooms-wait", "Connect Home Assistant first")
+    status(view, %{"state" => "connecting", "url" => "https://ha.example.com"})
+    assert has_element?(view, "#ha-rooms-wait", "The app waits for the link")
+
+    # The hook has no link yet: it tells offline. When the link comes, the
+    # page asks again.
+    render_hook(view, "ha:rooms", %{"error" => "offline"})
+    assert has_element?(view, "#ha-rooms-wait", "The app waits for the link")
+    connected(view)
+    assert_push_event(view, "ha:rooms_fetch", %{})
+    assert has_element?(view, "#ha-rooms-wait", "The app reads the areas")
+    render_hook(view, "ha:rooms", %{"error" => "offline"})
+    assert has_element?(view, "#ha-rooms-wait[role=alert]", "does not answer now")
+    render_hook(view, "ha:rooms", %{"error" => "failed"})
+    assert has_element?(view, "#ha-rooms-wait[role=alert]", "Home Assistant 2024.4 or later")
+
+    # The areas come. A new status does not read them again.
+    render_hook(view, "ha:rooms", ha_rooms())
+    assert has_element?(view, "#ha-rooms")
+    connected(view)
+    refute_push_event(view, "ha:rooms_fetch", %{})
+
+    # The link goes and comes back: the areas can be different now.
+    status(view, %{"state" => "offline", "url" => "https://ha.example.com"})
+    refute has_element?(view, "#ha-rooms")
+    connected(view)
+    assert_push_event(view, "ha:rooms_fetch", %{})
+
+    # On a different sheet, a status does not read the areas.
+    render_patch(view, ~p"/inside")
+    render_hook(view, "ha:rooms", %{"error" => "offline"})
+    connected(view)
+    refute_push_event(view, "ha:rooms_fetch", %{})
+  end
+
+  test "the sheet shows the rooms in both, only in the app, and only in Home Assistant", %{
+    conn: conn
+  } do
+    view = page(conn, ~p"/inside?#{[sheet: "ha_rooms"]}")
+    connected(view)
+    render_hook(view, "ha:rooms", ha_rooms())
+
+    assert has_element?(view, "#ha-both h3", "In both (1)")
+    assert has_element?(view, "#ha-both li", "Living room")
+    refute has_element?(view, "#ha-both li", "in Home Assistant:")
+    assert has_element?(view, "#ha-app input[type=checkbox][checked]")
+    refute has_element?(view, "#ha-app input[disabled]")
+    assert has_element?(view, "#ha-app label", "Add Kitchen to Home Assistant (Floor 1)")
+    assert has_element?(view, "#ha-ha h3", "Only in Home Assistant (3)")
+
+    assert has_element?(
+             view,
+             "select[name='ha[patio]'] option[value='outside outdoor'][selected]"
+           )
+
+    assert has_element?(view, "select[name='ha[suite]'] option[value='f1 indoor'][selected]")
+    assert has_element?(view, "select[name='ha[den]'] option[value='f2 indoor']")
+    assert has_element?(view, "select[name='ha[den]'] option[value='skip']", "Do not add it")
+
+    # A room with a link to an area of a different name shows that name.
+    {:ok, build} = Build.link_area(build(), room_id(build(), "Kitchen"), "den")
+    view = page(conn, ~p"/inside?#{[sheet: "ha_rooms"]}", build)
+    connected(view)
+    render_hook(view, "ha:rooms", ha_rooms())
+    assert has_element?(view, "#ha-both li", "Kitchen (in Home Assistant: Den)")
+
+    # A room with the name of an area of a different room, and the second of
+    # two rooms with one name, cannot get an area.
+    {:ok, build} = Build.rename_room(build, room_id(build, "Laundry"), "LIVING ROOM")
+    {:ok, build, _id} = Build.add_room(build, "Den 2", "f1", :indoor)
+    {:ok, build, _id} = Build.add_room(build, "den2", "f2", :indoor)
+    view = page(conn, ~p"/inside?#{[sheet: "ha_rooms"]}", build)
+    connected(view)
+    render_hook(view, "ha:rooms", ha_rooms())
+    assert has_element?(view, "#ha-app p", "LIVING ROOM (Floor 1): a different room or area")
+    assert has_element?(view, "#ha-app p", "den2 (Floor 2): a different room or area")
+    assert has_element?(view, "#ha-app label", "Add Den 2 to Home Assistant")
+    laundry = room_id(build, "LIVING ROOM")
+    refute has_element?(view, "#ha-app input[value='#{laundry}']")
+    view |> form("#ha-rooms") |> render_submit(%{"app" => [laundry]})
+    refute_push_event(view, "ha:add_areas", %{})
+
+    # Not an admin: no rooms to add to Home Assistant.
+    render_hook(view, "ha:rooms", ha_rooms(false))
+    assert has_element?(view, "#ha-app", "Your user of Home Assistant is not an admin")
+    assert has_element?(view, "#ha-app input[disabled]")
+    refute has_element?(view, "#ha-app input[checked]")
+  end
+
+  test "the floors and the areas that the page cannot read do not count", %{conn: conn} do
+    view = page(conn, ~p"/inside?#{[sheet: "ha_rooms"]}")
+    connected(view)
+    good = ha_rooms()
+    floor = hd(good["floors"])
+    area = hd(good["areas"])
+
+    # A payload that is not floors and areas: no change.
+    for bad <- [%{}, %{good | "admin" => "yes"}, %{good | "floors" => "x"}, %{"error" => "x"}] do
+      render_hook(view, "ha:rooms", bad)
+      assert has_element?(view, "#ha-rooms-wait", "The app reads the areas")
+    end
+
+    # Too many floors or areas: the sheet tells it.
+    for bad <- [
+          %{good | "floors" => List.duplicate(floor, 101)},
+          %{good | "areas" => List.duplicate(area, 501)}
+        ] do
+      render_hook(view, "ha:rooms", bad)
+      assert has_element?(view, "#ha-rooms-wait[role=alert]", "more than 500 areas")
+    end
+
+    # A bad floor or area does not count. The other areas show.
+    long = String.duplicate("ü", 128)
+
+    for bad <- [
+          %{floor | "level" => "one"},
+          %{floor | "id" => String.duplicate("f", 256)},
+          1
+        ] do
+      render_hook(view, "ha:rooms", %{good | "floors" => [bad]})
+      assert has_element?(view, "select[name='ha[den]'] option[value='f1 indoor'][selected]")
+    end
+
+    for bad <- [
+          %{area | "floor" => 5},
+          %{area | "name" => long},
+          %{area | "id" => 5},
+          nil
+        ] do
+      render_hook(view, "ha:rooms", %{good | "areas" => [bad | tl(good["areas"])]})
+      assert has_element?(view, "#ha-ha h3", "Only in Home Assistant (3)")
+      assert has_element?(view, "#ha-both h3", "In both (0)")
+    end
+
+    # An area on a floor with a long id has no floor.
+    render_hook(view, "ha:rooms", %{
+      good
+      | "areas" => [%{area | "floor" => String.duplicate("f", 256)} | tl(good["areas"])]
+    })
+
+    assert has_element?(view, "#ha-both h3", "In both (1)")
+
+    # A floor with no level, an area with no floor, and long names and ids
+    # (255 bytes) are good.
+    render_hook(view, "ha:rooms", %{
+      good
+      | "floors" => [%{floor | "level" => nil, "id" => String.duplicate("f", 255)}],
+        "areas" => [%{area | "floor" => nil, "name" => String.duplicate("ü", 127) <> "x"}]
+    })
+
+    assert has_element?(view, "#ha-ha h3", "Only in Home Assistant (1)")
+  end
+
+  test "a match links the rooms, adds the areas as rooms, and asks the hook for new areas", %{
+    conn: conn
+  } do
+    view = page(conn, ~p"/inside?#{[sheet: "ha_rooms"]}")
+    connected(view)
+    render_hook(view, "ha:rooms", ha_rooms())
+    kitchen = room_id(build(), "Kitchen")
+    garage = room_id(build(), "Garage")
+    attic = room_id(build(), "Attic")
+
+    view
+    |> form("#ha-rooms", %{
+      "ha" => %{
+        "patio" => "outside outdoor",
+        "suite" => "f2 indoor",
+        "den" => "skip"
+      }
+    })
+    |> render_submit(%{"app" => [kitchen, garage, attic, "r999"]})
+
+    assert_push_event(view, "ha:add_areas", %{areas: areas})
+
+    assert Enum.sort_by(areas, & &1.name) == [
+             %{room: attic, name: "Attic", level: nil, floor: "Roof and attic"},
+             %{room: garage, name: "Garage", level: nil, floor: "Around the house"},
+             %{room: kitchen, name: "Kitchen", level: 0, floor: "Floor 1"}
+           ]
+
+    build = saved(view)
+    living = room_id(build, "Living room")
+    patio = Enum.find(build.rooms, &(&1.name == "Patio"))
+    suite = Enum.find(build.rooms, &(&1.name == "Guest Suite"))
+    assert {patio.level, patio.place} == {"outside", :outdoor}
+    assert {suite.level, suite.place} == {"f2", :indoor}
+    refute Enum.any?(build.rooms, &(&1.name == "Den"))
+    assert build.areas == %{living => "living", patio.id => "patio", suite.id => "suite"}
+
+    assert has_element?(
+             view,
+             "#ha-sync",
+             "The app linked 1 room and added 2 rooms. Home Assistant adds 3 areas."
+           )
+
+    # The answer of the hook: two new areas, and one error.
+    render_hook(view, "ha:areas_added", %{
+      "links" => [
+        %{"room" => kitchen, "area" => "kitchen"},
+        %{"room" => garage, "area" => "garage"},
+        %{"room" => "r999", "area" => "x"},
+        %{"room" => kitchen, "area" => String.duplicate("a", 256)},
+        %{"room" => living, "area" => "kitchen"},
+        %{"room" => 5}
+      ],
+      "errors" => [
+        %{"room" => attic, "message" => "Unauthorized"},
+        %{"room" => kitchen, "message" => 5},
+        %{"room" => "r999", "message" => "x"}
+      ]
+    })
+
+    assert_push_event(view, "ha:rooms_fetch", %{})
+    build = saved(view)
+    assert build.areas[kitchen] == "kitchen"
+    assert build.areas[garage] == "garage"
+
+    assert has_element?(
+             view,
+             "#ha-sync",
+             "The app linked 1 room and added 2 rooms. Home Assistant added 2 areas. " <>
+               "Home Assistant did not add: Attic (Unauthorized), Kitchen (no reason), " <>
+               "Living room (a different room has the area)."
+           )
+
+    # The areas come again: the rooms are in both.
+    areas = [
+      %{"id" => "kitchen", "name" => "Kitchen", "floor" => "ground"},
+      %{"id" => "garage", "name" => "Garage", "floor" => nil}
+      | ha_rooms()["areas"]
+    ]
+
+    render_hook(view, "ha:rooms", %{ha_rooms() | "areas" => areas})
+    assert has_element?(view, "#ha-both h3", "In both (5)")
+    assert has_element?(view, "#ha-ha h3", "Only in Home Assistant (1)")
+  end
+
+  test "a match with no new areas reads the areas again, and the hook can answer late", %{
+    conn: conn
+  } do
+    view = page(conn, ~p"/inside?#{[sheet: "ha_rooms"]}")
+    connected(view)
+    render_hook(view, "ha:rooms", ha_rooms(false))
+    view |> form("#ha-rooms") |> render_submit(%{"ha" => %{"den" => "f9 indoor"}})
+    refute_push_event(view, "ha:add_areas", %{})
+    assert_push_event(view, "ha:rooms_fetch", %{})
+
+    assert has_element?(
+             view,
+             "#ha-sync",
+             "The app linked 1 room and added 2 rooms."
+           )
+
+    # Choices that the page cannot read: no new rooms.
+    render_hook(view, "ha:rooms", ha_rooms(false))
+    render_hook(view, "ha_sync", %{"ha" => "x", "app" => "y"})
+    render_hook(view, "ha:rooms", ha_rooms(false))
+    render_hook(view, "ha_sync", %{"ha" => %{"patio" => 5, "suite" => "f1 attic"}})
+    assert has_element?(view, "#ha-sync", "The app linked 0 rooms and added 0 rooms.")
+
+    # A match with no areas, or a bad answer of the hook: no change.
+    render_hook(view, "ha_sync", %{})
+    render_hook(view, "ha:areas_added", %{"links" => "x"})
+    link = %{"room" => room_id(build(), "Kitchen"), "area" => "kitchen"}
+    render_hook(view, "ha:areas_added", %{"links" => List.duplicate(link, 501), "errors" => []})
+    render_hook(view, "ha:areas_added", %{"links" => [], "errors" => List.duplicate(link, 501)})
+    assert has_element?(view, "#ha-sync", "The app linked 0 rooms and added 0 rooms.")
+
+    # An answer after the sheet opened again (no status of a match).
+    render_patch(view, ~p"/inside")
+    render_patch(view, ~p"/inside?#{[sheet: "ha_rooms"]}")
+    refute has_element?(view, "#ha-sync")
+    kitchen = room_id(build(), "Kitchen")
+
+    render_hook(view, "ha:areas_added", %{
+      "links" => [%{"room" => kitchen, "area" => "kitchen"}],
+      "errors" => []
+    })
+
+    assert has_element?(
+             view,
+             "#ha-sync",
+             "The app linked 0 rooms and added 0 rooms. Home Assistant added 1 area."
+           )
+  end
+
+  test "a match adds 50 areas as rooms at most, and a bad payload changes nothing", %{
+    conn: conn
+  } do
+    view = page(conn, ~p"/inside?#{[sheet: "ha_rooms"]}")
+    connected(view)
+    areas = for n <- 1..51, do: %{"id" => "a#{n}", "name" => "Area #{n}", "floor" => "ground"}
+    render_hook(view, "ha:rooms", %{ha_rooms(false) | "areas" => areas})
+    view |> form("#ha-rooms") |> render_submit()
+    assert has_element?(view, "#ha-sync", "added 50 rooms. It did not add: Area 51.")
+    assert length(saved(view).rooms) == length(build().rooms) + 50
+
+    # A payload that is not a map.
+    render_hook(view, "ha:rooms", %{ha_rooms(false) | "areas" => areas})
+    render_hook(view, "ha_sync", ["x"])
+    assert render(view) =~ "ha-rooms"
+  end
+
+  test "the words of a match" do
+    status = %{linked: 2, added: 0, missed: ["Loft"], sent: 0, done: nil, errors: []}
+
+    assert HomeAssistant.sync_text(status) ==
+             "The app linked 2 rooms and added 0 rooms. It did not add: Loft."
+  end
+
+  test "with no house, the events of the match change nothing", %{conn: conn} do
+    {:ok, build} = Build.choose_door(Build.new(), "my_house")
+    view = page(conn, ~p"/inside", build)
+    render_hook(view, "ha_sync", %{})
+    render_hook(view, "ha:areas_added", %{"links" => [], "errors" => []})
+    refute_push_event(view, "device:save", %{})
+  end
+
   test "the other events of the page still work", %{conn: conn} do
     view = settings(conn)
     view |> form("#settings-zip", %{"zip" => "77002"}) |> render_submit()

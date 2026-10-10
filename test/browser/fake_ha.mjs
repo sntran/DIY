@@ -1,6 +1,7 @@
 // A fake Home Assistant for the browser test. It has the sign-in page,
 // the tokens, the revoke and the WebSocket API: only the parts that the
-// app uses. The sign-in page sends the browser back at once, with a code. The
+// app uses. The registry of the floors and of the areas refuses a second
+// floor or area with the same name, as Home Assistant does. The sign-in page sends the browser back at once, with a code. The
 // token endpoint checks the client, the way back and the PKCE verifier, as
 // Home Assistant does.
 
@@ -16,7 +17,17 @@ const read = (request) => new Promise((resolve) => {
   request.on("end", () => resolve(new URLSearchParams(text)))
 })
 
-export async function fakeHomeAssistant({ name = "Fake house", version = "2026.10.0" } = {}) {
+// The name of a floor or an area for a match: no case and no spaces.
+const key = (name) => name.toUpperCase().toLowerCase().replaceAll(" ", "")
+
+export async function fakeHomeAssistant({
+  name = "Fake house",
+  version = "2026.10.0",
+  floors = [],
+  areas = [],
+  admin = true,
+} = {}) {
+  const registry = { floors: structuredClone(floors), areas: structuredClone(areas) }
   const codes = new Map()
   const sessions = new Map()
   const accesses = new Map()
@@ -88,6 +99,38 @@ export async function fakeHomeAssistant({ name = "Fake house", version = "2026.1
     json(response, 404, {})
   })
 
+  // The commands of the registry, and the user.
+  const command = (message) => {
+    const ok = (result) => ({ success: true, result })
+    const inUse = (list) => list.some((one) => key(one.name) === key(message.name))
+    const refuse = () => ({
+      success: false,
+      error: { code: "invalid_info", message: `The name ${message.name} (${key(message.name)}) is already in use` },
+    })
+    switch (message.type) {
+      case "config/floor_registry/list":
+        return ok(registry.floors)
+      case "config/area_registry/list":
+        return ok(registry.areas)
+      case "auth/current_user":
+        return ok({ id: "u1", name: "Owner", is_admin: admin })
+      case "config/floor_registry/create": {
+        if (inUse(registry.floors)) return refuse()
+        const floor = { floor_id: key(message.name), name: message.name, level: message.level ?? null, aliases: [] }
+        registry.floors.push(floor)
+        return ok(floor)
+      }
+      case "config/area_registry/create": {
+        if (inUse(registry.areas)) return refuse()
+        const area = { area_id: key(message.name), name: message.name, floor_id: message.floor_id ?? null }
+        registry.areas.push(area)
+        return ok(area)
+      }
+      default:
+        return { success: false, error: { code: "unknown_command", message: "Unknown command." } }
+    }
+  }
+
   const sockets = new WebSocketServer({ noServer: true })
   server.on("upgrade", (request, socket, head) => {
     if (request.url !== "/api/websocket") return socket.destroy()
@@ -105,6 +148,8 @@ export async function fakeHomeAssistant({ name = "Fake house", version = "2026.1
           }
         } else if (message.type === "get_config") {
           send({ id: message.id, type: "result", success: true, result: { location_name: name, version } })
+        } else {
+          send({ id: message.id, type: "result", ...command(message) })
         }
       })
     })
@@ -115,6 +160,7 @@ export async function fakeHomeAssistant({ name = "Fake house", version = "2026.1
     url: `http://127.0.0.1:${server.address().port}`,
     revoked,
     sessions,
+    registry,
     close: () => {
       for (const ws of sockets.clients) ws.terminate()
       server.close()

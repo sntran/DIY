@@ -143,6 +143,37 @@ defmodule DIY.BuildTest do
     assert Build.delete_room(build, kitchen.id) == {:error, :room}
   end
 
+  test "the links of the rooms to the areas of Home Assistant" do
+    build = preset()
+    kitchen = room_named(build, "Kitchen")
+    assert build.areas == %{}
+    assert {:ok, build} = Build.link_area(build, kitchen.id, "kitchen")
+    assert build.areas == %{kitchen.id => "kitchen"}
+    assert Build.from_json(Build.to_json(build)) == {:ok, build}
+    assert Build.link_area(build, "r999", "den") == {:error, :room}
+    assert Build.link_area(build, kitchen.id, "") == {:error, :area}
+    assert Build.link_area(build, kitchen.id, String.duplicate("a", 256)) == {:error, :area}
+    assert {:ok, _build} = Build.link_area(build, kitchen.id, String.duplicate("a", 255))
+    assert Build.link_area(build, kitchen.id, 5) == {:error, :area}
+    # One room for each area. The roof has no area.
+    assert Build.link_area(build, room_named(build, "Garage").id, "kitchen") == {:error, :taken}
+    assert {:ok, _build} = Build.link_area(build, kitchen.id, "kitchen")
+    assert Build.link_area(build, room_named(build, "Roof").id, "roof") == {:error, :room}
+    assert {:ok, %{areas: areas}} = Build.link_area(build, kitchen.id, nil)
+    assert areas == %{}
+
+    # A zone of a van has no area.
+    {:ok, build, van} = Build.add_item(build, room_named(build, "Driveway").id, "camper_van")
+    [zone | _zones] = Build.zones(build, van)
+    assert Build.link_area(build, zone.id, "van") == {:error, :room}
+
+    # The link goes with its room, and with the rooms of a new house.
+    assert {:ok, %{areas: areas}} = Build.delete_room(build, kitchen.id)
+    assert areas == %{}
+    {house, rooms, items} = House.preset(house(%{}))
+    assert Build.put_house(build, house, rooms, items).areas == %{}
+  end
+
   test "items: add, change, check, move and remove" do
     build = preset()
     kitchen = room_named(build, "Kitchen")
@@ -289,6 +320,19 @@ defmodule DIY.BuildTest do
     assert {:ok, %{seq: 0}} = bad.(%{"seq" => 0, "rooms" => [room], "items" => []})
     assert bad.(%{"hints" => ["x"]}) == {:error, :hints}
     assert bad.(%{"hints" => "swipe"}) == {:error, :hints}
+    assert bad.(%{"areas" => ["kitchen"]}) == {:error, :areas}
+    assert bad.(%{"areas" => %{"r1" => 5}}) == {:error, :areas}
+    assert bad.(%{"areas" => %{"r1" => ""}}) == {:error, :areas}
+    # Two rooms with one area: the first room keeps it.
+    [one, two | _rooms] = Enum.reject(good["rooms"], &(&1["place"] == "roof"))
+    {:ok, %{areas: areas}} = bad.(%{"areas" => %{one["id"] => "den", two["id"] => "den"}})
+    assert areas == %{one["id"] => "den"}
+    roof = Enum.find(good["rooms"], &(&1["place"] == "roof"))
+    assert {:ok, %{areas: %{}}} = bad.(%{"areas" => %{roof["id"] => "roof"}})
+    # A link of a room that is not there goes away. A build of an older
+    # version has no links.
+    assert {:ok, %{areas: %{}}} = bad.(%{"areas" => %{"r999" => "den"}})
+    assert {:ok, %{areas: %{}}} = Build.from_json(Jason.encode!(Map.delete(good, "areas")))
     # An AC cannot be in a kitchen (inside).
     kitchen = Enum.find(good["rooms"], &(&1["name"] == "Kitchen"))
     ac = Enum.find(good["items"], &(&1["type"] == "ac"))
@@ -321,7 +365,11 @@ defmodule DIY.BuildTest do
                 source: member_of(["ptc", "user"])
               })
             ]),
-          changes <- list_of({member_of(Catalog.types()), integer(0..20)}, max_length: 6)
+          changes <- list_of({member_of(Catalog.types()), integer(0..20)}, max_length: 6),
+          links <-
+            list_of({integer(0..20), string(:alphanumeric, min_length: 1, max_length: 20)},
+              max_length: 3
+            )
         ) do
       {house, rooms, items} =
         House.preset(%{size: size, year: year, floors: floors, heat: heat, lot: lot})
@@ -333,11 +381,21 @@ defmodule DIY.BuildTest do
       build = if market, do: Build.set_market(build, market), else: build
       build = Build.put_house(build, house, rooms, items)
 
-      Enum.reduce(changes, build, fn {type, index}, build ->
+      build =
+        Enum.reduce(changes, build, fn {type, index}, build ->
+          room = Enum.at(build.rooms, rem(index, length(build.rooms)))
+
+          case Build.add_item(build, room.id, type) do
+            {:ok, build, _id} -> build
+            {:error, _reason} -> build
+          end
+        end)
+
+      Enum.reduce(links, build, fn {index, area}, build ->
         room = Enum.at(build.rooms, rem(index, length(build.rooms)))
 
-        case Build.add_item(build, room.id, type) do
-          {:ok, build, _id} -> build
+        case Build.link_area(build, room.id, area) do
+          {:ok, build} -> build
           {:error, _reason} -> build
         end
       end)
@@ -384,6 +442,7 @@ defmodule DIY.BuildTest do
   test "from_json never raises for a build with a bad value at any place" do
     build = preset()
     {:ok, build, _id} = Build.add_item(build, room_named(build, "Kitchen").id, "other")
+    {:ok, build} = Build.link_area(build, room_named(build, "Kitchen").id, "kitchen")
     map = build |> Build.to_json() |> Jason.decode!()
 
     map = %{

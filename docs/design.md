@@ -1560,9 +1560,9 @@ camera and the same look. A tap on the picture opens the plan.
 
 Many people keep their rooms, their devices and their meters in Home
 Assistant. The app links to it, so that the person does not type them
-again. This part is the link: the sign-in and the socket. The next parts
-bring in the rooms and the devices, show their state, turn them on and
-off, and read the use of power.
+again. The parts that are done: the link (the sign-in and the socket),
+and the match of the rooms. The next parts bring in the devices, show
+their state, turn them on and off, and read the use of power.
 
 ### The sign-in stays on the device
 
@@ -1693,6 +1693,105 @@ The tests:
 - A test by hand used Home Assistant 2026.10 with its demo. It signed in
   on the page of Home Assistant, loaded the page again, opened a second
   tab, and disconnected. Home Assistant then had no session of the app.
+
+### The match of the rooms
+
+Home Assistant has floors and areas. A floor has a level: 0 is the
+ground floor. An area is a room, on a floor or on none. The app and Home
+Assistant can have the same rooms, so the person does not make them two
+times. The card links to a sheet: "Match the rooms with Home Assistant"
+(`/inside?sheet=ha_rooms`, `DIYWeb.HomeAssistant.rooms_sheet/1`).
+
+1. When the sheet opens, the LiveView sends `ha:rooms_fetch`. The hook
+   reads the floors, the areas and the user of Home Assistant on its
+   socket (`config/floor_registry/list`, `config/area_registry/list` and
+   `auth/current_user`). It sends them to the LiveView (`ha:rooms`). The
+   sheet reads them again when the link comes back.
+2. `DIY.HomeAssistant.match/2` makes three lists: the rooms in both, the
+   rooms only in the app, and the areas only in Home Assistant. A room
+   with a link to an area is in both. The build keeps the links (`areas`:
+   the id of the area for each room). Then the name matches. Home
+   Assistant compares names with a case fold and no spaces, and so does
+   the app.
+   The roof and the zones of a van have no area.
+3. For an area only in Home Assistant, the sheet suggests a place: the
+   floor of the area, else a word of its name. For example, a patio is
+   outside the house, a garage is around the house, and an attic is under
+   the roof. The person can change the place, or skip the area.
+4. "Match the rooms" (`ha_sync`) links the rooms in both. It adds the
+   areas that the person chose as rooms, each with its link: 50 at most
+   for each match. The rooms only in the app that the person chose go to
+   the hook (`ha:add_areas`), with the level and the name of their floors.
+5. The hook adds each floor that Home Assistant does not have (by level),
+   and then each area, on its floor. A room around the house or in the
+   attic has no floor. The hook sends the ids of the new areas
+   (`ha:areas_added`). The LiveView links the rooms, and reads the areas
+   again.
+
+An area has one room at most (`DIY.Build.link_area/3`). Home Assistant
+refuses a second area with one name. So the sheet does not offer a room
+when Home Assistant has an area with its name. It also does not offer the
+second of two rooms with one name (`DIY.HomeAssistant.blocked/2`). The
+sheet tells the person to give the room a different name.
+
+Only an admin of Home Assistant can add floors and areas. For a user that
+is not an admin, the sheet tells this, and adds no rooms to Home
+Assistant. The rooms of Home Assistant still come into the app.
+
+Home Assistant refuses a second floor or area with the same name
+(`invalid_info`, "already in use"). This occurs when two tabs do the
+match at the same time, or when a person adds the area in Home Assistant
+first. Then the hook reads the list again, and uses the area of that
+name. It uses a floor of that name only when the floor has the same
+level. Else, the room is not added. The sheet tells that Home Assistant
+has a floor of that name at a different level.
+
+The TLA+ model `specs/RoomSync.tla` checks these rules with two tabs,
+twin rooms (two rooms with one name), and a person in Home Assistant.
+Each fault has a configuration, and TLC finds it:
+
+- **A new name** (`RoomSync.suffix.cfg`). The hook adds the area with a
+  new name ("Den 2"). Then Home Assistant has two areas for one room.
+- **The old list** (`RoomSync.snapshot.cfg`). The hook looks for the area
+  in the list from the start of the sheet. The area of the other tab is
+  not in it, so the room gets no area.
+- **No rules for the names** (`RoomSync.twins.cfg`). The sheet offers the
+  twin of a room with an area, and the LiveView links the twin. Then two
+  rooms have one area.
+- **Only the check of the links** (`RoomSync.nooffer.cfg`). The sheet
+  offers each room, and the LiveView refuses a second room for an area.
+  An area still has one room (`RoomSync.nooffer-rooms.cfg`), but the twin
+  gets no area.
+
+The LiveView takes at most 100 floors and 500 areas. With more, the sheet
+tells that Home Assistant has too many. A floor or an area with a bad
+value, or a text of more than 255 bytes, does not count. An area on a
+floor with a longer id has no floor. When Home
+Assistant refuses a command (for example, a version with no floors), the
+sheet tells that the match needs Home Assistant 2024.4 or later.
+
+Sometimes a link goes to an area that is not there now. For example, the
+person removed the area in Home Assistant. Then the link does not count:
+the room is only in the app again. When a room goes away, its link goes
+too. A new house has no links. When a stored build has two rooms for one
+area, the first room keeps the link.
+
+The tests:
+
+- `test/diy/home_assistant_test.exs`: the match, the blocked rooms and the
+  places. A property test checks that each room and each area is in one
+  list. Also, no room only in the app has the name of an area only in
+  Home Assistant. The rooms that the sheet offers have names that are not
+  in use.
+- `test/js/home_assistant.test.js`: the commands on the socket, the
+  errors, and a property test with two tabs and the answers in any order.
+  Each room gets an area of its name, on the floor of its level.
+- `test/diy_web/home_assistant_test.exs`: the sheet, the choices, the
+  answers of the hook, and the payloads that the LiveView refuses.
+- The browser test opens the sheet from the sheet of the hub. A fake Home
+  Assistant has a floor and three areas: the living room matches, and
+  two areas come in as rooms. Home Assistant adds the other rooms, with
+  a new floor for floor 2.
 
 ## In a car
 

@@ -90,7 +90,8 @@ defmodule DIY.Build do
             lesson: 1,
             lesson_plan: nil,
             seq: 0,
-            hints: []
+            hints: [],
+            areas: %{}
 
   @type plan :: %{x: integer(), y: integer(), w: pos_integer(), d: pos_integer()}
   @type room :: %{
@@ -140,7 +141,8 @@ defmodule DIY.Build do
           lesson: 1..4,
           lesson_plan: String.t() | nil,
           seq: non_neg_integer(),
-          hints: [String.t()]
+          hints: [String.t()],
+          areas: %{String.t() => String.t()}
         }
 
   @doc "The version of the format of the build."
@@ -257,7 +259,7 @@ defmodule DIY.Build do
   @spec put_house(t(), house(), [map()], [map()]) :: t()
   def put_house(build, house, rooms, items) do
     change(build, fn build ->
-      build = %{build | house: house, rooms: [], items: []}
+      build = %{build | house: house, rooms: [], items: [], areas: %{}}
 
       {build, ids} =
         Enum.reduce(rooms, {build, %{}}, fn room, {build, ids} ->
@@ -349,7 +351,7 @@ defmodule DIY.Build do
                item.room != id,
                do: if(item.home == id, do: %{item | home: new_home(item, house)}, else: item)
 
-         %{build | rooms: rooms, items: items}
+         %{build | rooms: rooms, items: items, areas: Map.delete(build.areas, id)}
          |> drop_vans()
          |> no_meter_no_usage()
        end)}
@@ -847,7 +849,8 @@ defmodule DIY.Build do
       "lesson" => build.lesson,
       "lesson_plan" => build.lesson_plan,
       "seq" => build.seq,
-      "hints" => build.hints
+      "hints" => build.hints,
+      "areas" => build.areas
     })
   end
 
@@ -884,7 +887,8 @@ defmodule DIY.Build do
          {:ok, lesson_plan} <- lesson_plan(map["lesson_plan"]),
          {:ok, seq} <- count(map["seq"], :seq),
          seq = last_id(seq, rooms ++ items ++ plans),
-         {:ok, hints} <- hints(map["hints"]) do
+         {:ok, hints} <- hints(map["hints"]),
+         {:ok, areas} <- areas(map["areas"], rooms) do
       {:ok,
        %__MODULE__{
          revision: revision,
@@ -903,7 +907,8 @@ defmodule DIY.Build do
          lesson: lesson,
          lesson_plan: lesson_plan,
          seq: seq,
-         hints: hints
+         hints: hints,
+         areas: areas
        }
        |> repair_vans()
        |> Layout.fill()}
@@ -1351,4 +1356,61 @@ defmodule DIY.Build do
   end
 
   defp hints(_hints), do: {:error, :hints}
+
+  # The links of the rooms to the areas of Home Assistant. A build of an
+  # older version has none. A link of a room that cannot have an area (it
+  # is not there, or it is the roof) goes away. Two rooms cannot have one
+  # area: the first room in the list keeps it.
+  defp areas(nil, _rooms), do: {:ok, %{}}
+
+  defp areas(areas, rooms) when is_map(areas) do
+    if Enum.all?(areas, fn {_room, area} -> is_binary(area) and area_id?(area) end) do
+      {links, _used} =
+        Enum.reduce(rooms, {%{}, MapSet.new()}, fn room, {links, used} ->
+          area = areas[room.id]
+
+          if area && area_room?(room) && not MapSet.member?(used, area),
+            do: {Map.put(links, room.id, area), MapSet.put(used, area)},
+            else: {links, used}
+        end)
+
+      {:ok, links}
+    else
+      {:error, :areas}
+    end
+  end
+
+  defp areas(_areas, _rooms), do: {:error, :areas}
+
+  # The id of an area of Home Assistant: a short text.
+  defp area_id?(id), do: id != "" and byte_size(id) <= 255
+
+  @doc """
+  True for a room that can have an area of Home Assistant. It is a room of
+  the house: not the roof, and not a zone of a van.
+  """
+  def area_room?(room), do: not van_level?(room.level) and room.place != :roof
+
+  @doc """
+  Links a room of the house to an area of Home Assistant (its id), or
+  removes the link (`nil`). An area has one room at most: a link to an
+  area of a different room is an error (`:taken`).
+  """
+  @spec link_area(t(), String.t(), String.t() | nil) :: {:ok, t()} | {:error, atom()}
+  def link_area(build, room_id, area) do
+    with {:ok, room} <- room(build, room_id),
+         true <- area_room?(room) || {:error, :room},
+         true <- (is_nil(area) or (is_binary(area) and area_id?(area))) || {:error, :area},
+         true <- not taken?(build, room_id, area) || {:error, :taken} do
+      areas =
+        if area, do: Map.put(build.areas, room_id, area), else: Map.delete(build.areas, room_id)
+
+      {:ok, change(build, &%{&1 | areas: areas})}
+    end
+  end
+
+  defp taken?(_build, _room_id, nil), do: false
+
+  defp taken?(build, room_id, area),
+    do: Enum.any?(build.areas, fn {room, other} -> other == area and room != room_id end)
 end

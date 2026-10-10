@@ -24,8 +24,16 @@ const site = process.argv[2] ?? "http://localhost:4002"
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM })
 let faults = 0
 
-// A fake Home Assistant on this computer (test/browser/fake_ha.mjs).
-const homeAssistant = await fakeHomeAssistant()
+// A fake Home Assistant on this computer (test/browser/fake_ha.mjs), with
+// a floor and three areas.
+const homeAssistant = await fakeHomeAssistant({
+  floors: [{ floor_id: "ground", name: "Ground floor", level: 0 }],
+  areas: [
+    { area_id: "living_room", name: "Living Room", floor_id: "ground" },
+    { area_id: "patio", name: "Patio", floor_id: null },
+    { area_id: "guest_suite", name: "Guest Suite", floor_id: null },
+  ],
+})
 
 // axe on the page as it is now.
 async function check(page, name) {
@@ -451,6 +459,33 @@ async function build(context, name) {
     "rgb(34, 197, 94)",
   )
   await check(page, `${name} Home Assistant`)
+
+  // The match of the rooms, from the sheet of the hub. The living room is in
+  // both. Patio and Guest Suite are only in Home Assistant: the app suggests
+  // a place for each. Home Assistant adds the other rooms, with a new floor
+  // for floor 2. (The first run adds them. The next runs find them.)
+  await follow(page, "#ha-match")
+  await page.waitForSelector("#ha-rooms-sheet #ha-rooms")
+  await page.waitForSelector("#ha-both li:has-text('Living room')")
+  assert.equal(await page.inputValue("select[name='ha[patio]']"), "outside outdoor")
+  assert.equal(await page.inputValue("select[name='ha[guest_suite]']"), "f1 indoor")
+  await check(page, `${name} match`)
+  const newAreas = !homeAssistant.registry.areas.some((area) => area.name === "Kitchen")
+  await page.click("#ha-rooms button")
+  await page.waitForSelector(newAreas ? "#ha-sync:has-text('Home Assistant added')" : "#ha-sync")
+  await page.waitForSelector("#ha-app h3:has-text('(0)')")
+  await page.waitForSelector("#ha-ha h3:has-text('(0)')")
+  await page.waitForSelector("#ha-both li:has-text('Guest Suite')")
+  const area = (name) => homeAssistant.registry.areas.find((one) => one.name === name)
+  const upstairs = homeAssistant.registry.floors.find((one) => one.level === 1)
+  assert.equal(area("Kitchen").floor_id, "ground")
+  assert.equal(area("Bedroom 1").floor_id, upstairs.floor_id)
+  assert.equal(area("Garage").floor_id, null)
+  assert.equal(homeAssistant.registry.areas.length, new Set(homeAssistant.registry.areas.map((one) => one.name)).size)
+  await page.goto(`${site}/inside?item=${hub}`)
+  await connected(page)
+  await page.waitForSelector("#item-sheet #ha-status:has-text('Connected to Fake house')")
+
   const revoked = homeAssistant.revoked.length
   await page.click("#ha-disconnect")
   await page.waitForSelector("#ha-status:has-text('Not connected.')")

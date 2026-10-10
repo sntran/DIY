@@ -31,11 +31,17 @@ defmodule DIYWeb.Inside do
   attr :item, :string, default: nil
   attr :add, :string, default: nil
   attr :room, :string, default: nil, doc: "the room that the person chose"
-  attr :sheet, :string, default: nil, doc: "\"room\" (change the room) or \"new_room\""
+
+  attr :sheet, :string,
+    default: nil,
+    doc: "\"room\" (change the room), \"new_room\" or \"ha_rooms\" (`DIYWeb.HomeAssistant`)"
+
   attr :item_error, :string, default: nil
   attr :status, :string, default: nil, doc: "a text for a screen reader after a move"
   attr :away, :list, default: [], doc: "the stations of the house in a van: {item, van}"
   attr :ha, :map, required: true, doc: "the link to Home Assistant (`DIYWeb.HomeAssistant`)"
+  attr :ha_rooms, :map, default: nil, doc: "the floors and the areas of Home Assistant"
+  attr :ha_sync, :map, default: nil, doc: "what the last match of the rooms did"
 
   attr :outage, :string,
     default: nil,
@@ -159,6 +165,13 @@ defmodule DIYWeb.Inside do
       />
       <.room_sheet :if={@chosen && @sheet == "room"} room={@chosen} />
       <.new_room_sheet :if={@sheet == "new_room"} levels={@levels} />
+      <HomeAssistant.rooms_sheet
+        :if={@sheet == "ha_rooms"}
+        build={@build}
+        ha={@ha}
+        ha_rooms={@ha_rooms}
+        ha_sync={@ha_sync}
+      />
     </section>
     """
   end
