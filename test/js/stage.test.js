@@ -481,8 +481,9 @@ test("with less motion, the item is at once in front, and a close is at once", (
 })
 
 test("an item that is not on the plan, or not in its view, comes from the middle", () => {
-  // No item on the plan; an item out of the view of the plan; a plan out of
-  // the page (the page is down at the list of the rooms).
+  // Three cases: no item on the plan, an item out of the view of the plan,
+  // and a plan out of the page. In the last case, the page is down at the
+  // list of the rooms.
   for (const options of [{plan: false}, {onPlan: false}, {top: -1000}]) {
     const p = page(options)
     p.time.tick(0)
