@@ -306,18 +306,18 @@ defmodule DIYWeb.VanLiveTest do
     build = house()
     {:ok, build, station} = Build.add_item(build, room(build, "Laundry"), "power_station")
     view = open(conn, ~p"/inside?item=#{station}", build)
-    refute has_element?(view, "#item-sheet", "the weight budget of the van")
+    refute has_element?(view, "#item-stage", "the weight budget of the van")
     refute has_element?(view, "#item-form input[name='item[weight]']")
 
     {build, van} = with_van(build)
     view = open(conn, ~p"/inside?item=#{station}", build)
-    assert has_element?(view, "#item-sheet", "the weight budget of the van")
+    assert has_element?(view, "#item-stage", "the weight budget of the van")
     assert has_element?(view, "#item-form input[name='item[weight]']")
 
     # The van itself: no station runs it, and its numbers are of its model.
     render_patch(view, ~p"/inside?item=#{van}")
     refute has_element?(view, "#flags-form input[name=backup]")
-    assert has_element?(view, "#item-sheet", "typical of the model")
+    assert has_element?(view, "#item-stage", "typical of the model")
   end
 
   test "a station in the van: the page Power of the house tells it", %{conn: conn} do
@@ -347,7 +347,7 @@ defmodule DIYWeb.VanLiveTest do
     {build, van} = with_van()
     {build, fridge} = add(build, van, :galley, "van_fridge")
     view = open(conn, ~p"/inside?item=#{fridge}", build)
-    refute has_element?(view, "#item-sheet")
+    refute has_element?(view, "#item-stage")
 
     # The item of a house goes back to the rooms after its removal.
     kitchen = Enum.find(build.items, &(&1.type == "fridge"))

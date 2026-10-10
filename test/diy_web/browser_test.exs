@@ -13,7 +13,9 @@ defmodule DIYWeb.BrowserTest do
   use ExUnit.Case, async: false
 
   @moduletag :browser
-  @moduletag timeout: 600_000
+  # The walk takes about 9 minutes: it opens and closes many items on their
+  # stage, in four sizes and colors.
+  @moduletag timeout: 900_000
 
   setup do
     Req.Test.set_req_test_to_shared()

@@ -69,7 +69,7 @@ defmodule DIYWeb.PlanLiveTest do
     render_hook(view, "open_item", %{"id" => fridge.id})
     assert_patch view, ~p"/inside?#{[item: fridge.id, room: kitchen.id]}"
     assert has_element?(view, "#room-bar", "Kitchen")
-    assert has_element?(view, ~s(#item-sheet a[data-close][href="/inside?room=#{kitchen.id}"]))
+    assert has_element?(view, ~s(#item-stage a[data-close][href="/inside?room=#{kitchen.id}"]))
 
     # From the bar, the person adds an item to the room, and then deletes
     # it. The room stays chosen. In the list, an item also keeps the room.

@@ -575,3 +575,123 @@
   opacity: 1; pointer-events: auto
 }
 .p-handle { r: var(--p-handle, 2px); fill: var(--p-halo); stroke: var(--p-chosen); stroke-width: 2.5; vector-effect: non-scaling-stroke; cursor: move }
+
+/* The stage of an item (DIYWeb.Stage, assets/js/stage.js): the model in
+   front of the house, and its panel on it. The panel has the style of the
+   item: the LED screen of a hub, the screen of a TV or of a computer, or a
+   printed label. A label is paper, so it has the same colors in the light
+   and the dark mode. With no script, the panel is under the model. */
+.stage-scrim { background: rgb(20 17 14 / 0.6); backdrop-filter: blur(3px); animation: stage-fade 350ms ease-out both }
+[data-stage=closing] .stage-scrim { animation: stage-fade-out 600ms ease-in both }
+.stage-body { position: relative; margin-inline: auto; display: flex; flex-direction: column; align-items: center;
+  gap: 12px; padding: 16px; max-width: 36rem; min-height: 100% }
+.stage-model { position: relative; z-index: 1; width: 100%; height: min(34dvh, 22rem); flex: none; pointer-events: none }
+.stage-model svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible }
+/* A soft light behind the model, so that a dark item shows on the scrim. */
+.stage-model::before { content: ""; position: absolute; inset: -12% -4%; z-index: -1;
+  background: radial-gradient(closest-side, rgb(255 255 255 / 0.28), rgb(255 255 255 / 0.08) 60%, transparent) }
+.stage-panel { position: relative; z-index: 2; width: 100%; padding: 0.7em 0.8em; display: flex; flex-direction: column;
+  gap: 0.6em; border-radius: 6px; overflow: auto; font-size: clamp(0.8rem, calc(var(--pw, 400px) / 24), 1rem) }
+/* The panel is as wide as its screen: its fields are not wider. */
+.stage-panel { overflow-x: hidden }
+.stage-panel :is(.input, .select, input, select) { max-width: 100%; min-width: 0 }
+.stage-panel :is(label, form) { max-width: 100%; min-width: 0 }
+.stage-panel .w-72 { width: 100% }
+.stage-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.5em }
+.stage-title { display: flex; align-items: center; gap: 0.4em; font-size: 1.1em; font-weight: 700; line-height: 1.2 }
+.stage-note { font-size: 0.9em }
+
+/* With the hook (data-stage: placed, landed or closing): the model at its
+   place, and the panel on its screen or its label. The panel shows when the
+   model lands, as a screen that turns on. */
+[data-stage] { overflow: hidden }
+[data-stage] .stage-body { position: fixed; inset: 0; padding: 0; max-width: none; display: block; pointer-events: none }
+[data-stage] .stage-model { position: absolute; height: auto }
+[data-stage] .stage-panel { position: absolute; left: 0; top: 0; transform-origin: 0 0; pointer-events: auto;
+  opacity: 0; visibility: hidden }
+[data-stage=landed] .stage-panel { opacity: 1; visibility: visible; transition: opacity 260ms ease-out }
+
+.stage-page { display: grid; gap: 0.6em }
+.stage-page .text-sm { font-size: 1em }
+.stage-keys { display: flex; flex-wrap: wrap; gap: 0.35em }
+.stage-key { display: inline-flex; align-items: center; justify-content: center; min-height: 1.9rem; padding: 0 0.75em;
+  border-radius: 999px; font-size: 0.95em; font-weight: 600; cursor: pointer; border: 0;
+  transition: transform 80ms, box-shadow 80ms }
+.stage-key:active, .stage-key[aria-selected=true] { transform: translateY(2px) }
+.stage-key:focus-visible { outline: 3px solid #f59e0b; outline-offset: 2px }
+.stage-back { white-space: nowrap; flex: none }
+/* A checkbox on a panel: its box in the ink of the panel, and its mark in
+   the color of the panel (the colors of daisyUI do not fit a panel). */
+.panel-label .checkbox { --input-color: #1f1a12; border-color: #1f1a12; color: #fff6cf }
+.panel-screen .checkbox { --input-color: #eef5fb; border-color: #eef5fb; color: #0d1b28 }
+.panel-led .checkbox { --input-color: #8dffa8; border-color: #8dffa8; color: #0c1410 }
+/* A checkbox on a panel is 24 px, large enough for a finger. */
+.stage-panel .checkbox { --size: 1.5rem }
+/* A file field on a panel: its button in the colors of the panel. */
+.stage-panel .file-input::file-selector-button { color: inherit; background: rgb(128 128 128 / 0.25); border-color: currentColor }
+/* The icon of the item is a dark drawing: on a dark screen it does not show. */
+:is(.panel-led, .panel-screen) .stage-title svg { display: none }
+/* A box of a different color on a page (the place, the real usage). */
+.stage-panel .bg-base-200 { color: inherit }
+.panel-label .bg-base-200 { background: rgb(31 26 18 / 0.07) }
+.panel-screen .bg-base-200 { background: rgb(255 255 255 / 0.08) }
+.panel-led .bg-base-200 { background: rgb(141 255 168 / 0.07) }
+.panel-label .stage-key:focus-visible { outline-color: #1f1a12 }
+/* Muted text on a panel has its own color, not a transparency: so it keeps
+   its contrast on each panel, in the light and the dark mode. */
+.stage-panel :is(.opacity-70, .opacity-80) { opacity: 1 }
+.panel-label :is(.opacity-70, .opacity-80, .stage-note) { color: #4a4130 }
+.panel-screen :is(.opacity-70, .opacity-80, .stage-note) { color: #c9dbe9 }
+.panel-led :is(.opacity-70, .opacity-80, .stage-note) { color: #74d98c }
+.stage-year { font-size: 1.15em; font-weight: 700 }
+.stage-warn { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5em;
+  border-radius: 6px; padding: 0.5em 0.6em }
+@keyframes stage-fade { from { opacity: 0 } }
+@keyframes stage-fade-out { to { opacity: 0 } }
+@media (prefers-reduced-motion: reduce) {
+  .stage-scrim, [data-stage=closing] .stage-scrim { animation: none }
+  [data-stage=landed] .stage-panel { transition: none }
+}
+
+/* When a panel has more text than its screen can show, the text scrolls.
+   A shade on the bottom edge shows that there is more text. The shade
+   stays on the edge. A cover at the end of the text (local) moves with the
+   text, and at the end it is on the shade. */
+
+/* The LED screen of a hub: green light on dark glass. */
+.panel-led { color: #8dffa8;
+  background: linear-gradient(rgb(12 20 16 / 0), #0c1410 1.4em) 0 100% / 100% 2.4em no-repeat local,
+    linear-gradient(rgb(141 255 168 / 0), rgb(141 255 168 / 0.3)) 0 100% / 100% 1.4em no-repeat,
+    #0c1410 radial-gradient(rgb(141 255 168 / 0.07) 1px, transparent 1px) 0 0 / 4px 4px;
+  box-shadow: inset 0 0 0 2px #2d3134, inset 0 2px 14px rgb(0 0 0 / 0.9); border-radius: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace }
+.panel-led h2, .panel-led .stage-year { text-shadow: 0 0 6px rgb(141 255 168 / 0.5) }
+.panel-led .stage-key { color: #e3e7ea; background: #4a5055; box-shadow: 0 3px 0 #1d2023 }
+.panel-led .stage-key[aria-selected=true] { background: #1565c0; color: #fff; box-shadow: 0 1px 0 #0d3c78 }
+.panel-led :is(.input, .select, .file-input) { background: rgb(141 255 168 / 0.08); color: #8dffa8; border-color: #3f7a4c }
+.panel-led :is(.btn) { background: #4a5055; color: #e3e7ea; border-color: #4a5055 }
+.panel-led .link { color: #b8ffc9 }
+
+/* The screen of a TV or of a computer: white on dark blue. */
+.panel-screen { color: #eef5fb; border-radius: 2px;
+  background: linear-gradient(rgb(13 27 40 / 0), #0d1b28 1.4em) 0 100% / 100% 2.4em no-repeat local,
+    linear-gradient(rgb(191 224 255 / 0), rgb(191 224 255 / 0.3)) 0 100% / 100% 1.4em no-repeat,
+    linear-gradient(160deg, #1b3a55, #0d1b28 65%) }
+.panel-screen .stage-key { color: #fff; background: #2b4a64; box-shadow: 0 3px 0 #13283a }
+.panel-screen .stage-key[aria-selected=true] { background: #eef5fb; color: #0d1b28; box-shadow: 0 1px 0 #9fb4c6 }
+.panel-screen :is(.input, .select, .file-input) { background: rgb(255 255 255 / 0.1); color: #eef5fb; border-color: #5b7a94 }
+.panel-screen .link { color: #bfe0ff }
+.panel-screen .stage-warn { background: rgb(245 158 11 / 0.2) }
+
+/* A printed label: dark ink on a pale yellow paper, with rules. */
+.panel-label { color: #1f1a12; border: 1px solid #c8b45a; border-radius: 3px;
+  background: linear-gradient(rgb(255 246 207 / 0), #fff6cf 1.4em) 0 100% / 100% 2.4em no-repeat local,
+    linear-gradient(rgb(31 26 18 / 0), rgb(31 26 18 / 0.22)) 0 100% / 100% 1.4em no-repeat, #fff6cf;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.35); font-variant-numeric: tabular-nums }
+.panel-label h2 { text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 3px solid #1f1a12; padding-bottom: 4px }
+.panel-label .stage-year { border-block: 1px solid #1f1a12; padding-block: 4px }
+.panel-label .stage-key { color: #1f1a12; background: #fffdf2; box-shadow: inset 0 0 0 1px #8a7a35, 0 2px 0 #8a7a35 }
+.panel-label .stage-key[aria-selected=true] { background: #1f1a12; color: #fff6cf }
+.panel-label :is(.input, .select, .file-input) { background: #fffdf2; color: #1f1a12; border-color: #8a7a35 }
+.panel-label .stage-warn { background: #ffe08a }
+.stage-key-remove { color: #fff !important; background: #b42318 !important; box-shadow: 0 2px 0 #7a1710 !important }

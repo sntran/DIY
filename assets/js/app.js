@@ -7,6 +7,7 @@ import topbar from "../vendor/topbar"
 import {deviceHook, storeOf, CHANNEL} from "./device.js"
 import {planHook} from "./plan.js"
 import {sheetHook} from "./sheet.js"
+import {stageHook} from "./stage.js"
 import {topHook} from "./top.js"
 import {usageHook} from "./usage.js"
 import {eflHook, eflLinksHook} from "./efl.js"
@@ -26,6 +27,7 @@ const liveSocket = new LiveSocket("/live", Socket, {
     Plan: planHook,
     // A sheet over the page: the Escape key and the focus (assets/js/sheet.js).
     Sheet: sheetHook,
+    Stage: stageHook(),
     // A new page starts at its top (assets/js/top.js).
     Top: topHook,
     // A usage file of a meter, read on the device (assets/js/usage.js).

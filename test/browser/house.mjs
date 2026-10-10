@@ -181,7 +181,7 @@ async function van(page, name) {
   await page.waitForSelector("#inside")
   await follow(page, 'a[id^="add-"][aria-label="Add an item to Driveway"]')
   await page.click("#add-camper_van")
-  await page.waitForSelector("#item-sheet:has-text('Camper van')")
+  await page.waitForSelector("#item-stage:has-text('Camper van')")
   await page.click("#open-van")
   await page.waitForSelector("#van-weight")
   assert.match(await page.textContent("#weight-total"), /of 8,900 lb/)
@@ -304,11 +304,17 @@ async function build(context, name) {
 
   // The house from the outside, in the look of the plan: the pole of the
   // grid and its wire. The power flows in the wire 5 times, then it stops.
+  // With less motion, it does not move.
   await page.waitForSelector("#house-picture svg.cutaway-outside .p-chip-text:has-text('Grid')")
-  assert.equal(
-    await page.$eval("#house-picture .p-flow", (path) => getComputedStyle(path).animationIterationCount),
-    "5",
-  )
+  const flow = await page.$eval("#house-picture .p-flow", (path) => {
+    const style = getComputedStyle(path)
+    return { name: style.animationName, count: style.animationIterationCount }
+  })
+  if (await page.evaluate(() => matchMedia("(prefers-reduced-motion: reduce)").matches)) {
+    assert.equal(flow.name, "none")
+  } else {
+    assert.equal(flow.count, "5")
+  }
 
   // The chart of the bill: a click on a month gives its dollars in the
   // line over the chart. The keyboard on the next month does it too.
@@ -392,26 +398,66 @@ async function build(context, name) {
   await check(page, `${name} list`)
 
   await page.keyboard.press("Enter")
-  await page.waitForSelector("#item-sheet")
+  await page.waitForSelector("#item-stage [data-stage=landed]")
   await check(page, `${name} item`)
+  await page.click("#key-place")
+  await check(page, `${name} item place`)
   await page.click("#turn-item")
 
-  // The sheet keeps the focus, and the Escape key closes it. The focus goes
-  // back to the item.
-  const inSheet = () => page.evaluate(() => document.querySelector("#item-sheet").contains(document.activeElement))
+  // The stage keeps the focus, and the Escape key puts the item back. The
+  // focus goes back to the item.
+  const inSheet = () => page.evaluate(() => document.querySelector("#item-stage").contains(document.activeElement))
   for (let i = 0; i < 30; i++) {
     await page.keyboard.press(i % 3 === 0 ? "Shift+Tab" : "Tab")
-    assert.ok(await inSheet(), `${name}: the focus stays in the sheet`)
+    assert.ok(await inSheet(), `${name}: the focus stays on the stage`)
   }
   await page.keyboard.press("Escape")
-  await page.waitForSelector("#item-sheet", { state: "detached" })
+  await page.waitForSelector("#item-stage", { state: "detached" })
   assert.match(await page.evaluate(() => document.activeElement.textContent), /Fridge/)
   await follow(page, fridge)
-  await page.waitForSelector("#item-sheet")
+  await page.waitForSelector("#item-stage")
+  await page.click("#key-numbers")
   await page.fill("#item-form input[name='item[kwh_year]']", "700")
   await page.waitForFunction(() => document.querySelector("#item-math")?.textContent.includes("700 kWh"))
-  await page.click("#item-sheet .btn-ghost[aria-label=Close]")
-  await page.waitForSelector("#item-sheet", { state: "detached" })
+  await page.click("#item-stage .stage-back")
+  await page.waitForSelector("#item-stage", { state: "detached" })
+
+  // A tap on the fridge on the plan: it comes out of the house and turns to
+  // the person. The frames of the flipbook change, and its panel shows.
+  // With less motion, the fridge is at once in front.
+  // The list of the rooms shows while it has the focus: first the focus
+  // goes away, as with a tap on the page.
+  await page.evaluate(() => document.activeElement?.blur())
+  const fridgeId = await itemId(page, "Fridge")
+  const spot = await page.locator(`#plan-item-${fridgeId}`).boundingBox()
+  await page.mouse.click(spot.x + spot.width / 2, spot.y + spot.height / 2)
+  await page.waitForSelector(`#item-stage-${fridgeId}`)
+  if (!(await page.evaluate(() => matchMedia("(prefers-reduced-motion: reduce)").matches))) {
+    const shown = new Set()
+    for (let i = 0; i < 15; i++) {
+      shown.add(await page.evaluate(() =>
+        [...document.querySelectorAll(".stage-frame")].findIndex((frame) => !frame.hasAttribute("hidden"))))
+      await page.waitForTimeout(50)
+    }
+    assert.ok(shown.size > 3, `${name}: the frames change in the flight (${[...shown]})`)
+  }
+  await page.waitForSelector("#item-stage [data-stage=landed]")
+  assert.equal(await page.evaluate(() =>
+    [...document.querySelectorAll(".stage-frame")].findIndex((frame) => !frame.hasAttribute("hidden"))), 11)
+  // The key of the first page takes the focus. A patch (the page Numbers)
+  // keeps the state of the stage, and the panel stays on the page.
+  assert.equal(await page.evaluate(() => document.activeElement?.id), "key-use")
+  await page.click("#key-numbers")
+  await page.waitForSelector("#page-numbers:not([hidden])")
+  const placed = await page.evaluate(() => {
+    const stage = document.querySelector("#item-stage [data-stage]")
+    const box = stage.querySelector(".stage-panel").getBoundingClientRect()
+    return { state: stage.dataset.stage, top: box.top, bottom: box.bottom, height: innerHeight }
+  })
+  assert.equal(placed.state, "landed")
+  assert.ok(placed.top >= 0 && placed.bottom <= placed.height, `${name}: the panel is on the page (${JSON.stringify(placed)})`)
+  await page.keyboard.press("Escape")
+  await page.waitForSelector("#item-stage", { state: "detached" })
 
   // The list chooses a bedroom on floor 2: floor 2 comes, and floor 1
   // hides.
@@ -427,18 +473,18 @@ async function build(context, name) {
   await page.click("button[data-focus=ground]")
   await page.waitForSelector("#plan-svg[data-dim=ground]")
   await follow(page, 'a[id^="item-"]:has-text("Computer")')
-  await page.waitForSelector("#item-sheet")
+  await page.waitForSelector("#item-stage")
   await page.waitForSelector("#plan-svg[data-dim=f2]")
-  await page.click("#item-sheet .btn-ghost[aria-label=Close]")
-  await page.waitForSelector("#item-sheet", { state: "detached" })
+  await page.click("#item-stage .stage-back")
+  await page.waitForSelector("#item-stage", { state: "detached" })
 
   await follow(page, 'a[id^="add-"][aria-label="Add an item to Kitchen"]')
   await page.waitForSelector("#add-sheet")
   await check(page, `${name} add`)
   await page.click("#add-freezer")
-  await page.waitForSelector("#item-sheet:has-text('Freezer')")
-  await page.click("#item-sheet .btn-ghost[aria-label=Close]")
-  await page.waitForSelector("#item-sheet", { state: "detached" })
+  await page.waitForSelector("#item-stage:has-text('Freezer')")
+  await page.click("#item-stage .stage-back")
+  await page.waitForSelector("#item-stage", { state: "detached" })
 
   // A Home Assistant hub in the living room. Its sheet has the link: the
   // sign-in on the page of Home Assistant, and back to the sheet. The code
@@ -446,11 +492,11 @@ async function build(context, name) {
   // the plan shows the link.
   await follow(page, 'a[id^="add-"][aria-label="Add an item to Living room"]')
   await page.click("#add-home_assistant")
-  await page.waitForSelector("#item-sheet:has-text('Home Assistant hub') #ha-form")
+  await page.waitForSelector("#item-stage:has-text('Home Assistant hub') #ha-form")
   const hub = new URL(page.url()).searchParams.get("item")
   await page.fill("#ha-form input[name=url]", homeAssistant.url + "/")
   await page.click("#ha-form button")
-  await page.waitForSelector("#item-sheet #ha-status:has-text('Connected to Fake house (Home Assistant 2026.10.0)')")
+  await page.waitForSelector("#item-stage #ha-status:has-text('Connected to Fake house (Home Assistant 2026.10.0)')")
   assert.equal(new URL(page.url()).search, `?item=${hub}`)
   await page.waitForSelector("#inside[data-ha=connected]")
   // The light on the pill of the hub is green.
@@ -458,6 +504,7 @@ async function build(context, name) {
     await page.$eval(`g.p-hub-label[data-item="${hub}"] .i-ha-light`, (el) => getComputedStyle(el).fill),
     "rgb(34, 197, 94)",
   )
+  await page.waitForSelector("#item-stage [data-stage=landed]")
   await check(page, `${name} Home Assistant`)
 
   // The match of the rooms, from the sheet of the hub. The living room is in
@@ -484,7 +531,7 @@ async function build(context, name) {
   assert.equal(homeAssistant.registry.areas.length, new Set(homeAssistant.registry.areas.map((one) => one.name)).size)
   await page.goto(`${site}/inside?item=${hub}`)
   await connected(page)
-  await page.waitForSelector("#item-sheet #ha-status:has-text('Connected to Fake house')")
+  await page.waitForSelector("#item-stage #ha-status:has-text('Connected to Fake house')")
 
   const revoked = homeAssistant.revoked.length
   await page.click("#ha-disconnect")
@@ -496,8 +543,8 @@ async function build(context, name) {
   }
   assert.equal(homeAssistant.revoked.length, revoked + 1)
   assert.equal(homeAssistant.sessions.size, 0)
-  await page.click("#item-sheet .btn-ghost[aria-label=Close]")
-  await page.waitForSelector("#item-sheet", { state: "detached" })
+  await page.click("#item-stage .stage-back")
+  await page.waitForSelector("#item-stage", { state: "detached" })
 
   await page.click("nav >> text=Bill")
   await page.waitForSelector("#months")
@@ -517,10 +564,14 @@ async function build(context, name) {
   return page
 }
 
+// On a desktop, the person wants less motion: an item is at once on its
+// stage. So the walk checks the flights and the way with less motion, and
+// it is shorter.
 for (const colorScheme of ["light", "dark"]) {
   for (const width of [390, 1280]) {
     const name = `${colorScheme}, ${width} px`
-    const context = await browser.newContext({ colorScheme, viewport: { width, height: 900 } })
+    const reducedMotion = width > 1000 ? "reduce" : "no-preference"
+    const context = await browser.newContext({ colorScheme, reducedMotion, viewport: { width, height: 900 } })
     const page = await build(context, name)
 
     // The build stays on the device: a reload shows it.
@@ -541,7 +592,7 @@ for (const colorScheme of ["light", "dark"]) {
     await follow(page, 'a[id^="add-"][aria-label="Add an item to Backyard"]')
     await page.click("#add-pool_pump")
     await other.waitForFunction((n) => document.querySelectorAll('a[id^="item-"]').length > n, before)
-    await page.waitForSelector("#item-sheet:has-text('Pool pump')")
+    await page.waitForSelector("#item-stage:has-text('Pool pump')")
 
     // A reconnect after the network goes down: the page restores the build.
     await context.setOffline(true)
@@ -549,9 +600,9 @@ for (const colorScheme of ["light", "dark"]) {
     await context.setOffline(false)
     await page.waitForSelector(".phx-connected")
     // The new LiveView restores the build: the pool pump is there.
-    await page.waitForSelector("#item-sheet:has-text('Pool pump')")
-    await page.click("#item-sheet .btn-ghost[aria-label=Close]")
-    await page.waitForSelector("#item-sheet", { state: "detached" })
+    await page.waitForSelector("#item-stage:has-text('Pool pump')")
+    await page.click("#item-stage .stage-back")
+    await page.waitForSelector("#item-stage", { state: "detached" })
     await page.click("nav >> text=House")
     await page.waitForSelector("#bill-average")
 
@@ -564,8 +615,8 @@ for (const colorScheme of ["light", "dark"]) {
     await check(page, `${name} meter`)
     await page.setInputFiles("#usage-file", { name: "IntervalMeterUsage.csv", mimeType: "text/csv", buffer: meterFile() })
     await page.waitForSelector("#usage-months:has-text('Smart Meter Texas: 12 months, from July 2024 to June 2025')")
-    await page.click("#item-sheet .btn-ghost[aria-label=Close]")
-    await page.waitForSelector("#item-sheet", { state: "detached" })
+    await page.click("#item-stage .stage-back")
+    await page.waitForSelector("#item-stage", { state: "detached" })
     await page.click("nav >> text=Bill")
     await page.waitForSelector("#real-months")
     await page.waitForSelector("#fit")
@@ -580,26 +631,29 @@ for (const colorScheme of ["light", "dark"]) {
     await page.waitForSelector("#inside")
     await follow(page, 'a[id^="add-"][aria-label="Add an item to Laundry"]')
     await page.click("#add-power_station")
-    await page.waitForSelector("#item-sheet:has-text('Power station')")
-    await page.click("#item-sheet .btn-ghost[aria-label=Close]")
-    await page.waitForSelector("#item-sheet", { state: "detached" })
+    await page.waitForSelector("#item-stage:has-text('Power station')")
+    await page.click("#item-stage .stage-back")
+    await page.waitForSelector("#item-stage", { state: "detached" })
     await follow(page, 'a[id^="item-"]:has-text("Fridge")')
+    await page.click("#key-numbers")
     await page.check("#flags-form input[name=backup][type=checkbox]")
     await page.waitForSelector("#flags-form input[name=backup]:checked")
-    await page.click("#item-sheet .btn-ghost[aria-label=Close]")
-    // The text of the list changes before the sheet closes: so the test
+    await page.click("#item-stage .stage-back")
+    // The text of the list changes before the stage closes: so the test
     // waits for the two.
-    await page.waitForSelector("#item-sheet", { state: "detached" })
+    await page.waitForSelector("#item-stage", { state: "detached" })
     await page.waitForSelector('a[id^="item-"]:has-text("on the station")', { state: "attached" })
     await follow(page, 'a[id^="add-"][aria-label="Add an item to Roof"]')
     await page.click("#add-solar_panels")
-    await page.waitForSelector("#item-sheet:has-text('Solar panels')")
+    await page.waitForSelector("#item-stage:has-text('Solar panels')")
+    await page.click("#key-numbers")
     await page.check("#flags-form input[name=planned][type=checkbox]")
-    await page.waitForSelector('#item-sheet:has-text("Solar panels")')
+    await page.waitForSelector('#item-stage:has-text("Solar panels")')
     await page.waitForSelector("#flags-form input[name=planned]:checked")
+    await page.waitForSelector("#item-stage [data-stage=landed]")
     await check(page, `${name} planned item`)
-    await page.click("#item-sheet .btn-ghost[aria-label=Close]")
-    await page.waitForSelector("#item-sheet", { state: "detached" })
+    await page.click("#item-stage .stage-back")
+    await page.waitForSelector("#item-stage", { state: "detached" })
     await page.waitForSelector('a[id^="item-"]:has-text("a plan")', { state: "attached" })
 
     // The page Bill with a planned item: the house of today, and a note.
@@ -625,11 +679,12 @@ for (const colorScheme of ["light", "dark"]) {
     // A station that is too small for its items: the warning.
     await page.click("nav >> text=Rooms")
     await follow(page, 'a[id^="item-"]:has-text("Power station")')
+    await page.click("#key-numbers")
     await page.fill("#item-form input[name='item[output_w]']", "100")
     await page.press("#item-form input[name='item[output_w]']", "Tab")
     await page.waitForFunction(() => document.querySelector("#item-form input[name='item[output_w]']").value === "100")
-    await page.click("#item-sheet .btn-ghost[aria-label=Close]")
-    await page.waitForSelector("#item-sheet", { state: "detached" })
+    await page.click("#item-stage .stage-back")
+    await page.waitForSelector("#item-stage", { state: "detached" })
     await page.click("nav >> text=Power")
     await page.waitForSelector("#today-overload")
     await check(page, `${name} power with an overload`)

@@ -110,7 +110,7 @@ jobs:
       - name: The TLA+ models
         run: |
           if [ "${{ github.event_name }}" = pull_request ] &&
-            git diff --quiet HEAD^1 HEAD -- specs scripts/tlc.sh assets/js/device.js \
+            git diff --quiet HEAD^1 HEAD -- specs scripts/tlc.sh assets/js/device.js assets/js/stage.js \
               lib/diy_web/device.ex lib/diy/power.ex; then
             echo "No change in the models or in the code that they check."
           else

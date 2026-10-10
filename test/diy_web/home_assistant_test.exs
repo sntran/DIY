@@ -223,8 +223,8 @@ defmodule DIYWeb.HomeAssistantTest do
     {build, id} = hub()
     view = page(conn, ~p"/inside?#{[item: id]}", build)
 
-    assert has_element?(view, "#item-sheet #home-assistant-card")
-    assert has_element?(view, "#item-sheet #ha-form input[name=back][value='/inside?item=#{id}']")
+    assert has_element?(view, "#item-stage #home-assistant-card")
+    assert has_element?(view, "#item-stage #ha-form input[name=back][value='/inside?item=#{id}']")
     refute has_element?(view, "#home-assistant-card h2")
     assert has_element?(view, "#inside[data-ha=loading]")
 
@@ -257,7 +257,7 @@ defmodule DIYWeb.HomeAssistantTest do
     # The light of the hub on the plan follows the state of the link.
     status(view, %{"state" => "connected", "url" => "https://ha.example.com", "name" => "Home"})
     assert has_element?(view, "#inside[data-ha=connected]")
-    assert has_element?(view, "#item-sheet #ha-status", "Connected to Home")
+    assert has_element?(view, "#item-stage #ha-status", "Connected to Home")
     assert has_element?(view, "#plan-item-#{id} .i-ha-light")
 
     # Over the small hub, a pill with the light: a part of the item for the
@@ -315,7 +315,7 @@ defmodule DIYWeb.HomeAssistantTest do
     # The sheet of the hub has the card, with the error: no alert over it.
     view |> render_patch(~p"/inside?#{[item: id]}")
     refute has_element?(view, "#ha-alert")
-    assert has_element?(view, "#item-sheet #ha-error", "did not give access")
+    assert has_element?(view, "#item-stage #ha-error", "did not give access")
 
     # The way back to a hub that went away: the alert shows.
     view |> render_patch(~p"/inside?#{[item: "i999"]}")
@@ -358,7 +358,7 @@ defmodule DIYWeb.HomeAssistantTest do
     assert has_element?(view, "#ha-hub", "Your hub is in Living room")
     view |> element("#ha-hub a") |> render_click()
     assert_patch(view, ~p"/inside?#{[item: id]}")
-    assert has_element?(view, "#item-sheet #home-assistant-card")
+    assert has_element?(view, "#item-stage #home-assistant-card")
   end
 
   ## The match of the rooms

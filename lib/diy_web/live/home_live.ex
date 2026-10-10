@@ -42,7 +42,7 @@ defmodule DIYWeb.HomeLive do
     Weather
   }
 
-  alias DIYWeb.{Cutaway, Device, Format, HomeAssistant, Inside, Outside, Scene, VanCutaway}
+  alias DIYWeb.{Cutaway, Device, Format, HomeAssistant, Inside, Outside, Scene, Stage, VanCutaway}
 
   @impl true
   def mount(_params, _session, socket) do
@@ -94,7 +94,10 @@ defmodule DIYWeb.HomeLive do
      socket
      # The error of a field is for the item that the sheet showed.
      |> assign(:item_error, if(item == socket.assigns[:item], do: socket.assigns[:item_error]))
+     # The panel of a different item starts at its first page.
+     |> assign(:item_page, if(item == socket.assigns[:item], do: socket.assigns[:item_page]))
      |> assign(:item, item)
+     |> item_frames()
      |> assign(:add, if(sheets?, do: params["add"]))
      |> assign(:room, params["room"])
      |> assign(:sheet, params["sheet"])
@@ -104,6 +107,24 @@ defmodule DIYWeb.HomeLive do
      |> assign(:lesson_step, parse_int(params["step"]))
      |> assign(checks: nil, answers: %{})
      |> assign(:hint, false)}
+  end
+
+  # The frames of the model of the open item (DIYWeb.Stage). The LiveView
+  # keeps them while the item is open: a render does not send them again.
+  # An item of a van opens in a sheet, with no frames.
+  defp item_frames(socket) do
+    type =
+      with :inside <- socket.assigns.live_action,
+           id when is_binary(id) <- socket.assigns[:item],
+           %Build{} = build <- socket.assigns[:build],
+           {:ok, item} <- Build.item(build, id),
+           do: item.type,
+           else: (_none -> nil)
+
+    case socket.assigns[:item_frames] do
+      %{type: ^type} -> socket
+      _other -> assign(socket, :item_frames, type && Map.put(Stage.frames(type), :type, type))
+    end
   end
 
   # The sheet of the match of the rooms reads the areas of Home Assistant
@@ -219,6 +240,11 @@ defmodule DIYWeb.HomeLive do
   def handle_event("clear_usage", _params, socket) do
     {:noreply, put(socket, Build.set_usage(socket.assigns.build, nil))}
   end
+
+  # A page of the panel of the open item (DIYWeb.Stage): the panel keeps
+  # only the pages that it has.
+  def handle_event("item_page", %{"page" => page}, socket) when is_binary(page),
+    do: {:noreply, assign(socket, :item_page, page)}
 
   def handle_event("check_item", %{"id" => id}, socket) do
     with_build(socket, Build.check_item(socket.assigns.build, id))
@@ -921,6 +947,7 @@ defmodule DIYWeb.HomeLive do
 
   defp refresh(socket) do
     socket
+    |> item_frames()
     |> load_weather()
     |> load_market()
     |> estimate()
@@ -1121,6 +1148,8 @@ defmodule DIYWeb.HomeLive do
               item_error={assigns[:item_error]}
               outage={DIYWeb.PowerPage.outage_text(@power, @whatif)}
               ha={@ha}
+              item_page={@item_page}
+              item_frames={@item_frames}
               ha_rooms={@ha_rooms}
               ha_sync={@ha_sync}
             />

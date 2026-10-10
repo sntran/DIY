@@ -250,7 +250,7 @@ defmodule DIYWeb.HomeLiveTest do
     lights = item(view, "lights")
     refute render_patch(view, ~p"/inside?item=#{lights.id}") =~ "Give a number from"
     render_patch(view, ~p"/inside?item=#{tv.id}")
-    view |> element("#item-sheet button", "They are right") |> render_click()
+    view |> element("#item-stage button", "They are right") |> render_click()
     refute item(view, "tv").typical
     render_click(view, "check_item", %{"id" => "i999"})
 
@@ -266,7 +266,7 @@ defmodule DIYWeb.HomeLiveTest do
              "for one month: January, a cold month."
 
     assert render_patch(view, ~p"/inside?item=i999") =~ "Kitchen"
-    refute has_element?(view, "#item-sheet")
+    refute has_element?(view, "#item-stage")
   end
 
   test "add an item to a room", %{conn: conn} do
@@ -364,7 +364,7 @@ defmodule DIYWeb.HomeLiveTest do
 
     render_patch(view, ~p"/inside?item=#{meter.id}")
     assert render(view) =~ "Smart Meter Texas: 12 months, from January 2025 to December 2025"
-    assert has_element?(view, ~s(#delete-item[data-confirm*="the real usage goes too"]))
+    assert has_element?(view, "#page-remove", "With no smart meter, the real usage goes too.")
     view |> element("#usage-months button", "Remove the real usage") |> render_click()
     assert build(view).usage == nil
 
@@ -716,7 +716,7 @@ defmodule DIYWeb.HomeLiveTest do
     assert has_element?(view, "#item-medical", "A power station can run it for some hours")
     assert has_element?(view, "#item-medical", "On a battery, turn off the humidifier")
     # 50 W for 8 hours in the 31 days of July.
-    assert has_element?(view, "#item-sheet", "12.4 kWh")
+    assert has_element?(view, "#item-stage", "12.4 kWh")
 
     # A fridge has no such note.
     fridge = Enum.find(build.items, &(&1.type == "fridge"))
@@ -807,7 +807,7 @@ defmodule DIYWeb.HomeLiveTest do
              "Gas in one year: #{DIYWeb.Format.therms(estimate.items[furnace.id].therms)}"
            )
 
-    assert has_element?(view, "#item-sheet", "the estimate of your gas bill")
+    assert has_element?(view, "#item-stage", "the estimate of your gas bill")
 
     assert has_element?(
              view,

@@ -297,7 +297,7 @@ defmodule DIYWeb.HomeAssistant do
         >open it</.link>.
       </p>
       <p :if={@title and is_nil(@hub)} id="ha-hub" class="text-sm">
-        You can also add a Home Assistant hub to a room on the page Rooms: its sheet has this card.
+        You can also add a Home Assistant hub to a room on the page Rooms: its panel has this card.
       </p>
     </div>
     """
