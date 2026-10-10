@@ -1552,9 +1552,14 @@ label on its front (`DIYWeb.Stage`, and the hook `Stage` in
   by 150 pixels. A test checks the shape of the panel of each kind. On a
   very small page (a zoom of 400%), the panel is smaller and its text
   scrolls. The panel shows when the model lands, as a screen that turns
-  on. Then its key takes the focus. The hook adds the class of the
-  landing at once. The LiveView adds a class only at the next frame, and a
-  panel that does not show cannot take the focus.
+  on. Then its key takes the focus.
+- The state of the stage. It is the attribute `data-stage`: placed,
+  landed or closing. The CSS has a rule for each. The hook sets it with
+  the command of the LiveView (`setAttribute`). The LiveView sets an
+  attribute at once, so the panel shows before its key takes the focus.
+  And a patch (after a key of the panel, or a new number) keeps it. A
+  class does not do this: the LiveView adds it only at the next frame.
+  And when the hook adds the class first, a patch removes it.
 - The pages. The keys of the panel show its pages:
   - Use: the kWh and the money of a year, with the math;
   - Numbers: the numbers of the item, and its flags, with the year at the
@@ -1598,24 +1603,28 @@ The tests:
   keys, the year on the page Numbers, and the remove.
 - `test/js/stage.test.js`: the math of the rest pose (a property test with
   fast-check) and of the place of the panel. The flight runs with a fake
-  clock, and the hook runs on a fake page. The fakes keep the attribute
-  `hidden` of each frame, as a browser does. The tests also close in the
-  flight out, and before it starts. They remove the stage before the
+  clock, and the hook runs on a fake page. As with the LiveView, an
+  attribute of a command is on the element at once, and a patch keeps it.
+  The fakes keep the attribute `hidden` of each frame, as a browser does.
+  The tests also close in the flight out, and before it starts. They remove the stage before the
   flight starts, and in a flight.
 - `specs/Stage.tla` is the model of the flights. Three things occur in
   any order: the frames of the page, a close by the person, and the
-  removal by the LiveView. The model has them with and without less
-  motion. TLC checks three rules. The close patches the page one time at
-  most. No call changes the stage after its removal. The panel shows only
-  when the model is in front. Also, a close ends with its patch, and the
-  model lands unless the stage closes first. Each fault has a configuration, and TLC finds it:
+  patches and the removal by the LiveView. The model has them with and
+  without less motion. TLC checks four rules. The close patches the page
+  one time at most. No call changes the stage after its removal. The
+  panel shows only when the model is in front. The stage keeps its state
+  through a patch. Also, a close ends with its patch, and the model lands
+  unless the stage closes first. Each fault has a configuration, and TLC finds it:
   - a step that does not check its flight (`Stage.noalive.cfg`): the
     flight out lands while the model flies back;
   - a second close that does not stop (`Stage.noclosing.cfg`): two
     patches;
   - a removal that does not stop the start (`Stage.nogone.cfg`): the
     start flies a stage that is not on the page. The model found this
-    fault in the hook, and the hook now has the fix.
+    fault in the hook, and the hook now has the fix;
+  - a state that the LiveView does not keep (`Stage.nokeep.cfg`): after
+    a patch, the stage has no state, and the panel is not on the item.
 - The browser test taps the fridge on the plan: the frames change in the
   flight. It also opens items in the list, changes their numbers, and
   turns an item on the page Place. Axe checks the stage after it lands.

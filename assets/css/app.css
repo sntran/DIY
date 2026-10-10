@@ -582,7 +582,7 @@
    printed label. A label is paper, so it has the same colors in the light
    and the dark mode. With no script, the panel is under the model. */
 .stage-scrim { background: rgb(20 17 14 / 0.6); backdrop-filter: blur(3px); animation: stage-fade 350ms ease-out both }
-.stage-closing .stage-scrim { animation: stage-fade-out 600ms ease-in both }
+[data-stage=closing] .stage-scrim { animation: stage-fade-out 600ms ease-in both }
 .stage-body { position: relative; margin-inline: auto; display: flex; flex-direction: column; align-items: center;
   gap: 12px; padding: 16px; max-width: 36rem; min-height: 100% }
 .stage-model { position: relative; z-index: 1; width: 100%; height: min(34dvh, 22rem); flex: none; pointer-events: none }
@@ -601,15 +601,15 @@
 .stage-title { display: flex; align-items: center; gap: 0.4em; font-size: 1.1em; font-weight: 700; line-height: 1.2 }
 .stage-note { font-size: 0.9em }
 
-/* With the hook: the model at its place, and the panel on its screen or its
-   label. The panel shows when the model lands, as a screen that turns on. */
-.stage-placed { overflow: hidden }
-.stage-placed .stage-body { position: fixed; inset: 0; padding: 0; max-width: none; display: block; pointer-events: none }
-.stage-placed .stage-model { position: absolute; height: auto }
-.stage-placed .stage-panel { position: absolute; left: 0; top: 0; transform-origin: 0 0; pointer-events: auto;
+/* With the hook (data-stage: placed, landed or closing): the model at its
+   place, and the panel on its screen or its label. The panel shows when the
+   model lands, as a screen that turns on. */
+[data-stage] { overflow: hidden }
+[data-stage] .stage-body { position: fixed; inset: 0; padding: 0; max-width: none; display: block; pointer-events: none }
+[data-stage] .stage-model { position: absolute; height: auto }
+[data-stage] .stage-panel { position: absolute; left: 0; top: 0; transform-origin: 0 0; pointer-events: auto;
   opacity: 0; visibility: hidden }
-.stage-landed .stage-panel { opacity: 1; visibility: visible; transition: opacity 260ms ease-out }
-.stage-closing .stage-panel { opacity: 0; visibility: hidden }
+[data-stage=landed] .stage-panel { opacity: 1; visibility: visible; transition: opacity 260ms ease-out }
 
 .stage-page { display: grid; gap: 0.6em }
 .stage-page .text-sm { font-size: 1em }
@@ -649,8 +649,8 @@
 @keyframes stage-fade { from { opacity: 0 } }
 @keyframes stage-fade-out { to { opacity: 0 } }
 @media (prefers-reduced-motion: reduce) {
-  .stage-scrim, .stage-closing .stage-scrim { animation: none }
-  .stage-landed .stage-panel { transition: none }
+  .stage-scrim, [data-stage=closing] .stage-scrim { animation: none }
+  [data-stage=landed] .stage-panel { transition: none }
 }
 
 /* When a panel has more text than its screen can show, the text scrolls.

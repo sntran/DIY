@@ -247,9 +247,10 @@ function element(extra = {}) {
 }
 
 // A fake page: a plan with the item, and the stage of the item. The plan
-// can be up (top < 0) and out of the page. The classes of the LiveView
-// change at the next frame, as with LiveView. A tab takes the focus only
-// when the panel shows.
+// can be up (top < 0) and out of the page. As with LiveView, an attribute
+// that a command sets is on the element at once, and a patch keeps it. A
+// patch puts the other attributes back to those of the server. A tab takes
+// the focus only when the panel shows.
 function page({reduce = false, plan = true, onPlan = true, start = "-5 -10 10 20", top = 0, rem = 16} = {}) {
   const time = clock()
   const listeners = new Map()
@@ -282,22 +283,22 @@ function page({reduce = false, plan = true, onPlan = true, start = "-5 -10 10 20
     getBoundingClientRect() { return rect(Number.parseFloat(this.style.left), Number.parseFloat(this.style.top), 300, 300) },
   })
   const panel = element()
-  const classes = new Set()
+  const attrs = new Map()
+  const kept = new Map()
   const tabs = ["use", "numbers", "place", "remove"].map((name) => {
     const tab = {
       name, getAttribute: () => "tab", closest: () => tab,
-      focus: () => classes.has("stage-landed") && focus.push(name), click: () => focus.push(`click ${name}`),
+      focus: () => attrs.get("data-stage") === "landed" && focus.push(name), click: () => focus.push(`click ${name}`),
     }
     return tab
   })
   const closeLink = {getAttribute: (name) => (assert.equal(name, "href"), "/inside?room=r2")}
   let clicked = null
-  const js = {patches: [], classes: []}
+  const js = {patches: [], states: []}
   const el = {
     ownerDocument: doc,
     dataset: {item: "i7", start, region: "-20 -10 20 -10 -20 10"},
     addEventListener: (type, f) => { clicked = f },
-    classList: {add: (cls) => classes.add(cls), remove: (cls) => classes.delete(cls)},
     getBoundingClientRect: () => rect(0, 0, 390, 844),
     querySelector(selector) {
       if (selector === ".stage-model") return model
@@ -311,8 +312,12 @@ function page({reduce = false, plan = true, onPlan = true, start = "-5 -10 10 20
   }
   const hook = Object.assign({el, js: () => ({
     patch: (href) => js.patches.push(href),
-    addClass: (node, cls) => (js.classes.push(["+", cls]), time.frame(() => classes.add(cls))),
-    removeClass: (node, cls) => (js.classes.push(["-", cls]), time.frame(() => classes.delete(cls))),
+    setAttribute(node, name, value) {
+      assert.equal(node, el)
+      js.states.push(value)
+      kept.set(name, value)
+      attrs.set(name, value)
+    },
   })}, stageHook(() => ({now: time.now, frame: time.frame, reduce: () => reduce, rem: () => rem})))
   hook.mounted()
   const press = (key, target = null) => {
@@ -330,14 +335,19 @@ function page({reduce = false, plan = true, onPlan = true, start = "-5 -10 10 20
     clicked(event)
     return event
   }
+  // A patch of the LiveView, for example after a key of the panel.
+  const patch = () => {
+    attrs.clear()
+    kept.forEach((value, name) => attrs.set(name, value))
+  }
   const visible = () => frames.findIndex((f) => !f.hasAttribute("hidden"))
   const scale = () => Number(model.style.transform.match(/scale\((.*)\)/)[1])
-  return {hook, time, head, focus, frames, model, panel, js, classes, listeners, resize, press, click, closeLink, visible, scale, el, tabs}
+  return {hook, time, head, focus, frames, model, panel, js, attrs, patch, listeners, resize, press, click, closeLink, visible, scale, el, tabs}
 }
 
 test("the stage places the model and its panel, and flies the item out of the plan", () => {
   const p = page()
-  assert.deepEqual(p.js.classes, [["+", "stage-placed"]])
+  assert.deepEqual(p.js.states, ["placed"])
   // The panel: 40 by 20 units at the middle of the view. It needs 150 px
   // of height: 7.5 px for each unit.
   assert.equal(p.panel.style.width, "300px")
@@ -364,8 +374,11 @@ test("the stage places the model and its panel, and flies the item out of the pl
   assert.equal(p.visible(), 11)
   assert.equal(p.model.style.transform, transformOf(FRONT))
   // The panel shows, and the key of its page takes the focus.
-  assert.deepEqual(p.js.classes.at(-1), ["+", "stage-landed"])
+  assert.deepEqual(p.js.states, ["placed", "landed"])
   assert.deepEqual(p.focus, ["use"])
+  // A patch (a key of the panel, a number) keeps the state of the stage.
+  p.patch()
+  assert.equal(p.attrs.get("data-stage"), "landed")
 
   // A new size of the page places them again.
   // A large page: the panel has its most width.
@@ -381,7 +394,9 @@ test("a close flies the item back, and then closes the stage", () => {
   const event = p.click(p.closeLink)
   assert.equal(event.prevented, true)
   assert.equal(event.stopped, true)
-  assert.deepEqual(p.js.classes.slice(-2), [["-", "stage-landed"], ["+", "stage-closing"]])
+  assert.equal(p.js.states.at(-1), "closing")
+  p.patch()
+  assert.equal(p.attrs.get("data-stage"), "closing")
   assert.equal(p.visible(), 11)
   // A second close while it flies does nothing.
   assert.equal(p.press("Escape"), true)
@@ -413,7 +428,7 @@ test("a close in the flight out goes back from where the model is", () => {
   assert.deepEqual(p.js.patches, ["/inside?room=r2"])
   // The flight out stopped: it does not land after the close.
   p.time.tick(OUT)
-  assert.equal(p.js.classes.some(([op, cls]) => op === "+" && cls === "stage-landed"), false)
+  assert.equal(p.js.states.includes("landed"), false)
 })
 
 test("a close before the flight out starts, and a stage that goes away before or in a flight", () => {
@@ -422,7 +437,7 @@ test("a close before the flight out starts, and a stage that goes away before or
     p.press("Escape")
     p.time.tick(0)
     // The flight out does not start after the close.
-    assert.equal(p.js.classes.some(([op, cls]) => op === "+" && cls === "stage-landed"), false)
+    assert.equal(p.js.states.includes("landed"), false)
     p.time.tick(BACK)
     assert.deepEqual(p.js.patches, ["/inside?room=r2"])
   }
@@ -443,7 +458,7 @@ test("a close before the flight out starts, and a stage that goes away before or
     r.hook.destroyed()
     r.time.tick(0)
     r.time.tick(OUT)
-    assert.deepEqual(r.js.classes, [["+", "stage-placed"]])
+    assert.deepEqual(r.js.states, ["placed"])
     assert.equal(r.model.style.transform, undefined)
     assert.equal(r.visible(), 11)
   }
@@ -472,12 +487,13 @@ test("with less motion, the item is at once in front, and a close is at once", (
   p.time.tick(0)
   assert.equal(p.visible(), 11)
   assert.equal(p.model.style.transform, transformOf(FRONT))
-  assert.deepEqual(p.js.classes.at(-1), ["+", "stage-landed"])
+  assert.deepEqual(p.js.states, ["placed", "landed"])
   // The panel shows at once, so its key takes the focus.
   assert.deepEqual(p.focus, ["use"])
   p.click(p.closeLink)
   assert.deepEqual(p.js.patches, ["/inside?room=r2"])
-  assert.equal(p.js.classes.some(([, cls]) => cls === "stage-closing"), false)
+  // The panel goes at once.
+  assert.deepEqual(p.js.states, ["placed", "landed", "closing"])
 })
 
 test("an item that is not on the plan, or not in its view, comes from the middle", () => {

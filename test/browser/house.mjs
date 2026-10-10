@@ -392,7 +392,7 @@ async function build(context, name) {
   await check(page, `${name} list`)
 
   await page.keyboard.press("Enter")
-  await page.waitForSelector("#item-stage .stage-landed")
+  await page.waitForSelector("#item-stage [data-stage=landed]")
   await check(page, `${name} item`)
   await page.click("#key-place")
   await check(page, `${name} item place`)
@@ -432,9 +432,21 @@ async function build(context, name) {
     await page.waitForTimeout(50)
   }
   assert.ok(shown.size > 3, `${name}: the frames change in the flight (${[...shown]})`)
-  await page.waitForSelector("#item-stage .stage-landed")
+  await page.waitForSelector("#item-stage [data-stage=landed]")
   assert.equal(await page.evaluate(() =>
     [...document.querySelectorAll(".stage-frame")].findIndex((frame) => !frame.hasAttribute("hidden"))), 11)
+  // The key of the first page takes the focus. A patch (the page Numbers)
+  // keeps the state of the stage, and the panel stays on the page.
+  assert.equal(await page.evaluate(() => document.activeElement?.id), "key-use")
+  await page.click("#key-numbers")
+  await page.waitForSelector("#page-numbers:not([hidden])")
+  const placed = await page.evaluate(() => {
+    const stage = document.querySelector("#item-stage [data-stage]")
+    const box = stage.querySelector(".stage-panel").getBoundingClientRect()
+    return { state: stage.dataset.stage, top: box.top, bottom: box.bottom, height: innerHeight }
+  })
+  assert.equal(placed.state, "landed")
+  assert.ok(placed.top >= 0 && placed.bottom <= placed.height, `${name}: the panel is on the page (${JSON.stringify(placed)})`)
   await page.keyboard.press("Escape")
   await page.waitForSelector("#item-stage", { state: "detached" })
 
@@ -483,7 +495,7 @@ async function build(context, name) {
     await page.$eval(`g.p-hub-label[data-item="${hub}"] .i-ha-light`, (el) => getComputedStyle(el).fill),
     "rgb(34, 197, 94)",
   )
-  await page.waitForSelector("#item-stage .stage-landed")
+  await page.waitForSelector("#item-stage [data-stage=landed]")
   await check(page, `${name} Home Assistant`)
 
   // The match of the rooms, from the sheet of the hub. The living room is in
@@ -625,7 +637,7 @@ for (const colorScheme of ["light", "dark"]) {
     await page.check("#flags-form input[name=planned][type=checkbox]")
     await page.waitForSelector('#item-stage:has-text("Solar panels")')
     await page.waitForSelector("#flags-form input[name=planned]:checked")
-    await page.waitForSelector("#item-stage .stage-landed")
+    await page.waitForSelector("#item-stage [data-stage=landed]")
     await check(page, `${name} planned item`)
     await page.click("#item-stage .stage-back")
     await page.waitForSelector("#item-stage", { state: "detached" })

@@ -181,7 +181,7 @@ export function stageHook(parts = pageParts) {
       doc.addEventListener("keydown", this.onKey)
       doc.defaultView?.addEventListener("resize", this.onResize)
       this.el.addEventListener("click", this.onClick)
-      this.mark("stage-placed")
+      this.state("placed")
       this.place()
 
       // The item on the plan does not show while it is on the stage.
@@ -203,7 +203,7 @@ export function stageHook(parts = pageParts) {
       const id = ++this.flight
       // The panel shows when the model lands: then it takes the focus.
       const landed = () => {
-        this.mark("stage-landed")
+        this.state("landed")
         this.el.querySelector('[role="tab"][aria-selected="true"]')?.focus({preventScroll: true})
       }
       if (this.parts.reduce()) {
@@ -226,16 +226,13 @@ export function stageHook(parts = pageParts) {
       return rect && plan && inside(rect, plan) && inside(rect, this.el.getBoundingClientRect()) ? rect : null
     },
 
-    // A class on the stage, at once. The LiveView adds it too, so that a
-    // patch keeps it. But the LiveView adds it only at the next frame of the
-    // page, and the focus needs the panel before that.
-    mark(add, remove = null) {
-      if (remove) {
-        this.el.classList.remove(remove)
-        this.js().removeClass(this.el, remove)
-      }
-      this.el.classList.add(add)
-      this.js().addClass(this.el, add)
+    // The state of the stage (the CSS has a rule for each): "placed",
+    // "landed" or "closing". It is the attribute data-stage. The LiveView
+    // sets the attribute at once, so the panel shows before its key takes the
+    // focus. A patch keeps it. (A class of the LiveView changes only at the
+    // next frame, and a patch keeps it only when the element did not have it.)
+    state(name) {
+      this.js().setAttribute(this.el, "data-stage", name)
     },
 
     // The model and its panel on the stage, for the size of the page and of
@@ -314,8 +311,8 @@ export function stageHook(parts = pageParts) {
       this.closing = true
       const id = ++this.flight
       const close = () => this.js().patch(href)
+      this.state("closing")
       if (this.parts.reduce()) return close()
-      this.mark("stage-closing", "stage-landed")
       // The plan can have a different place now (a zoom, or a move).
       const rect = this.planRect()
       const rest = rect ? this.restPose(rect) : (this.rest ?? this.restPose(null))
