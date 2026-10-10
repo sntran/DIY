@@ -1075,6 +1075,9 @@ test("a floor of the same name at a different level, and the rooms that the hook
   const ha = registry({
     floors: [{floor_id: "upstairs", name: "Floor 2", level: 5}],
     fail: (message, ha) => {
+      if (message.type === "config/floor_registry/create" && message.level === 2) {
+        return {code: "unauthorized", message: "Unauthorized"}
+      }
       if (message.type === "config/area_registry/create" && message.name === "Vault") {
         return {code: "unauthorized", message: "Unauthorized"}
       }
@@ -1089,6 +1092,7 @@ test("a floor of the same name at a different level, and the rooms that the hook
     {room: "r1", name: "Bath", level: 1, floor: "Floor 2"},
     {room: "r2", name: "Vault", level: null, floor: "Around the house"},
     {room: "r3", name: "Den", level: null, floor: "Around the house"},
+    {room: "r6", name: "Loft", level: 2, floor: "Floor 3"},
   ])
   await serve(ha, [socket])
   await done
@@ -1097,9 +1101,10 @@ test("a floor of the same name at a different level, and the rooms that the hook
   assert.deepEqual(page.pushes.at(-1), ["ha:areas_added", {
     links: [],
     errors: [
-      {room: "r1", message: "The name Floor 2 (floor2) is already in use"},
+      {room: "r1", message: "Home Assistant has a floor Floor 2 at a different level"},
       {room: "r2", message: "Unauthorized"},
       {room: "r3", message: "The name Den (den) is already in use"},
+      {room: "r6", message: "Unauthorized"},
     ],
   }])
   assert.deepEqual(ha.areas, [])
@@ -1157,8 +1162,9 @@ test("two tabs add rooms in any order: one area for each name, and each room get
       links.forEach((link, i) => {
         const area = ha.areas.find((one) => one.area_id === link.area)
         assert.equal(key(area.name), key(rooms[i].name))
-        if (area.floor_id) {
-          assert.equal(ha.floors.find((floor) => floor.floor_id === area.floor_id).level, rooms[i].level)
+        // A new area is on the floor of its level, or on none.
+        if (!area.area_id.startsWith("old_")) {
+          assert.equal(ha.floors.find((floor) => floor.floor_id === area.floor_id)?.level ?? null, rooms[i].level)
         }
       })
     }

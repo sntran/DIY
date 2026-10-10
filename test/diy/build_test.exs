@@ -323,8 +323,10 @@ defmodule DIY.BuildTest do
     assert bad.(%{"areas" => ["kitchen"]}) == {:error, :areas}
     assert bad.(%{"areas" => %{"r1" => 5}}) == {:error, :areas}
     assert bad.(%{"areas" => %{"r1" => ""}}) == {:error, :areas}
-    [one, two | _rooms] = good["rooms"]
-    assert bad.(%{"areas" => %{one["id"] => "den", two["id"] => "den"}}) == {:error, :areas}
+    # Two rooms with one area: the first room keeps it.
+    [one, two | _rooms] = Enum.reject(good["rooms"], &(&1["place"] == "roof"))
+    {:ok, %{areas: areas}} = bad.(%{"areas" => %{one["id"] => "den", two["id"] => "den"}})
+    assert areas == %{one["id"] => "den"}
     roof = Enum.find(good["rooms"], &(&1["place"] == "roof"))
     assert {:ok, %{areas: %{}}} = bad.(%{"areas" => %{roof["id"] => "roof"}})
     # A link of a room that is not there goes away. A build of an older

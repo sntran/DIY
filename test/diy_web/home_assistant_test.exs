@@ -542,7 +542,6 @@ defmodule DIYWeb.HomeAssistantTest do
     for bad <- [
           %{area | "floor" => 5},
           %{area | "name" => long},
-          %{area | "floor" => String.duplicate("f", 256)},
           %{area | "id" => 5},
           nil
         ] do
@@ -550,6 +549,14 @@ defmodule DIYWeb.HomeAssistantTest do
       assert has_element?(view, "#ha-ha h3", "Only in Home Assistant (3)")
       assert has_element?(view, "#ha-both h3", "In both (0)")
     end
+
+    # An area on a floor with a long id has no floor.
+    render_hook(view, "ha:rooms", %{
+      good
+      | "areas" => [%{area | "floor" => String.duplicate("f", 256)} | tl(good["areas"])]
+    })
+
+    assert has_element?(view, "#ha-both h3", "In both (1)")
 
     # A floor with no level, an area with no floor, and long names and ids
     # (255 bytes) are good.

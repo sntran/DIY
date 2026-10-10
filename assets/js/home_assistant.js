@@ -529,6 +529,10 @@ export class Link {
         let at = level === null ? null : floors.find((one) => one.level === level)
         if (level !== null && !at) {
           at = await this.add("config/floor_registry", {name: floor, level}, (one) => one.level === level)
+            .catch((error) => {
+              if (error.code !== "invalid_info") throw error
+              throw new CommandError(error.code, `Home Assistant has a floor ${floor} at a different level`)
+            })
           floors.push(at)
         }
         const area = await this.add("config/area_registry", at ? {name, floor_id: at.floor_id} : {name})

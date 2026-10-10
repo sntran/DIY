@@ -1743,8 +1743,8 @@ Home Assistant refuses a second floor or area with the same name
 match at the same time, or when a person adds the area in Home Assistant
 first. Then the hook reads the list again, and uses the area of that
 name. It uses a floor of that name only when the floor has the same
-level. Else, the room is not added, and the sheet shows the message of
-Home Assistant.
+level. Else, the room is not added. The sheet tells that Home Assistant
+has a floor of that name at a different level.
 
 The TLA+ model `specs/RoomSync.tla` checks these rules with two tabs,
 twin rooms (two rooms with one name), and a person in Home Assistant.
@@ -1758,17 +1758,23 @@ Each fault has a configuration, and TLC finds it:
 - **No rules for the names** (`RoomSync.twins.cfg`). The sheet offers the
   twin of a room with an area, and the LiveView links the twin. Then two
   rooms have one area.
+- **Only the check of the links** (`RoomSync.nooffer.cfg`). The sheet
+  offers each room, and the LiveView refuses a second room for an area.
+  An area still has one room (`RoomSync.nooffer-rooms.cfg`), but the twin
+  gets no area.
 
 The LiveView takes at most 100 floors and 500 areas. With more, the sheet
 tells that Home Assistant has too many. A floor or an area with a bad
-value, or a text of more than 255 bytes, does not count. When Home
+value, or a text of more than 255 bytes, does not count. An area on a
+floor with a longer id has no floor. When Home
 Assistant refuses a command (for example, a version with no floors), the
 sheet tells that the match needs Home Assistant 2024.4 or later.
 
 Sometimes a link goes to an area that is not there now. For example, the
 person removed the area in Home Assistant. Then the link does not count:
 the room is only in the app again. When a room goes away, its link goes
-too. A new house has no links.
+too. A new house has no links. When a stored build has two rooms for one
+area, the first room keeps the link.
 
 The tests:
 

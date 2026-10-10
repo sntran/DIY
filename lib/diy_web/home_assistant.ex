@@ -144,7 +144,8 @@ defmodule DIYWeb.HomeAssistant do
   defp text(_value, _max), do: nil
 
   # A floor or an area from the hook, or nil. An id has at most 255 bytes,
-  # as in the build (`DIY.Build.link_area/3`).
+  # as in the build (`DIY.Build.link_area/3`). An area on a floor with a
+  # longer id has no floor.
   defp read_floor(%{"id" => id, "name" => name, "level" => level})
        when is_integer(level) or is_nil(level) do
     if text(id, @max_id) && text(name, @max_name), do: %{id: id, name: name, level: level}
@@ -152,9 +153,10 @@ defmodule DIYWeb.HomeAssistant do
 
   defp read_floor(_floor), do: nil
 
-  defp read_area(%{"id" => id, "name" => name, "floor" => floor}) do
-    if text(id, @max_id) && text(name, @max_name) && (is_nil(floor) or text(floor, @max_id)),
-      do: %{id: id, name: name, floor: floor}
+  defp read_area(%{"id" => id, "name" => name, "floor" => floor})
+       when is_binary(floor) or is_nil(floor) do
+    if text(id, @max_id) && text(name, @max_name),
+      do: %{id: id, name: name, floor: text(floor, @max_id)}
   end
 
   defp read_area(_area), do: nil

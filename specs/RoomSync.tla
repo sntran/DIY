@@ -17,7 +17,7 @@
 (*   room before it has its name (DIY.HomeAssistant.blocked). An area has  *)
 (*   one room at most (DIY.Build.link_area).                               *)
 (*                                                                         *)
-(* Three modes have a fault:                                               *)
+(* Four modes have a fault:                                                *)
 (* - "suffix": the tab adds the area with a new name ("Den 2"). Home       *)
 (*   Assistant then has two areas for one room (RoomSync.suffix.cfg).      *)
 (* - "snapshot": the tab looks for the area in its snapshot. The area of a *)
@@ -25,6 +25,9 @@
 (*   (RoomSync.snapshot.cfg).                                              *)
 (* - "twins": the server has no rules for the names. Two rooms with one    *)
 (*   name then get one area (RoomSync.twins.cfg).                          *)
+(* - "nooffer": the sheet offers each room, and only the check of the      *)
+(*   links stays. An area still has one room (RoomSync.nooffer-rooms.cfg). *)
+(*   But the twin of a room gets no area (RoomSync.nooffer.cfg).           *)
 (***************************************************************************)
 EXTENDS Naturals, FiniteSets
 
@@ -76,10 +79,10 @@ Init ==
 Free(list) == {r \in Rooms : link[r] \notin list /\ Area(NameOf(r)) \notin list}
 
 \* The rooms that the person can choose for a list of areas: the first room
-\* of each name in Free (DIY.HomeAssistant.blocked). In the mode "twins",
-\* each room with no link to an area of the list.
+\* of each name in Free (DIY.HomeAssistant.blocked). In the modes "twins"
+\* and "nooffer", each room with no link to an area of the list.
 Offered(list) ==
-  IF Mode = "twins"
+  IF Mode \in {"twins", "nooffer"}
     THEN {r \in Rooms : link[r] \notin list}
     ELSE {r \in Free(list) : \A s \in Free(list) : NameOf(s) = NameOf(r) => r[2] <= s[2]}
 
@@ -114,7 +117,7 @@ Create(t) ==
             THEN /\ areas' = areas \cup {Area(NameOf(r))}
                  /\ Link(r, Area(NameOf(r)))
                  /\ UNCHANGED cur
-            ELSE CASE Mode \in {"ok", "twins"} ->
+            ELSE CASE Mode \in {"ok", "twins", "nooffer"} ->
                         /\ cur' = [cur EXCEPT ![t] = r]
                         /\ UNCHANGED <<areas, link, failed>>
                    [] Mode = "snapshot" ->

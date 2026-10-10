@@ -1360,16 +1360,24 @@ defmodule DIY.Build do
   # The links of the rooms to the areas of Home Assistant. A build of an
   # older version has none. A link of a room that cannot have an area (it
   # is not there, or it is the roof) goes away. Two rooms cannot have one
-  # area.
+  # area: the first room in the list keeps it.
   defp areas(nil, _rooms), do: {:ok, %{}}
 
   defp areas(areas, rooms) when is_map(areas) do
-    ids = MapSet.new(for room <- rooms, area_room?(room), do: room.id)
+    if Enum.all?(areas, fn {_room, area} -> is_binary(area) and area_id?(area) end) do
+      {links, _used} =
+        Enum.reduce(rooms, {%{}, MapSet.new()}, fn room, {links, used} ->
+          area = areas[room.id]
 
-    if Enum.all?(areas, fn {_room, area} -> is_binary(area) and area_id?(area) end) and
-         length(Enum.uniq(Map.values(areas))) == map_size(areas),
-       do: {:ok, Map.filter(areas, fn {room, _area} -> MapSet.member?(ids, room) end)},
-       else: {:error, :areas}
+          if area && area_room?(room) && not MapSet.member?(used, area),
+            do: {Map.put(links, room.id, area), MapSet.put(used, area)},
+            else: {links, used}
+        end)
+
+      {:ok, links}
+    else
+      {:error, :areas}
+    end
   end
 
   defp areas(_areas, _rooms), do: {:error, :areas}
