@@ -290,6 +290,14 @@ async function build(context, name) {
   await page.waitForSelector("#market:has-text('Oncor')", { timeout: 30000 })
   await check(page, `${name} front`)
 
+  // The house from the outside, in the look of the plan: the pole of the
+  // grid and its wire. The power flows in the wire 5 times, then it stops.
+  await page.waitForSelector("#house-picture svg.cutaway-outside .p-chip-text:has-text('Grid')")
+  assert.equal(
+    await page.$eval("#house-picture .p-flow", (path) => getComputedStyle(path).animationIterationCount),
+    "5",
+  )
+
   // The chart of the bill: a click on a month gives its dollars in the
   // line over the chart. The keyboard on the next month does it too.
   const names = ["January", "February", "March", "April", "May", "June", "July",
@@ -536,6 +544,9 @@ for (const colorScheme of ["light", "dark"]) {
     await page.click("nav >> text=House")
     await page.waitForSelector("#whatif-card")
     await check(page, `${name} front with a plan`)
+    // A tap on the house goes in.
+    await page.click("#house-picture")
+    await page.waitForSelector("#plan-svg")
 
     // A station that is too small for its items: the warning.
     await page.click("nav >> text=Rooms")

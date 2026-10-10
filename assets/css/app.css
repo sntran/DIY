@@ -507,6 +507,25 @@
 }
 @keyframes p-flicker { 0% { opacity: 1 } 40% { opacity: 0.75 } 70% { opacity: 0.9 } 100% { opacity: 0.65 } }
 @keyframes p-warm { from { opacity: 1 } to { opacity: 0.7 } }
+/* The house from the outside (DIYWeb.Outside): the pole and the wire of
+   the grid, the meter, the doors, and the labels. The power of the grid
+   flows in the wire for 4.5 seconds when the page opens. */
+.p-pole-t { fill: var(--c-wood-t) } .p-pole-l { fill: var(--c-wood-l) } .p-pole-r { fill: var(--c-wood-r) }
+.p-meter-t { fill: var(--c-gray-t) } .p-meter-l { fill: var(--c-gray-l) } .p-meter-r { fill: var(--c-gray-r) }
+.p-door { fill: var(--c-wood-r) } .p-garage { fill: var(--c-white-l) } .p-line { fill: var(--c-line) }
+.p-wire { fill: none; stroke: var(--c-dark-t); stroke-width: 1.2; vector-effect: non-scaling-stroke }
+.p-flow { fill: none; stroke: #60a5fa; stroke-width: 2; stroke-dasharray: 2 6; stroke-linecap: round; vector-effect: non-scaling-stroke }
+@media (prefers-reduced-motion: no-preference) {
+  .cutaway-outside .p-flow { animation: p-flow 0.9s linear 5 }
+}
+@keyframes p-flow { to { stroke-dashoffset: -8 } }
+/* At night, the windows of the house have the warm light of the rooms. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme=light]) .cutaway-outside .p-pane { fill: #f2c46b }
+}
+[data-theme=dark] .cutaway-outside .p-pane { fill: #f2c46b }
+.p-chip { fill: var(--p-pill); stroke: var(--p-edge); stroke-width: 0.8; vector-effect: non-scaling-stroke }
+.p-chip-text { font: 600 7px / 1 ui-sans-serif, system-ui, sans-serif; fill: var(--p-pill-text) }
 /* The van cut open (DIYWeb.VanCutaway): its walls (bare or with panels),
    the insulation in their cut, its floor, the mat of the cab, its roof. */
 .p-vwall-t { fill: var(--p-vwall-t) } .p-vwall-l { fill: var(--p-vwall-l) } .p-vwall-r { fill: var(--p-vwall-r) }
