@@ -8,7 +8,7 @@ import fc from "fast-check"
 import {IDBFactory} from "fake-indexeddb"
 import {
   DB, STORE, KEY, CHANNEL, PENDING, EARLY, FIRST_WAIT, MAX_WAIT,
-  address, blocked, socketUrl, clientOf, randomText, pkce, authorizeUrl,
+  address, blocked, socketUrl, clientOf, wayBack, randomText, pkce, authorizeUrl,
   open, sessionStore, Link, homeAssistantHook, browserParts,
 } from "../../assets/js/home_assistant.js"
 
@@ -43,7 +43,7 @@ const tokens = (access, refresh, expires = 1800) =>
 
 // The parts of a browser for a Link, with fakes. fetch gives the answers of
 // respond(url, fields).
-function parts({search = "", protocol = "http:", respond = () => answer(200), store, factory} = {}) {
+function parts({search = "", pathname = "/settings", protocol = "http:", respond = () => answer(200), store, factory} = {}) {
   const calls = []
   const pushes = []
   const timers = new Map()
@@ -69,7 +69,7 @@ function parts({search = "", protocol = "http:", respond = () => answer(200), st
     },
     WebSocket: FakeSocket,
     location: {
-      origin: APP, protocol, pathname: "/settings", search,
+      origin: APP, protocol, pathname, search,
       assign: (url) => page.assigned.push(url),
     },
     history: {state: {type: "patch", id: "phx-1"}, replaceState: (...args) => page.replaced.push(args)},
@@ -138,6 +138,14 @@ test("an HTTPS page cannot use an http address", () => {
   assert.equal(clientOf({origin: APP}), APP + "/")
 })
 
+test("the way back is a path of this app", () => {
+  assert.equal(wayBack("/inside?item=i42"), "/inside?item=i42")
+  assert.equal(wayBack("/settings"), "/settings")
+  for (const bad of ["//evil.example/x", "https://evil.example", "inside", "/a b", "/" + "x".repeat(201), undefined, 5]) {
+    assert.equal(wayBack(bad), "/settings", String(bad))
+  }
+})
+
 test("the sign-in page gets the client, the way back, the state and the challenge", async () => {
   const {verifier, challenge} = await pkce(globalThis.crypto)
   assert.match(verifier, /^[A-Za-z0-9_-]{64}$/)
@@ -155,6 +163,8 @@ test("the sign-in page gets the client, the way back, the state and the challeng
     code_challenge: challenge,
     code_challenge_method: "S256",
   })
+  const hub = new URL(authorizeUrl(HA, {client: APP + "/", state: "s1", challenge, back: "/inside?item=i42"}))
+  assert.equal(hub.searchParams.get("redirect_uri"), APP + "/inside?item=i42")
 })
 
 test("the store reads, writes, updates with a compare and set, and clears", async () => {
@@ -238,6 +248,13 @@ test("connect sends the browser to the sign-in page with a new state", async () 
   assert.equal(url.searchParams.get("code_challenge"), challenge)
   assert.equal(last(page).state, "signing_in")
 
+  // From the sheet of a hub: the sign-in comes back to the sheet. A bad
+  // way back gives Settings.
+  await link.connect(HA, "/inside?item=i42")
+  assert.equal(new URL(page.assigned[1]).searchParams.get("redirect_uri"), APP + "/inside?item=i42")
+  await link.connect(HA, "//evil.example")
+  assert.equal(new URL(page.assigned[2]).searchParams.get("redirect_uri"), APP + "/settings")
+
   await link.connect("not an address")
   assert.deepEqual(last(page), {state: "none", url: null, name: null, version: null, error: "url"})
   const https = parts({protocol: "https:"})
@@ -288,6 +305,19 @@ test("the way back gets the tokens, keeps them, and connects", async () => {
   // The LiveView reconnects: the hook tells the state again.
   link.report()
   assert.equal(last(page).state, "connected")
+})
+
+test("the way back to the sheet of a hub keeps the item in the address", async () => {
+  const page = parts({
+    pathname: "/inside",
+    search: "?item=i42&code=c1&state=s1",
+    respond: (url) => url.endsWith("/auth/token") ? tokens("a1", "r1") : answer(200),
+  })
+  page.storage.set(PENDING, JSON.stringify({url: HA, state: "s1", verifier: "v1"}))
+  await new Link(page.deps).start()
+  await settle()
+  assert.deepEqual(page.replaced, [[{type: "patch", id: "phx-1"}, "", "/inside?item=i42"]])
+  assert.equal((await page.deps.store.read()).refresh, "r1")
 })
 
 test("a way back with a wrong state, no code, or a bad text keeps nothing", async () => {
@@ -688,8 +718,9 @@ test("the hook of LiveView", async () => {
   self.mounted()
   await settle()
   assert.deepEqual(page.pushes.at(-1), ["hook:ha:status", {state: "none", url: null, name: null, version: null, error: null}])
-  await handlers["ha:connect"]({url: HA})
+  await handlers["ha:connect"]({url: HA, back: "/inside?item=i1"})
   assert.equal(page.assigned.length, 1)
+  assert.equal(new URL(page.assigned[0]).searchParams.get("redirect_uri"), APP + "/inside?item=i1")
   await handlers["ha:disconnect"]()
   assert.equal(page.pushes.at(-1)[1].state, "none")
   self.reconnected()

@@ -432,6 +432,33 @@ async function build(context, name) {
   await page.click("#item-sheet .btn-ghost[aria-label=Close]")
   await page.waitForSelector("#item-sheet", { state: "detached" })
 
+  // A Home Assistant hub in the living room. Its sheet has the link: the
+  // sign-in on the page of Home Assistant, and back to the sheet. The code
+  // of the sign-in does not stay in the address. The light of the hub on
+  // the plan shows the link.
+  await follow(page, 'a[id^="add-"][aria-label="Add an item to Living room"]')
+  await page.click("#add-home_assistant")
+  await page.waitForSelector("#item-sheet:has-text('Home Assistant hub') #ha-form")
+  const hub = new URL(page.url()).searchParams.get("item")
+  await page.fill("#ha-form input[name=url]", homeAssistant.url + "/")
+  await page.click("#ha-form button")
+  await page.waitForSelector("#item-sheet #ha-status:has-text('Connected to Fake house (Home Assistant 2026.10.0)')")
+  assert.equal(new URL(page.url()).search, `?item=${hub}`)
+  await page.waitForSelector("#inside[data-ha=connected]")
+  await check(page, `${name} Home Assistant`)
+  const revoked = homeAssistant.revoked.length
+  await page.click("#ha-disconnect")
+  await page.waitForSelector("#ha-status:has-text('Not connected.')")
+  await page.waitForSelector("#inside[data-ha=none]")
+  // The hook does not wait for the revoke: wait for it here.
+  for (let i = 0; i < 50 && homeAssistant.revoked.length === revoked; i++) {
+    await new Promise((resolve) => setTimeout(resolve, 100))
+  }
+  assert.equal(homeAssistant.revoked.length, revoked + 1)
+  assert.equal(homeAssistant.sessions.size, 0)
+  await page.click("#item-sheet .btn-ghost[aria-label=Close]")
+  await page.waitForSelector("#item-sheet", { state: "detached" })
+
   await page.click("nav >> text=Bill")
   await page.waitForSelector("#months")
   await check(page, `${name} math`)
@@ -445,22 +472,8 @@ async function build(context, name) {
 
   await page.waitForSelector("#device-status:has-text('Saved on this device')")
 
-  // Home Assistant: the sign-in on its page, the socket, and the
-  // disconnect. The code of the sign-in does not stay in the address.
-  await page.fill("#ha-form input[name=url]", homeAssistant.url + "/")
-  await page.click("#ha-form button")
-  await page.waitForSelector("#ha-status:has-text('Connected to Fake house (Home Assistant 2026.10.0)')")
-  assert.equal(new URL(page.url()).search, "")
-  await check(page, `${name} Home Assistant`)
-  const revoked = homeAssistant.revoked.length
-  await page.click("#ha-disconnect")
-  await page.waitForSelector("#ha-status:has-text('Not connected.')")
-  // The hook does not wait for the revoke: wait for it here.
-  for (let i = 0; i < 50 && homeAssistant.revoked.length === revoked; i++) {
-    await new Promise((resolve) => setTimeout(resolve, 100))
-  }
-  assert.equal(homeAssistant.revoked.length, revoked + 1)
-  assert.equal(homeAssistant.sessions.size, 0)
+  // Settings has the card too, with a link to the hub.
+  await page.waitForSelector("#ha-hub:has-text('Your hub is in Living room')")
   return page
 }
 

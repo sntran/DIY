@@ -4,7 +4,7 @@ defmodule DIYWeb.HomeAssistantTest do
 
   import Phoenix.LiveViewTest
 
-  alias DIY.{Build, House, Stubs}
+  alias DIY.{Build, Catalog, Estimate, House, Stubs}
   alias DIYWeb.HomeAssistant
 
   setup do
@@ -22,12 +22,21 @@ defmodule DIYWeb.HomeAssistantTest do
     Build.put_house(build, house, rooms, items)
   end
 
-  # The page Settings, with the build on the device.
-  defp settings(conn) do
-    {:ok, view, _html} = live(conn, ~p"/settings")
-    build = build()
+  # A page with the build on the device.
+  defp page(conn, path, build \\ build()) do
+    {:ok, view, _html} = live(conn, path)
     render_hook(view, "device:restore", %{"text" => Build.to_json(build), "stamp" => build.stamp})
     view
+  end
+
+  defp settings(conn), do: page(conn, ~p"/settings")
+
+  # The build with a Home Assistant hub in the living room.
+  defp hub do
+    build = build()
+    room = Enum.find(build.rooms, &(&1.name == "Living room"))
+    {:ok, build, id} = Build.add_item(build, room.id, "home_assistant")
+    {build, id}
   end
 
   defp status(view, payload), do: render_hook(view, "ha:status", payload)
@@ -119,7 +128,7 @@ defmodule DIYWeb.HomeAssistantTest do
     refute_push_event(view, "ha:connect", %{})
 
     view |> form("#ha-form", %{"url" => "https://HA.example.com/"}) |> render_submit()
-    assert_push_event(view, "ha:connect", %{url: "https://ha.example.com"})
+    assert_push_event(view, "ha:connect", %{url: "https://ha.example.com", back: "/settings"})
 
     status(view, %{"state" => "none", "url" => nil, "error" => nil})
     assert has_element?(view, "#ha-status", "Not connected.")
@@ -191,6 +200,61 @@ defmodule DIYWeb.HomeAssistantTest do
 
     assert has_element?(view, "#ha-status", "Connected to Home Assistant (Home Assistant ) at .")
     refute has_element?(view, "#ha-error")
+  end
+
+  test "a Home Assistant hub: 2 W all the time, with the source of the number" do
+    kind = Catalog.kind("home_assistant")
+    assert kind.places == [:indoor]
+    assert Catalog.size("home_assistant") == {4, 4, 1}
+    [watts] = kind.params
+    assert {watts.key, watts.default} == {"watts", 2}
+    assert watts.note =~ "1.7 W at idle and 3 W under load"
+
+    {build, id} = hub()
+    {:ok, climate} = DIY.Weather.parse(Stubs.power(), 33.25, -96.75, 2016, 2025)
+    estimate = Estimate.run(build, climate)
+    {:ok, item} = Build.item(build, id)
+    january = hd(estimate.months)
+    assert_in_delta january.items[id].kwh, 2 * 24 * 31 / 1000, 1.0e-9
+    assert hd(Estimate.explain(item, 1, estimate)) == "2 W × 24 hours × 31 days ÷ 1,000."
+  end
+
+  test "the sheet of a hub has the card, and the sign-in comes back to the sheet", %{conn: conn} do
+    {build, id} = hub()
+    view = page(conn, ~p"/inside?#{[item: id]}", build)
+
+    assert has_element?(view, "#item-sheet #home-assistant-card")
+    assert has_element?(view, "#item-sheet #ha-form input[name=back][value='/inside?item=#{id}']")
+    refute has_element?(view, "#home-assistant-card h2")
+    assert has_element?(view, "#inside[data-ha=loading]")
+
+    view |> form("#ha-form", %{"url" => "https://ha.example.com"}) |> render_submit()
+    assert_push_event(view, "ha:connect", %{url: "https://ha.example.com", back: back})
+    assert back == "/inside?item=#{id}"
+
+    # A way back that is not a page of the sign-in gives Settings.
+    for bad <- ["//evil.example", "https://evil.example", "/plans", "/inside?item=a b", 5] do
+      render_hook(view, "ha_connect", %{"url" => "https://ha.example.com", "back" => bad})
+      assert_push_event(view, "ha:connect", %{back: "/settings"})
+    end
+
+    # The light of the hub on the plan follows the state of the link.
+    status(view, %{"state" => "connected", "url" => "https://ha.example.com", "name" => "Home"})
+    assert has_element?(view, "#inside[data-ha=connected]")
+    assert has_element?(view, "#item-sheet #ha-status", "Connected to Home")
+    assert render(view) =~ "i-ha-light"
+  end
+
+  test "Settings: a link to the hub, or a hint to add one", %{conn: conn} do
+    view = settings(conn)
+    assert has_element?(view, "#ha-hub", "add a Home Assistant hub to a room")
+
+    {build, id} = hub()
+    view = page(conn, ~p"/settings", build)
+    assert has_element?(view, "#ha-hub", "Your hub is in Living room")
+    view |> element("#ha-hub a") |> render_click()
+    assert_patch(view, ~p"/inside?#{[item: id]}")
+    assert has_element?(view, "#item-sheet #home-assistant-card")
   end
 
   test "the other events of the page still work", %{conn: conn} do

@@ -264,6 +264,12 @@
 .i-outline { fill: none; stroke: rgb(31 35 40 / 0.35); stroke-width: 0.75; stroke-linejoin: round; vector-effect: non-scaling-stroke }
 .i-burner { fill: none; stroke: #6b7280; stroke-width: 1.5; vector-effect: non-scaling-stroke }
 .i-glass { fill: #8ec5ec } .i-glass-dark { fill: #2b3a52 } .i-shine { fill: rgb(255 255 255 / 0.14) } .i-screen { fill: #1e40af }
+/* The light of a Home Assistant hub: gray with no link, amber while the
+   link waits for Home Assistant, and green when it is connected
+   (data-ha on the page Rooms, DIYWeb.HomeAssistant). */
+.i-ha-light { fill: #9ca3af }
+[data-ha=signing_in] .i-ha-light, [data-ha=connecting] .i-ha-light, [data-ha=offline] .i-ha-light { fill: #f59e0b }
+[data-ha=connected] .i-ha-light { fill: #22c55e }
 .i-led { fill: #34d399 } .i-hot { fill: #ef4444 } .i-flame { fill: #f59e0b } .i-bulb { fill: #fcd34d }
 .i-pv { fill: #1e3a8a; stroke: #6d8fd6; stroke-width: 1; vector-effect: non-scaling-stroke }
 .i-pv-line { fill: #6d8fd6 }

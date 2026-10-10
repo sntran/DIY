@@ -16,7 +16,7 @@ defmodule DIYWeb.Inside do
   use DIYWeb, :html
 
   alias DIY.{Build, Catalog, Estimate, Layout, Prices, Solar}
-  alias DIYWeb.{Camera, Cutaway, Format, Icon}
+  alias DIYWeb.{Camera, Cutaway, Format, HomeAssistant, Icon}
 
   @place_names %{indoor: "Inside", outdoor: "Outside", roof: "On the roof"}
 
@@ -35,6 +35,7 @@ defmodule DIYWeb.Inside do
   attr :item_error, :string, default: nil
   attr :status, :string, default: nil, doc: "a text for a screen reader after a move"
   attr :away, :list, default: [], doc: "the stations of the house in a van: {item, van}"
+  attr :ha, :map, required: true, doc: "the link to Home Assistant (`DIYWeb.HomeAssistant`)"
 
   attr :outage, :string,
     default: nil,
@@ -50,7 +51,7 @@ defmodule DIYWeb.Inside do
     assigns = assign(assigns, chosen: room, levels: Build.levels(assigns.build.house.floors))
 
     ~H"""
-    <section id="inside" class="space-y-2">
+    <section id="inside" class="space-y-2" data-ha={@ha.state}>
       <div class="flex items-center justify-between">
         <h1 class="text-xl font-bold">Rooms</h1>
         <.link
@@ -129,6 +130,7 @@ defmodule DIYWeb.Inside do
         price={@price}
         error={@item_error}
         outage={@outage}
+        ha={@ha}
       />
       <.add_sheet
         :if={@add && match?({:ok, _}, Build.room(@build, @add))}
@@ -498,9 +500,10 @@ defmodule DIYWeb.Inside do
   attr :error, :string, default: nil
   attr :outage, :string, default: nil
   attr :close, :string, default: "/inside", doc: "the page of the close link"
+  attr :ha, :map, required: true
 
   # The numbers of an item, the math of its kWh, and the features that it
-  # turns on.
+  # turns on. The sheet of a Home Assistant hub has the card of the link.
   defp item_sheet(assigns) do
     kind = Catalog.kind(assigns.item.type)
     {:ok, room} = Build.room(assigns.build, assigns.item.room)
@@ -529,6 +532,13 @@ defmodule DIYWeb.Inside do
     ~H"""
     <.sheet id="item-sheet" title={Catalog.name(@item)} icon={@item.type} close={@close}>
       <p class="text-sm opacity-80">In {@room.name}{level_note(@room.level)}</p>
+
+      <HomeAssistant.card
+        :if={@item.type == "home_assistant"}
+        ha={@ha}
+        back={~p"/inside?#{[item: @item.id]}"}
+        title={false}
+      />
 
       <div :if={@item.typical} class="alert alert-warning text-sm">
         <span>
