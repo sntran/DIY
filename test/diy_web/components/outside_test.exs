@@ -182,7 +182,8 @@ defmodule DIYWeb.OutsideTest do
     # The text for a screen reader tells the same facts.
     assert view.label ==
              "a house with 2 floors, a garage, solar panels of 6.4 kW on the roof, " <>
-               "outside: Central AC, Solar panels, 1 power station of 4 kWh, " <>
+               "other solar panels of 400 W, outside: Central AC, Solar panels, " <>
+               "1 power station of 4 kWh, " <>
                "the wire of the grid, you in front of the door"
 
     # The panels on the roof show. A planned item does not.
@@ -250,9 +251,25 @@ defmodule DIYWeb.OutsideTest do
     # With no room on the roof, the house gets its plain roof.
     build = delete(house(), ["roof"])
     {:ok, build, porch} = Build.add_room(build, "Porch roof", "f1", :roof)
-    ids = ids(Outside.view(build))
-    assert "roof-roof" in ids
-    refute Enum.any?(ids, &String.ends_with?(&1, porch))
+    view = Outside.view(build)
+    assert "roof-roof" in ids(view)
+    refute Enum.any?(ids(view), &String.ends_with?(&1, porch))
+
+    # The panels on the porch do not show. Their label is over the middle
+    # of the lot, and not over the roof of the house.
+    {:ok, build, id} = Build.add_item(build, porch, "solar_panels")
+    {:ok, build} = Build.update_item(build, id, %{"watts" => 2000})
+    view = Outside.view(build)
+    assert Enum.map(view.chips, & &1.text) == ["Grid", "2 kW"]
+    refute view.label =~ "on the roof"
+    assert view.label =~ "other solar panels of 2 kW"
+
+    # A roof on the garage: the same, and the roof of the house has no
+    # label.
+    {:ok, build, shed} = Build.add_room(house(), "Shed roof", "outside", :roof)
+    {:ok, build, id} = Build.add_item(build, shed, "solar_panels")
+    {:ok, build} = Build.update_item(build, id, %{"watts" => 1200})
+    assert Enum.map(Outside.view(build).chips, & &1.text) == ["Grid", "1.2 kW"]
   end
 
   test "a balcony: on its slab, with its floor and its items, and no wall" do

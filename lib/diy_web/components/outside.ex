@@ -104,7 +104,8 @@ defmodule DIYWeb.Outside do
       })
 
     {wire, wire_box, meter, meter_box} = wire(pole, inside, z, camera)
-    chips = chips(house, pole, roofs, yards ++ decks, inside, lot, z, camera)
+    power = power(house, roofs)
+    chips = chips(house, power, pole, roofs, yards ++ decks, inside, lot, z, camera)
     boxes = [level.box, wire_box, meter_box | Enum.map(chips, & &1.box)]
     box = around(Enum.reject(boxes, &is_nil/1), 4.0)
     shown = for %{kind: :item, id: id} <- objects, do: id
@@ -116,7 +117,7 @@ defmodule DIYWeb.Outside do
       chips: chips,
       box: box,
       camera: camera,
-      label: label(house, inside, shown, wire, door)
+      label: label(house, power, inside, shown, wire, door)
     }
   end
 
@@ -530,33 +531,31 @@ defmodule DIYWeb.Outside do
     {x0, y0, x1 - x0, y1 - y0}
   end
 
-  # The power of the house: the watts of the panels on the roof and outside,
-  # and the count and the kWh of the stations.
-  defp power(house) do
-    places = Map.new(house.rooms, &{&1.id, &1.place})
+  # The power of the house. It has the watts of the panels on the roof of
+  # the picture (`roofs`) and of the other panels. It also has the count
+  # and the kWh of the stations. A room on the roof of a garage or of a
+  # porch does not show: its panels are with the other panels.
+  defp power(house, roofs) do
+    on_roof = MapSet.new(roofs, & &1.id)
     of = fn type -> Enum.filter(house.items, &(&1.type == type)) end
-
-    watts = fn place ->
-      for(item <- of.("solar_panels"), places[item.room] == place, do: item.params["watts"])
-      |> Enum.sum()
-    end
+    {roof, other} = Enum.split_with(of.("solar_panels"), &MapSet.member?(on_roof, &1.room))
+    watts = fn panels -> panels |> Enum.map(& &1.params["watts"]) |> Enum.sum() end
 
     stations = of.("power_station")
     kwh = for(s <- stations, do: s.params["kwh"] + s.params["extra_kwh"]) |> Enum.sum()
 
     %{
-      roof: watts.(:roof),
-      outdoor: watts.(:outdoor),
+      roof: watts.(roof),
+      other: watts.(other),
       stations: length(stations),
       kwh: Format.value(Float.round(kwh / 1, 1))
     }
   end
 
-  # The labels: the grid at the pole, and the watts of the panels on the
-  # roof and outside. The kWh of the stations is at the front of the house.
-  defp chips(house, {px, py}, roofs, outdoor, inside, lot, z, camera) do
-    power = power(house)
-
+  # The labels: the grid at the pole, the watts of the panels on the roof,
+  # and the watts of the other panels. The kWh of the stations is at the
+  # front of the house.
+  defp chips(house, power, {px, py}, roofs, outdoor, inside, lot, z, camera) do
     roof_at =
       case roofs do
         [roof | _] ->
@@ -569,8 +568,8 @@ defmodule DIYWeb.Outside do
 
     [chip({px, py, @pole + 0.9}, "Grid", camera)] ++
       if(power.roof > 0, do: [chip(roof_at, kw(power.roof), camera)], else: []) ++
-      if(power.outdoor > 0,
-        do: [chip(panels_at(house, outdoor, lot, z), kw(power.outdoor), camera)],
+      if(power.other > 0,
+        do: [chip(panels_at(house, outdoor, lot, z), kw(power.other), camera)],
         else: []
       ) ++
       if(power.stations > 0,
@@ -579,7 +578,7 @@ defmodule DIYWeb.Outside do
       )
   end
 
-  # The label of the panels outside: over the first yard or balcony with
+  # The label of the other panels: over the first yard or balcony with
   # panels, else over the middle of the lot.
   defp panels_at(house, outdoor, lot, z) do
     rooms =
@@ -614,8 +613,7 @@ defmodule DIYWeb.Outside do
   defp kw(watts), do: "#{watts} W"
 
   # A text for a screen reader: what the picture shows.
-  defp label(house, inside, shown, wire, door) do
-    power = power(house)
+  defp label(house, power, inside, shown, wire, door) do
     floors = inside |> Enum.map(& &1.level) |> Enum.filter(&String.starts_with?(&1, "f"))
     floors = floors |> Enum.uniq() |> length()
     types = Map.new(house.items, &{&1.id, &1.type})
@@ -625,6 +623,7 @@ defmodule DIYWeb.Outside do
       if(floors > 0, do: "a house with #{Format.count(floors, "floor")}", else: "a lot"),
       Enum.any?(inside, &(&1.level == "outside")) && "a garage",
       power.roof > 0 && "solar panels of #{kw(power.roof)} on the roof",
+      power.other > 0 && "other solar panels of #{kw(power.other)}",
       names != [] && "outside: #{Enum.join(names, ", ")}",
       power.stations > 0 && "#{Format.count(power.stations, "power station")} of #{power.kwh} kWh",
       wire && "the wire of the grid",

@@ -1531,8 +1531,11 @@ camera and the same look. A tap on the picture opens the plan.
   meter on the right end of the house. The power flows in the wire 5
   times (4.5 seconds) when the page opens. It does not flow when the
   person asks for less motion.
-- The labels tell the kW of the panels on the roof and in the yards, and
-  the kWh of the stations (with one decimal).
+- The labels tell the kW of the panels on the roof and of the other
+  panels. A label also tells the kWh of the stations, with one decimal.
+  The panels on the roof of a garage or of a porch do not show. They are
+  in the label of the other panels. That label is over the first yard or
+  balcony with panels, else over the middle of the lot.
 - The picture is the link into the house. Its label for a screen reader
   tells what the picture shows. These are the floors, the garage, the
   panels, the items outside, the stations, the wire and the person.

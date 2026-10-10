@@ -34,7 +34,6 @@ defmodule DIYWeb.SceneTest do
     refute html =~ ~s(class="s-pv")
     refute html =~ "s-station"
     refute html =~ "s-flow-sun"
-    assert Scene.label(Scene.parts(house())) == "a house with 2 floors, an AC"
 
     # Three floors: a taller picture.
     [_x, _y, _w, tall] = box(picture(house(3)))
@@ -66,10 +65,6 @@ defmodule DIYWeb.SceneTest do
     assert html =~ "s-flow-battery"
     assert html =~ "s-water"
     assert html =~ ~s(class="i-red-)
-
-    assert Scene.label(Scene.parts(build)) ==
-             "a house with 2 floors, solar panels on the roof, solar panels in the yard, " <>
-               "2 power stations, an AC, a pool, an electric car"
   end
 
   test "a station on plugs gives no flow to the panel, and planned items do not show" do
@@ -81,7 +76,6 @@ defmodule DIYWeb.SceneTest do
     {:ok, build, panels} = Build.add_item(build, room(build, "Roof"), "solar_panels")
     {:ok, planned} = Build.flag_item(build, panels, :planned, true)
     refute picture(planned) =~ ~s(class="s-pv")
-    refute Scene.label(Scene.parts(planned)) =~ "solar panels"
     assert picture(build) =~ ~s(class="s-pv")
   end
 
@@ -125,7 +119,6 @@ defmodule DIYWeb.SceneTest do
     refute html =~ "s-gdoor"
     assert html =~ ~s(class="i-white-)
     assert html =~ ~s(class="s-pv")
-    assert Scene.label(Scene.parts(build)) =~ "a camper van"
   end
 
   test "the labels of the axles are at the axles of each model of van" do

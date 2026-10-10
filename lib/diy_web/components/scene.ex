@@ -22,7 +22,7 @@ defmodule DIYWeb.Scene do
   camera of a van. The colors are CSS variables (`assets/css/app.css`):
   one set for the light mode (a day) and one for the dark mode (a night).
   The pictures are for the eyes only: the text of the page gives the same
-  facts. A link with a picture has a label (`label/1`).
+  facts.
 
   A shape is one of:
 
@@ -150,29 +150,6 @@ defmodule DIYWeb.Scene do
   end
 
   defp watts(panels), do: panels |> Enum.map(& &1.params["watts"]) |> Enum.sum()
-
-  @doc "A text for a screen reader: what the picture of the house shows."
-  def label(parts) do
-    count = length(parts.stations)
-
-    things =
-      Enum.filter(
-        [
-          parts.roof.station + parts.roof.grid > 0 && "solar panels on the roof",
-          parts.yard.station + parts.yard.grid > 0 && "solar panels in the yard",
-          count == 1 && "a power station",
-          count > 1 && "#{count} power stations",
-          parts.ac && "an AC",
-          parts.pool && "a pool",
-          parts.car && "an electric car",
-          parts.van && "a camper van"
-        ],
-        & &1
-      )
-
-    "a house with #{Format.count(parts.floors, "floor")}" <>
-      Enum.map_join(things, "", &(", " <> &1))
-  end
 
   attr :id, :string, required: true, doc: "the prefix of the ids of the gradients"
   attr :parts, :map, required: true, doc: "the parts of the picture (`parts/1`)"
