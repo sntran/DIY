@@ -1553,7 +1553,8 @@ label on its front (`DIYWeb.Stage`, and the hook `Stage` in
   A hub first shows Link (the card of the link to Home Assistant). The
   remove asks on the panel: Remove the item, or Keep it. A different item
   starts at its first page. A panel that is too small for its page
-  scrolls.
+  scrolls. Then a shade on its bottom edge shows that more text is below.
+  A field is not wider than its panel.
 - The keyboard and the screen reader. The stage is a modal dialog. The
   keys are tabs, and each page is a tab panel. The arrow keys, Home and
   End go from key to key. The Tab key keeps the focus on the stage. The

@@ -647,8 +647,16 @@
   .stage-landed .stage-panel { transition: none }
 }
 
+/* When a panel has more text than its screen can show, the text scrolls.
+   A shade on the bottom edge shows that there is more text. The shade
+   stays on the edge. A cover at the end of the text (local) moves with the
+   text, and at the end it is on the shade. */
+
 /* The LED screen of a hub: green light on dark glass. */
-.panel-led { color: #8dffa8; background: #0c1410 radial-gradient(rgb(141 255 168 / 0.07) 1px, transparent 1px) 0 0 / 4px 4px;
+.panel-led { color: #8dffa8;
+  background: linear-gradient(rgb(12 20 16 / 0), #0c1410 1.4em) 0 100% / 100% 2.4em no-repeat local,
+    linear-gradient(rgb(141 255 168 / 0), rgb(141 255 168 / 0.3)) 0 100% / 100% 1.4em no-repeat,
+    #0c1410 radial-gradient(rgb(141 255 168 / 0.07) 1px, transparent 1px) 0 0 / 4px 4px;
   box-shadow: inset 0 0 0 2px #2d3134, inset 0 2px 14px rgb(0 0 0 / 0.9); border-radius: 10px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace }
 .panel-led h2, .panel-led .stage-year { text-shadow: 0 0 6px rgb(141 255 168 / 0.5) }
@@ -659,7 +667,10 @@
 .panel-led .link { color: #b8ffc9 }
 
 /* The screen of a TV or of a computer: white on dark blue. */
-.panel-screen { color: #eef5fb; background: linear-gradient(160deg, #1b3a55, #0d1b28 65%); border-radius: 2px }
+.panel-screen { color: #eef5fb; border-radius: 2px;
+  background: linear-gradient(rgb(13 27 40 / 0), #0d1b28 1.4em) 0 100% / 100% 2.4em no-repeat local,
+    linear-gradient(rgb(191 224 255 / 0), rgb(191 224 255 / 0.3)) 0 100% / 100% 1.4em no-repeat,
+    linear-gradient(160deg, #1b3a55, #0d1b28 65%) }
 .panel-screen .stage-key { color: #fff; background: #2b4a64; box-shadow: 0 3px 0 #13283a }
 .panel-screen .stage-key[aria-selected=true] { background: #eef5fb; color: #0d1b28; box-shadow: 0 1px 0 #9fb4c6 }
 .panel-screen :is(.input, .select) { background: rgb(255 255 255 / 0.1); color: #eef5fb; border-color: #5b7a94 }
@@ -667,7 +678,9 @@
 .panel-screen .stage-warn { background: rgb(245 158 11 / 0.2) }
 
 /* A printed label: dark ink on a pale yellow paper, with rules. */
-.panel-label { color: #1f1a12; background: #fff6cf; border: 1px solid #c8b45a; border-radius: 3px;
+.panel-label { color: #1f1a12; border: 1px solid #c8b45a; border-radius: 3px;
+  background: linear-gradient(rgb(255 246 207 / 0), #fff6cf 1.4em) 0 100% / 100% 2.4em no-repeat local,
+    linear-gradient(rgb(31 26 18 / 0), rgb(31 26 18 / 0.22)) 0 100% / 100% 1.4em no-repeat, #fff6cf;
   box-shadow: 0 1px 3px rgb(0 0 0 / 0.35); font-variant-numeric: tabular-nums }
 .panel-label h2 { text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 3px solid #1f1a12; padding-bottom: 4px }
 .panel-label .stage-year { border-block: 1px solid #1f1a12; padding-block: 4px }
