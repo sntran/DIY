@@ -3,11 +3,11 @@ defmodule DIYWeb.Inside do
   The inside of the house: the plan at scale (`DIYWeb.Cutaway`). The house
   is cut open: each floor is a layer, from the ground up to the roof. Each
   item stands at its place in its room. The person drags an item to move
-  it, also to a different room. A tap on an item opens it, and a tap on a
-  room chooses it. A chosen room has handles on its walls, and a bar with
-  its size and its buttons. The hook Plan (`assets/js/plan.js`) does the
-  drag and the zoom. The sheets have buttons that move an item or a room
-  with no drag.
+  it, also to a different room. A tap on an item brings it to the front
+  (`DIYWeb.Stage`), and a tap on a room chooses it. A chosen room has
+  handles on its walls, and a bar with its size and its buttons. The hook
+  Plan (`assets/js/plan.js`) does the drag and the zoom. The panel of an
+  item and the bar of a room have buttons that move them with no drag.
 
   The plan is for the eyes. A list of the rooms and their items gives the
   same facts to a screen reader and to a keyboard. It shows when it has
@@ -60,8 +60,8 @@ defmodule DIYWeb.Inside do
         _none -> nil
       end
 
-    # The card of the link to Home Assistant is in the sheet of a hub.
-    # Sometimes no such sheet is open: for example, the hub went away in a
+    # The card of the link to Home Assistant is on the panel of a hub.
+    # Sometimes no hub is on the stage: for example, the hub went away in a
     # different tab. Then the page shows the error of a sign-in that came
     # back, or of a session that ended. The other errors come from the card
     # itself, or from the store for each page (the device error tells it).
@@ -698,6 +698,11 @@ defmodule DIYWeb.Inside do
         hidden={@page != "numbers"}
         class="stage-page"
       >
+        <p :if={@estimate.ready and @item.type not in @no_use} id="numbers-year" class="stage-year">
+          In one year: {Format.kwh(@estimate.items[@item.id].year)} · {Format.money(
+            Format.cost(@estimate.items[@item.id].year, @price.cents)
+          )}
+        </p>
         <div :if={@item.typical} class="stage-warn text-sm">
           <span>
             {if @item.type == "camper_van",
@@ -797,7 +802,14 @@ defmodule DIYWeb.Inside do
           >
             Remove the item
           </button>
-          <button type="button" phx-click="item_page" phx-value-page="use" class="stage-key">
+          <button
+            type="button"
+            phx-click={
+              JS.push("item_page", value: %{page: first_page(@pages)})
+              |> JS.focus(to: "#key-#{first_page(@pages)}")
+            }
+            class="stage-key"
+          >
             Keep it
           </button>
         </div>
@@ -805,6 +817,8 @@ defmodule DIYWeb.Inside do
     </Stage.stage>
     """
   end
+
+  defp first_page([{page, _label} | _pages]), do: page
 
   # The pages of the panel of an item, with the names of their keys. A hub
   # first shows its link.
@@ -818,8 +832,8 @@ defmodule DIYWeb.Inside do
 
   @doc """
   The place of an item on the plan: buttons that move it, its place in
-  words, its size and its turn. It is in the sheet of an item of the house
-  or of a van.
+  words, its size and its turn. It is on the panel of an item of the house
+  (`DIYWeb.Stage`), and in the sheet of an item of a van.
   """
   def place(assigns) do
     {pw, pd} = Layout.panel()

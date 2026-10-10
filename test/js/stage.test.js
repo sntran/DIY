@@ -4,8 +4,8 @@ import {test} from "node:test"
 import assert from "node:assert/strict"
 import fc from "fast-check"
 import {
-  OUT, BACK, FRONT, numbers, easeOut, easeIn, frameAt, rectOf, restPose, between, transformOf, fly,
-  browserParts, pageParts, stageHook,
+  OUT, BACK, FRONT, MIN_W, MAX_W, numbers, easeOut, easeIn, frameAt, rectOf, restPose, placement, between,
+  transformOf, fly, inside, cssString, nextTab, browserParts, pageParts, stageHook,
 } from "../../assets/js/stage.js"
 
 const close = (a, b, eps = 1e-6) => assert.ok(Math.abs(a - b) < eps, `${a} is not ${b}`)
@@ -94,20 +94,21 @@ test("a pose between two poses, and its transform", () => {
   assert.equal(transformOf({x: 1, y: 2, s: 0.5}), "translate(1px, 2px) scale(0.5)")
 })
 
-// A fake clock: frame() keeps the step, and tick() moves the time.
+// A fake clock: frame() keeps the steps, and tick() moves the time and
+// runs them.
 function clock() {
   let t = 0
-  let next = null
+  let next = []
   return {
     now: () => t,
-    frame: (f) => { next = f },
+    frame: (f) => { next.push(f) },
     tick(ms) {
       t += ms
-      const f = next
-      next = null
-      f?.()
+      const steps = next
+      next = []
+      for (const f of steps) f()
     },
-    waiting: () => next !== null,
+    waiting: () => next.length > 0,
   }
 }
 
@@ -154,54 +155,146 @@ test("the parts of the browser", () => {
   assert.equal(typeof stageHook().mounted, "function")
 })
 
+test("a flight stops when it is not alive", () => {
+  const time = clock()
+  const shown = []
+  let alive = true
+  let done = 0
+  fly({
+    from: FRONT, to: FRONT, first: 0, last: 11, count: 12, time: 100, ease: (t) => t,
+    now: time.now, frame: time.frame, show: (i) => shown.push(i), done: () => done++, alive: () => alive,
+  })
+  alive = false
+  time.tick(200)
+  assert.deepEqual(shown, [0])
+  assert.equal(done, 0)
+})
+
+test("the place of the model and of its panel on the stage", () => {
+  // A view of 100 by 50 units, and a panel of 40 by 20 units at its middle,
+  // with no slant.
+  const view = [-50, -25, 100, 50]
+  const region = [-20, -10, 20, -10, -20, 10]
+  // A wide area: the whole model fits, and the panel is large enough.
+  const wide = placement(view, region, {width: 1000, height: 800})
+  close(wide.model.width, 900)
+  close(wide.panel.width, 360)
+  close(wide.panel.height, 180)
+  assert.deepEqual(wide.panel.matrix.slice(0, 4), [1, 0, 0, 1])
+  // The middle of the panel is at the middle of the width, at 45% of the
+  // height.
+  close(wide.panel.matrix[4] + wide.panel.width / 2, 500)
+  close(wide.panel.matrix[5] + wide.panel.height / 2, 360)
+  close(wide.model.left + wide.model.width / 2, 500)
+
+  // A phone: the model comes nearer, so that the panel is large enough to
+  // read. Then the model is wider than the page.
+  const phone = placement(view, [-5, -10, 5, -10, -5, 10], {width: 390, height: 844})
+  close(phone.panel.width, MIN_W)
+  assert.ok(phone.model.width > 390)
+  // A desktop: the panel is not wider than the most.
+  const desk = placement(view, [-40, -20, 40, -20, -40, 20], {width: 2000, height: 2000})
+  close(desk.panel.width, MAX_W)
+
+  // A slant: the panel goes along the sides of the region.
+  const slant = placement(view, [0, 0, 30, 3, 1, 20], {width: 800, height: 600})
+  const [a, b, c, d] = slant.panel.matrix
+  close(Math.hypot(a, b), 1)
+  close(Math.hypot(c, d), 1)
+  close(b / a, 0.1)
+})
+
+test("a rect in a box, a text in a CSS string, and the next tab", () => {
+  const box = {left: 0, top: 0, width: 100, height: 100}
+  assert.equal(inside({left: 40, top: 40, width: 10, height: 10}, box), true)
+  assert.equal(inside({left: 140, top: 40, width: 10, height: 10}, box), false)
+  assert.equal(inside({left: 40, top: -40, width: 10, height: 10}, box), false)
+  assert.equal(cssString('i7"] { x } [a="'), 'i7\\"] { x } [a=\\"')
+  const tabs = ["use", "numbers", "place", "remove"]
+  assert.equal(nextTab(tabs, "use", "ArrowRight"), "numbers")
+  assert.equal(nextTab(tabs, "use", "ArrowLeft"), "remove")
+  assert.equal(nextTab(tabs, "remove", "ArrowRight"), "use")
+  assert.equal(nextTab(tabs, "place", "Home"), "use")
+  assert.equal(nextTab(tabs, "use", "End"), "remove")
+  assert.equal(nextTab(tabs, "use", "Enter"), null)
+})
+
+// An element with attributes, as the DOM has them.
+function element(extra = {}) {
+  const attrs = new Map()
+  return {
+    attrs,
+    style: {setProperty(name, value) { this[name] = value }},
+    toggleAttribute: (name, on) => (on ? attrs.set(name, "") : attrs.delete(name)),
+    hasAttribute: (name) => attrs.has(name),
+    ...extra,
+  }
+}
+
 // A fake page: a plan with the item, and the stage of the item.
-function page({reduce = false, plan = true, start = "-5 -10 10 20"} = {}) {
+function page({reduce = false, plan = true, onPlan = true, start = "-5 -10 10 20"} = {}) {
   const time = clock()
   const listeners = new Map()
+  const resize = new Map()
   const head = []
   const focus = []
   const doc = {
     activeElement: null,
     head: {append: (el) => head.push(el)},
+    defaultView: {
+      addEventListener: (type, f) => resize.set(type, f),
+      removeEventListener: (type, f) => resize.get(type) === f && resize.delete(type),
+    },
     addEventListener: (type, f) => listeners.set(type, f),
     removeEventListener: (type, f) => listeners.get(type) === f && listeners.delete(type),
     createElement: (tag) => ({tag, textContent: "", remove() { head.splice(head.indexOf(this), 1) }}),
-    getElementById: (id) => (plan && id === "plan-item-i7"
-      ? {querySelectorAll: () => [polygon(rect(100, 500, 6, 12))]}
-      : null),
+    getElementById(id) {
+      if (id === "plan-svg") return {getBoundingClientRect: () => rect(0, 0, 390, onPlan ? 800 : 100)}
+      if (plan && id === "plan-item-i7") return {querySelectorAll: () => [polygon(rect(100, 500, 6, 12))]}
+      return null
+    },
   }
   const before = {isConnected: true, focus: () => focus.push("before")}
   doc.activeElement = before
-  const frames = Array.from({length: 12}, () => ({hidden: true}))
-  const model = {
+  const frames = Array.from({length: 12}, (_, i) => element({frame: i}))
+  frames.forEach((f, i) => i < 11 && f.toggleAttribute("hidden", true))
+  const model = element({
     dataset: {view: "-50 -50 100 100"},
-    style: {},
     querySelectorAll: (selector) => (assert.equal(selector, ".stage-frame"), frames),
-    getBoundingClientRect: () => rect(20, 40, 300, 300),
-  }
-  const tab = {focus: (opts) => focus.push(["tab", opts])}
+    getBoundingClientRect() { return rect(Number.parseFloat(this.style.left), Number.parseFloat(this.style.top), 300, 300) },
+  })
+  const panel = element()
+  const tabs = ["use", "numbers", "place", "remove"].map((name) => {
+    const tab = {name, getAttribute: () => "tab", closest: () => tab, focus: () => focus.push(name), click: () => focus.push(`click ${name}`)}
+    return tab
+  })
   const closeLink = {getAttribute: (name) => (assert.equal(name, "href"), "/inside?room=r2")}
   let clicked = null
   const js = {patches: [], classes: []}
   const el = {
     ownerDocument: doc,
-    dataset: {item: "i7", start},
+    dataset: {item: "i7", start, region: "-20 -10 20 -10 -20 10"},
     addEventListener: (type, f) => { clicked = f },
+    getBoundingClientRect: () => rect(0, 0, 390, 844),
     querySelector(selector) {
       if (selector === ".stage-model") return model
-      if (selector === '[role="tab"][aria-selected="true"]') return tab
+      if (selector === ".stage-panel") return panel
+      if (selector === '[role="tab"][aria-selected="true"]') return tabs[0]
       if (selector === "[data-close]") return closeLink
       throw new Error(selector)
     },
-    querySelectorAll: () => [],
+    querySelectorAll: (selector) => (selector === '[role="tab"]' ? tabs : []),
     contains: () => true,
   }
-  const hook = Object.assign({el, js: () => ({patch: (href) => js.patches.push(href), addClass: (node, cls) => js.classes.push([node, cls])})},
-    stageHook(() => ({now: time.now, frame: time.frame, reduce: () => reduce})))
+  const hook = Object.assign({el, js: () => ({
+    patch: (href) => js.patches.push(href),
+    addClass: (node, cls) => js.classes.push(["+", cls]),
+    removeClass: (node, cls) => js.classes.push(["-", cls]),
+  })}, stageHook(() => ({now: time.now, frame: time.frame, reduce: () => reduce})))
   hook.mounted()
-  const press = (key) => {
+  const press = (key, target = null) => {
     let prevented = false
-    listeners.get("keydown")({key, shiftKey: false, preventDefault: () => (prevented = true)})
+    listeners.get("keydown")({key, shiftKey: false, target, preventDefault: () => (prevented = true)})
     return prevented
   }
   const click = (target) => {
@@ -214,34 +307,58 @@ function page({reduce = false, plan = true, start = "-5 -10 10 20"} = {}) {
     clicked(event)
     return event
   }
-  const visible = () => frames.findIndex((f) => !f.hidden)
-  return {hook, time, head, focus, frames, model, js, listeners, press, click, closeLink, visible, el}
+  const visible = () => frames.findIndex((f) => !f.hasAttribute("hidden"))
+  const scale = () => Number(model.style.transform.match(/scale\((.*)\)/)[1])
+  return {hook, time, head, focus, frames, model, panel, js, listeners, resize, press, click, closeLink, visible, scale, el, tabs}
 }
 
-test("the stage flies the item out of the plan, and the item of the plan does not show", () => {
+test("the stage places the model and its panel, and flies the item out of the plan", () => {
   const p = page()
-  assert.equal(p.head.length, 1)
-  assert.equal(p.head[0].textContent, "#plan-item-i7 { opacity: 0 }")
-  assert.deepEqual(p.focus, [["tab", {preventScroll: true}]])
+  assert.deepEqual(p.js.classes, [["+", "stage-placed"]])
+  // The panel: 40 by 20 units at the middle of the view. It needs 150 px
+  // of height: 7.5 px for each unit.
+  assert.equal(p.panel.style.width, "300px")
+  assert.equal(p.panel.style.height, "150px")
+  assert.equal(p.panel.style["--pw"], "300px")
+  assert.match(p.panel.style.transform, /^matrix\(1, 0, 0, 1, /)
+  assert.equal(p.model.style.width, "750px")
+  // The item on the plan does not show, with its id in a CSS string.
+  assert.equal(p.head[0].textContent, '[id="plan-item-i7"] { opacity: 0 }')
+  // The flight starts at the next frame of the page.
+  assert.equal(p.model.style.visibility, "hidden")
+  p.time.tick(0)
+  assert.equal(p.model.style.visibility, "")
   assert.equal(p.visible(), 0)
-  assert.equal(p.model.style.transformOrigin, "0 0")
-  // At the start, the first frame is on the item of the plan. The item is
-  // 6 px wide, and the start box is 10 units of 3 px.
-  close(Number(p.model.style.transform.match(/scale\((.*)\)/)[1]), 0.2)
+  // The item on the plan is 6 px wide. The first frame is 10 units wide,
+  // with 3 px for each unit: a box of 300 px for 100 units.
+  close(p.scale(), 0.2)
   p.time.tick(OUT / 2)
   assert.ok(p.visible() > 0 && p.visible() < 11)
+  // Only one frame shows: the others have the attribute hidden.
+  assert.equal(p.frames.filter((f) => !f.hasAttribute("hidden")).length, 1)
+  assert.deepEqual(p.focus, [])
   p.time.tick(OUT)
   assert.equal(p.visible(), 11)
   assert.equal(p.model.style.transform, transformOf(FRONT))
+  // The panel shows, and the key of its page takes the focus.
+  assert.deepEqual(p.js.classes.at(-1), ["+", "stage-landed"])
+  assert.deepEqual(p.focus, ["use"])
+
+  // A new size of the page places them again.
+  // A large page: the panel has its most width.
+  p.el.getBoundingClientRect = () => rect(0, 0, 2000, 2000)
+  p.resize.get("resize")()
+  assert.equal(p.panel.style.width, `${MAX_W}px`)
 })
 
 test("a close flies the item back, and then closes the stage", () => {
   const p = page()
+  p.time.tick(0)
   p.time.tick(OUT)
   const event = p.click(p.closeLink)
   assert.equal(event.prevented, true)
   assert.equal(event.stopped, true)
-  assert.deepEqual(p.js.classes, [[p.el, "stage-closing"]])
+  assert.deepEqual(p.js.classes.slice(-2), [["-", "stage-landed"], ["+", "stage-closing"]])
   assert.equal(p.visible(), 11)
   // A second close while it flies does nothing.
   assert.equal(p.press("Escape"), true)
@@ -255,17 +372,59 @@ test("a close flies the item back, and then closes the stage", () => {
   p.hook.destroyed()
   assert.equal(p.head.length, 0)
   assert.equal(p.listeners.has("keydown"), false)
+  assert.equal(p.resize.has("resize"), false)
   assert.equal(p.focus.at(-1), "before")
 })
 
-test("the Escape key closes, and the Tab key keeps the focus in the stage", () => {
+test("a close in the flight out goes back from where the model is", () => {
   const p = page()
-  assert.equal(p.press("Escape"), true)
+  p.time.tick(0)
+  p.time.tick(OUT / 4)
+  const [frame, scale] = [p.visible(), p.scale()]
+  assert.ok(frame > 0 && frame < 11)
+  p.press("Escape")
+  // No jump: the flight back starts at the same frame and the same pose.
+  assert.equal(p.visible(), frame)
+  close(p.scale(), scale)
   p.time.tick(BACK)
   assert.deepEqual(p.js.patches, ["/inside?room=r2"])
+  // The flight out stopped: it does not land after the close.
+  p.time.tick(OUT)
+  assert.equal(p.js.classes.some(([op, cls]) => op === "+" && cls === "stage-landed"), false)
+})
+
+test("a close before the flight out starts, and a stage that goes away in a flight", () => {
+  for (const options of [{}, {plan: false}]) {
+    const p = page(options)
+    p.press("Escape")
+    p.time.tick(0)
+    // The flight out does not start after the close.
+    assert.equal(p.js.classes.some(([op, cls]) => op === "+" && cls === "stage-landed"), false)
+    p.time.tick(BACK)
+    assert.deepEqual(p.js.patches, ["/inside?room=r2"])
+  }
+
+  // The stage goes away while the item flies back: no close after it.
+  const q = page()
+  q.time.tick(0)
+  q.time.tick(OUT)
+  q.press("Escape")
+  q.hook.destroyed()
+  q.time.tick(BACK)
+  assert.deepEqual(q.js.patches, [])
+})
+
+test("the arrow keys go from page to page; Escape and Tab", () => {
+  const p = page()
+  assert.equal(p.press("ArrowRight", p.tabs[0]), true)
+  assert.deepEqual(p.focus.slice(-2), ["numbers", "click numbers"])
+  p.press("End", p.tabs[0])
+  assert.deepEqual(p.focus.slice(-2), ["remove", "click remove"])
+  // A key that is not for the tabs, on a tab: no change of the page.
+  assert.equal(p.press("a", p.tabs[0]), false)
   // The Tab key: the trap of the hook Sheet (no element: no change).
   assert.equal(p.press("Tab"), false)
-  assert.equal(p.press("a"), false)
+  assert.equal(p.press("Escape", {}), true)
   // A click that is not on a close link does nothing.
   const event = p.click(null)
   assert.equal(event.prevented, false)
@@ -273,22 +432,26 @@ test("the Escape key closes, and the Tab key keeps the focus in the stage", () =
 
 test("with less motion, the item is at once in front, and a close is at once", () => {
   const p = page({reduce: true})
+  p.time.tick(0)
   assert.equal(p.visible(), 11)
   assert.equal(p.model.style.transform, transformOf(FRONT))
-  assert.equal(p.time.waiting(), false)
+  assert.deepEqual(p.js.classes.at(-1), ["+", "stage-landed"])
   p.click(p.closeLink)
   assert.deepEqual(p.js.patches, ["/inside?room=r2"])
-  assert.deepEqual(p.js.classes, [])
+  assert.equal(p.js.classes.some(([, cls]) => cls === "stage-closing"), false)
 })
 
-test("an item that is not on the plan comes from the middle, and goes back there", () => {
-  const p = page({plan: false})
-  assert.equal(p.model.style.transform, "translate(120px, 120px) scale(0.2)")
-  p.time.tick(OUT)
-  p.press("Escape")
-  p.time.tick(BACK)
-  assert.equal(p.model.style.transform, "translate(120px, 120px) scale(0.2)")
-  assert.deepEqual(p.js.patches, ["/inside?room=r2"])
+test("an item that is not on the plan, or not in its view, comes from the middle", () => {
+  for (const options of [{plan: false}, {onPlan: false}]) {
+    const p = page(options)
+    p.time.tick(0)
+    assert.equal(p.scale(), 0.2)
+    p.time.tick(OUT)
+    p.press("Escape")
+    p.time.tick(BACK)
+    assert.equal(p.scale(), 0.2)
+    assert.deepEqual(p.js.patches, ["/inside?room=r2"])
+  }
 })
 
 test("the focus does not go back to an element that went away", () => {

@@ -42,8 +42,9 @@ defmodule DIYWeb.StageLiveTest do
     fridge = item(build, "fridge")
     view = open(conn, ~p"/inside?#{[item: fridge.id]}", build)
 
-    stage = "#item-stage[phx-hook=Stage][data-item=#{fridge.id}]"
-    assert has_element?(view, stage <> "[data-start][data-anchor]")
+    # The hook is on an element of the item: a different item has a new one.
+    stage = "#item-stage #item-stage-#{fridge.id}[phx-hook=Stage][data-item=#{fridge.id}]"
+    assert has_element?(view, stage <> "[data-start][data-region]")
     assert has_element?(view, "#item-stage [role=dialog][aria-labelledby=item-stage-title]")
     assert has_element?(view, "#item-stage-title", "Fridge")
     assert has_element?(view, "#item-stage .stage-note", "In Kitchen (Floor 1)")
@@ -84,6 +85,8 @@ defmodule DIYWeb.StageLiveTest do
     assert shown?(view, "numbers")
     assert has_element?(view, "#page-use[hidden]")
     assert has_element?(view, "#page-numbers #flags-form")
+    # The page of the numbers also shows the year: its change shows at once.
+    assert has_element?(view, "#page-numbers #numbers-year", "In one year")
 
     view |> element("#key-place") |> render_click()
     assert shown?(view, "place")
@@ -111,6 +114,8 @@ defmodule DIYWeb.StageLiveTest do
     view |> element("#key-remove") |> render_click()
     assert shown?(view, "remove")
     assert has_element?(view, "#page-remove", "Remove this item from the house?")
+    # Keep it goes to the first page, and its key takes the focus.
+    assert has_element?(view, "#page-remove button[phx-click*='key-use']", "Keep it")
     view |> element("#page-remove button", "Keep it") |> render_click()
     assert shown?(view, "use")
     assert Build.item(build(view), fridge.id) == {:ok, fridge}
@@ -130,6 +135,7 @@ defmodule DIYWeb.StageLiveTest do
 
     assert has_element?(view, "#item-stage .stage-panel.panel-led")
     assert shown?(view, "link")
+    assert has_element?(view, "#page-remove button[phx-click*='key-link']", "Keep it")
     assert has_element?(view, "#page-link #home-assistant-card #ha-form")
     view |> element("#key-use") |> render_click()
     assert shown?(view, "use")

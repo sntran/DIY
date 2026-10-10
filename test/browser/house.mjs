@@ -392,9 +392,10 @@ async function build(context, name) {
   await check(page, `${name} list`)
 
   await page.keyboard.press("Enter")
-  await page.waitForSelector("#item-stage")
+  await page.waitForSelector("#item-stage .stage-landed")
   await check(page, `${name} item`)
   await page.click("#key-place")
+  await check(page, `${name} item place`)
   await page.click("#turn-item")
 
   // The stage keeps the focus, and the Escape key puts the item back. The
@@ -413,6 +414,25 @@ async function build(context, name) {
   await page.fill("#item-form input[name='item[kwh_year]']", "700")
   await page.waitForFunction(() => document.querySelector("#item-math")?.textContent.includes("700 kWh"))
   await page.click("#item-stage .stage-back")
+  await page.waitForSelector("#item-stage", { state: "detached" })
+
+  // A tap on the fridge on the plan: it comes out of the house and turns to
+  // the person. The frames of the flipbook change, and its panel shows.
+  const fridgeId = await itemId(page, "Fridge")
+  const spot = await page.locator(`#plan-item-${fridgeId}`).boundingBox()
+  await page.mouse.click(spot.x + spot.width / 2, spot.y + spot.height / 2)
+  await page.waitForSelector(`#item-stage-${fridgeId}`)
+  const shown = new Set()
+  for (let i = 0; i < 15; i++) {
+    shown.add(await page.evaluate(() =>
+      [...document.querySelectorAll(".stage-frame")].findIndex((frame) => !frame.hasAttribute("hidden"))))
+    await page.waitForTimeout(50)
+  }
+  assert.ok(shown.size > 3, `${name}: the frames change in the flight (${[...shown]})`)
+  await page.waitForSelector("#item-stage .stage-landed")
+  assert.equal(await page.evaluate(() =>
+    [...document.querySelectorAll(".stage-frame")].findIndex((frame) => !frame.hasAttribute("hidden"))), 11)
+  await page.keyboard.press("Escape")
   await page.waitForSelector("#item-stage", { state: "detached" })
 
   // The list chooses a bedroom on floor 2: floor 2 comes, and floor 1
@@ -460,6 +480,7 @@ async function build(context, name) {
     await page.$eval(`g.p-hub-label[data-item="${hub}"] .i-ha-light`, (el) => getComputedStyle(el).fill),
     "rgb(34, 197, 94)",
   )
+  await page.waitForSelector("#item-stage .stage-landed")
   await check(page, `${name} Home Assistant`)
 
   // The match of the rooms, from the sheet of the hub. The living room is in
@@ -601,6 +622,7 @@ for (const colorScheme of ["light", "dark"]) {
     await page.check("#flags-form input[name=planned][type=checkbox]")
     await page.waitForSelector('#item-stage:has-text("Solar panels")')
     await page.waitForSelector("#flags-form input[name=planned]:checked")
+    await page.waitForSelector("#item-stage .stage-landed")
     await check(page, `${name} planned item`)
     await page.click("#item-stage .stage-back")
     await page.waitForSelector("#item-stage", { state: "detached" })

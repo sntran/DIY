@@ -1506,61 +1506,87 @@ its turn. A length is in inches.
 
 A tap on an item of the plan does not open a card. The item comes out of
 the house and turns to the person, as an item that a person takes in the
-hand. Then its panel shows (`DIYWeb.Stage`, and the hook `Stage` in
+hand. Its numbers then show on the item itself: on its screen, or on a
+label on its front (`DIYWeb.Stage`, and the hook `Stage` in
 `assets/js/stage.js`).
 
 - The flipbook. The server draws the model of the item from 12 cameras.
-  The first camera is the camera of the house, so the first frame is the
-  drawing on the plan. The last camera looks at the front of the item, a
-  little from its side and from over it (a view of three quarters). So
-  the item keeps its depth. For a flat item (a Home Assistant hub), it
-  looks more from over it. The cameras between turn step by step.
-- The cost. The frames of a water heater have 128 KB, and take 37 ms on
-  the BEAM of a computer. So the app keeps the frames of each kind after
-  the first time. The LiveView keeps the frames of the open item: a
-  render, for example of a different page, does not send them again. Each frame has the center of the model at the same
-  point, so the model turns in place.
-- The flight. The hook puts the first frame on the item of the plan, at
-  the same size. In 0.9 seconds, the model moves to the top of the page
-  and grows. On its way, the hook shows the frames one after the other.
-  The item of the plan does not show while it is on the stage. A close
-  does the same in the other direction in 0.65 seconds, and then closes
-  the stage. The view of the plan can change while the item is on the
-  stage: the item goes back to its place in the new view.
-- A soft light is behind the model, so a dark item shows on the dark
-  scrim.
-- The panel. It comes out of the model after the flight. It has the style
-  of the item. A hub has an LED screen. A TV, a computer, a microwave, a
-  power station, a smart meter and a CPAP have a screen. The other items
-  have a printed label. A label is paper, so it has the same
-  colors in the light and the dark mode.
+  The first camera is the camera of the house. The last camera looks at
+  the panel of the item: at its front, or down at the top of a hub. It is
+  a little to the side and over the item, so the item keeps its depth.
+  The cameras between turn step by step. Each frame has the center of the
+  model at the same point, so the model turns in place. The first frame is
+  the model of the kind, at its own size and with no turn. So an item with
+  a turn, or with a size of its own, changes a little at the start.
+- The flight. The hook starts at the next frame of the page, after the
+  plan shows the layer of the item. It puts the first frame on the item of
+  the plan, at the same size. In 0.9 seconds, the model moves to its place
+  on the stage and grows. On its way, the hook shows the frames one after
+  the other. The item of the plan does not show while it is on the stage.
+  A close does the same in the other direction in 0.65 seconds, from where
+  the model is (also in the flight out). Then the stage closes. When the
+  item is not in the view of the plan, it comes from the middle of the
+  stage.
+- The panel is on the item (`DIYWeb.Stage.region/1`):
+  - A TV, a computer, a microwave, a power station, a smart meter and a
+    CPAP show the panel on their screen. A hub has an LED screen on its
+    top.
+  - The other items have a printed label on the front: 3/4 of the width,
+    a little over the middle of the height. A label is paper, so it has
+    the same colors in the light and the dark mode.
+  - The server gives three corners of the panel on the last frame. The
+    hook puts the panel on them with a CSS matrix, so the panel follows
+    the slant of the face.
+- The size. The panel must be large enough to read: 260 by 150 pixels at
+  least, and 440 pixels wide at most. When the whole model fits on the
+  page with such a panel, the whole model shows. Else the model comes
+  nearer, as an item in front of the eyes. Then a part of a fridge, for
+  example, is out of the page. The panel shows when the model lands, as
+  a screen that turns on.
 - The pages. The keys of the panel show its pages:
   - Use: the kWh and the money of a year, with the math;
-  - Numbers: the numbers of the item, and its flags;
+  - Numbers: the numbers of the item, and its flags, with the year at the
+    top, so a change shows at once;
   - Place: its room, its place, its size and its turn;
-  - Remove. A hub first shows Link (the card of the link to Home
-  Assistant). The remove asks on the panel: Remove the item, or Keep it.
-  A different item starts at its first page.
+  - Remove.
+
+  A hub first shows Link (the card of the link to Home Assistant). The
+  remove asks on the panel: Remove the item, or Keep it. A different item
+  starts at its first page. A panel that is too small for its page
+  scrolls.
 - The keyboard and the screen reader. The stage is a modal dialog. The
-  keys are tabs, and each page is a tab panel. The Tab key keeps the focus
-  on the stage. The Escape key, the key Put it back, or a tap next to the
-  panel puts the item back. Then the focus goes back to the item.
+  keys are tabs, and each page is a tab panel. The arrow keys, Home and
+  End go from key to key. The Tab key keeps the focus on the stage. The
+  Escape key, the key Put it back, or a tap next to the panel puts the
+  item back. Then the focus goes back to where it was, for example the
+  item in the list.
 - Less motion. With `prefers-reduced-motion`, the model is at once in
   front, and a close is at once.
+- The cost. The frames of a water heater have about 100 KB, and take 37
+  ms on the BEAM of a computer. So the app keeps the frames of each kind
+  after the first time, for each version of the code. The LiveView keeps
+  the frames of the open item: a render, for example of a different page,
+  does not send them again. The points have one decimal: a step of 0.1%
+  of the model.
 - The van. The items of a van still open in a sheet. They come to the
   stage in a later change.
 
 The tests:
 
 - `test/diy_web/components/stage_test.exs`: the frames of each kind. The
-  first frame is the drawing of the plan, and each point is in the view.
-  A property test checks that the center of the model stays at 0, 0.
+  first frame has the polygons of the plan. Each point and each corner of
+  the panel is in the view. A property test checks that the center of the
+  model stays in each frame.
 - `test/diy_web/live/stage_live_test.exs`: the stage, the pages, the
-  keys, and the remove.
+  keys, the year on the page Numbers, and the remove.
 - `test/js/stage.test.js`: the math of the rest pose (a property test with
-  fast-check), the flight with a fake clock, and the hook on a fake page.
-- The browser test opens items on the plan and in the list. It changes
-  their numbers on the page Numbers, and turns an item on the page Place.
+  fast-check) and of the place of the panel. The flight runs with a fake
+  clock, and the hook runs on a fake page. The fakes keep the attribute
+  `hidden` of each frame, as a browser does. The tests also close in the
+  flight out, and before it starts.
+- The browser test taps the fridge on the plan: the frames change in the
+  flight. It also opens items in the list, changes their numbers, and
+  turns an item on the page Place. Axe checks the stage after it lands.
 
 ## The house from the outside
 

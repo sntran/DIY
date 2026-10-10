@@ -29,13 +29,28 @@ defmodule DIYWeb.StageTest do
       assert yaws == Enum.sort(yaws)
     end
 
-    # A view of three quarters: the side shows a little, and the top of a
-    # hub shows more.
+    # The last camera looks at the panel: at the front, or down at the top
+    # of a hub. The side and the top show a little.
     assert {List.last(Stage.cameras("fridge")).yaw, List.last(Stage.cameras("fridge")).pitch} ==
-             {80.0, 15.0}
+             {84.0, 10.0}
 
     assert {List.last(Stage.cameras("home_assistant")).yaw,
-            List.last(Stage.cameras("home_assistant")).pitch} == {72.0, 42.0}
+            List.last(Stage.cameras("home_assistant")).pitch} == {88.0, 58.0}
+  end
+
+  test "the place of the panel: the screen of an item, or a label on its front" do
+    assert Stage.region("tv") == {:front, {0.015, 0.137, 0.135}, {1.09, 0.57}}
+    assert {:top, _corner, _size} = Stage.region("home_assistant")
+
+    # A label: 3/4 of the width of the front, a little over the middle of
+    # the height, in front of the model.
+    {{x0, _y0, z0}, {x1, y1, z1}} = Shapes.bounds(Shapes.model("fridge"))
+    {:front, {x, y, z}, {w, h}} = Stage.region("fridge")
+    assert_in_delta w, (x1 - x0) * 0.75, 1.0e-9
+    assert_in_delta x - x0, (x1 - x0 - w) / 2, 1.0e-9
+    assert y > y1
+    assert z > z0 and z + h < z1
+    assert h <= w * 1.3 + 1.0e-9
   end
 
   # The x and y of the points of a frame.
@@ -50,7 +65,7 @@ defmodule DIYWeb.StageTest do
 
   test "the frames of each kind: the first is the drawing of the plan, all in the view" do
     for type <- @types do
-      %{view: {vx, vy, vw, vh}, frames: frames, start: {sx, sy, sw, sh}, anchor: {ax, ay}} =
+      %{view: {vx, vy, vw, vh}, frames: frames, start: {sx, sy, sw, sh}, region: region} =
         Stage.frames(type)
 
       assert length(frames) == Stage.frame_count(), type
@@ -70,7 +85,16 @@ defmodule DIYWeb.StageTest do
       end
 
       assert sx >= vx and sy >= vy and sx + sw <= vx + vw + 1.0e-6 and sy + sh <= vy + vh + 1.0e-6
-      assert ax >= 0 and ax <= 100 and ay >= 0 and ay <= 100, type
+      # The corners of the panel are on the last frame: in the view. The
+      # top left goes to the right to the top right, and down to the bottom
+      # left.
+      {ax, ay, bx, by, cx, cy} = region
+
+      for {x, y} <- [{ax, ay}, {bx, by}, {cx, cy}] do
+        assert x >= vx - 1 and x <= vx + vw + 1 and y >= vy - 1 and y <= vy + vh + 1, type
+      end
+
+      assert bx > ax and cy > ay, type
     end
   end
 

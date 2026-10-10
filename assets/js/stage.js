@@ -67,16 +67,52 @@ export function restPose(box, view, start, rect) {
 
 export const FRONT = {x: 0, y: 0, s: 1}
 
+// The sizes of the panel on the stage, in px: the least width and height
+// to read it, and the most width.
+export const MIN_W = 260
+export const MIN_H = 150
+export const MAX_W = 440
+
+// The places of the model and of its panel on the stage (an area of the
+// page). The region is the place of the panel on the last frame. It has
+// three corners: at the top left, at the top right and at the bottom left.
+// They are in units of the view. The whole model fits in the area when the panel is
+// then large enough to read. Else the model comes nearer. The middle of
+// the panel is at the middle of the width, and at 45% of the height.
+export function placement(view, region, area) {
+  const [vx, vy, vw, vh] = view
+  const [ax, ay, bx, by, cx, cy] = region
+  const ru = Math.hypot(bx - ax, by - ay)
+  const rv = Math.hypot(cx - ax, cy - ay)
+  const fit = Math.min((area.width * 0.9) / vw, (area.height * 0.75) / vh)
+  const widest = Math.min(area.width - 24, MAX_W)
+  const k = Math.min(Math.max(fit, MIN_W / ru, MIN_H / rv), widest / ru)
+  const [mx, my] = [(bx + cx) / 2, (by + cy) / 2]
+  const left = area.width / 2 - (mx - vx) * k
+  const top = area.height * 0.45 - (my - vy) * k
+  return {
+    model: {left, top, width: vw * k, height: vh * k},
+    panel: {
+      width: ru * k,
+      height: rv * k,
+      // The panel goes along the two sides of the region.
+      matrix: [(bx - ax) / ru, (by - ay) / ru, (cx - ax) / rv, (cy - ay) / rv, left + (ax - vx) * k, top + (ay - vy) * k],
+    },
+  }
+}
+
 // A pose between two poses: a at 0, b at 1.
 export const between = (a, b, t) => ({x: a.x * (1 - t) + b.x * t, y: a.y * (1 - t) + b.y * t, s: a.s * (1 - t) + b.s * t})
 
 export const transformOf = ({x, y, s}) => `translate(${x}px, ${y}px) scale(${s})`
 
 // A flight: each step of the clock shows the frame and the pose of its
-// part of the time. It calls done at the end.
-export function fly({from, to, first, last, count, time, ease, now, frame, show, done}) {
+// part of the time. It calls done at the end. It stops when it is not
+// alive (a different flight started, or the stage went away).
+export function fly({from, to, first, last, count, time, ease, now, frame, show, done, alive = () => true}) {
   const start = now()
   const step = () => {
+    if (!alive()) return
     const t = Math.min(1, (now() - start) / time)
     const part = ease(t)
     show(frameAt(first / (count - 1) + (last - first) / (count - 1) * part, count), between(from, to, part))
@@ -84,6 +120,24 @@ export function fly({from, to, first, last, count, time, ease, now, frame, show,
     else done()
   }
   step()
+}
+
+// The center of a rect is in a box.
+export const inside = (rect, box) => {
+  const [x, y] = [rect.left + rect.width / 2, rect.top + rect.height / 2]
+  return x >= box.left && x <= box.left + box.width && y >= box.top && y <= box.top + box.height
+}
+
+// A text in a CSS string ("..."): its quotes and its backslashes have an
+// escape, so an id cannot end the selector.
+export const cssString = (text) => JSON.stringify(String(text)).slice(1, -1)
+
+// The next tab for an arrow key, Home or End, or null for a different key.
+export function nextTab(tabs, current, key) {
+  const i = tabs.indexOf(current)
+  const moves = {ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: tabs.length - 1}
+  if (!(key in moves)) return null
+  return tabs[(moves[key] + tabs.length) % tabs.length]
 }
 
 // The parts of the browser for the hook (for the tests, fakes).
@@ -103,50 +157,110 @@ export function stageHook(parts = pageParts) {
       this.parts = parts(this.el)
       this.previous = doc.activeElement
       this.model = this.el.querySelector(".stage-model")
+      this.panel = this.el.querySelector(".stage-panel")
       this.frames = [...this.model.querySelectorAll(".stage-frame")]
+      this.flight = 0
       this.closing = false
+      this.index = this.frames.length - 1
+      this.pose = FRONT
       this.onKey = (event) => this.key(event)
       this.onClick = (event) => this.click(event)
+      this.onResize = () => this.place()
       doc.addEventListener("keydown", this.onKey)
+      doc.defaultView?.addEventListener("resize", this.onResize)
       this.el.addEventListener("click", this.onClick)
+      this.js().addClass(this.el, "stage-placed")
+      this.place()
 
       // The item on the plan does not show while it is on the stage.
       this.away = doc.createElement("style")
-      this.away.textContent = `#plan-item-${this.el.dataset.item} { opacity: 0 }`
-      const group = doc.getElementById(`plan-item-${this.el.dataset.item}`)
-      this.rest = this.restPose(rectOf(group))
+      this.away.textContent = `[id="${cssString(`plan-item-${this.el.dataset.item}`)}"] { opacity: 0 }`
       doc.head.append(this.away)
 
-      this.el.querySelector('[role="tab"][aria-selected="true"]')?.focus({preventScroll: true})
-      if (this.parts.reduce()) return this.show(this.frames.length - 1, FRONT)
+      // The hook Plan shows the layer of the item after this hook mounts: so
+      // the flight starts at the next frame of the page.
+      this.model.style.visibility = "hidden"
+      this.parts.frame(() => this.start())
+    },
+
+    // The flight out, from the item on the plan to the stage.
+    start() {
+      this.model.style.visibility = ""
+      if (this.closing) return
+      this.rest = this.restPose(this.planRect())
+      const id = ++this.flight
+      // The panel shows when the model lands: then it takes the focus.
+      const landed = () => {
+        this.js().addClass(this.el, "stage-landed")
+        this.el.querySelector('[role="tab"][aria-selected="true"]')?.focus({preventScroll: true})
+      }
+      if (this.parts.reduce()) {
+        this.show(this.frames.length - 1, FRONT)
+        return landed()
+      }
       fly({
         from: this.rest, to: FRONT, first: 0, last: this.frames.length - 1, count: this.frames.length,
         time: OUT, ease: easeOut, now: this.parts.now, frame: this.parts.frame,
-        show: (i, pose) => this.show(i, pose), done: () => {},
+        show: (i, pose) => this.show(i, pose), done: landed, alive: () => id === this.flight,
       })
+    },
+
+    // The box of the item on the plan, when it shows in the plan.
+    planRect() {
+      const doc = this.el.ownerDocument
+      const rect = rectOf(doc.getElementById(`plan-item-${this.el.dataset.item}`))
+      const plan = doc.getElementById("plan-svg")?.getBoundingClientRect()
+      return rect && plan && inside(rect, plan) ? rect : null
+    },
+
+    // The model and its panel on the stage, for the size of the page.
+    place() {
+      const area = this.el.getBoundingClientRect()
+      const {model, panel} = placement(numbers(this.model.dataset.view), numbers(this.el.dataset.region), area)
+      Object.assign(this.model.style, {
+        left: `${model.left}px`, top: `${model.top}px`, width: `${model.width}px`, height: `${model.height}px`,
+      })
+      Object.assign(this.panel.style, {
+        width: `${panel.width}px`, height: `${panel.height}px`, transform: `matrix(${panel.matrix.join(", ")})`,
+      })
+      this.panel.style.setProperty("--pw", `${panel.width}px`)
     },
 
     destroyed() {
       const doc = this.el.ownerDocument
+      this.flight += 1
       doc.removeEventListener("keydown", this.onKey)
+      doc.defaultView?.removeEventListener("resize", this.onResize)
       this.away.remove()
       if (this.previous?.isConnected) this.previous.focus()
     },
 
     restPose(rect) {
+      const transform = this.model.style.transform
       this.model.style.transform = "none"
       const box = this.model.getBoundingClientRect()
+      this.model.style.transform = transform
       return restPose(box, numbers(this.model.dataset.view), numbers(this.el.dataset.start), rect)
     },
 
+    // A frame and a pose of the model. Only one frame shows: an SVG element
+    // has no hidden property, so the attribute changes.
     show(index, pose) {
-      this.frames.forEach((svg, i) => { svg.hidden = i !== index })
+      this.index = index
+      this.pose = pose
+      this.frames.forEach((svg, i) => svg.toggleAttribute("hidden", i !== index))
       this.model.style.transformOrigin = "0 0"
       this.model.style.transform = transformOf(pose)
     },
 
     key(event) {
-      if (event.key === "Escape") {
+      const tab = event.target?.closest?.('[role="tab"]')
+      const next = tab && nextTab([...this.el.querySelectorAll('[role="tab"]')], tab, event.key)
+      if (next) {
+        event.preventDefault()
+        next.focus()
+        next.click()
+      } else if (event.key === "Escape") {
         event.preventDefault()
         this.back(this.el.querySelector("[data-close]").getAttribute("href"))
       } else if (event.key === "Tab") {
@@ -163,19 +277,23 @@ export function stageHook(parts = pageParts) {
       this.back(link.getAttribute("href"))
     },
 
+    // The flight back, from where the model is now (also in the flight
+    // out), to the item on the plan. Then the close.
     back(href) {
       if (this.closing) return
       this.closing = true
+      const id = ++this.flight
       const close = () => this.js().patch(href)
       if (this.parts.reduce()) return close()
+      this.js().removeClass(this.el, "stage-landed")
       this.js().addClass(this.el, "stage-closing")
       // The plan can have a different place now (a zoom, or a move).
-      const rect = rectOf(this.el.ownerDocument.getElementById(`plan-item-${this.el.dataset.item}`))
-      const rest = rect ? this.restPose(rect) : this.rest
+      const rect = this.planRect()
+      const rest = rect ? this.restPose(rect) : (this.rest ?? this.restPose(null))
       fly({
-        from: FRONT, to: rest, first: this.frames.length - 1, last: 0, count: this.frames.length,
+        from: this.pose, to: rest, first: this.index, last: 0, count: this.frames.length,
         time: BACK, ease: easeIn, now: this.parts.now, frame: this.parts.frame,
-        show: (i, pose) => this.show(i, pose), done: close,
+        show: (i, pose) => this.show(i, pose), done: close, alive: () => id === this.flight,
       })
     },
   }
