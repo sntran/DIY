@@ -13,6 +13,7 @@
 import { readFileSync } from "node:fs"
 import { createRequire } from "node:module"
 import assert from "node:assert/strict"
+import { fakeHomeAssistant } from "./fake_ha.mjs"
 
 const require = createRequire(import.meta.url)
 const { chromium } = await import(process.env.PLAYWRIGHT ?? "playwright-core")
@@ -22,6 +23,9 @@ const site = process.argv[2] ?? "http://localhost:4002"
 
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM })
 let faults = 0
+
+// A fake Home Assistant on this computer (test/browser/fake_ha.mjs).
+const homeAssistant = await fakeHomeAssistant()
 
 // axe on the page as it is now.
 async function check(page, name) {
@@ -440,6 +444,19 @@ async function build(context, name) {
   await page.waitForSelector("text=the price that you gave")
 
   await page.waitForSelector("#device-status:has-text('Saved on this device')")
+
+  // Home Assistant: the sign-in on its page, the socket, and the
+  // disconnect. The code of the sign-in does not stay in the address.
+  await page.fill("#ha-form input[name=url]", homeAssistant.url + "/")
+  await page.click("#ha-form button")
+  await page.waitForSelector("#ha-status:has-text('Connected to Fake house (Home Assistant 2026.10.0)')")
+  assert.equal(new URL(page.url()).search, "")
+  await check(page, `${name} Home Assistant`)
+  const revoked = homeAssistant.revoked.length
+  await page.click("#ha-disconnect")
+  await page.waitForSelector("#ha-status:has-text('Not connected.')")
+  assert.equal(homeAssistant.revoked.length, revoked + 1)
+  assert.equal(homeAssistant.sessions.size, 0)
   return page
 }
 
@@ -568,6 +585,7 @@ for (const colorScheme of ["light", "dark"]) {
 }
 
 await browser.close()
+homeAssistant.close()
 if (faults > 0) {
   console.log(`${faults} faults.`)
   process.exit(1)

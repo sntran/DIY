@@ -13,7 +13,7 @@ defmodule DIYWeb.Router do
   scope "/", DIYWeb do
     pipe_through :browser
 
-    live_session :build, on_mount: DIYWeb.Device do
+    live_session :build, on_mount: [DIYWeb.Device, DIYWeb.HomeAssistant] do
       live "/", HomeLive, :front
       live "/inside", HomeLive, :inside
       live "/estimate", HomeLive, :estimate

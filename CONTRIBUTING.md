@@ -36,7 +36,9 @@ that NIF as a native library, which `beam.com` cannot load: delete
 `_build` before the first `mix.com test`.
 
 The browser test builds a house in Chromium, with axe-core on each
-screen. It needs the assets of the tests and a Chromium (`CHROMIUM`):
+screen. It signs in on a fake Home Assistant on this computer
+(`test/browser/fake_ha.mjs`). It needs the assets of the tests and a
+Chromium (`CHROMIUM`):
 
 ```sh
 MIX_ENV=test mix.com assets.build

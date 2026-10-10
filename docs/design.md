@@ -1555,3 +1555,143 @@ camera and the same look. A tap on the picture opens the plan.
   the SVG. Only the items of today in the yards and on the roof show. No
   box paints after a box in front of it. The browser test taps the
   picture and goes in.
+
+## Home Assistant
+
+Many people keep their rooms, their devices and their meters in Home
+Assistant. The app links to it, so that the person does not type them
+again. This part is the link: the sign-in and the socket. The next parts
+bring in the rooms and the devices, show their state, turn them on and
+off, and read the use of power.
+
+### The sign-in stays on the device
+
+The page links to Home Assistant directly, from the browser. The server
+of the app never sees the tokens: they stay in IndexedDB, as the build
+does (see "The build on the device"). This is the way of the web app of
+Home Assistant Cast. A Home Assistant at home is often on a home network,
+where the server of the app cannot go. The browser on that network can.
+
+The limit: this page uses HTTPS, so the browser blocks an http address
+of Home Assistant (mixed content). The person uses the HTTPS address of
+Home Assistant (for example, from Home Assistant Cloud). The page tells
+this before the sign-in, and the hook does not send the browser to an
+http address from an HTTPS page.
+
+A test on a real Home Assistant 2026.10 showed that it accepts this. Its
+token endpoint and its revoke endpoint answer to each origin (CORS), and
+its WebSocket API takes each origin.
+
+### The protocol
+
+`assets/js/home_assistant.js` (the hook `HomeAssistant`) and
+`DIYWeb.HomeAssistant` (the LiveView part, the assign `:ha`) do the
+link. The card of Settings shows it.
+
+1. The person gives the address. The LiveView checks it, and sends
+   `ha:connect`. The hook makes a random state and a PKCE pair (RFC 7636,
+   S256), and keeps them in sessionStorage of the tab. Then it sends the
+   browser to the sign-in page of Home Assistant. The client is the
+   address of the app, and the way back is `/settings`. Home Assistant
+   accepts a way back on the host of the client.
+2. Home Assistant sends the browser back with a code and the state. The
+   hook removes them from the address. It gets the tokens for the code
+   with the verifier, and writes the session in IndexedDB. The session
+   has the address, the two tokens and the end of the access token. A
+   different session in the store is revoked.
+3. The hook opens a WebSocket to `/api/websocket`, signs in with the
+   access token, and asks for the configuration. The page shows the name
+   of the home and the version of Home Assistant.
+4. An access token lasts 30 minutes. The hook gets a new one 60 seconds
+   before its end. When Home Assistant refuses an access token, the hook
+   gets a new one and tries again one time. A refused refresh token means
+   that the session ended (for example, the person removed it in Home
+   Assistant): the page asks for a new sign-in.
+5. When the socket closes, the page shows that Home Assistant does not
+   answer. The hook tries again after 1, 2, 4 seconds and so on, up to 60
+   seconds. When the device is online again, it tries at once.
+6. A disconnect clears the store and revokes the session on Home
+   Assistant (`/auth/revoke`).
+7. A write or a clear of the store tells the other tabs with a
+   BroadcastChannel. The hook of each other tab reads the store, and
+   follows it: a new socket for a new session, or no socket.
+
+The hook sends its state to the LiveView (`ha:status`): `none`,
+`signing_in`, `connecting`, `connected`, `offline` or `signed_out`, and
+an error for the last step. The LiveView takes only the states and the
+errors that it knows, and texts of a limited length.
+
+The TLA+ model `specs/HomeAssistant.tla` checks two rules with two tabs,
+three sign-ins and the answers of Home Assistant in any order. Each rule
+has a configuration with the fault, and TLC finds the fault:
+
+- **The epoch** (`HomeAssistant.noepoch.cfg`). A disconnect makes a new
+  epoch of the tab. The tokens of a sign-in that come after it are
+  revoked, and the tab keeps nothing. Without the epoch, a disconnect
+  while a sign-in finishes gives a socket after the disconnect.
+- **The compare and set** (`HomeAssistant.nocas.cfg`). A refresh writes
+  its access token only when the store still has its refresh token.
+  Without it, a refresh in flight puts back a session that a disconnect
+  of a different tab revoked.
+
+The tests:
+
+- `test/js/home_assistant.test.js`: the hook with a fake WebSocket, a
+  fake fetch and fake-indexeddb. A property test (fast-check) checks the
+  two rules with two tabs and the answers in any order. The property
+  finds each fault when the code does not have its rule.
+- `test/diy_web/home_assistant_test.exs`: the LiveView part, the card of
+  Settings, and a property test of the check of the address.
+- The browser test signs in on a fake Home Assistant
+  (`test/browser/fake_ha.mjs`). It checks the code, the way back and the
+  PKCE verifier as Home Assistant does. Then the test disconnects, and
+  checks the revoke.
+- A test by hand used Home Assistant 2026.10 with its demo. It signed in
+  on the page of Home Assistant, loaded the page again, opened a second
+  tab, and disconnected. Home Assistant then had no session of the app.
+
+## In a car
+
+The owner wants the app in a car later: Android Auto and Android
+Automotive OS. The parts of the app that a car can show follow these
+rules now, so that a car app can use them.
+
+The facts of the platform (developer.android.com, "Use the Android for
+Cars App Library", "Build IoT apps for cars", "Template restrictions",
+"Car Hardware APIs"):
+
+- A car app is a native Android app with the Android for Cars App
+  Library. It shows templates, not a web page. One app is for Android
+  Auto (on the phone), and one is for Android Automotive OS (in the car).
+- The app fits the category IoT: actions on connected devices from the
+  car, for example a garage door or the lights of the house. For IoT,
+  the library advises the `GridTemplate`.
+- A task shows 5 templates at most. A new state of a toggle on the same
+  template does not count.
+- The car app can read the energy level of the car: the battery, the
+  fuel and the range.
+
+The rules for the app:
+
+1. **A car view is data, not HTML.** A module gives the facts and the
+   actions that a car can show. The facts are the power now (the grid
+   and the sun) and the charge of the stations. A van or an electric car
+   also gives its battery and its range. The actions turn devices on or
+   off. A
+   native car app shows this data with the templates. A page of the web
+   app shows the same data, for the tests.
+2. **Short tasks.** A task has 3 steps at most: the home, a group of
+   devices, a device. Each label is short.
+3. **No text in the car.** The sign-in to Home Assistant, the plan and
+   the editor of the rooms stay on the phone. In the car, the person only
+   reads facts and does simple actions.
+4. **A confirmation for an action with a risk**, for example a garage
+   door or a lock.
+5. **The data goes to the native part.** The build and the session of
+   Home Assistant are in IndexedDB of the browser. So the Android app is
+   a shell with a WebView, not a Trusted Web Activity: a native service
+   of the shell can then read them. The session goes in the Android
+   Keystore.
+6. **Icons that a car can show.** The icons of the items are simple
+   vector shapes (`DIYWeb.Icon`). A script can make vector drawables of
+   them.

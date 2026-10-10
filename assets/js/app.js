@@ -10,6 +10,7 @@ import {sheetHook} from "./sheet.js"
 import {topHook} from "./top.js"
 import {usageHook} from "./usage.js"
 import {eflHook, eflLinksHook} from "./efl.js"
+import {homeAssistantHook, browserParts} from "./home_assistant.js"
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {
@@ -32,6 +33,8 @@ const liveSocket = new LiveSocket("/live", Socket, {
     // The EFL of a plan, read on the device (assets/js/efl.js).
     EflFile: eflHook,
     EflLinks: eflLinksHook,
+    // The sign-in to Home Assistant, on the device (assets/js/home_assistant.js).
+    HomeAssistant: homeAssistantHook(() => browserParts(window)),
   },
 })
 
