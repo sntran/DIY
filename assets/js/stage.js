@@ -226,8 +226,11 @@ export function stageHook(parts = pageParts) {
       this.panel.style.setProperty("--pw", `${panel.width}px`)
     },
 
+    // The stage is not on the page now: the flight stops, and a start that
+    // waits for a frame does not start a flight (specs/Stage.tla).
     destroyed() {
       const doc = this.el.ownerDocument
+      this.closing = true
       this.flight += 1
       doc.removeEventListener("keydown", this.onKey)
       doc.defaultView?.removeEventListener("resize", this.onResize)

@@ -1584,7 +1584,22 @@ The tests:
   fast-check) and of the place of the panel. The flight runs with a fake
   clock, and the hook runs on a fake page. The fakes keep the attribute
   `hidden` of each frame, as a browser does. The tests also close in the
-  flight out, and before it starts.
+  flight out, and before it starts. They remove the stage before the
+  flight starts, and in a flight.
+- `specs/Stage.tla` is the model of the flights. Three things occur in
+  any order: the frames of the page, a close by the person, and the
+  removal by the LiveView. The model has them with and without less
+  motion. TLC checks three rules. The close patches the page one time at
+  most. No call changes the stage after its removal. The panel shows only
+  when the model is in front. Also, a close ends with its patch, and the
+  model lands unless the stage closes first. Each fault has a configuration, and TLC finds it:
+  - a step that does not check its flight (`Stage.noalive.cfg`): the
+    flight out lands while the model flies back;
+  - a second close that does not stop (`Stage.noclosing.cfg`): two
+    patches;
+  - a removal that does not stop the start (`Stage.nogone.cfg`): the
+    start flies a stage that is not on the page. The model found this
+    fault in the hook, and the hook now has the fix.
 - The browser test taps the fridge on the plan: the frames change in the
   flight. It also opens items in the list, changes their numbers, and
   turns an item on the page Place. Axe checks the stage after it lands.

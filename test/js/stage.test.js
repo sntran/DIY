@@ -393,7 +393,7 @@ test("a close in the flight out goes back from where the model is", () => {
   assert.equal(p.js.classes.some(([op, cls]) => op === "+" && cls === "stage-landed"), false)
 })
 
-test("a close before the flight out starts, and a stage that goes away in a flight", () => {
+test("a close before the flight out starts, and a stage that goes away before or in a flight", () => {
   for (const options of [{}, {plan: false}]) {
     const p = page(options)
     p.press("Escape")
@@ -412,6 +412,18 @@ test("a close before the flight out starts, and a stage that goes away in a flig
   q.hook.destroyed()
   q.time.tick(BACK)
   assert.deepEqual(q.js.patches, [])
+
+  // The stage goes away before the first frame of the page: the flight
+  // does not start, because the stage is not on the page.
+  for (const reduce of [false, true]) {
+    const r = page({reduce})
+    r.hook.destroyed()
+    r.time.tick(0)
+    r.time.tick(OUT)
+    assert.deepEqual(r.js.classes, [["+", "stage-placed"]])
+    assert.equal(r.model.style.transform, undefined)
+    assert.equal(r.visible(), 11)
+  }
 })
 
 test("the arrow keys go from page to page; Escape and Tab", () => {
