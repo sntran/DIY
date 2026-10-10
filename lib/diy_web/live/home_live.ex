@@ -1050,6 +1050,7 @@ defmodule DIYWeb.HomeLive do
       saved={Device.saved?(assigns)}
     >
       <div id="device" phx-hook="Device" class="hidden"></div>
+      <div id="home-assistant" phx-hook="HomeAssistant" class="hidden"></div>
       <div id="top" phx-hook="Top" data-page={page_key(assigns)} class="hidden"></div>
       <noscript>
         <p class="alert alert-warning">
@@ -1141,6 +1142,7 @@ defmodule DIYWeb.HomeLive do
               price={@price}
               market={@market}
               uploads={@uploads}
+              ha={@ha}
             />
           <% true -> %>
             <DIYWeb.Front.front
