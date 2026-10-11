@@ -249,7 +249,8 @@ defmodule DIYWeb.Stage do
 
   attr :state, :string,
     default: nil,
-    doc: "the state of the device of the item in Home Assistant (`on`, `off`), for its model"
+    doc:
+      "the state of the device of the item in Home Assistant (`on`, `off` or `unavailable`), for its model"
 
   slot :screen, doc: "the LED screen of a hub: on the top of its model"
   slot :inner_block, required: true, doc: "the panel"

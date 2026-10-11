@@ -82,7 +82,10 @@ defmodule DIYWeb.HaControlLiveTest do
 
     states(view, %{"d1" => "unavailable"})
     assert has_element?(view, "#plan-svg g[data-item=#{item}][data-ha=unavailable]")
-    refute view |> element("#item-#{item}") |> render() =~ " now"
+
+    assert view |> element("#item-#{item}") |> render() =~
+             ", Home Assistant cannot reach it now"
+
     assert has_element?(view, "#ha-switch[aria-disabled=true]")
     assert has_element?(view, "#ha-power-state", "Home Assistant cannot reach it now.")
 
@@ -160,14 +163,18 @@ defmodule DIYWeb.HaControlLiveTest do
     assert has_element?(view, "#ha-device", "This is Kitchen TV in Home Assistant.")
     refute has_element?(view, "#ha-switch")
 
-    # The link closes: no switch, and no states on the plan. A state that
-    # comes then does not count.
+    # The link closes: the switch stays, so that it keeps the focus, but it
+    # has no state. The plan has no states. A state that comes then does
+    # not count, and a tap changes nothing.
     render_patch(view, ~p"/inside?#{[item: item]}")
     assert has_element?(view, "#ha-switch")
     render_click(view, "ha_switch", %{"item" => item, "on" => "false"})
     assert_push_event(view, "ha:control", %{device: "d1", on: false})
     render_hook(view, "ha:status", %{"state" => "offline", "url" => "https://ha.example.com"})
-    refute has_element?(view, "#ha-switch")
+    assert has_element?(view, "#ha-switch[aria-disabled=true][aria-checked=false]")
+    assert has_element?(view, "#ha-power-state", "The app has no link to Home Assistant now.")
+    view |> element("#ha-switch") |> render_click()
+    refute_push_event(view, "ha:control", _payload)
     refute has_element?(view, "#plan-svg [data-ha]")
     states(view, %{"d1" => "on"})
     refute has_element?(view, "#plan-svg [data-ha]")
@@ -178,6 +185,30 @@ defmodule DIYWeb.HaControlLiveTest do
     assert has_element?(view, "#ha-power-state", "The app waits for its state.")
     states(view, %{"d1" => "on"})
     assert has_element?(view, "#plan-svg g[data-item=#{item}][data-ha=on]")
+
+    # A disconnect forgets the devices: no switch then.
+    render_hook(view, "ha:status", %{"state" => "none"})
+    refute has_element?(view, "#ha-switch")
+  end
+
+  test "a new state of the device ends the error of its last control", %{conn: conn} do
+    {view, item} = page(conn)
+    states(view, %{"d1" => "off"})
+    render_click(view, "ha_switch", %{"item" => item, "on" => "true"})
+    render_hook(view, "ha:control_done", %{"device" => "d1", "error" => "failed"})
+    assert has_element?(view, "#ha-power-state", "Home Assistant did not do it.")
+
+    # The same state keeps the error. A person turns the light on in Home
+    # Assistant: the error goes.
+    states(view, %{"d1" => "off"})
+    assert has_element?(view, "#ha-power-state", "Home Assistant did not do it.")
+    states(view, %{"d1" => "on"})
+    assert has_element?(view, "#ha-power-state", "It is on.")
+    refute has_element?(view, "#ha-power-state", "did not do it")
+
+    # The word Power is the label of the switch: a tap on it is a tap on
+    # the switch.
+    assert has_element?(view, "label#ha-power-label[for=ha-switch]", "Power")
   end
 
   property "the page takes only the states that it knows" do

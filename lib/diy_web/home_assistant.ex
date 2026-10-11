@@ -137,15 +137,16 @@ defmodule DIYWeb.HomeAssistant do
   def controls?(device), do: Enum.any?(device.domains, &(&1 in @controls))
 
   @doc """
-  The switch of an item, or `nil`: for the item of a device that the app
-  turns on and off, while the link is connected. It has the device and
-  its state (`nil` before the hook tells it). It also has the control
-  that waits (`pending`: `true` for on, `false` for off), and the error
-  of the last control.
+  The switch of an item, or `nil`. It is for the item of a device that
+  the app turns on and off, while the page has the devices. It has the
+  device and its state (`nil` before the hook tells it). It also has the
+  control that waits (`pending`: `true` for on, `false` for off), and the
+  error of the last control. When the link is not connected (`online`:
+  false), the switch stays, so that it keeps the focus, but it has no
+  state.
   """
   def power(%{ha: ha, build: build, ha_devices: ha_devices} = assigns, item_id) do
-    with "connected" <- ha.state,
-         id when is_binary(id) <- build.devices[item_id],
+    with id when is_binary(id) <- build.devices[item_id],
          %{devices: devices} <- ha_devices,
          %{} = device <- Enum.find(devices, &(&1.id == id)),
          true <- controls?(device) do
@@ -156,7 +157,13 @@ defmodule DIYWeb.HomeAssistant do
           nil -> {nil, nil}
         end
 
-      %{device: id, state: assigns.ha_states[id], pending: pending, error: error}
+      %{
+        device: id,
+        online: ha.state == "connected",
+        state: assigns.ha_states[id],
+        pending: pending,
+        error: error
+      }
     else
       _ -> nil
     end
@@ -209,9 +216,19 @@ defmodule DIYWeb.HomeAssistant do
         %{assigns: %{ha: %{state: "connected"}}} = socket
       )
       when is_map(states) and map_size(states) <= @max_devices do
-    if Enum.all?(states, fn {id, state} -> text(id, @max_id) && state in @power_states end),
-      do: {:halt, assign(socket, :ha_states, states)},
-      else: {:halt, socket}
+    if Enum.all?(states, fn {id, state} -> text(id, @max_id) && state in @power_states end) do
+      # A new state of a device ends the error of its last control.
+      old = socket.assigns.ha_states
+
+      control =
+        Map.reject(socket.assigns.ha_control, fn {device, value} ->
+          match?({:error, _}, value) and states[device] != old[device]
+        end)
+
+      {:halt, assign(socket, ha_states: states, ha_control: control)}
+    else
+      {:halt, socket}
+    end
   end
 
   def handle_event("ha:states", _params, socket), do: {:halt, socket}
@@ -414,6 +431,7 @@ defmodule DIYWeb.HomeAssistant do
   def tab_message(error), do: message(error)
 
   @doc "The state of the switch of an item (`power/2`), in words."
+  def power_text(%{online: false}), do: "The app has no link to Home Assistant now."
   def power_text(%{pending: true}), do: "Home Assistant turns it on."
   def power_text(%{pending: false}), do: "Home Assistant turns it off."
 

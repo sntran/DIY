@@ -18,23 +18,28 @@
 (*                                                                         *)
 (* The rules of the hook and of the LiveView:                              *)
 (* - The socket: the hook takes the messages of its open socket only.      *)
-(* - The clear: a new watch and a closed socket clear the states of the    *)
-(* hook.                                                                   *)
+(* - The watch: the hook takes the events of its watch only.               *)
+(* - The old states: a new watch and a closed socket clear the states of   *)
+(*   the hook.                                                             *)
 (* - The end: a new watch ends the old watch (unsubscribe_events).         *)
-(* - The LiveView forgets the states and the controls when the link is     *)
-(* not connected.                                                          *)
+(* - The LiveView forgets the states and the controls when the link is not *)
+(*   connected.                                                            *)
 (*                                                                         *)
-(* Four modes have a fault:                                                *)
-(* - "noepoch": the hook takes the messages of an old socket. A late       *)
-(* state of the old socket then replaces a new state                       *)
-(* (HomeAssistantStates.noepoch.cfg).                                      *)
+(* Five modes have a fault:                                                *)
+(* - "noepoch": the hook takes the messages of an old socket. A late state *)
+(*   of the old socket then replaces a new state                           *)
+(*   (HomeAssistantStates.noepoch.cfg).                                    *)
+(* - "noid": the hook takes the events of each watch of its socket. The    *)
+(*   first states of the old watch come after the start of the new watch.  *)
+(*   Then a state that Home Assistant removes stays                        *)
+(*   (HomeAssistantStates.noid.cfg).                                       *)
 (* - "noclear": the hook keeps its states. A state that Home Assistant     *)
-(* removed while the socket was closed then stays                          *)
-(* (HomeAssistantStates.noclear.cfg).                                      *)
+(*   removed while the socket was closed then stays                        *)
+(*   (HomeAssistantStates.noclear.cfg).                                    *)
 (* - "nounsub": the hook does not end the old watch. Home Assistant then   *)
-(* keeps two watches (HomeAssistantStates.nounsub.cfg).                    *)
+(*   keeps two watches (HomeAssistantStates.nounsub.cfg).                  *)
 (* - "nolvclear": the LiveView keeps the states when the link is not       *)
-(* connected (HomeAssistantStates.nolvclear.cfg).                          *)
+(*   connected (HomeAssistantStates.nolvclear.cfg).                        *)
 (***************************************************************************)
 EXTENDS Naturals, Sequences, FiniteSets
 
@@ -241,7 +246,7 @@ Hook(s) ==
   /\ net' = [net EXCEPT ![s] = Tail(@)]
   /\ LET m == Head(net[s])
          taken == (s = sock /\ up) \/ Mode = "noepoch"
-     IN IF taken /\ m.kind \in {"a", "c"} /\ m.id = watch
+     IN IF taken /\ m.kind \in {"a", "c"} /\ (m.id = watch \/ Mode = "noid")
           THEN /\ hs' = IF m.kind = "a"
                           THEN [d \in Devices |-> IF m.st[d] \in {"skip", "none"} THEN hs[d]
                                                   ELSE m.st[d]]

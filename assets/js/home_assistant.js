@@ -33,10 +33,11 @@
 // Home Assistant (devices(), and DIY.HomeAssistant.ghosts/4).
 //
 // The hook watches the states of the lights, the switches and the fans
-// (watchStates()), and turns them on and off (control()). Three rules
-// come from the TLA+ model specs/HomeAssistantStates.tla:
+// (watchStates()), and turns them on and off (control()). Four rules come
+// from the TLA+ model specs/HomeAssistantStates.tla:
 // - The socket: the hook takes the messages of its open socket only.
-// - The clear: a new watch and a closed socket clear the states.
+// - The watch: the hook takes the events of its watch only.
+// - The old states: a new watch and a closed socket clear the states.
 // - The end: a new watch ends the old watch.
 //
 // The match of the rooms reads the floors and the areas of Home Assistant.
@@ -70,6 +71,9 @@ export const CONTROLS = ["fan", "light", "switch"]
 // The wait after a change of a state before the hook sends the states to
 // the LiveView: one message for many changes.
 export const STATE_WAIT = 150
+// The longest wait for the end of a control. After it, the control did
+// not work.
+export const CONTROL_WAIT = 10_000
 // The first and the longest wait before the hook opens the socket again.
 export const FIRST_WAIT = 1_000
 export const MAX_WAIT = 60_000
@@ -635,7 +639,9 @@ export class Link {
   // watch and starts a new one. When they do not change, the hook sends
   // the states that it has again: a new LiveView has none.
   async watchStates() {
-    const key = JSON.stringify([...this.controls])
+    // The key does not change with the order of the registry. Each device
+    // has a different id.
+    const key = JSON.stringify([...this.controls].sort(([a], [b]) => (a < b ? -1 : 1)))
     if (key === this.watched) {
       if (this.statesReady) this.sendStates()
       return
@@ -643,7 +649,8 @@ export class Link {
     this.endStates()
     this.watched = key
     const ids = [...this.controls.values()].flat().sort()
-    // With no entity, Home Assistant sends the states of all its entities.
+    // A watch with no entity gets the states of all the entities. So with
+    // no entity, the hook starts no watch.
     if (ids.length === 0) return this.push("ha:states", {states: {}})
     const {id, done} = this.subscribe("subscribe_entities", {entity_ids: ids}, (event) => this.stateEvent(event))
     this.statesOf = id
@@ -674,15 +681,21 @@ export class Link {
   }
 
   // An event of the watch: "a" adds states, "c" changes them, and "r"
-  // removes entities. A change of the attributes only has no "s".
+  // removes entities. A change of the attributes only has no "s": it
+  // sends nothing. The first event sends the states, also with no state.
   stateEvent(event) {
-    for (const [id, state] of Object.entries(event.a ?? {})) this.states.set(id, state.s)
-    for (const [id, change] of Object.entries(event.c ?? {})) {
-      if (change["+"] && "s" in change["+"]) this.states.set(id, change["+"].s)
+    let changed = !this.statesReady
+    const put = (id, state) => {
+      if (this.states.get(id) !== state) changed = true
+      this.states.set(id, state)
     }
-    for (const id of event.r ?? []) this.states.delete(id)
+    for (const [id, state] of Object.entries(event.a ?? {})) put(id, state.s)
+    for (const [id, change] of Object.entries(event.c ?? {})) {
+      if (change["+"] && "s" in change["+"]) put(id, change["+"].s)
+    }
+    for (const id of event.r ?? []) changed = this.states.delete(id) || changed
     this.statesReady = true
-    if (this.statesTimer) return
+    if (!changed || this.statesTimer) return
     this.statesTimer = this.setTimer(() => {
       this.statesTimer = null
       this.sendStates()
@@ -694,11 +707,31 @@ export class Link {
     this.push("ha:states", {states: deviceStates(this.controls, this.states)})
   }
 
+  // Sends the states that wait for the timer now.
+  flushStates() {
+    if (!this.statesTimer) return
+    this.clearTimer(this.statesTimer)
+    this.statesTimer = null
+    this.sendStates()
+  }
+
   // Turns the entities of a device on or off (call_service), for the
   // switch of its item. It tells the end to the LiveView
-  // (ha:control_done): with no error, or with "offline" or "failed". The
-  // new state comes with the watch of the states.
+  // (ha:control_done): with no error, or with "offline" or "failed". With
+  // no end after CONTROL_WAIT, the control failed. The new state comes
+  // with the watch of the states, and Home Assistant sends it before the
+  // end. So the hook sends the states before the end. Then the LiveView
+  // never shows the old state after the end.
   async control(device, on) {
+    let ended = false
+    const end = (error) => {
+      if (ended) return
+      ended = true
+      this.clearTimer(timer)
+      this.flushStates()
+      this.push("ha:control_done", {device, error})
+    }
+    const timer = this.setTimer(() => end("failed"), CONTROL_WAIT)
     try {
       const ids = this.controls.get(device)
       if (!ids) throw new CommandError("unknown", "The app does not turn this device on or off")
@@ -706,9 +739,9 @@ export class Link {
       for (const id of ids) domains.set(domainOf(id), [...(domains.get(domainOf(id)) ?? []), id])
       await Promise.all([...domains].map(([domain, entityIds]) =>
         this.command("call_service", {domain, service: on ? "turn_on" : "turn_off", target: {entity_id: entityIds}})))
-      this.push("ha:control_done", {device, error: null})
+      end(null)
     } catch (error) {
-      this.push("ha:control_done", {device, error: error.code === "offline" ? "offline" : "failed"})
+      end(error.code === "offline" ? "offline" : "failed")
     }
   }
 
@@ -872,7 +905,9 @@ export class SignIn {
 export function homeAssistantHook(deps) {
   return {
     mounted() {
-      this.link = new Link({...deps(), push: (event, payload) => this.pushEvent(event, payload)})
+      // A push while LiveView connects again fails: the hook does not wait
+      // for its reply (the third argument).
+      this.link = new Link({...deps(), push: (event, payload) => this.pushEvent(event, payload, () => {})})
       this.handleEvent("ha:disconnect", () => this.link.disconnect())
       this.handleEvent("ha:rooms_fetch", () => this.link.rooms())
       this.handleEvent("ha:devices_fetch", () => this.link.devices())
@@ -892,7 +927,7 @@ export function signInHook(deps) {
   let signIn = null
   return {
     mounted() {
-      const push = (event, payload) => this.pushEvent(event, payload)
+      const push = (event, payload) => this.pushEvent(event, payload, () => {})
       if (signIn) {
         signIn.push = push
         return signIn.report()

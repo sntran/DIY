@@ -10,7 +10,7 @@ import {
   DB, STORE, KEY, GENERATION, CHANNEL, PENDING, SIGN_IN, TAB, TAB_CHECK, EARLY, FIRST_WAIT, MAX_WAIT,
   address, blocked, socketUrl, clientOf, signInPage, signInId, randomText, pkce, authorizeUrl,
   open, sessionStore, Link, SignIn, homeAssistantHook, signInHook, browserParts, signInParts, key, CommandError,
-  deviceList, REGISTRY_WAIT, controlList, deviceStates, CONTROLS, STATE_WAIT,
+  deviceList, REGISTRY_WAIT, controlList, deviceStates, CONTROLS, STATE_WAIT, CONTROL_WAIT,
 } from "../../assets/js/home_assistant.js"
 
 const HA = "http://ha.test:8123"
@@ -954,7 +954,11 @@ test("the hook of LiveView", async () => {
   const hook = homeAssistantHook(() => page.deps)
   const self = {
     ...hook,
-    pushEvent: (event, payload) => page.pushes.push(["hook:" + event, payload]),
+    // LiveView calls the third argument with the reply of a push.
+    pushEvent: (event, payload, reply) => {
+      page.pushes.push(["hook:" + event, payload])
+      reply({})
+    },
     handleEvent: (event, f) => { handlers[event] = f },
   }
   self.mounted()
@@ -986,7 +990,10 @@ test("the hook of the sign-in page starts the sign-in one time", async () => {
   const page = parts({pathname: SIGN_IN, search: "?" + new URLSearchParams({url: HA, id: "s1"})})
   let made = 0
   const hook = signInHook(() => { made += 1; return page.deps })
-  const self = {...hook, pushEvent: (event, payload) => page.pushes.push(["first:" + event, payload])}
+  const self = {...hook, pushEvent: (event, payload, reply) => {
+    page.pushes.push(["first:" + event, payload])
+    reply({})
+  }}
   self.mounted()
   await until(() => page.went.length > 0)
   assert.equal(page.went.length, 1)
@@ -1836,9 +1843,11 @@ test("the hook watches the states of the lights, the switches and the fans", asy
   tick(page)
   assert.deepEqual(lastStates(page), {lamp: "off", plug: "off", fan: "on"})
 
-  // A change of the attributes only, and an entity that goes and comes
-  // back.
+  // A change of the attributes only sends nothing, and a state that does
+  // not change neither. An entity that goes and comes back.
   socket.receive({id: watch.id, type: "event", event: {c: {"light.lamp": {"+": {a: {brightness: 3}}}}}})
+  ha.set("light.lamp", "off")
+  assert.equal(page.timers.size, 0)
   socket.receive({id: watch.id, type: "event", event: {r: ["switch.plug"]}})
   tick(page)
   assert.deepEqual(lastStates(page), {lamp: "off", plug: "unavailable", fan: "on"})
@@ -1847,7 +1856,10 @@ test("the hook watches the states of the lights, the switches and the fans", asy
   assert.deepEqual(lastStates(page), {lamp: "off", plug: "on", fan: "on"})
 
   // A new read with the same entities: no new watch, and the states again
-  // at once (a new LiveView has none).
+  // at once (a new LiveView has none). The order of the registry does not
+  // count.
+  ha.entities.reverse()
+  ha.devices.reverse()
   const count = page.pushes.length
   const again = link.devices()
   await serve(ha, [socket])
@@ -1879,6 +1891,51 @@ test("the hook watches the states of the lights, the switches and the fans", asy
   assert.equal(link.statesTimer, null)
   assert.equal(link.statesOf, null)
   link.stop()
+})
+
+test("a new watch starts with no states, and a second read waits for the first states", async () => {
+  const page = parts()
+  const {link, socket} = await connected(page)
+  const ha = home()
+  const read = async () => {
+    const done = link.devices()
+    await serve(ha, [socket])
+    await done
+  }
+  await read()
+  tick(page)
+  assert.equal(lastStates(page).lamp, "on")
+
+  // Home Assistant removes the state of the lamp while the hook starts a
+  // new watch (a new light). The new watch has no state of the lamp: the
+  // lamp is not on.
+  delete ha.states["light.lamp"]
+  ha.devices.push(haDevice("hall", {area_id: "living"}))
+  ha.entities.push(haEntity("light.hall", "hall"))
+  await read()
+  tick(page)
+  assert.equal(lastStates(page).lamp, "unavailable")
+
+  // The end of a watch clears its states and its wait.
+  ha.set("fan.fan", "on")
+  assert.equal(page.timers.size, 1)
+  link.endStates()
+  assert.deepEqual([link.states.size, link.statesReady, link.statesTimer, page.timers.size], [0, false, null, 0])
+  link.stop()
+
+  // Two reads at once, with the same entities: the second read sends no
+  // states before the first states of the watch.
+  const other = parts()
+  const second = await connected(other)
+  const fresh = home()
+  const first = second.link.devices()
+  const again = second.link.devices()
+  await serve(fresh, [second.socket])
+  await Promise.all([first, again])
+  tick(other)
+  const sent = other.pushes.filter(([event]) => event === "ha:states")
+  assert.deepEqual(sent, [["ha:states", {states: {lamp: "on", plug: "off", fan: "unavailable"}}]])
+  second.link.stop()
 })
 
 test("a watch of the states that Home Assistant refuses, and a Home Assistant with no light", async () => {
@@ -1935,9 +1992,13 @@ test("the switch of an item turns its device on and off", async () => {
   await serve(ha, [socket])
   await done
   assert.deepEqual(ha.calls, [{domain: "light", service: "turn_off", ids: ["light.lamp"]}])
-  assert.deepEqual(page.pushes.at(-1), ["ha:control_done", {device: "lamp", error: null}])
-  tick(page)
-  assert.equal(lastStates(page).lamp, "off")
+  // The new state comes before the end, with no wait: the LiveView never
+  // shows the old state after the end.
+  assert.deepEqual(page.pushes.slice(-2), [
+    ["ha:states", {states: {lamp: "off", combo: "unavailable"}}],
+    ["ha:control_done", {device: "lamp", error: null}],
+  ])
+  assert.equal(page.timers.size, 0)
 
   ha.calls = []
   const both = link.control("combo", true)
@@ -1958,6 +2019,18 @@ test("the switch of an item turns its device on and off", async () => {
   await serve(ha, [socket])
   await refused
   assert.deepEqual(page.pushes.at(-1), ["ha:control_done", {device: "lamp", error: "failed"}])
+
+  // Home Assistant does not answer: after a wait, the control failed. A
+  // late answer then changes nothing.
+  ha.fail = () => null
+  const late = link.control("lamp", false)
+  const [timer] = [...page.timers.values()].filter((one) => one.ms === CONTROL_WAIT)
+  timer.f()
+  assert.deepEqual(page.pushes.at(-1), ["ha:control_done", {device: "lamp", error: "failed"}])
+  const count = page.pushes.filter(([event]) => event === "ha:control_done").length
+  await serve(ha, [socket])
+  await late
+  assert.equal(page.pushes.filter(([event]) => event === "ha:control_done").length, count)
 
   // The socket closes while the call waits: offline.
   const waiting = link.control("lamp", true)

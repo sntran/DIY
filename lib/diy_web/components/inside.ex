@@ -393,7 +393,10 @@ defmodule DIYWeb.Inside do
   attr :away, :list, default: []
   attr :chosen, :string, default: nil, doc: "the chosen room: it stays when an item opens"
   attr :ghosts, :list, default: [], doc: "the ghosts of the devices of Home Assistant"
-  attr :states, :map, default: %{}, doc: "the state of each item of a device (`on` or `off`)"
+
+  attr :states, :map,
+    default: %{},
+    doc: "the state of each item of a device (`on`, `off` or `unavailable`)"
 
   # The rooms and their items, as a list: for a screen reader, and for a
   # keyboard (it shows when it has the focus). The arrow keys move an item
@@ -563,7 +566,8 @@ defmodule DIYWeb.Inside do
   # The state of the device of an item, in the list of the rooms.
   defp state_note("on"), do: ", on now"
   defp state_note("off"), do: ", off now"
-  defp state_note(_state), do: ""
+  defp state_note("unavailable"), do: ", Home Assistant cannot reach it now"
+  defp state_note(nil), do: ""
 
   attr :room, :map, required: true
 
@@ -893,8 +897,8 @@ defmodule DIYWeb.Inside do
       >
         <h3 id="part-link-title" class="stage-sec-title">Home Assistant</h3>
         <p id="ha-device" class="text-sm">{device_text(@device)}</p>
-        <div :if={@power} id="ha-power" class="stage-switch-row">
-          <span id="ha-power-label">Power</span>
+        <div :if={@power} id="ha-power" class="stage-switch-row stage-row-plain">
+          <label for="ha-switch" id="ha-power-label">Power</label>
           <%!-- aria-disabled, not disabled: the switch keeps the focus while
             a control waits. --%>
           <button
