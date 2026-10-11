@@ -2,25 +2,28 @@
 // to Home Assistant (docs/design.md, "Home Assistant", and the TLA+ model
 // specs/HomeAssistant.tla).
 //
-// - The person gives the address of Home Assistant. The hook sends the
-//   browser to the sign-in page of Home Assistant, with a random state and
-//   a PKCE challenge. The state and the verifier stay in sessionStorage of
-//   the tab.
-// - Home Assistant sends the browser back with a code, to the page of the
-//   sign-in: Settings, or the sheet of a hub. The hook gets the tokens for
-//   the code, and keeps them in IndexedDB, for all the tabs. The server of
-//   the app never sees them.
-// - The hook opens a WebSocket to Home Assistant with the access token.
-//   When a socket signs in, the hook first gets a new access token if the
-//   old one ends in 60 seconds or less. A socket that signed in stays open
-//   after the end of its access token.
+// - The person gives the address of Home Assistant, on the screen of a hub
+//   or in Settings. The key Connect opens the sign-in page of the app
+//   (SIGN_IN) in a new tab. The tab opens in the tap: a browser blocks a
+//   tab that a page opens later.
+// - The new tab (SignIn) makes a random state and a PKCE challenge, and
+//   keeps them in its sessionStorage. It goes to the sign-in page of Home
+//   Assistant. Home Assistant sends it back with a code. The new tab gets
+//   the tokens for the code, and keeps them in IndexedDB, for all the tabs.
+//   The server of the app never sees them. Then the new tab tells its end
+//   to the first tab, and closes.
+// - The hook of each page (Link) reads the store, and opens a WebSocket to
+//   Home Assistant with the access token. When a socket signs in, the hook
+//   first gets a new access token if the old one ends in 60 seconds or
+//   less. A socket that signed in stays open after the end of its access
+//   token.
 // - A disconnect clears the store, and revokes the session on Home
 //   Assistant. A BroadcastChannel tells the other tabs to read the store.
 //
 // Three rules come from the model:
-// - The epoch: a disconnect makes a new epoch of the tab. An answer of an
-//   old epoch keeps nothing. An exchange of an old epoch revokes its new
-//   session.
+// - The generation: a disconnect adds one to the generation in the store.
+//   A sign-in keeps its session only when the generation is the same as at
+//   its start. Else it revokes its new session.
 // - The compare and set: a refresh writes its access token only when the
 //   store still has the same refresh token.
 // - The owner: a refused refresh ends only the socket of its own session.
@@ -36,11 +39,15 @@
 export const DB = "diy-ha"
 export const STORE = "session"
 export const KEY = "session"
+export const GENERATION = "generation"
 export const CHANNEL = "diy.ha"
 export const PENDING = "diy.ha.pending"
-// The page of the app where Home Assistant sends the browser back, when
-// the LiveView gives no page.
-export const BACK = "/settings"
+// The sign-in page of the app (DIYWeb.SignInLive), and the name of its tab.
+// Home Assistant sends the tab back to this page.
+export const SIGN_IN = "/ha/sign-in"
+export const TAB = "diy-ha-sign-in"
+// The time between two checks of the tab of a sign-in.
+export const TAB_CHECK = 1_000
 // A socket that signs in gets a new access token when the old one ends in
 // 60 seconds or less.
 export const EARLY = 60_000
@@ -88,10 +95,12 @@ const offline = () => new CommandError("offline", "Home Assistant does not answe
 // The client of the app for Home Assistant: the address of the app.
 export const clientOf = (location) => location.origin + "/"
 
-// The way back: Settings, or the sheet of an item. It is the same rule as
-// in DIYWeb.HomeAssistant. Else BACK.
-export const wayBack = (back) =>
-  typeof back === "string" && /^\/(settings|inside\?item=[A-Za-z0-9_-]{1,40})$/.test(back) ? back : BACK
+// The sign-in page of the app in a new tab, with the address of Home
+// Assistant and the id of the sign-in.
+export const signInPage = (url, id) => SIGN_IN + "?" + new URLSearchParams({url, id})
+
+// The id of a sign-in in a text, or null.
+export const signInId = (text) => typeof text === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(text) ? text : null
 
 const base64url = (bytes) =>
   btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")
@@ -107,17 +116,25 @@ export async function pkce(crypto) {
 }
 
 // The sign-in page of Home Assistant for this app. Home Assistant accepts a
-// way back on the host of the client.
-export function authorizeUrl(url, {client, state, challenge, back = BACK}) {
+// way back on the host of the client: the sign-in page of the app.
+export function authorizeUrl(url, {client, state, challenge}) {
   const query = new URLSearchParams({
     response_type: "code",
     client_id: client,
-    redirect_uri: client.replace(/\/$/, "") + back,
+    redirect_uri: client.replace(/\/$/, "") + SIGN_IN,
     state,
     code_challenge: challenge,
     code_challenge_method: "S256",
   })
   return `${url}/auth/authorize?${query}`
+}
+
+const post = (fetch, url, path, fields) =>
+  fetch(url + path, {method: "POST", body: new URLSearchParams(fields)})
+
+// Ends a session on Home Assistant. The hook does not wait for it.
+const revoke = (fetch, session) => {
+  post(fetch, session.url, "/auth/revoke", {token: session.refresh}).catch(() => {})
 }
 
 // Opens the database of the sign-in.
@@ -130,10 +147,10 @@ export function open(factory) {
   })
 }
 
-// The store of the session in IndexedDB. Each operation is one
-// transaction. notify() runs in the transaction of a write or a clear.
-// The store opens the database again when the browser closed it (the
-// person removed the data of the site).
+// The store of the session in IndexedDB, with the generation: the count of
+// the disconnects. Each operation is one transaction. notify() runs in the
+// transaction of a write or a clear. The store opens the database again
+// when the browser closed it (the person removed the data of the site).
 export function sessionStore(factory, notify) {
   let connection = null
 
@@ -152,24 +169,31 @@ export function sessionStore(factory, notify) {
     return connection
   }
 
-  // Reads the session, and gives it to change(store, session) in the same
-  // transaction. The result of change is the result of the operation.
+  // Reads the session and the generation, and gives them to
+  // change(store, session, generation) in the same transaction. The result
+  // of change is the result of the operation.
   const run = (mode, change) => connect().then((db) => new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, mode)
     const store = tx.objectStore(STORE)
+    let session = null
     let result = null
-    store.get(KEY).onsuccess = (event) => { result = change(store, event.target.result ?? null) }
+    store.get(KEY).onsuccess = (event) => { session = event.target.result ?? null }
+    store.get(GENERATION).onsuccess = (event) => { result = change(store, session, event.target.result ?? 0) }
     tx.oncomplete = () => resolve(result)
     tx.onabort = () => reject(tx.error)
   }))
 
   return {
     read: () => run("readonly", (_store, session) => session),
-    // Writes a new session, and gives the old one.
-    write: (session) => run("readwrite", (store, old) => {
+    generation: () => run("readonly", (_store, _session, generation) => generation),
+    // Writes the session of a sign-in that started in this generation, and
+    // gives {kept: true, old}. After a disconnect (a different generation),
+    // it writes nothing, and gives {kept: false}.
+    write: (session, generation) => run("readwrite", (store, old, now) => {
+      if (generation !== now) return {kept: false, old: null}
       store.put(session, KEY)
       notify()
-      return old
+      return {kept: true, old}
     }),
     // Writes new fields of the session with this refresh token. False when
     // the store has a different session (the compare and set).
@@ -178,10 +202,19 @@ export function sessionStore(factory, notify) {
       store.put({...session, ...fields}, KEY)
       return true
     }),
-    // Clears the session (only the one with this refresh token, if given),
+    // Clears the session with this refresh token (Home Assistant ended it),
     // and gives it.
     clear: (refresh) => run("readwrite", (store, session) => {
-      if (!session || (refresh !== undefined && session.refresh !== refresh)) return null
+      if (!session || session.refresh !== refresh) return null
+      store.delete(KEY)
+      notify()
+      return session
+    }),
+    // The disconnect: a new generation, and no session. It gives the old
+    // session.
+    disconnect: () => run("readwrite", (store, session, generation) => {
+      store.put(generation + 1, GENERATION)
+      if (!session) return null
       store.delete(KEY)
       notify()
       return session
@@ -200,6 +233,8 @@ export class Link {
     this.session = null
     this.socket = null
     this.retry = null
+    this.tab = null
+    this.watcher = null
     this.commands = new Map()
     this.next = CONFIG + 1
     this.wait = FIRST_WAIT
@@ -215,21 +250,27 @@ export class Link {
 
   report() { this.push("ha:status", this.state) }
 
-  // The start of the page: a sign-in that comes back, or the stored
-  // session.
+  // The start of the page: the stored session.
   start() {
-    this.unlisten = this.listen(() => this.load(this.epoch), () => this.again())
-    const params = new URLSearchParams(this.location.search)
-    return params.has("state") ? this.finish(params) : this.load(this.epoch)
+    this.unlisten = this.listen((message) => this.news(message), () => this.again(), (text) => this.connect(text))
+    return this.load(this.epoch)
   }
 
   // The hook goes away (LiveView mounts the page again): no more news, no
-  // more tries, and no socket.
+  // more tries, and no socket. The tab of a sign-in stays open: its session
+  // comes to the new hook.
   stop() {
     this.epoch += 1
+    this.forget()
     this.close()
     this.session = null
     this.unlisten()
+  }
+
+  // A message of a different tab: the store changed, or a sign-in ended.
+  news(message) {
+    if (message?.ended !== undefined) return this.ended(message)
+    return this.load(this.epoch)
   }
 
   // Reads the store, and uses its session (the news of a different tab).
@@ -244,98 +285,67 @@ export class Link {
     if (this.socket && session?.refresh === this.session?.refresh) return
     this.close()
     this.session = session
-    if (!session) return this.show("none", {error})
+    // With no session, the tab of a sign-in can still give one.
+    if (!session) return this.tab ? this.show("signing_in", {url: this.tab.url}) : this.show("none", {error})
     this.open(epoch)
   }
 
-  // The person asks to connect: the browser goes to the sign-in page, and
-  // then comes back to `back`.
-  async connect(text, back) {
+  // The person asks to connect: the sign-in page of the app opens in a new
+  // tab. The field keeps a bad address, so the person can correct it.
+  connect(text) {
     const url = address(text)
-    if (!url) return this.show("none", {error: "url", url: null})
+    if (!url) return this.show("none", {error: "url", url: typeof text === "string" ? text : null})
     if (blocked(this.location.protocol, url)) return this.show("none", {error: "blocked", url})
-    const {verifier, challenge} = await pkce(this.crypto)
-    const state = randomText(this.crypto)
-    this.storage.setItem(PENDING, JSON.stringify({url, state, verifier}))
+    const id = randomText(this.crypto)
+    const tab = this.openTab(signInPage(url, id))
+    if (!tab) return this.show("none", {error: "tab", url})
+    this.forget()
+    this.tab = {window: tab, id, url}
     this.show("signing_in", {url})
-    this.location.assign(authorizeUrl(url, {
-      client: clientOf(this.location), state, challenge, back: wayBack(back),
-    }))
+    this.watch()
   }
 
-  // The sign-in page sent the browser back: get the tokens for the code.
-  async finish(params) {
-    const epoch = this.epoch
-    let pending = null
-    try {
-      pending = JSON.parse(this.storage.getItem(PENDING))
-    } catch {
-      pending = null
-    }
-    this.storage.removeItem(PENDING)
-    // Remove the answer of the sign-in from the address, and keep the rest
-    // (for example, the item of a sheet). Keep the state of LiveView in the
-    // history: Back needs it.
-    const rest = new URLSearchParams(this.location.search)
-    // Home Assistant adds storeToken when the person asks it to keep the
-    // sign-in.
-    for (const key of ["code", "state", "error", "storeToken"]) rest.delete(key)
-    const query = rest.toString()
-    this.history.replaceState(this.history.state, "", this.location.pathname + (query ? "?" + query : ""))
-    if (!pending || pending.state !== params.get("state")) return this.load(epoch, "state")
-    const code = params.get("code")
-    if (!code) return this.load(epoch, "denied")
-
-    const {url} = pending
-    const client = clientOf(this.location)
-    this.show("signing_in", {url})
-    let answer
-    try {
-      answer = await this.post(url, "/auth/token", {
-        grant_type: "authorization_code", code, client_id: client, code_verifier: pending.verifier,
-      })
-    } catch {
-      return this.show("none", {url, error: "unreachable"})
-    }
-    let tokens
-    try {
-      if (!answer.ok) throw new Error(`HTTP ${answer.status}`)
-      tokens = await answer.json()
-    } catch {
-      return this.show("none", {url, error: "token"})
-    }
-    const session = {
-      url, client, access: tokens.access_token, refresh: tokens.refresh_token,
-      expires: this.now() + tokens.expires_in * 1000,
-    }
-    if (epoch !== this.epoch) return this.revoke(session)
-    let old
-    try {
-      old = await this.store.write(session)
-    } catch {
-      this.revoke(session)
-      return this.show("none", {url, error: "storage"})
-    }
-    if (old && old.refresh !== session.refresh) this.revoke(old)
-    if (epoch !== this.epoch) return
-    this.close()
-    this.session = session
-    this.open(epoch)
+  // Checks the tab of the sign-in. When it closed with no end, the page
+  // reads the store: the sign-in can be done.
+  watch() {
+    this.watcher = this.setTimer(() => {
+      this.watcher = null
+      if (!this.tab.window.closed) return this.watch()
+      this.tab = null
+      this.load(this.epoch, "closed")
+    }, TAB_CHECK)
   }
 
-  // The person asks to disconnect.
+  // The tab of a sign-in tells its end: an error, or null. Only the tab
+  // that opened it waits for it.
+  ended({ended, error}) {
+    if (ended !== this.tab?.id) return
+    this.forget()
+    return this.load(this.epoch, error ?? null)
+  }
+
+  forget() {
+    if (this.watcher) this.clearTimer(this.watcher)
+    this.watcher = null
+    this.tab = null
+  }
+
+  // The person asks to disconnect, or to stop a sign-in. A sign-in in a
+  // different tab that started before it keeps nothing (the generation).
   async disconnect() {
     this.epoch += 1
     const epoch = this.epoch
+    this.tab?.window.close()
+    this.forget()
     this.close()
     this.session = null
     let old = null
     try {
-      old = await this.store.clear()
+      old = await this.store.disconnect()
     } catch {
       old = null
     }
-    if (old) this.revoke(old)
+    if (old) revoke(this.fetch, old)
     if (epoch === this.epoch) this.show("none")
   }
 
@@ -439,7 +449,7 @@ export class Link {
     const session = this.session
     let answer
     try {
-      answer = await this.post(session.url, "/auth/token", {
+      answer = await post(this.fetch, session.url, "/auth/token", {
         grant_type: "refresh_token", refresh_token: session.refresh, client_id: session.client,
       })
     } catch {
@@ -484,14 +494,6 @@ export class Link {
     this.session = null
     this.show("signed_out", {url: session.url, error: "signed_out"})
     return null
-  }
-
-  revoke(session) {
-    this.post(session.url, "/auth/revoke", {token: session.refresh}).catch(() => {})
-  }
-
-  post(url, path, fields) {
-    return this.fetch(url + path, {method: "POST", body: new URLSearchParams(fields)})
   }
 
   // Sends the floors and the areas of Home Assistant to the LiveView
@@ -559,15 +561,121 @@ export class Link {
   }
 }
 
-// The hook of LiveView. deps() gives the parts of the browser: store,
-// listen, fetch, WebSocket, location and history. It also gives storage
-// (sessionStorage), crypto, now, setTimer and clearTimer.
-// listen(onNews, onOnline) gives a function that stops the two listeners.
+// The sign-in page of the app, in its own tab (DIYWeb.SignInLive). It
+// sends its state to the LiveView with push("ha:status", state): loading,
+// signing_in, done, or none with an error. The first tab gets the end with
+// tell({ended: id, error}).
+export class SignIn {
+  constructor(deps) {
+    Object.assign(this, deps)
+    this.state = {state: "loading", url: null, name: null, version: null, error: null}
+  }
+
+  show(state, {url = null, error = null} = {}) {
+    this.state = {state, url, name: null, version: null, error}
+    this.report()
+  }
+
+  report() { this.push("ha:status", this.state) }
+
+  // The tab opens with the address, or comes back from Home Assistant with
+  // the state of the sign-in.
+  start() {
+    const params = new URLSearchParams(this.location.search)
+    return params.has("state") ? this.finish(params) : this.begin(params)
+  }
+
+  // Goes to the sign-in page of Home Assistant. The page keeps the
+  // generation of the store: a disconnect after this start ends the
+  // sign-in.
+  async begin(params) {
+    const id = signInId(params.get("id"))
+    const url = address(params.get("url"))
+    if (!url) return this.end(id, null, "url")
+    if (blocked(this.location.protocol, url)) return this.end(id, url, "blocked")
+    let generation
+    try {
+      generation = await this.store.generation()
+    } catch {
+      return this.end(id, url, "storage")
+    }
+    const {verifier, challenge} = await pkce(this.crypto)
+    const state = randomText(this.crypto)
+    this.storage.setItem(PENDING, JSON.stringify({url, state, verifier, generation, id}))
+    this.show("signing_in", {url})
+    this.location.replace(authorizeUrl(url, {client: clientOf(this.location), state, challenge}))
+  }
+
+  // Home Assistant sent the tab back: get the tokens for the code, and keep
+  // them.
+  async finish(params) {
+    let pending = null
+    try {
+      pending = JSON.parse(this.storage.getItem(PENDING))
+    } catch {
+      pending = null
+    }
+    this.storage.removeItem(PENDING)
+    // The code and the state go away from the address.
+    this.history.replaceState(null, "", SIGN_IN)
+    if (pending?.state !== params.get("state")) return this.end(null, null, "state")
+    const {url, id} = pending
+    const code = params.get("code")
+    if (!code) return this.end(id, url, "denied")
+
+    const client = clientOf(this.location)
+    this.show("signing_in", {url})
+    let answer
+    try {
+      answer = await post(this.fetch, url, "/auth/token", {
+        grant_type: "authorization_code", code, client_id: client, code_verifier: pending.verifier,
+      })
+    } catch {
+      return this.end(id, url, "unreachable")
+    }
+    let tokens
+    try {
+      if (!answer.ok) throw new Error(`HTTP ${answer.status}`)
+      tokens = await answer.json()
+    } catch {
+      return this.end(id, url, "token")
+    }
+    const session = {
+      url, client, access: tokens.access_token, refresh: tokens.refresh_token,
+      expires: this.now() + tokens.expires_in * 1000,
+    }
+    let written
+    try {
+      written = await this.store.write(session, pending.generation)
+    } catch {
+      revoke(this.fetch, session)
+      return this.end(id, url, "storage")
+    }
+    if (!written.kept) {
+      revoke(this.fetch, session)
+      return this.end(id, url, "cancelled")
+    }
+    // A different session in the store: the new sign-in replaces it.
+    if (written.old && written.old.refresh !== session.refresh) revoke(this.fetch, written.old)
+    this.end(id, url, null)
+  }
+
+  // The end of the sign-in: the page shows it, and the first tab gets it.
+  // After a sign-in that worked, the tab closes.
+  end(id, url, error) {
+    if (id) this.tell({ended: id, error})
+    this.show(error ? "none" : "done", {url, error})
+    if (!error) this.closeTab()
+  }
+}
+
+// The hook of LiveView. deps() gives the parts of the browser
+// (browserParts). listen(onNews, onOnline, onConnect) gives a function that
+// stops the three listeners.
 export function homeAssistantHook(deps) {
   return {
     mounted() {
       this.link = new Link({...deps(), push: (event, payload) => this.pushEvent(event, payload)})
-      this.handleEvent("ha:connect", ({url, back}) => this.link.connect(url, back))
       this.handleEvent("ha:disconnect", () => this.link.disconnect())
       this.handleEvent("ha:rooms_fetch", () => this.link.rooms())
       this.handleEvent("ha:add_areas", ({areas}) => this.link.addAreas(areas))
@@ -578,27 +686,75 @@ export function homeAssistantHook(deps) {
   }
 }
 
-// The parts of the browser for the hook.
+// The hook of the sign-in page. deps() gives the parts of the browser for
+// SignIn: store, tell, fetch, location, history, storage, crypto, now and
+// closeTab. When LiveView mounts the page again, the sign-in does not start
+// again: the hook tells its state.
+export function signInHook(deps) {
+  let signIn = null
+  return {
+    mounted() {
+      const push = (event, payload) => this.pushEvent(event, payload)
+      if (signIn) {
+        signIn.push = push
+        return signIn.report()
+      }
+      signIn = new SignIn({...deps(), push})
+      signIn.start()
+    },
+    reconnected() { signIn.report() },
+  }
+}
+
+// The BroadcastChannel of the sign-in, or null in a browser with none.
+const channelOf = (window) =>
+  typeof window.BroadcastChannel === "function" ? new window.BroadcastChannel(CHANNEL) : null
+
+// The parts of the browser for the hook of a page.
 export function browserParts(window) {
-  const channel = typeof window.BroadcastChannel === "function" ? new window.BroadcastChannel(CHANNEL) : null
+  const channel = channelOf(window)
   return {
     store: sessionStore(window.indexedDB, () => channel?.postMessage("changed")),
-    listen: (onNews, onOnline) => {
-      if (channel) channel.onmessage = onNews
+    // The news of the other tabs, the device online again, and the key
+    // Connect (JS.dispatch("ha:connect") on its form).
+    listen: (onNews, onOnline, onConnect) => {
+      const connect = (event) => onConnect(event.target.elements.namedItem("url")?.value)
+      if (channel) channel.onmessage = (event) => onNews(event.data)
       window.addEventListener("online", onOnline)
+      window.addEventListener("ha:connect", connect)
       return () => {
         if (channel) channel.onmessage = null
         window.removeEventListener("online", onOnline)
+        window.removeEventListener("ha:connect", connect)
       }
     },
     fetch: (...args) => window.fetch(...args),
     WebSocket: window.WebSocket,
     location: window.location,
+    crypto: window.crypto,
+    // The tab of the sign-in. The page keeps a link to it, to see if it
+    // closed.
+    openTab: (path) => window.open(path, TAB),
+    now: () => Date.now(),
+    setTimer: (f, ms) => window.setTimeout(f, ms),
+    clearTimer: (id) => window.clearTimeout(id),
+  }
+}
+
+// The parts of the browser for the sign-in page. The pages of Home
+// Assistant in this tab get no link to the tab of the app.
+export function signInParts(window) {
+  window.opener = null
+  const channel = channelOf(window)
+  return {
+    store: sessionStore(window.indexedDB, () => channel?.postMessage("changed")),
+    tell: (message) => channel?.postMessage(message),
+    fetch: (...args) => window.fetch(...args),
+    location: window.location,
     history: window.history,
     storage: window.sessionStorage,
     crypto: window.crypto,
     now: () => Date.now(),
-    setTimer: (f, ms) => window.setTimeout(f, ms),
-    clearTimer: (id) => window.clearTimeout(id),
+    closeTab: () => window.close(),
   }
 }

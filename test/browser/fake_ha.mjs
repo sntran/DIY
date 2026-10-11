@@ -1,9 +1,10 @@
 // A fake Home Assistant for the browser test. It has the sign-in page,
 // the tokens, the revoke and the WebSocket API: only the parts that the
 // app uses. The registry of the floors and of the areas refuses a second
-// floor or area with the same name, as Home Assistant does. The sign-in page sends the browser back at once, with a code. The
-// token endpoint checks the client, the way back and the PKCE verifier, as
-// Home Assistant does.
+// floor or area with the same name, as Home Assistant does. The sign-in
+// page has a link "Log in" that sends the tab back with a code. The token
+// endpoint checks the client, the way back and the PKCE verifier, as Home
+// Assistant does.
 
 import http from "node:http"
 import { createHash, randomBytes } from "node:crypto"
@@ -59,8 +60,12 @@ export async function fakeHomeAssistant({
       // Home Assistant adds its answer to the query of the way back.
       back.searchParams.append("code", code)
       back.searchParams.append("state", query.get("state"))
-      response.writeHead(302, { Location: back.toString() })
-      return response.end()
+      const href = back.toString().replaceAll("&", "&amp;").replaceAll('"', "&quot;")
+      response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" })
+      return response.end(
+        `<!doctype html><html lang="en"><title>Fake house</title>` +
+          `<main><h1>Fake house</h1><a id="log-in" href="${href}">Log in</a></main></html>`,
+      )
     }
 
     const form = await read(request)

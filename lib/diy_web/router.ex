@@ -22,5 +22,10 @@ defmodule DIYWeb.Router do
       live "/van", HomeLive, :van
       live "/settings", HomeLive, :settings
     end
+
+    # The sign-in page of Home Assistant, in its own tab: it needs no build.
+    live_session :sign_in, on_mount: [DIYWeb.HomeAssistant] do
+      live "/ha/sign-in", SignInLive
+    end
   end
 end

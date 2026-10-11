@@ -1,6 +1,5 @@
 defmodule DIYWeb.HomeAssistantTest do
   use DIYWeb.ConnCase, async: true
-  use ExUnitProperties
 
   import Phoenix.LiveViewTest
 
@@ -41,45 +40,6 @@ defmodule DIYWeb.HomeAssistantTest do
 
   defp status(view, payload), do: render_hook(view, "ha:status", payload)
 
-  test "the address of Home Assistant" do
-    assert HomeAssistant.address("https://Home.Example.com/") == {:ok, "https://home.example.com"}
-    assert HomeAssistant.address(" http://192.168.1.5:8123 ") == {:ok, "http://192.168.1.5:8123"}
-
-    assert HomeAssistant.address("https://example.com:443/ha//?x=1#y") ==
-             {:ok, "https://example.com/ha"}
-
-    assert HomeAssistant.address("http://[::1]:8123") == {:ok, "http://[::1]:8123"}
-    assert HomeAssistant.address("ftp://example.com") == :error
-    assert HomeAssistant.address("home.example.com") == :error
-    assert HomeAssistant.address("https://user:pass@example.com") == :error
-    assert HomeAssistant.address("https://") == :error
-    assert HomeAssistant.address("https://exa mple.com") == :error
-    assert HomeAssistant.address(String.duplicate("a", 3000)) == :error
-    assert HomeAssistant.address(nil) == :error
-  end
-
-  property "an address is the same address again, with no / at the end" do
-    check all(
-            scheme <- member_of(["http", "https", "ftp", ""]),
-            host <- string(:alphanumeric, max_length: 12),
-            port <- one_of([constant(""), map(integer(1..65_535), &":#{&1}")]),
-            path <- list_of(string(:alphanumeric, max_length: 4), max_length: 3),
-            slash <- member_of(["", "/", "//"])
-          ) do
-      text = "#{scheme}://#{host}#{port}/#{Enum.join(path, "/")}#{slash}"
-
-      case HomeAssistant.address(text) do
-        {:ok, url} ->
-          assert url =~ ~r{^https?://}
-          refute String.ends_with?(url, "/")
-          assert HomeAssistant.address(url) == {:ok, url}
-
-        :error ->
-          assert scheme not in ["http", "https"] or host == ""
-      end
-    end
-  end
-
   test "the words of each state and of each error" do
     ha = %{
       state: "none",
@@ -92,7 +52,9 @@ defmodule DIYWeb.HomeAssistantTest do
     assert HomeAssistant.status(%{ha | state: "loading"}) == nil
     assert HomeAssistant.status(ha) == "Not connected."
     assert HomeAssistant.status(%{ha | state: "signed_out"}) == "Not connected."
-    assert HomeAssistant.status(%{ha | state: "signing_in"}) =~ "sign-in"
+
+    assert HomeAssistant.status(%{ha | state: "signing_in"}) ==
+             "Sign in to Home Assistant on the new tab."
 
     assert HomeAssistant.status(%{ha | state: "connecting"}) =~
              "connects to Home Assistant at https://ha.example.com"
@@ -105,9 +67,20 @@ defmodule DIYWeb.HomeAssistantTest do
 
     assert HomeAssistant.status(%{ha | state: "offline"}) =~ "does not answer now"
 
-    for error <- ~w(url blocked state denied token unreachable storage signed_out) do
+    for error <-
+          ~w(url blocked tab closed cancelled state denied token unreachable storage signed_out) do
       assert HomeAssistant.message(error) =~ ~r/^[A-Z].*\.$/
     end
+
+    # The words of the sign-in page in its own tab.
+    assert HomeAssistant.tab_status(%{ha | state: "loading"}) ==
+             "The app gets ready for the sign-in."
+
+    assert HomeAssistant.tab_status(%{ha | state: "signing_in"}) ==
+             "The app signs in to Home Assistant at https://ha.example.com."
+
+    assert HomeAssistant.tab_status(%{ha | state: "done"}) == "The sign-in is done."
+    assert HomeAssistant.tab_status(%{ha | error: "denied"}) == "The sign-in did not finish."
   end
 
   test "the hook element is on each page", %{conn: conn} do
@@ -122,15 +95,34 @@ defmodule DIYWeb.HomeAssistantTest do
     assert has_element?(view, "#home-assistant-card #ha-form")
     refute has_element?(view, "#ha-status", "Not")
 
-    # A bad address: the page tells it, and the hook gets nothing.
-    view |> form("#ha-form", %{"url" => "home.example.com"}) |> render_submit()
+    # The key Connect gives the address to the hook in the tap, not to the
+    # server: the hook opens the sign-in in a new tab. No way back.
+    assert has_element?(view, ~s(#ha-form[phx-submit*='"dispatch"'][phx-submit*="ha:connect"]))
+    refute has_element?(view, "#ha-form input[name=back]")
+    assert has_element?(view, "#home-assistant-card", "opens in a new tab")
+
+    # A bad address: the hook tells it. The field keeps the address, so the
+    # person can correct it.
+    status(view, %{"state" => "none", "url" => "home.example.com", "error" => "url"})
     assert has_element?(view, "#ha-error", "Give the address")
-    refute_push_event(view, "ha:connect", %{})
-    # The field keeps the address, so the person can correct it.
     assert has_element?(view, "#ha-form input[name=url][value='home.example.com']")
 
-    view |> form("#ha-form", %{"url" => "https://HA.example.com/"}) |> render_submit()
-    assert_push_event(view, "ha:connect", %{url: "https://ha.example.com", back: "/settings"})
+    # The browser did not open the tab.
+    status(view, %{"state" => "none", "url" => "https://ha.example.com", "error" => "tab"})
+    assert has_element?(view, "#ha-error", "Let this site open pop-ups")
+
+    # The sign-in is in the new tab: the person can stop it.
+    status(view, %{"state" => "signing_in", "url" => "https://ha.example.com"})
+    assert has_element?(view, "#ha-status", "Sign in to Home Assistant on the new tab.")
+    assert has_element?(view, "#ha-disconnect", "Stop the sign-in")
+    refute has_element?(view, "#ha-form")
+    view |> element("#ha-disconnect") |> render_click()
+    assert_push_event(view, "ha:disconnect", %{})
+
+    for {error, words} <- [{"closed", "closed before the end"}, {"cancelled", "A disconnect"}] do
+      status(view, %{"state" => "none", "url" => "https://ha.example.com", "error" => error})
+      assert has_element?(view, "#ha-error", words)
+    end
 
     status(view, %{"state" => "none", "url" => nil, "error" => nil})
     assert has_element?(view, "#ha-status", "Not connected.")
@@ -160,6 +152,7 @@ defmodule DIYWeb.HomeAssistantTest do
              "Connected to Test house (Home Assistant 2026.10.0) at https://ha.example.com."
            )
 
+    assert has_element?(view, "#ha-disconnect", "Disconnect")
     view |> element("#ha-disconnect") |> render_click()
     assert_push_event(view, "ha:disconnect", %{})
 
@@ -221,40 +214,23 @@ defmodule DIYWeb.HomeAssistantTest do
     assert hd(Estimate.explain(item, 1, estimate)) == "2 W × 24 hours × 31 days ÷ 1,000."
   end
 
-  test "the sheet of a hub has the card, and the sign-in comes back to the sheet", %{conn: conn} do
+  test "the panel of a hub has the card, and its screen opens the sign-in", %{conn: conn} do
     {build, id} = hub()
     view = page(conn, ~p"/inside?#{[item: id]}", build)
 
     assert has_element?(view, "#item-stage #home-assistant-card")
-    assert has_element?(view, "#item-stage #ha-form input[name=back][value='/inside?item=#{id}']")
     refute has_element?(view, "#home-assistant-card h2")
     assert has_element?(view, "#inside[data-ha=loading]")
 
-    view |> form("#ha-form", %{"url" => "https://ha.example.com"}) |> render_submit()
-    assert_push_event(view, "ha:connect", %{url: "https://ha.example.com", back: back})
-    assert back == "/inside?item=#{id}"
+    # The address and the key Connect are on the LED screen. The key gives
+    # the address to the hook in the tap. No way back.
+    assert has_element?(view, ~s(#item-stage #ha-form[phx-submit*="ha:connect"] #ha-url))
+    refute has_element?(view, "#ha-form input[name=back]")
 
-    # A way back that is not a page of the sign-in gives Settings, and no
-    # way back too. The id of an item has 40 letters at most.
-    for bad <- [
-          "//evil.example",
-          "/\\evil.example",
-          "https://evil.example",
-          "/plans",
-          "/inside?item=a b",
-          "/inside?item=x&y=1",
-          "/inside?item=" <> String.duplicate("a", 41),
-          5
-        ] do
-      render_hook(view, "ha_connect", %{"url" => "https://ha.example.com", "back" => bad})
-      assert_push_event(view, "ha:connect", %{back: "/settings"})
-    end
-
-    render_hook(view, "ha_connect", %{"url" => "https://ha.example.com"})
-    assert_push_event(view, "ha:connect", %{back: "/settings"})
-    long = "/inside?item=" <> String.duplicate("a", 40)
-    render_hook(view, "ha_connect", %{"url" => "https://ha.example.com", "back" => long})
-    assert_push_event(view, "ha:connect", %{back: ^long})
+    # While the sign-in is in the new tab, the screen tells it.
+    status(view, %{"state" => "signing_in", "url" => "https://ha.example.com"})
+    assert has_element?(view, "#ha-screen-state", "Sign in to Home Assistant on the new tab.")
+    refute has_element?(view, "#ha-form")
 
     # The light of the hub on the plan follows the state of the link.
     status(view, %{"state" => "connected", "url" => "https://ha.example.com", "name" => "Home"})
@@ -281,31 +257,6 @@ defmodule DIYWeb.HomeAssistantTest do
     assert Enum.all?(ground.labels -- [label], &(not Map.has_key?(&1, :item)))
   end
 
-  property "the way back is Settings or the sheet of an item, on the host of the app", %{
-    conn: conn
-  } do
-    {build, id} = hub()
-    view = page(conn, ~p"/inside?#{[item: id]}", build)
-
-    check all(
-            back <-
-              one_of([
-                string(:printable, max_length: 60),
-                map(
-                  string([?a..?z, ?0..?9, ?-, ?_, ?/, ?\\, ?&, ?=, ?.], max_length: 45),
-                  &("/inside?item=" <> &1)
-                ),
-                member_of(["/settings", "//x", "/\\x", "/settings/", "javascript:alert(1)"])
-              ])
-          ) do
-      render_hook(view, "ha_connect", %{"url" => "https://ha.example.com", "back" => back})
-      assert_push_event(view, "ha:connect", %{back: pushed})
-      assert pushed == "/settings" or pushed =~ ~r"\A/inside\?item=[A-Za-z0-9_-]{1,40}\z"
-      assert pushed == back or pushed == "/settings"
-      assert URI.parse("https://app.example" <> pushed).host == "app.example"
-    end
-  end
-
   test "Rooms shows an error of the link when no sheet of a hub is open", %{conn: conn} do
     {build, id} = hub()
     view = page(conn, ~p"/inside", build)
@@ -319,20 +270,21 @@ defmodule DIYWeb.HomeAssistantTest do
     refute has_element?(view, "#ha-alert")
     assert has_element?(view, "#item-stage #ha-error", "did not give access")
 
-    # The way back to a hub that went away: the alert shows.
+    # A hub that went away: the alert shows.
     view |> render_patch(~p"/inside?#{[item: "i999"]}")
     assert has_element?(view, "#ha-alert")
     status(view, %{"state" => "connected", "url" => "https://ha.example.com", "name" => "Home"})
     refute has_element?(view, "#ha-alert")
 
-    # Only the errors of a sign-in that came back, or of a session that
-    # ended. Not an error of the store at each page, or of the card.
+    # Only the errors of a sign-in in its tab, or of a session that ended.
+    # Not an error of the store at each page, or of the card. Not a step of
+    # the person: a tab that the person closed, or a stop.
     for error <- ~w(state denied token unreachable signed_out) do
       status(view, %{"state" => "none", "error" => error})
       assert has_element?(view, "#ha-alert"), error
     end
 
-    for error <- ~w(storage url blocked) do
+    for error <- ~w(storage url blocked tab closed cancelled) do
       status(view, %{"state" => "none", "error" => error})
       refute has_element?(view, "#ha-alert"), error
     end

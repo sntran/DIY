@@ -513,9 +513,8 @@ async function build(context, name) {
   await page.click("#item-stage .stage-back")
   await page.waitForSelector("#item-stage", { state: "detached" })
 
-  // A Home Assistant hub in the living room. Its sheet has the link: the
-  // sign-in on the page of Home Assistant, and back to the sheet. The code
-  // of the sign-in does not stay in the address. The light of the hub on
+  // A Home Assistant hub in the living room. Its screen opens the sign-in
+  // in a new tab. The first tab stays on the hub. The light of the hub on
   // the plan shows the link.
   await follow(page, 'a[id^="add-"][aria-label="Add an item to Living room"]')
   await page.click("#add-home_assistant")
@@ -532,7 +531,24 @@ async function build(context, name) {
   })
   assert.ok(led, "the screen of the hub is on the page")
   await page.fill("#ha-form input[name=url]", homeAssistant.url + "/")
+  const opened = page.context().waitForEvent("page")
   await page.click("#ha-form button")
+  const tab = await opened
+  const closed = new Promise((resolve) => tab.once("close", resolve))
+  const visited = []
+  tab.on("framenavigated", (frame) => { if (frame === tab.mainFrame()) visited.push(new URL(frame.url())) })
+  await tab.waitForSelector("#log-in")
+  // While the sign-in is in the new tab, the screen of the hub tells it,
+  // and the panel can stop it.
+  await page.waitForSelector("#ha-screen-state:has-text('Sign in to Home Assistant on the new tab.')")
+  await page.waitForSelector("#ha-disconnect:has-text('Stop the sign-in')")
+  await check(page, `${name} sign-in waits`)
+  // The person signs in. The tab comes back to the sign-in page of the app
+  // with the code. It keeps the tokens, tells the first tab, and closes.
+  await tab.click("#log-in")
+  await closed
+  const back = visited.find((url) => url.pathname === "/ha/sign-in" && url.searchParams.has("code"))
+  assert.ok(back, "the tab comes back to the sign-in page of the app")
   await page.waitForSelector("#item-stage #ha-status:has-text('Connected to Fake house (Home Assistant 2026.10.0)')")
   assert.equal(new URL(page.url()).search, `?item=${hub}`)
   await page.waitForSelector("#inside[data-ha=connected]")
@@ -582,6 +598,14 @@ async function build(context, name) {
   assert.equal(homeAssistant.sessions.size, 0)
   await page.click("#item-stage .stage-back")
   await page.waitForSelector("#item-stage", { state: "detached" })
+
+  // The sign-in page by itself, with a bad address: it tells the error.
+  const lone = await page.context().newPage()
+  await lone.goto(`${site}/ha/sign-in?url=home.example.com&id=x1`)
+  await lone.waitForSelector("#ha-error:has-text('Give the address')")
+  await lone.waitForSelector("#ha-close")
+  await check(lone, `${name} sign-in page`)
+  await lone.close()
 
   await page.click("nav >> text=Bill")
   await page.waitForSelector("#months")

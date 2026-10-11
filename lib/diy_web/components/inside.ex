@@ -624,7 +624,7 @@ defmodule DIYWeb.Inside do
       close={@close}
     >
       <:screen :if={@item.type == "home_assistant"}>
-        <HomeAssistant.screen ha={@ha} back={~p"/inside?#{[item: @item.id]}"} />
+        <HomeAssistant.screen ha={@ha} />
       </:screen>
 
       <section
@@ -729,12 +729,7 @@ defmodule DIYWeb.Inside do
         aria-labelledby="part-link-title"
       >
         <h3 id="part-link-title" class="stage-sec-title">Home Assistant</h3>
-        <HomeAssistant.card
-          ha={@ha}
-          back={~p"/inside?#{[item: @item.id]}"}
-          title={false}
-          form={false}
-        />
+        <HomeAssistant.card ha={@ha} title={false} form={false} />
       </section>
 
       <section

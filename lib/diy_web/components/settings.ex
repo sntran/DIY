@@ -179,7 +179,7 @@ defmodule DIYWeb.Settings do
         </p>
       </div>
 
-      <HomeAssistant.card ha={@ha} back={~p"/settings"} hub={hub(@build)} />
+      <HomeAssistant.card ha={@ha} hub={hub(@build)} />
 
       <div class="space-y-2">
         <h2 class="text-lg font-bold">The file of your build</h2>
