@@ -4,7 +4,8 @@
 // floor or area with the same name, as Home Assistant does. It has the
 // registries of the devices and of their entities, and the states of the
 // entities. A watch of the states (subscribe_entities) gets all the states
-// first, then each change. A service turns an entity on or off. The sign-in
+// first, then each change. A service turns an entity on or off. It has
+// the energy settings and the statistics of their sensors. The sign-in
 // page has a link "Log in" that sends the tab back with a code. The token
 // endpoint checks the client, the way back and the PKCE verifier, as Home
 // Assistant does.
@@ -33,6 +34,8 @@ export async function fakeHomeAssistant({
   devices = [],
   entities = [],
   states = {},
+  prefs = null,
+  statistics = {},
 } = {}) {
   const registry = { floors: structuredClone(floors), areas: structuredClone(areas), devices, entities }
   const codes = new Map()
@@ -140,6 +143,13 @@ export async function fakeHomeAssistant({
         return ok(registry.devices)
       case "config/entity_registry/list":
         return ok(registry.entities)
+      // With no energy settings, Home Assistant answers not_found.
+      case "energy/get_prefs":
+        return prefs ? ok(prefs) : { success: false, error: { code: "not_found", message: "No prefs" } }
+      // The rows of each statistic for the period: {day: [...], month: [...]}.
+      case "recorder/statistics_during_period":
+        return ok(Object.fromEntries(message.statistic_ids.filter((id) => id in statistics)
+          .map((id) => [id, statistics[id][message.period] ?? []])))
       case "config/floor_registry/create": {
         if (inUse(registry.floors)) return refuse()
         const floor = { floor_id: key(message.name), name: message.name, level: message.level ?? null, aliases: [] }

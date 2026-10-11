@@ -53,6 +53,10 @@ defmodule DIYWeb.Inside do
     default: nil,
     doc: "the devices and the areas of Home Assistant (`DIYWeb.HomeAssistant`)"
 
+  attr :ha_energy, :map,
+    default: nil,
+    doc: "the energy data of Home Assistant (`DIYWeb.HomeAssistant.read_energy/1`)"
+
   attr :ha_states, :map,
     default: %{},
     doc: "the state of each device that the app turns on and off (`DIYWeb.HomeAssistant`)"
@@ -106,7 +110,9 @@ defmodule DIYWeb.Inside do
             do: assigns.ha_devices.error
           ),
         item_states: HomeAssistant.item_states(assigns),
-        power: HomeAssistant.power(assigns, assigns.item)
+        power: HomeAssistant.power(assigns, assigns.item),
+        energy: HomeAssistant.item_energy(assigns, assigns.item),
+        ha_meter: HomeAssistant.meter_offer(assigns)
       )
 
     ~H"""
@@ -224,6 +230,8 @@ defmodule DIYWeb.Inside do
         ha={@ha}
         ha_devices={@ha_devices}
         power={@power}
+        energy={@energy}
+        ha_meter={@ha_meter}
       />
       <.add_sheet
         :if={@add && match?({:ok, _}, Build.room(@build, @add))}
@@ -519,6 +527,35 @@ defmodule DIYWeb.Inside do
     end
   end
 
+  # The energy that Home Assistant measured for the device of an item, and
+  # the estimate of the same months for the item.
+  defp energy_text(%{partial: true} = energy, _estimate, _item),
+    do:
+      "Home Assistant measured #{Format.kwh(energy.kwh)} in #{Format.month(energy.from)}, a part of the month."
+
+  defp energy_text(energy, estimate, item) do
+    count = length(energy.months)
+
+    measured =
+      "Home Assistant measured #{Format.kwh(energy.kwh)} in #{Format.count(count, "month")}, " <>
+        if(count == 1,
+          do: "in #{Format.month(energy.from)}.",
+          else: "from #{Format.month(energy.from)} to #{Format.month(energy.to)}."
+        )
+
+    # The estimate of each month of the year (January first), before the
+    # estimate is ready: none.
+    by_month = estimate.ready && get_in(estimate.items, [item.id, :months])
+    same = by_month && same_months(by_month, energy.months)
+    measured <> ((same && " The estimate for the same months: #{Format.kwh(same)}.") || "")
+  end
+
+  defp same_months(by_month, months),
+    do:
+      months
+      |> Enum.map(&Enum.at(by_month, String.to_integer(String.slice(&1, 5, 2)) - 1))
+      |> Enum.sum()
+
   defp device_text({:known, name}), do: "This is #{name} in Home Assistant."
   defp device_text(:gone), do: "Its device is not in Home Assistant now."
   defp device_text(:linked), do: "It has a link to a device of Home Assistant."
@@ -703,6 +740,14 @@ defmodule DIYWeb.Inside do
   attr :power, :map,
     default: nil,
     doc: "the switch of the item of a device (`DIYWeb.HomeAssistant.power/2`), or `nil`"
+
+  attr :energy, :map,
+    default: nil,
+    doc: "the energy of the device of the item (`DIYWeb.HomeAssistant.item_energy/2`), or `nil`"
+
+  attr :ha_meter, :map,
+    default: nil,
+    doc: "the meter of Home Assistant, when the build does not use it (`DIYWeb.HomeAssistant`)"
 
   attr :numbers, :list,
     default: [],
@@ -897,6 +942,9 @@ defmodule DIYWeb.Inside do
       >
         <h3 id="part-link-title" class="stage-sec-title">Home Assistant</h3>
         <p id="ha-device" class="text-sm">{device_text(@device)}</p>
+        <p :if={@energy} id="ha-energy" class="text-sm">
+          {energy_text(@energy, @estimate, @item)}
+        </p>
         <div :if={@power} id="ha-power" class="stage-switch-row stage-row-plain">
           <label for="ha-switch" id="ha-power-label">Power</label>
           <%!-- aria-disabled, not disabled: the switch keeps the focus while
@@ -965,7 +1013,7 @@ defmodule DIYWeb.Inside do
         >
           Use the numbers of the model
         </button>
-        <.usage :if={:usage in @kind.features} usage={@build.usage} />
+        <.usage :if={:usage in @kind.features} usage={@build.usage} ha_meter={@ha_meter} />
       </section>
 
       <p id="item-said" class="sr-only" role="status">{@said}</p>
@@ -1540,13 +1588,25 @@ defmodule DIYWeb.Inside do
   defp feature(:safety), do: "the safety notes of the van"
 
   attr :usage, :map, default: nil
+  attr :ha_meter, :map, default: nil
 
   # The file of a meter. The browser reads it (the hook UsageFile), and
-  # sends only the sum of each month.
+  # sends only the sum of each month. Home Assistant can also give the
+  # months of the meter.
   defp usage(assigns) do
     ~H"""
     <div id="usage" class="space-y-2 rounded-box bg-base-200 p-3">
       <h3 class="font-semibold">Your real usage</h3>
+      <div :if={@ha_meter} id="ha-meter" class="space-y-2">
+        <p class="text-sm">
+          Home Assistant has the use of this meter: {Format.count(length(@ha_meter.months), "month")}, from {Format.month(
+            hd(@ha_meter.months).month
+          )} to {Format.month(List.last(@ha_meter.months).month)}.
+        </p>
+        <button type="button" id="use-ha-meter" phx-click="ha_use_meter" class="stage-btn">
+          Use the meter of Home Assistant
+        </button>
+      </div>
       <p :if={@usage} id="usage-months" class="text-sm">
         {DIY.Usage.source_name(@usage.source)}: {Format.count(length(@usage.months), "month")}, from {Format.month(
           hd(@usage.months).month

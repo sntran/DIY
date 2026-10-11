@@ -18,6 +18,10 @@ defmodule DIYWeb.Front do
   attr :outside, :map, required: true, doc: "the house from the outside (`DIYWeb.Outside.view/1`)"
   attr :bill_month, :integer, default: nil, doc: "the month that the person chose on the chart"
 
+  attr :ha_meter, :map,
+    default: nil,
+    doc: "the meter of Home Assistant, when the build does not use it (`DIYWeb.HomeAssistant`)"
+
   def front(assigns) do
     {:ok, place} = Zip.lookup(assigns.build.zip)
     assigns = assign(assigns, place: place, gas: Prices.gas(assigns.build))
@@ -56,7 +60,7 @@ defmodule DIYWeb.Front do
 
       <.whatif :if={@whatif} whatif={@whatif} gas={@gas} />
 
-      <.real build={@build} price={@price} />
+      <.real build={@build} price={@price} ha_meter={@ha_meter} />
 
       <.van build={@build} />
 
@@ -410,6 +414,7 @@ defmodule DIYWeb.Front do
 
   attr :build, :map, required: true
   attr :price, :map, required: true
+  attr :ha_meter, :map, default: nil
 
   # The real usage from the meter, or the next step to get it.
   defp real(assigns) do
@@ -446,6 +451,16 @@ defmodule DIYWeb.Front do
             {Format.count(length(@build.usage.months), "month")} of real usage.
             <.link patch={~p"/estimate"} class="link">See them next to the estimate</.link>
           </p>
+        <% @ha_meter -> %>
+          <p class="text-sm">
+            Home Assistant has the use of your meter: {Format.count(
+              length(@ha_meter.months),
+              "month"
+            )}. The app can show your real usage with it.
+          </p>
+          <button type="button" id="use-ha-meter" phx-click="ha_use_meter" class="btn btn-sm">
+            Use the meter of Home Assistant
+          </button>
         <% @meter -> %>
           <p class="text-sm">
             Open the file of your smart meter: the app then shows your real usage.

@@ -284,6 +284,23 @@ defmodule DIYWeb.HomeLive do
     {:noreply, put(socket, Build.set_usage(socket.assigns.build, nil))}
   end
 
+  # The meter of Home Assistant in place of the usage of the build. A house
+  # with no smart meter gets one: outside, else inside.
+  def handle_event("ha_use_meter", _params, socket) do
+    with %{} = usage <- DIYWeb.HomeAssistant.meter_offer(socket.assigns),
+         {:ok, build} <- with_meter(socket.assigns.build) do
+      {:noreply,
+       socket
+       |> put(Build.set_usage(build, usage))
+       |> put_flash(
+         :info,
+         "The page has #{Format.count(length(usage.months), "month")} of your usage from Home Assistant."
+       )}
+    else
+      _ -> {:noreply, socket}
+    end
+  end
+
   # A tap on − or + of a number of an item (DIYWeb.Inside): the next round
   # value, in the range of the number (`DIY.Catalog.stepped/3`). The panel
   # tells the new value to a screen reader (`say_step/6`).
@@ -1052,6 +1069,29 @@ defmodule DIYWeb.HomeLive do
 
   # Changes the build, and updates the data of the pages. The same build
   # makes no change.
+  # The meter of Home Assistant, also when the build uses it already.
+  defp own_meter(%{ha_energy: %{meter: %{} = meter}}), do: meter
+  defp own_meter(_assigns), do: nil
+
+  # The build with a smart meter: the one it has, else a new one outside,
+  # else inside.
+  defp with_meter(build) do
+    room =
+      Enum.find(build.rooms, &(&1.place == :outdoor)) ||
+        Enum.find(build.rooms, &(&1.place == :indoor))
+
+    cond do
+      Enum.any?(build.items, &(&1.type == "smart_meter")) ->
+        {:ok, build}
+
+      room ->
+        with {:ok, build, _id} <- Build.add_item(build, room.id, "smart_meter"), do: {:ok, build}
+
+      true ->
+        :error
+    end
+  end
+
   defp put(%{assigns: %{build: build}} = socket, build), do: socket
   defp put(socket, build), do: socket |> Device.put_build(build) |> refresh()
 
@@ -1224,6 +1264,18 @@ defmodule DIYWeb.HomeLive do
   # draws the ghosts again.
   def handle_info(:ha_devices, socket), do: {:noreply, pictures(socket)}
 
+  # New energy data of Home Assistant. A build that uses the meter of Home
+  # Assistant gets its new months. A different build keeps its usage (a
+  # file, or none): the page offers the meter of Home Assistant.
+  def handle_info(:ha_energy, socket) do
+    build = socket.assigns.build
+    usage = own_meter(socket.assigns)
+
+    if usage && build.usage != usage && match?(%{source: "home_assistant"}, build.usage),
+      do: {:noreply, put(socket, Build.set_usage(build, usage))},
+      else: {:noreply, socket}
+  end
+
   # A message that the page does not know (or a status of a different
   # item): nothing changes.
   def handle_info(_message, socket), do: {:noreply, socket}
@@ -1366,6 +1418,7 @@ defmodule DIYWeb.HomeLive do
               ha_devices={@ha_devices}
               ha_states={@ha_states}
               ha_control={@ha_control}
+              ha_energy={@ha_energy}
               ghosts={@ghosts}
               ha_count={@ha_count}
               ha_away={@ha_away}
@@ -1446,6 +1499,7 @@ defmodule DIYWeb.HomeLive do
               market={@market}
               outside={@outside}
               bill_month={@bill_month}
+              ha_meter={DIYWeb.HomeAssistant.meter_offer(%{ha_energy: @ha_energy, build: @build})}
             />
         <% end %>
       <% end %>

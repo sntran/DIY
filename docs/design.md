@@ -422,6 +422,10 @@ The app reads these files:
   kWh to the grid (export) goes to the grid, a net value under zero too,
   and a row of gas or with units that are not kWh or Wh does not count.
 
+Home Assistant can also give the months of the meter (see "The energy
+data" under "Home Assistant"). They have the same form as the months of
+a file.
+
 For each month (the last 24 months at most), the build keeps the kWh from
 the grid, the kWh to the grid, and the days with data. The page says so.
 `DIY.Usage.read/1` accepts only a usage that it can read in full: a month
@@ -1830,7 +1834,8 @@ Assistant. The app links to it, so that the person does not type them
 again. The parts that are done: the link (the sign-in and the socket),
 the match of the rooms, and the devices as ghosts in their rooms. The
 page also shows the states of the lights, the switches and the fans, and
-it has a switch for each. The next part reads the use of power.
+it has a switch for each. It reads the energy data of Home Assistant: the
+meter of the house, and the energy of each device.
 
 ### The sign-in stays on the device
 
@@ -2386,6 +2391,83 @@ The tests:
   switch turns them off. A person turns them on in Home Assistant, and
   the page follows. The keyboard turns them off again, and the switch
   keeps the focus. Axe checks the panel with the switch.
+
+### The energy data
+
+The energy settings of Home Assistant name the sensor of the meter of the
+house, and the sensor of each device that measures its energy. The
+statistics of Home Assistant give their kWh. The app reads them in the
+browser, so the data stays on the device, as with the file of a meter.
+
+1. When the link becomes connected, the LiveView sends `ha:energy_fetch`.
+   The hook reads the energy settings (`energy/get_prefs`) and the
+   entities. With no energy settings, Home Assistant answers `not_found`:
+   then the app has no meter and no device.
+2. `energySources` takes the sensors of each grid: from the grid and to
+   the grid. Home Assistant 2025 and later has one sensor for each way.
+   Before, it had lists (`flow_from` and `flow_to`). The app reads both
+   forms. It also takes the sensor of each device (`device_consumption`),
+   200 at most.
+3. The hook reads the statistics (`recorder/statistics_during_period`,
+   the type `change`, in kWh). It reads the meter for each day of the
+   last 24 months, and the devices for each month of the last 13 months.
+   With no sensor, the hook sends no command for the statistics.
+4. `meterMonths` makes the months of the meter in the time zone of Home
+   Assistant (from `get_config`). Each month has the kWh from the grid,
+   the kWh to the grid, and the days with data. These are the numbers of
+   the file of a meter (`DIY.Usage`, with the source `home_assistant`). A
+   change under zero (a new meter) counts as zero.
+5. `deviceEnergy` makes the kWh of each month of each device. The
+   registry of the entities gives the device of each sensor. A sensor of
+   no device (for example, a statistic of an integration) does not count.
+6. The hook sends `ha:energy`: `{meter, devices}`, or `{error:
+   "offline"}` or `{error: "failed"}`.
+
+The LiveView (`DIYWeb.HomeAssistant.read_energy/1`):
+
+- It takes the energy data only while the link is connected. The meter
+  must be a usage that `DIY.Usage.read/1` accepts, with the source
+  `home_assistant`. It takes 200 devices at most, each with 13 months at
+  most, with a month "YYYY-MM" and the kWh. A device that it cannot read
+  does not count. Two sensors of one device give the sum of their kWh.
+  After a disconnect, it forgets the energy data.
+- A build that uses the meter of Home Assistant gets its new months each
+  time. A different build keeps its usage: a file, or no usage. Then the
+  front of the house and the panel of the smart meter offer the meter of
+  Home Assistant. The key is "Use the meter of Home Assistant"
+  (`ha_use_meter`). A house with no smart meter gets one: outside, else
+  inside. When the person removes the real usage, the months of Home
+  Assistant do not come back by themselves.
+- The panel of the item of a device tells the energy that Home Assistant
+  measured. It uses the last 12 months that are over, and it gives the
+  estimate of the same months. The month that is not over does not count,
+  because a part of a month is not the estimate of a month. When Home
+  Assistant has only the month that is not over, the panel tells its kWh
+  so far. Then it gives no estimate. An example of the text: "Home
+  Assistant measured 120 kWh in 3 months, from November 2025 to January
+  2026. The estimate for the same months: 131 kWh."
+
+The TLA+ models do not change. The energy data is one question and its
+answer, under the rules of the socket. An answer after a disconnect does
+not count. Two tabs can put the same meter in the build: the build on the
+device has a compare and set (`specs/Device.tla`).
+
+The tests:
+
+- `test/js/home_assistant.test.js`: the sensors of both forms of the
+  settings, the months in a time zone, and the months of the meter and of
+  each device. It also checks the commands. A property test checks that
+  the months of the meter keep the sum of the rows and the days with
+  data.
+- `test/diy_web/live/ha_energy_live_test.exs`: the energy data that the
+  page reads, with a property test. It checks the offer of the meter, the
+  new months, a file that stays, and a usage that the person removes. It
+  also checks the energy of a device in its panel, a house with no room
+  outside, and a house with no room.
+- The browser test: the fake Home Assistant has the energy settings and
+  the statistics. The panel of the lights tells their energy. The front
+  of the house offers the meter of Home Assistant, and the page Bill
+  shows its months.
 
 ## In a car
 
