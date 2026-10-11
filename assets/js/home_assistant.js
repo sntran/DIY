@@ -6,13 +6,13 @@
 //   or in Settings. The key Connect opens the sign-in page of the app
 //   (SIGN_IN) in a new tab. The tab opens in the tap: a browser blocks a
 //   tab that a page opens later.
-// - The new tab (SignIn) starts only when a tab of the app opened it: a
-//   link of a different site cannot start a sign-in. It makes a random
-//   state and a PKCE challenge, and keeps them in its sessionStorage. It goes to the sign-in page of Home
-//   Assistant. Home Assistant sends it back with a code. The new tab gets
-//   the tokens for the code, and keeps them in IndexedDB, for all the tabs.
-//   The server of the app never sees them. Then the new tab tells its end
-//   to the first tab, and closes.
+// - The new tab (SignIn) starts only when a tab of the app opened it: a link
+//   of a different site cannot start a sign-in. It makes a random state and
+//   a PKCE challenge, and keeps them in its sessionStorage. It goes to the
+//   sign-in page of Home Assistant. Home Assistant sends it back with a
+//   code. The new tab gets the tokens for the code, and keeps them in
+//   IndexedDB, for all the tabs. The server of the app never sees them. Then
+//   the new tab tells its end to the first tab, and closes.
 // - The hook of each page (Link) reads the store, and opens a WebSocket to
 //   Home Assistant with the access token. When a socket signs in, the hook
 //   first gets a new access token if the old one ends in 60 seconds or
@@ -693,8 +693,8 @@ export function homeAssistantHook(deps) {
 }
 
 // The hook of the sign-in page. deps() gives the parts of the browser for
-// SignIn (signInParts). When LiveView mounts the page again, the sign-in does not start
-// again: the hook tells its state.
+// SignIn (signInParts). When LiveView mounts the page again, the sign-in
+// does not start again: the hook tells its state.
 export function signInHook(deps) {
   let signIn = null
   return {

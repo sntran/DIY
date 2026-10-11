@@ -1885,22 +1885,22 @@ The app links to one Home Assistant. A second hub shows the same link.
    the address and a random id of the sign-in. A browser lets a page open
    a tab only in the tap. So the key sends the address to the hook in the
    browser, not to the server (`JS.dispatch("ha:connect")`). The hook
-   checks the address, and opens the tab at once. The first tab stays on the hub,
-   and its screen tells the person to sign in on the new tab. When the
-   browser blocks the tab, the card tells the person to let the site open
-   pop-ups.
-2. The new tab (the hook `HomeAssistantSignIn`) starts only when a page
-   of the app opened it (`window.opener` has the origin of the app). Else
-   a link of a different site can send the tab to a server of its choice.
+   checks the address, and opens the tab at once. The first tab stays on
+   the hub, and its screen tells the person to sign in on the new tab.
+   When the browser blocks the tab, the card tells the person to let the
+   site open pop-ups.
+2. The new tab (the hook `HomeAssistantSignIn`) starts only when a page of
+   the app opened it (`window.opener` has the origin of the app). Else a
+   link of a different site can send the tab to a server of its choice.
    Then the store gets the tokens of that server. The page tells the
    person to connect again on the page of the app. The new tab reads the
-   generation of the store (see below). It makes a random state and a
-   PKCE pair (RFC 7636, S256). It keeps them in its sessionStorage. Then it goes to the
-   sign-in page of Home Assistant. The client is the address of the app,
-   and the way back is the sign-in page of the app. Home Assistant accepts
-   a way back on the host of the client, and adds its answer to the query.
-   The pages of Home Assistant in the new tab get no link to the tab of
-   the app: the new tab sets `window.opener` to null.
+   generation of the store (see below). It makes a random state and a PKCE
+   pair (RFC 7636, S256). It keeps them in its sessionStorage. Then it
+   goes to the sign-in page of Home Assistant. The client is the address
+   of the app, and the way back is the sign-in page of the app. Home
+   Assistant accepts a way back on the host of the client, and adds its
+   answer to the query. The pages of Home Assistant in the new tab get no
+   link to the tab of the app: the new tab sets `window.opener` to null.
 3. Home Assistant sends the new tab back with a code and the state. The
    hook removes them from the address (and `storeToken`, which Home
    Assistant adds when the person asks it to keep the sign-in). It gets
@@ -1981,11 +1981,12 @@ The tests:
   fake-indexeddb. A property test (fast-check) checks the generation and
   the compare and set. It has two tabs of the app, the tabs of their
   sign-ins, and the answers in any order. The test counts the disconnects
-  itself: it does not read the generation of the store. It has the shortest steps to
-  each fault as fixed examples, so it finds each fault in each run. A
-  test with fixed steps checks the owner. A property test checks that the
-  sign-in page stays on the app, and gives back the address and the id.
-  A sign-in page that no tab of the app opened does not leave the app.
+  itself: it does not read the generation of the store. It has the
+  shortest steps to each fault as fixed examples, so it finds each fault
+  in each run. A test with fixed steps checks the owner. A property test
+  checks that the sign-in page stays on the app, and gives back the
+  address and the id. A sign-in page that no tab of the app opened does
+  not leave the app.
 - `test/diy_web/home_assistant_test.exs` and
   `test/diy_web/live/sign_in_live_test.exs`: the LiveView part, the card
   in Settings and on the panel of a hub, and the sign-in page. A property
