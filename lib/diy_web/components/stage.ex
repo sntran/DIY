@@ -9,8 +9,9 @@ defmodule DIYWeb.Stage do
 
   The server draws the model of the item (`DIYWeb.Icon.Shapes`) from #{12}
   cameras, as the frames of a flipbook. The first camera is the camera of
-  the house (`DIYWeb.Camera.house/0`), so the first frame looks as the item
-  on the plan. The last camera looks at the front of the item, or down at
+  the plan: of the house (`DIYWeb.Camera.house/0`), or of a van
+  (`DIYWeb.Camera.van/0`). So the first frame looks as the item on the
+  plan. The last camera looks at the front of the item, or down at
   its top for a screen on the top. Each frame has the center of the model at
   the same point, so the model turns in place.
 
@@ -23,7 +24,7 @@ defmodule DIYWeb.Stage do
 
   The panel is next to the model on a wide page, and under it on a narrow
   page. The item helps the person. A tag on the model (the `spots` of
-  `frames/1`) shows where a number is on the real item. An example is the
+  `frames/2`) shows where a number is on the real item. An example is the
   label on the back of a TV. A tap on the tag goes to the number in the
   panel.
 
@@ -101,13 +102,15 @@ defmodule DIYWeb.Stage do
   defp corners({:top, {x, y, z}, {w, d}}), do: [{x, y, z}, {x + w, y, z}, {x, y + d, z}]
 
   @doc """
-  The cameras of the frames: from the camera of the house to the face of
-  the item. The last camera looks at the face, a little from the side and
-  from over it, so the item keeps its depth. For a face on the top (a hub),
-  it looks down at the top, and the front shows too.
+  The cameras of the frames: from the camera of the plan to the face of
+  the item. The plan is the house (`:house`, `DIYWeb.Camera.house/0`) or a
+  van (`:van`, `DIYWeb.Camera.van/0`). The last camera looks at the face, a
+  little from the side and from over it, so the item keeps its depth. For a
+  face on the top (a hub), it looks down at the top, and the front shows
+  too.
   """
-  def cameras(type) do
-    house = Camera.house()
+  def cameras(type, plan \\ :house) do
+    first = if plan == :van, do: Camera.van(), else: Camera.house()
     {yaw, pitch} = if elem(region(type), 0) == :top, do: {88.0, 58.0}, else: {84.0, 10.0}
 
     for i <- 0..(@count - 1) do
@@ -115,8 +118,8 @@ defmodule DIYWeb.Stage do
 
       Camera.new(
         :stage,
-        house.yaw + (yaw - house.yaw) * t,
-        house.pitch + (pitch - house.pitch) * t
+        first.yaw + (yaw - first.yaw) * t,
+        first.pitch + (pitch - first.pitch) * t
       )
     end
   end
@@ -135,16 +138,18 @@ defmodule DIYWeb.Stage do
     `at` in units of the view.
 
   The center of the model is at 0, 0 in each frame. The largest side of all
-  the frames is #{@size} units. The frames of a kind do not change: the app
-  keeps them after the first time (`:persistent_term`).
+  the frames is #{@size} units. The first frame is from the camera of the
+  plan (`cameras/2`). The frames of a kind and a plan do not change: the
+  app keeps them after the first time (`:persistent_term`).
   """
-  def frames(type) do
+  def frames(type, plan \\ :house) when plan in [:house, :van] do
     # A new version of the code that draws the frames has new frames.
-    key = {__MODULE__, type, Enum.map([__MODULE__, Shapes, Camera], & &1.module_info(:md5))}
+    modules = Enum.map([__MODULE__, Shapes, Camera], & &1.module_info(:md5))
+    key = {__MODULE__, type, plan, modules}
 
     case :persistent_term.get(key, nil) do
       nil ->
-        frames = draw(type)
+        frames = draw(type, plan)
         :persistent_term.put(key, frames)
         frames
 
@@ -153,11 +158,11 @@ defmodule DIYWeb.Stage do
     end
   end
 
-  defp draw(type) do
+  defp draw(type, plan) do
     model = Shapes.model(type)
     {{x0, y0, z0}, {x1, y1, z1}} = Shapes.bounds(model)
     center = {(x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2}
-    cameras = cameras(type)
+    cameras = cameras(type, plan)
 
     drawn =
       for camera <- cameras do
@@ -235,7 +240,7 @@ defmodule DIYWeb.Stage do
   attr :frames, :map,
     required: true,
     doc:
-      "the frames of the kind (`frames/1`): a LiveView keeps them, so a render does not send them again"
+      "the frames of the kind (`frames/2`): a LiveView keeps them, so a render does not send them again"
 
   attr :item, :string, required: true, doc: "the id of the item on the plan"
   attr :title, :string, required: true

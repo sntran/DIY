@@ -179,7 +179,7 @@ defmodule DIYWeb.VanPlanLiveTest do
 
     render_hook(view, "open_item", %{"id" => fridge})
     assert_patch(view, ~p"/van?#{[id: van, item: fridge]}")
-    assert has_element?(view, "#item-sheet #item-place")
+    assert has_element?(view, "#item-stage #item-place")
     assert has_element?(view, "#item-where", "from the right side of Galley")
     assert has_element?(view, "#move-item-left[aria-label='Move the item 6 in to the front']")
     view |> element("#turn-item") |> render_click()

@@ -8,6 +8,13 @@ defmodule DIYWeb.StageTest do
 
   @types Enum.map(Catalog.kinds(), & &1.type)
 
+  # The kinds that can go in a van: their frames also start from the camera
+  # of the van.
+  @van_places [:cab, :galley, :bay, :bed, :living, :van_roof, :shell]
+  @van_types for kind <- Catalog.kinds(),
+                 Enum.any?(kind.places, &(&1 in @van_places)),
+                 do: kind.type
+
   test "the cameras go from the camera of the house to the front, or over a hub" do
     house = Camera.house()
 
@@ -28,6 +35,15 @@ defmodule DIYWeb.StageTest do
 
     assert {List.last(Stage.cameras("home_assistant")).yaw,
             List.last(Stage.cameras("home_assistant")).pitch} == {88.0, 58.0}
+  end
+
+  test "the cameras of an item of a van start from the camera of the van" do
+    van = Camera.van()
+    cameras = Stage.cameras("van_fridge", :van)
+    assert {hd(cameras).yaw, hd(cameras).pitch} == {van.yaw, van.pitch}
+    assert {List.last(cameras).yaw, List.last(cameras).pitch} == {84.0, 10.0}
+    yaws = Enum.map(cameras, & &1.yaw)
+    assert yaws == Enum.sort(yaws)
   end
 
   test "the face of an item: its screen, or the middle of its front" do
@@ -107,6 +123,30 @@ defmodule DIYWeb.StageTest do
 
       assert bx > ax and cy > ay, type
     end
+  end
+
+  test "the first frame of an item of a van is the drawing of the van plan" do
+    assert "van_fridge" in @van_types and "van_battery" in @van_types
+
+    for type <- @van_types do
+      %{view: {vx, vy, vw, vh}, frames: frames} = Stage.frames(type, :van)
+      assert length(frames) == Stage.frame_count(), type
+
+      plan = Shapes.shapes(type, Camera.van())
+
+      assert Enum.map(hd(frames), &elem(&1, 1)) ==
+               Enum.map(plan, fn {:poly, _, class} -> class end),
+             type
+
+      for frame <- frames, {x, y} <- points(frame) do
+        assert x >= vx and x <= vx + vw and y >= vy and y <= vy + vh, type
+      end
+
+      # The last frame looks at the front, as for an item of the house.
+      assert List.last(frames) != hd(frames), type
+    end
+
+    assert hd(Stage.frames("van_fridge", :van).frames) != hd(Stage.frames("van_fridge").frames)
   end
 
   property "the center of the model stays at 0, 0 in each frame" do

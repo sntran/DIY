@@ -142,10 +142,12 @@ The tests:
 
 The first screen has two doors: "My house" and "A house I'm planning".
 Then the user gives the ZIP code, and picks a preset: "a house like mine"
-by size, age, floors and heat. The front of the house shows the bill
-estimate at once, before the user adds an item. For a house that the user
-plans, the estimate shows when the house has an AC (the plan: "as soon as
-the house has walls and an AC").
+by size, age, floors and heat. After a ZIP code that the app does not
+know, the field keeps the text that the person typed, and the error shows
+under it. The field of the ZIP code in Settings does the same. The front
+of the house shows the bill estimate at once, before the user adds an
+item. For a house that the user plans, the estimate shows when the house
+has an AC. The plan says: "as soon as the house has walls and an AC".
 
 A preset has the rooms of the house and its typical items
 (`DIY.House`). It has a bedroom for each person that the preset gives
@@ -868,8 +870,9 @@ A camper van is a small house on wheels, so it uses the same builder. A
 van is an item of the house (in the driveway or in the garage), and it
 opens its own build: the page Van. Not each person has a van, so the bar
 at the bottom has no part Van. The page Van is a part of the rooms. The
-van item in the list of the rooms opens its sheet. The button "Open the
-build of the van" of the sheet opens the page Van. A station of the house
+van item in the list of the rooms comes forward with its panel (see "The
+stage of an item"). The button "Open the build of the van" of the panel
+opens the page Van. A station of the house
 can be in the van. Then the page Power and the list of the rooms also
 have a link to the page Van. On the page Van, the part Rooms of the bar
 is the current part. A link at the top goes back to the van in the
@@ -934,7 +937,7 @@ layers: its floor, and its roof over it with a gap.
 - The model of each van (`DIYWeb.Icon.Shapes.van/1`) has the nose, the
   hood, the windshield and the roof of its brand. The ProMaster, the
   Transit and the Sprinter look different in the yard and in the garage.
-  The model gives the size of the van: its sheet has no size.
+  The model gives the size of the van: its panel has no size.
 - A drag moves an item, also to a different zone. A tap on a zone
   chooses it. Its bar has the buttons that move it. They use the words of
   a van: to the back, to the front, to the right side, to the left side.
@@ -1356,7 +1359,7 @@ its turn. A length is in inches.
 - Each kind has a typical size (`DIY.Catalog.size/1`). Next to each size
   is its source: the spec sheet of a common model, or a standard size.
   For example, a fridge is the LG LRFXS2503S: 33 by 33 by 70 inches. A
-  size with no source is for the plan only. The sheet of the item asks
+  size with no source is for the plan only. The panel of the item asks
   for the size of the real item.
 - The watts of an array of solar panels give its size. A panel of 400 W
   is 45 by 68 inches: a module of 108 half cells, 1134 by 1722 mm. An
@@ -1557,8 +1560,11 @@ learns it one time, and then knows each item.
      opens the math of one month.
   2. Home Assistant, only for a hub: the state of the link, Disconnect,
      and the match of the rooms.
-  3. How you use it: the numbers of the item.
-  4. Where it is: its room, its place, its size and its turn.
+  3. How you use it: the numbers of the item. For a camper van, also the
+     key "Use the numbers of the model".
+  4. Where it is: its room, its place, its size and its turn. The list of
+     the rooms has only the rooms where the item can go. An item does not
+     go from the house to a van with this list.
   5. More: the flags (a plan, a power station runs it), what the app
      uses it for, and Remove.
 
@@ -1597,11 +1603,12 @@ learns it one time, and then knows each item.
   the light and the dark mode. An error has the red of the app, with a
   contrast of 4.5 at least (`--color-error`).
 
-  Two parts are not the same yet. The room is a list (a select): a house
-  can have many rooms. The place of an item has smaller fields for its
-  size, with the key "Set the size". The reason is that the sheet of a
-  van item has the same place. When the van items come to the stage, the
-  size gets − and + too.
+  The room is a list (a select), not a row of buttons: a house can have
+  many rooms. Each side of the size of an item (width, depth and height)
+  has the control of a number: −, the field, "in" and +. A change applies
+  at once. When a side is not valid, the error shows under the size. Only
+  the sides that are not valid have the mark of the error. A step and the
+  key "The typical size" clear the error.
 - The tags. A tag on the model shows where a number is on the real item:
   - the EnergyGuide label of a fridge and of a freezer;
   - the watts on the back of a TV and of a computer, and their hours on
@@ -1660,16 +1667,33 @@ learns it one time, and then knows each item.
   the frames of the open item: a render, for example of a different page,
   does not send them again. The points have one decimal: a step of 0.1%
   of the model.
-- The van. The items of a van still open in a sheet, with no frames. They
-  come to the stage in a later change.
+- The van. An item of a van comes forward on the page Van, with the same
+  stage and the same panel (`DIYWeb.Inside.item_stage/1`). The first
+  frame of its model is from the camera of the van plan
+  (`DIYWeb.Stage.frames/2` with `:van`). So the flight starts on the item
+  of the plan. The close goes back to the van. The panel of an item
+  in a van differs only where the van is different:
+  - the first part has its weight and its Wh in a day of July and of
+    January, not the dollars of the house;
+  - the list of "Where it is" has the zones of the van where the item
+    can go;
+  - "More" has no flags of the house. It has the budgets of the van that
+    the item counts in, and "Bring it home" for a station of the house.
+    This key closes the panel, and a message tells that the station is at
+    home now;
+  - the remove asks "Remove this item from the van?".
+
+  The key "The numbers of the van" brings the van itself to the front. It
+  has the panel of an item of the house, with no key to its own page and
+  no remove.
 
 The tests:
 
 - `test/diy_web/components/stage_test.exs`: the frames of each kind. The
-  first frame has the polygons of the plan. Each point and each corner of
-  the face is in the view. Each tag is a number of its kind, on the face.
-  A property test checks that the center of the model stays in each
-  frame.
+  first frame has the polygons of the plan: of the house, and of the van
+  for each kind that can go in a van. Each point and each corner of the
+  face is in the view. Each tag is a number of its kind, on the face. A
+  property test checks that the center of the model stays in each frame.
 - `test/diy_web/live/stage_live_test.exs`:
   - the stage and its tags;
   - the same parts in the same order for a fridge, a TV and a hub;
@@ -1678,6 +1702,19 @@ The tests:
   - − and +, and the status of the new value;
   - the remove;
   - the screen of a hub, with a bad address.
+- `test/diy_web/live/van_stage_live_test.exs`:
+  - an item of a van: its stage with the frames of the van plan, and the
+    same parts in the same order. Its weight and its energy, and its
+    zones. A change of a number and of the zone, and the remove;
+  - the van itself, on its page and on the page Rooms. A planned van
+    opens on its page;
+  - a station in the van goes home from its panel;
+  - an item is on the stage of its own page only;
+  - a smart meter (an item with no numbers) tells its new size;
+  - − and + of the size, a typed size, a size that is not valid, and the
+    ends of the range;
+  - the field of a ZIP code after an error, on the start page and in
+    Settings.
 - `test/diy/catalog_test.exs`: the steps of − and +. A property test
   checks each number of each kind. The new value is valid and in the
   range. It goes in the right direction, one step at most. It is a

@@ -14,6 +14,8 @@ defmodule DIYWeb.Settings do
   attr :market, :map, required: true
   attr :uploads, :map, required: true
   attr :ha, :map, required: true, doc: "the link to Home Assistant (`DIYWeb.HomeAssistant`)"
+  attr :zip_error, :string, default: nil, doc: "the error of the last ZIP code"
+  attr :zip_text, :string, default: nil, doc: "the text that the person typed, after an error"
 
   # The first Home Assistant hub of the house, and its room.
   defp hub(build) do
@@ -37,14 +39,19 @@ defmodule DIYWeb.Settings do
             <span class="text-sm">ZIP code</span>
             <input
               name="zip"
-              value={@build.zip}
+              value={@zip_text || @build.zip}
               inputmode="numeric"
               maxlength="5"
-              class="input input-sm w-28 block"
+              aria-invalid={@zip_error && "true"}
+              aria-describedby={@zip_error && "settings-zip-error"}
+              class={["input input-sm w-28 block", @zip_error && "input-error"]}
             />
           </label>
           <button class="btn btn-sm">Change</button>
         </form>
+        <p :if={@zip_error} id="settings-zip-error" role="alert" class="text-sm text-error">
+          {@zip_error}
+        </p>
         <p class="text-sm opacity-80">{Zip.state_name(@place.state)}</p>
 
         <div :if={@place.state == "TX"} id="utility" class="space-y-1 text-sm">

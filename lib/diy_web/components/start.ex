@@ -49,6 +49,7 @@ defmodule DIYWeb.Start do
   @doc "The ZIP code of the house."
   attr :build, Build, required: true
   attr :error, :string, default: nil
+  attr :typed, :string, default: nil, doc: "the text that the person typed, after an error"
 
   def zip(assigns) do
     ~H"""
@@ -68,13 +69,15 @@ defmodule DIYWeb.Start do
           autocomplete="postal-code"
           maxlength="5"
           placeholder="75070"
+          value={@typed}
           class={["input input-lg w-40", @error && "input-error"]}
+          aria-invalid={@error && "true"}
           aria-describedby={@error && "zip-error"}
           required
         />
         <button type="submit" class="btn btn-primary btn-lg">Next</button>
       </form>
-      <p :if={@error} id="zip-error" class="text-error">{@error}</p>
+      <p :if={@error} id="zip-error" role="alert" class="text-error">{@error}</p>
       <button type="button" phx-click="restart" class="btn btn-ghost btn-sm">Back</button>
     </section>
     """
