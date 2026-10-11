@@ -130,8 +130,11 @@ defmodule DIYWeb.HomeAssistant do
       {:ok, url} ->
         {:halt, LiveView.push_event(socket, "ha:connect", %{url: url, back: back})}
 
+      # The field keeps the address that the person typed, so the person
+      # can correct it.
       :error ->
-        {:halt, assign(socket, :ha, %{socket.assigns.ha | error: "url"})}
+        {:halt,
+         assign(socket, :ha, %{socket.assigns.ha | error: "url", url: text(text, @max_url)})}
     end
   end
 
@@ -224,18 +227,18 @@ defmodule DIYWeb.HomeAssistant do
   attr :ha, :map, required: true, doc: "the link (the assign `:ha`)"
   attr :back, :string, required: true, doc: "the page where the sign-in comes back"
   attr :hub, :map, default: nil, doc: "the hub of the house and its room, for Settings"
-  attr :title, :boolean, default: true, doc: "false in the sheet of a hub: it has its title"
+  attr :title, :boolean, default: true, doc: "false in the panel of a hub: it has its title"
+
+  attr :form, :boolean,
+    default: true,
+    doc: "false in the panel of a hub: the address is on the screen of the hub (`screen/1`)"
 
   @doc """
   The card of the link: the address and the sign-in, or the state of the
   link and a disconnect.
   """
   def card(assigns) do
-    assigns =
-      assign(assigns,
-        status: status(assigns.ha),
-        linked: assigns.ha.state in ~w(signing_in connecting connected offline)
-      )
+    assigns = assign(assigns, status: status(assigns.ha), linked: linked?(assigns.ha))
 
     ~H"""
     <div id="home-assistant-card" class="space-y-2">
@@ -248,8 +251,17 @@ defmodule DIYWeb.HomeAssistant do
       <p :if={@ha.error} id="ha-error" role="alert" class="text-sm text-error">
         {message(@ha.error)}
       </p>
+      <button
+        :if={not @form and not @linked}
+        type="button"
+        id="ha-show-screen"
+        class="stage-link"
+        data-show="screen"
+      >
+        Type the address on the screen of the hub
+      </button>
       <form
-        :if={not @linked}
+        :if={@form and not @linked}
         id="ha-form"
         phx-submit="ha_connect"
         class="flex flex-wrap gap-2 items-end"
@@ -300,6 +312,51 @@ defmodule DIYWeb.HomeAssistant do
         You can also add a Home Assistant hub to a room on the page Rooms: its panel has this card.
       </p>
     </div>
+    """
+  end
+
+  # The link is open, or it opens: the address does not change.
+  defp linked?(ha), do: ha.state in ~w(signing_in connecting connected offline)
+
+  attr :ha, :map, required: true, doc: "the link (the assign `:ha`)"
+  attr :back, :string, required: true, doc: "the page where the sign-in comes back"
+
+  @doc """
+  The LED screen of a hub (`DIYWeb.Stage`): the address of Home Assistant
+  and the key Connect. When the link is open, the screen shows its state.
+  The rest of the link (its state, the errors, Disconnect and the match of
+  the rooms) is in the panel of the hub (`card/1`). When the address is not
+  correct, the screen also tells it next to the field. A screen reader
+  reads the error of the panel with the field.
+  """
+  def screen(assigns) do
+    assigns =
+      assign(assigns,
+        status: status(assigns.ha),
+        linked: linked?(assigns.ha),
+        bad: assigns.ha.error in ~w(url blocked)
+      )
+
+    ~H"""
+    <form :if={not @linked} id="ha-form" phx-submit="ha_connect" class="stage-led-form">
+      <input type="hidden" name="back" value={@back} />
+      <label for="ha-url" class="stage-led-label">Address of your Home Assistant</label>
+      <input
+        id="ha-url"
+        name="url"
+        value={@ha.url}
+        type="url"
+        inputmode="url"
+        autocomplete="url"
+        placeholder="https://home.example.com"
+        aria-invalid={@bad && "true"}
+        aria-describedby={@bad && "ha-screen-error ha-error"}
+        class="stage-led-input"
+      />
+      <p :if={@bad} id="ha-screen-error" class="stage-led-error">Check the address.</p>
+      <button class="stage-led-key">Connect</button>
+    </form>
+    <p :if={@linked} id="ha-screen-state" class="stage-led-state">{@status}</p>
     """
   end
 

@@ -3,6 +3,11 @@
 // sheet closes, the focus goes back to the element that had it before, if
 // that element is still on the page.
 
+// The place of a node before or after an other node
+// (Node.compareDocumentPosition).
+const BEFORE = 2
+const AFTER = 4
+
 // The elements that can have the focus.
 export const FOCUSABLE =
   "a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]"
@@ -29,8 +34,12 @@ export const sheetHook = {
     }
   },
 
-  // The first and the last element that can have the focus: Tab after the
-  // last goes to the first, and Shift+Tab before the first to the last.
+  // The first and the last element that can have the focus. Tab after the
+  // last goes to the first. Shift+Tab before the first goes to the last.
+  // Some elements of the sheet are not in the list, for example a title
+  // with the tabindex -1. From such an element before the first, Shift+Tab
+  // goes to the last. From such an element after the last, Tab goes to the
+  // first.
   trap(event) {
     const list = [...this.el.querySelectorAll(FOCUSABLE)].filter(
       (el) => el.tabIndex >= 0 && el.getClientRects().length > 0,
@@ -40,10 +49,13 @@ export const sheetHook = {
     const last = list[list.length - 1]
     const active = this.el.ownerDocument.activeElement
     const outside = !this.el.contains(active)
-    if (event.shiftKey && (active === first || outside)) {
+    const loose = !outside && !list.includes(active)
+    const before = loose && (first.compareDocumentPosition(active) & BEFORE) !== 0
+    const after = loose && (last.compareDocumentPosition(active) & AFTER) !== 0
+    if (event.shiftKey && (active === first || outside || before)) {
       event.preventDefault()
       last.focus()
-    } else if (!event.shiftKey && (active === last || outside)) {
+    } else if (!event.shiftKey && (active === last || outside || after)) {
       event.preventDefault()
       first.focus()
     }

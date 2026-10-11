@@ -400,7 +400,8 @@ async function build(context, name) {
   await page.keyboard.press("Enter")
   await page.waitForSelector("#item-stage [data-stage=landed]")
   await check(page, `${name} item`)
-  await page.click("#key-place")
+  // The panel scrolls to its place, its size and its turn.
+  await page.locator("#item-place").scrollIntoViewIfNeeded()
   await check(page, `${name} item place`)
   await page.click("#turn-item")
 
@@ -416,9 +417,8 @@ async function build(context, name) {
   assert.match(await page.evaluate(() => document.activeElement.textContent), /Fridge/)
   await follow(page, fridge)
   await page.waitForSelector("#item-stage")
-  await page.click("#key-numbers")
   await page.fill("#item-form input[name='item[kwh_year]']", "700")
-  await page.waitForFunction(() => document.querySelector("#item-math")?.textContent.includes("700 kWh"))
+  await page.waitForFunction(() => document.querySelector("#item-year")?.textContent.includes("700 kWh"))
   await page.click("#item-stage .stage-back")
   await page.waitForSelector("#item-stage", { state: "detached" })
 
@@ -444,11 +444,30 @@ async function build(context, name) {
   await page.waitForSelector("#item-stage [data-stage=landed]")
   assert.equal(await page.evaluate(() =>
     [...document.querySelectorAll(".stage-frame")].findIndex((frame) => !frame.hasAttribute("hidden"))), 11)
-  // The key of the first page takes the focus. A patch (the page Numbers)
-  // keeps the state of the stage, and the panel stays on the page.
-  assert.equal(await page.evaluate(() => document.activeElement?.id), "key-use")
-  await page.click("#key-numbers")
-  await page.waitForSelector("#page-numbers:not([hidden])")
+  // The title of the panel takes the focus. A tap on the tag of the
+  // EnergyGuide label goes to its number. A tap on + gives the next round
+  // number: a patch, which keeps the state of the stage, and the panel
+  // stays on the page.
+  assert.equal(await page.evaluate(() => document.activeElement?.id), "item-stage-title")
+  // Shift+Tab from the title goes to the last control of the dialog, and
+  // up. The focus stays in the dialog, and the head of the panel does not
+  // cover the control with the focus (WCAG 2.4.11).
+  for (let i = 0; i < 8; i++) {
+    await page.keyboard.press("Shift+Tab")
+    const focus = await page.evaluate(() => {
+      const el = document.activeElement
+      const head = document.querySelector(".stage-head").getBoundingClientRect()
+      const box = el.getBoundingClientRect()
+      const under = el.closest(".stage-scroll") && !el.closest(".stage-head") ? box.top < head.bottom - 1 : false
+      return { inside: Boolean(el.closest("#item-stage")), under, name: el.id || el.textContent.trim() }
+    })
+    assert.ok(focus.inside, `${name}: the focus stays in the dialog (${focus.name})`)
+    assert.ok(!focus.under, `${name}: the head covers ${focus.name}`)
+  }
+  await page.click("#item-stage-spot-kwh_year")
+  await page.waitForFunction(() => document.activeElement?.id === "param-kwh_year")
+  await page.click("#param-kwh_year-field button[phx-value-by='1']")
+  await page.waitForSelector("#item-year:has-text('750 kWh')")
   const placed = await page.evaluate(() => {
     const stage = document.querySelector("#item-stage [data-stage]")
     const box = stage.querySelector(".stage-panel").getBoundingClientRect()
@@ -494,6 +513,16 @@ async function build(context, name) {
   await page.click("#add-home_assistant")
   await page.waitForSelector("#item-stage:has-text('Home Assistant hub') #ha-form")
   const hub = new URL(page.url()).searchParams.get("item")
+  // The field of the address on the screen of the hub is wide enough to
+  // read, on a phone and on a wide page. The whole screen is on the page.
+  await page.waitForSelector("#item-stage [data-stage=landed]")
+  const field = await page.$eval("#ha-url", (el) => el.getBoundingClientRect().width)
+  assert.ok(field > 200, `the field of the address is ${field} px wide`)
+  const led = await page.$eval("#item-stage-screen", (el) => {
+    const box = el.getBoundingClientRect()
+    return box.top >= 0 && box.left >= 0 && box.bottom <= innerHeight && box.right <= innerWidth
+  })
+  assert.ok(led, "the screen of the hub is on the page")
   await page.fill("#ha-form input[name=url]", homeAssistant.url + "/")
   await page.click("#ha-form button")
   await page.waitForSelector("#item-stage #ha-status:has-text('Connected to Fake house (Home Assistant 2026.10.0)')")
@@ -635,7 +664,6 @@ for (const colorScheme of ["light", "dark"]) {
     await page.click("#item-stage .stage-back")
     await page.waitForSelector("#item-stage", { state: "detached" })
     await follow(page, 'a[id^="item-"]:has-text("Fridge")')
-    await page.click("#key-numbers")
     await page.check("#flags-form input[name=backup][type=checkbox]")
     await page.waitForSelector("#flags-form input[name=backup]:checked")
     await page.click("#item-stage .stage-back")
@@ -646,7 +674,6 @@ for (const colorScheme of ["light", "dark"]) {
     await follow(page, 'a[id^="add-"][aria-label="Add an item to Roof"]')
     await page.click("#add-solar_panels")
     await page.waitForSelector("#item-stage:has-text('Solar panels')")
-    await page.click("#key-numbers")
     await page.check("#flags-form input[name=planned][type=checkbox]")
     await page.waitForSelector('#item-stage:has-text("Solar panels")')
     await page.waitForSelector("#flags-form input[name=planned]:checked")
@@ -679,7 +706,6 @@ for (const colorScheme of ["light", "dark"]) {
     // A station that is too small for its items: the warning.
     await page.click("nav >> text=Rooms")
     await follow(page, 'a[id^="item-"]:has-text("Power station")')
-    await page.click("#key-numbers")
     await page.fill("#item-form input[name='item[output_w]']", "100")
     await page.press("#item-form input[name='item[output_w]']", "Tab")
     await page.waitForFunction(() => document.querySelector("#item-form input[name='item[output_w]']").value === "100")

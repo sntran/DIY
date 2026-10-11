@@ -141,4 +141,76 @@ defmodule DIY.CatalogTest do
     assert Catalog.lift("ceiling_fan") == 84
     assert Catalog.lift("fridge") == 0
   end
+
+  # The number parameters of all the kinds.
+  @numbers for kind <- Catalog.kinds(),
+               param <- kind.params,
+               param.type in [:int, :float],
+               do: {kind.type, param}
+
+  test "the steps of − and +: round steps, half an hour for hours" do
+    param = fn type, key -> Enum.find(Catalog.kind(type).params, &(&1.key == key)) end
+
+    assert Catalog.step(param.("fridge", "kwh_year"), 500) == 20
+    assert Catalog.stepped(param.("fridge", "kwh_year"), 500, 1) == 520
+    assert Catalog.stepped(param.("fridge", "kwh_year"), 503, -1) == 500
+    assert Catalog.stepped(param.("tv", "watts"), 100, 1) == 105
+    assert Catalog.stepped(param.("tv", "hours"), 5.3, 1) == 5.5
+    assert Catalog.stepped(param.("tv", "hours"), 24.0, 1) == 24.0
+    assert Catalog.stepped(param.("power_station", "cost"), 1500, 1) == 1600
+    # Near 0, the step comes from the range.
+    assert Catalog.stepped(param.("power_station", "solar_w"), 0, 1) == 5
+    assert Catalog.stepped(param.("dishwasher", "loads"), 0, -1) == 0
+    assert Catalog.stepped(param.("power_station", "kwh"), 0.1, -1) == 0.1
+    # Hours that are whole numbers have the steps of a number.
+    hours = %{param.("tv", "hours") | type: :int, min: 0, max: 24}
+    assert Catalog.stepped(hours, 5, -1) == 4
+  end
+
+  property "− and + give a valid value in the range, in the right direction" do
+    check all(
+            {type, param} <- member_of(@numbers),
+            part <- float(min: 0.0, max: 1.0),
+            by <- member_of([-1, 1])
+          ) do
+      value =
+        case param.type do
+          :int -> round(param.min + part * (param.max - param.min))
+          :float -> Float.round(param.min + part * (param.max - param.min), 2)
+        end
+
+      next = Catalog.stepped(param, value, by)
+      step = Catalog.step(param, value)
+      assert {:ok, _params} = Catalog.params(type, %{param.key => next})
+      assert next >= param.min and next <= param.max
+
+      # Up is more, and down is less, unless the value is at the end of the
+      # range. The new value is a multiple of the step, or an end.
+      if by > 0, do: assert(next > value or next == param.max)
+      if by < 0, do: assert(next < value or next == param.min)
+      ratio = next / step
+
+      assert abs(ratio - round(ratio)) < 1.0e-6 or next in [param.min, param.max],
+             "#{type} #{param.key}: #{value} #{by} gives #{next} (step #{step})"
+
+      # One tap goes one step at most (a float has a round of 0.01).
+      assert abs(next - value) <= step + 0.01,
+             "#{type} #{param.key}: #{value} #{by} gives #{next} (step #{step})"
+
+      # A step is 1, 2 or 5 times a power of ten (or half an hour).
+      digits = step |> abs() |> :math.log10() |> Float.floor()
+      lead = step / :math.pow(10, digits)
+      assert Enum.any?([1, 2, 5], &(abs(lead - &1) < 1.0e-6))
+
+      # A step is near 5% of the value (or of 1/200 of the range): from 3%
+      # to 8% of it, or the smallest step.
+      base = max(abs(value), (param.max - param.min) / 200)
+      least = if param.type == :int, do: 1, else: 0.1
+
+      unless param.unit == "h" do
+        assert step >= 0.03 * base or step == least
+        assert step <= 0.08 * base or step == least
+      end
+    end
+  end
 end

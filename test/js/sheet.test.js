@@ -3,13 +3,19 @@ import {test} from "node:test"
 import assert from "node:assert/strict"
 import {sheetHook, FOCUSABLE} from "../../assets/js/sheet.js"
 
-// An element that can have the focus.
+// An element that can have the focus. Its index is its place in the page.
+let next = 0
 function focusable(doc, name, {tabIndex = 0, visible = true} = {}) {
   return {
     name,
     tabIndex,
+    index: next++,
     isConnected: true,
     getClientRects: () => (visible ? [{}] : []),
+    // 2: the other node is before; 4: it is after.
+    compareDocumentPosition(other) {
+      return other.index < this.index ? 2 : other.index > this.index ? 4 : 0
+    },
     focus() {
       doc.activeElement = this
     },
@@ -26,8 +32,8 @@ function setup(names = ["close", "field", "save"]) {
   const before = focusable(doc, "item link")
   doc.activeElement = before
   const backdrop = focusable(doc, "backdrop", {tabIndex: -1})
-  const hidden = focusable(doc, "hidden", {visible: false})
   const items = names.map((name) => focusable(doc, name))
+  const hidden = focusable(doc, "hidden", {visible: false})
   let closed = 0
   const el = {
     ownerDocument: doc,
@@ -48,7 +54,7 @@ function setup(names = ["close", "field", "save"]) {
     listeners.get("keydown")({key, shiftKey, preventDefault: () => (prevented = true)})
     return prevented
   }
-  return {hook, doc, before, items, listeners, press, closed: () => closed}
+  return {hook, doc, before, backdrop, hidden, items, listeners, press, closed: () => closed}
 }
 
 test("the Escape key closes the sheet", () => {
@@ -79,6 +85,27 @@ test("the Tab key keeps the focus in the sheet", () => {
   assert.equal(press("Tab"), false)
   assert.equal(press("Tab", true), false)
   assert.equal(press("Enter"), false)
+})
+
+test("the Tab key from an element of the sheet that is not in the list", () => {
+  const {doc, backdrop, hidden, items, press} = setup()
+  const [close, , save] = items
+
+  // A title with the tabindex -1 before the first: Shift+Tab goes to the
+  // last, and Tab is for the browser.
+  doc.activeElement = backdrop
+  assert.equal(press("Tab", true), true)
+  assert.equal(doc.activeElement, save)
+  doc.activeElement = backdrop
+  assert.equal(press("Tab"), false)
+
+  // An element after the last: Tab goes to the first, and Shift+Tab is for
+  // the browser.
+  doc.activeElement = hidden
+  assert.equal(press("Tab"), true)
+  assert.equal(doc.activeElement, close)
+  doc.activeElement = hidden
+  assert.equal(press("Tab", true), false)
 })
 
 test("a sheet with nothing to focus does not trap the Tab key", () => {

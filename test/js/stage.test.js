@@ -4,8 +4,8 @@ import {test} from "node:test"
 import assert from "node:assert/strict"
 import fc from "fast-check"
 import {
-  OUT, BACK, FRONT, MIN_W, MAX_W, EDGE, numbers, easeOut, easeIn, frameAt, rectOf, restPose, placement, between,
-  transformOf, fly, inside, cssString, nextTab, browserParts, pageParts, stageHook,
+  OUT, BACK, PING, FRONT, SCREEN_W, SCREEN_MIN, screenAt, numbers, easeOut, easeIn, frameAt, rectOf, restPose, areaOf, placement, pointAt,
+  screenOf, between, transformOf, fly, inside, cssString, browserParts, pageParts, stageHook,
 } from "../../assets/js/stage.js"
 
 const close = (a, b, eps = 1e-6) => assert.ok(Math.abs(a - b) < eps, `${a} is not ${b}`)
@@ -146,11 +146,13 @@ test("the parts of the browser", () => {
     matchMedia: (query) => ({matches: query === "(prefers-reduced-motion: reduce)"}),
     document: {documentElement: "root"},
     getComputedStyle: (el) => ({fontSize: el === "root" ? "20px" : ""}),
+    setTimeout: (f, ms) => calls.push([f, ms]),
   }
   const parts = browserParts(win)
   assert.equal(parts.now(), 42)
   parts.frame("f")
-  assert.deepEqual(calls, ["f"])
+  parts.wait("g", 900)
+  assert.deepEqual(calls, ["f", ["g", 900]])
   assert.equal(parts.reduce(), true)
   assert.equal(parts.rem(), 20)
   assert.equal(browserParts({...win, matchMedia: undefined}).reduce(), false)
@@ -174,64 +176,75 @@ test("a flight stops when it is not alive", () => {
   assert.equal(done, 0)
 })
 
-test("the place of the model and of its panel on the stage", () => {
-  // A view of 100 by 50 units, and a panel of 40 by 20 units at its middle,
-  // with no slant.
+test("the area of the model, its place, a point on it, and the screen of a hub", () => {
+  // A wide page: the panel is at the right. A narrow page: at the bottom.
+  assert.deepEqual(
+    areaOf({width: 1280, height: 800}, {left: 840, top: 24, width: 416, height: 752}),
+    {left: 24, top: 24, width: 784, height: 752},
+  )
+  assert.deepEqual(
+    areaOf({width: 390, height: 844}, {left: 0, top: 354, width: 390, height: 490}),
+    {left: 16, top: 16, width: 358, height: 314},
+  )
+
+  // The whole model fits at the middle of its area.
   const view = [-50, -25, 100, 50]
+  const box = placement(view, [], {left: 0, top: 0, width: 1000, height: 800})
+  close(box.k, 9.2)
+  close(box.width, 920)
+  close(box.left + box.width / 2, 500)
+  close(box.top + box.height / 2, 400)
+  const low = placement(view, [], {left: 10, top: 20, width: 1000, height: 100})
+  close(low.k, 1.88)
+  close(low.top, 20 + 3)
+  // A point of the view on the page: the center of the view is the middle.
+  const [x, y] = pointAt(box, view, [0, 0])
+  close(x, 500)
+  close(y, 400)
+
+  // A hub comes near: its screen is SCREEN_W px wide, at the middle of the
+  // area, with no slant here.
   const region = [-20, -10, 20, -10, -20, 10]
-  // A wide area: the whole model fits, and the panel is large enough.
-  const wide = placement(view, region, {width: 1000, height: 800})
-  close(wide.model.width, 900)
-  close(wide.panel.width, 360)
-  close(wide.panel.height, 180)
-  assert.deepEqual(wide.panel.matrix.slice(0, 4), [1, 0, 0, 1])
-  // The middle of the panel is at the middle of the width, at 45% of the
-  // height.
-  close(wide.panel.matrix[4] + wide.panel.width / 2, 500)
-  close(wide.panel.matrix[5] + wide.panel.height / 2, 360)
-  close(wide.model.left + wide.model.width / 2, 500)
-
-  // A phone: the model comes nearer, so that the panel is large enough to
-  // read. Then the model is wider than the page.
-  const phone = placement(view, [-5, -10, 5, -10, -5, 10], {width: 390, height: 844})
-  close(phone.panel.width, MIN_W)
-  assert.ok(phone.model.width > 390)
-  // A desktop: the panel is not wider than the most.
-  const desk = placement(view, [-40, -20, 40, -20, -40, 20], {width: 2000, height: 2000})
-  close(desk.panel.width, MAX_W)
-
-  // A short page (a zoom of 400%): the panel is not higher than the page,
-  // and it is on the page. The model is then nearer than for the least
-  // width of the panel.
-  const short = placement(view, [-10, -20, 10, -20, -10, 20], {width: 320, height: 256})
-  close(short.panel.height, 256 - 2 * EDGE)
-  close(short.panel.matrix[5], EDGE)
-  assert.ok(short.panel.width < MIN_W)
-  // A large font makes a larger panel.
-  const font = placement(view, [-5, -10, 5, -10, -5, 10], {width: 390, height: 844}, 20)
-  close(font.panel.width, MIN_W * 1.25)
-
-  // A slant: the panel goes along the sides of the region.
-  const slant = placement(view, [0, 0, 30, 3, 1, 20], {width: 800, height: 600})
-  const [a, b, c, d] = slant.panel.matrix
+  const area = {left: 0, top: 0, width: 1000, height: 800}
+  const hub = placement(view, region, area, {screen: true})
+  close(hub.k, SCREEN_W / 40)
+  const screen = screenOf(hub, view, region)
+  close(screen.width, SCREEN_W)
+  close(screen.height, SCREEN_W / 2)
+  assert.deepEqual(screen.matrix.slice(0, 4), [1, 0, 0, 1])
+  close(screen.matrix[4] + screen.width / 2, 500)
+  close(screen.matrix[5] + screen.height / 2, 400)
+  // It is not wider or higher than its area, and a large font makes it
+  // larger. On a short area (a zoom of 400 %), the whole screen shows.
+  close(placement(view, region, {left: 0, top: 0, width: 200, height: 300}, {screen: true}).k, 176 / 40)
+  const short = placement(view, region, {left: 0, top: 16, width: 280, height: 90}, {screen: true})
+  close(short.k, 66 / 20)
+  const led = screenOf(short, view, region)
+  assert.ok(led.matrix[5] >= 16 && led.matrix[5] + led.height <= 16 + 90)
+  // That screen is too small to read on the model: it covers the area.
+  const near = {left: 0, top: 16, width: 280, height: 90}
+  assert.deepEqual(screenAt(short, view, region, near), {width: 280, height: 90, matrix: [1, 0, 0, 1, 0, 16]})
+  // A screen of SCREEN_MIN px or more stays on the model. On a narrow area,
+  // a screen as wide as the area (less 24 px) stays too.
+  assert.deepEqual(screenAt(hub, view, region, area).matrix.slice(0, 4), [1, 0, 0, 1])
+  close(screenAt(hub, view, region, area).width, SCREEN_W)
+  const thin = {left: 0, top: 0, width: 200, height: 300}
+  close(screenAt(placement(view, region, thin, {screen: true}), view, region, thin).width, 176)
+  assert.ok(SCREEN_MIN < SCREEN_W)
+  close(placement(view, region, area, {screen: true, rem: 20}).k, (SCREEN_W * 1.25) / 40)
+  // A slant: the screen goes along the sides of its region.
+  const [a, b, c, d] = screenOf(hub, view, [0, 0, 30, 3, 1, 20]).matrix
   close(Math.hypot(a, b), 1)
   close(Math.hypot(c, d), 1)
   close(b / a, 0.1)
 })
 
-test("a rect in a box, a text in a CSS string, and the next tab", () => {
+test("a rect in a box, and a text in a CSS string", () => {
   const box = {left: 0, top: 0, width: 100, height: 100}
   assert.equal(inside({left: 40, top: 40, width: 10, height: 10}, box), true)
   assert.equal(inside({left: 140, top: 40, width: 10, height: 10}, box), false)
   assert.equal(inside({left: 40, top: -40, width: 10, height: 10}, box), false)
   assert.equal(cssString('i7"] { x } [a="'), 'i7\\"] { x } [a=\\"')
-  const tabs = ["use", "numbers", "place", "remove"]
-  assert.equal(nextTab(tabs, "use", "ArrowRight"), "numbers")
-  assert.equal(nextTab(tabs, "use", "ArrowLeft"), "remove")
-  assert.equal(nextTab(tabs, "remove", "ArrowRight"), "use")
-  assert.equal(nextTab(tabs, "place", "Home"), "use")
-  assert.equal(nextTab(tabs, "use", "End"), "remove")
-  assert.equal(nextTab(tabs, "use", "Enter"), null)
 })
 
 // An element with attributes, as the DOM has them.
@@ -246,13 +259,21 @@ function element(extra = {}) {
   }
 }
 
+// A list of classes, as the DOM has it.
+const classes = () => {
+  const set = new Set()
+  return {set, add: (name) => set.add(name), remove: (name) => set.delete(name), contains: (name) => set.has(name)}
+}
+
 // A fake page: a plan with the item, and the stage of the item. The plan
 // can be up (top < 0) and out of the page. As with LiveView, an attribute
 // that a command sets is on the element at once, and a patch keeps it. A
-// patch puts the other attributes back to those of the server. A tab takes
-// the focus only when the panel shows.
-function page({reduce = false, plan = true, onPlan = true, start = "-5 -10 10 20", top = 0, rem = 16} = {}) {
+// patch puts the other attributes back to those of the server. The title
+// takes the focus only when the panel shows. The page is narrow (the panel
+// at the bottom), or wide (the panel at the right). A hub has its screen.
+function page({reduce = false, plan = true, onPlan = true, start = "-5 -10 10 20", top = 0, rem = 16, screen = false} = {}) {
   const time = clock()
+  const timers = []
   const listeners = new Map()
   const resize = new Map()
   const head = []
@@ -270,6 +291,7 @@ function page({reduce = false, plan = true, onPlan = true, start = "-5 -10 10 20
     getElementById(id) {
       if (id === "plan-svg") return {getBoundingClientRect: () => rect(0, top, 390, onPlan ? 800 : 100)}
       if (plan && id === "plan-item-i7") return {querySelectorAll: () => [polygon(rect(100, 500 + top, 6, 12))]}
+      if (id === "param-watts-field") return field
       return null
     },
   }
@@ -282,15 +304,22 @@ function page({reduce = false, plan = true, onPlan = true, start = "-5 -10 10 20
     querySelectorAll: (selector) => (assert.equal(selector, ".stage-frame"), frames),
     getBoundingClientRect() { return rect(Number.parseFloat(this.style.left), Number.parseFloat(this.style.top), 300, 300) },
   })
-  const panel = element()
+  const panel = element({offsetLeft: 0, offsetTop: 354, offsetWidth: 390, offsetHeight: 490})
   const attrs = new Map()
   const kept = new Map()
-  const tabs = ["use", "numbers", "place", "remove"].map((name) => {
-    const tab = {
-      name, getAttribute: () => "tab", closest: () => tab,
-      focus: () => attrs.get("data-stage") === "landed" && focus.push(name), click: () => focus.push(`click ${name}`),
-    }
-    return tab
+  const title = {focus: () => attrs.get("data-stage") === "landed" && focus.push("title")}
+  // Two tags: the watts on the face, and a tag with no field in the panel.
+  const spots = ["watts", "nothing"].map((key) =>
+    element({dataset: {spot: key, at: key === "watts" ? "10 0" : "0 0"}, classList: classes(), offsetWidth: 80}))
+  const input = {focus: () => focus.push("field")}
+  const field = {
+    classList: classes(), scrolls: [],
+    scrollIntoView(options) { this.scrolls.push(options) },
+    querySelector: (selector) => (assert.equal(selector, "input:not([type=hidden]), select"), input),
+  }
+  const hubScreen = screen && element({
+    classList: classes(), offsetWidth: 300,
+    querySelector: (selector) => (assert.equal(selector, "input:not([type=hidden])"), {focus: () => focus.push("address")}),
   })
   const closeLink = {getAttribute: (name) => (assert.equal(name, "href"), "/inside?room=r2")}
   let clicked = null
@@ -298,16 +327,19 @@ function page({reduce = false, plan = true, onPlan = true, start = "-5 -10 10 20
   const el = {
     ownerDocument: doc,
     dataset: {item: "i7", start, region: "-20 -10 20 -10 -20 10"},
+    clientWidth: 390,
+    clientHeight: 844,
     addEventListener: (type, f) => { clicked = f },
     getBoundingClientRect: () => rect(0, 0, 390, 844),
     querySelector(selector) {
       if (selector === ".stage-model") return model
       if (selector === ".stage-panel") return panel
-      if (selector === '[role="tab"][aria-selected="true"]') return tabs[0]
+      if (selector === ".stage-screen") return hubScreen || null
+      if (selector === ".stage-title") return title
       if (selector === "[data-close]") return closeLink
       throw new Error(selector)
     },
-    querySelectorAll: (selector) => (selector === '[role="tab"]' ? tabs : []),
+    querySelectorAll: (selector) => (selector === "[data-spot]" ? spots : []),
     contains: () => true,
   }
   const hook = Object.assign({el, js: () => ({
@@ -318,16 +350,19 @@ function page({reduce = false, plan = true, onPlan = true, start = "-5 -10 10 20
       kept.set(name, value)
       attrs.set(name, value)
     },
-  })}, stageHook(() => ({now: time.now, frame: time.frame, reduce: () => reduce, rem: () => rem})))
+  })}, stageHook(() => ({
+    now: time.now, frame: time.frame, reduce: () => reduce, rem: () => rem, wait: (f, ms) => timers.push([f, ms]),
+  })))
   hook.mounted()
   const press = (key, target = null) => {
     let prevented = false
     listeners.get("keydown")({key, shiftKey: false, target, preventDefault: () => (prevented = true)})
     return prevented
   }
-  const click = (target) => {
+  // A click on an element: the closest element of each selector.
+  const click = (target, selector = "[data-close]") => {
     const event = {
-      target: {closest: (selector) => (assert.equal(selector, "[data-close]"), target)},
+      target: {closest: (wanted) => (wanted === selector ? target : null)},
       prevented: false, stopped: false,
       preventDefault() { this.prevented = true },
       stopPropagation() { this.stopped = true },
@@ -342,19 +377,25 @@ function page({reduce = false, plan = true, onPlan = true, start = "-5 -10 10 20
   }
   const visible = () => frames.findIndex((f) => !f.hasAttribute("hidden"))
   const scale = () => Number(model.style.transform.match(/scale\((.*)\)/)[1])
-  return {hook, time, head, focus, frames, model, panel, js, attrs, patch, listeners, resize, press, click, closeLink, visible, scale, el, tabs}
+  return {
+    hook, time, timers, head, focus, frames, model, panel, js, attrs, patch, listeners, resize, press, click, closeLink,
+    visible, scale, el, spots, field, screen: hubScreen,
+  }
 }
 
-test("the stage places the model and its panel, and flies the item out of the plan", () => {
+test("the stage places the model and its tags, and flies the item out of the plan", () => {
   const p = page()
   assert.deepEqual(p.js.states, ["placed"])
-  // The panel: 40 by 20 units at the middle of the view. It needs 150 px
-  // of height: 7.5 px for each unit.
-  assert.equal(p.panel.style.width, "300px")
-  assert.equal(p.panel.style.height, "150px")
-  assert.equal(p.panel.style["--pw"], "300px")
-  assert.match(p.panel.style.transform, /^matrix\(1, 0, 0, 1, /)
-  assert.equal(p.model.style.width, "750px")
+  // A narrow page: the model is over the panel, in an area of 358 by 314
+  // px. The view is 100 units: 2.9516 px for each unit, at the middle.
+  close(Number.parseFloat(p.model.style.width), 295.16)
+  close(Number.parseFloat(p.model.style.left), 16 + (358 - 295.16) / 2)
+  close(Number.parseFloat(p.model.style.top), 25.42)
+  // The tag of the watts is at 10, 0 in the view.
+  close(Number.parseFloat(p.spots[0].style.left), 16 + (358 - 295.16) / 2 + 60 * 2.9516)
+  close(Number.parseFloat(p.spots[0].style.top), 25.42 + 50 * 2.9516)
+  // The notch of the panel points at the middle of the model.
+  assert.equal(p.panel.style["--notch"], "24px")
   // The item on the plan does not show, with its id in a CSS string.
   assert.equal(p.head[0].textContent, '[id="plan-item-i7"] { opacity: 0 }')
   // The flight starts at the next frame of the page.
@@ -373,18 +414,20 @@ test("the stage places the model and its panel, and flies the item out of the pl
   p.time.tick(OUT)
   assert.equal(p.visible(), 11)
   assert.equal(p.model.style.transform, transformOf(FRONT))
-  // The panel shows, and the key of its page takes the focus.
+  // The panel shows, and its title takes the focus.
   assert.deepEqual(p.js.states, ["placed", "landed"])
-  assert.deepEqual(p.focus, ["use"])
+  assert.deepEqual(p.focus, ["title"])
   // A patch (a key of the panel, a number) keeps the state of the stage.
   p.patch()
   assert.equal(p.attrs.get("data-stage"), "landed")
 
-  // A new size of the page places them again.
-  // A large page: the panel has its most width.
-  p.el.getBoundingClientRect = () => rect(0, 0, 2000, 2000)
+  // A new size of the page places them again. A wide page: the panel is
+  // at the right, and the model at the left of it.
+  Object.assign(p.el, {clientWidth: 1280, clientHeight: 800})
+  Object.assign(p.panel, {offsetLeft: 840, offsetTop: 24, offsetWidth: 416, offsetHeight: 752})
   p.resize.get("resize")()
-  assert.equal(p.panel.style.width, `${MAX_W}px`)
+  close(Number.parseFloat(p.model.style.width), 752 * 0.94)
+  close(Number.parseFloat(p.panel.style["--notch"]), 400 - 24)
 })
 
 test("a close flies the item back, and then closes the stage", () => {
@@ -464,22 +507,72 @@ test("a close before the flight out starts, and a stage that goes away before or
   }
 })
 
-test("the arrow keys go from page to page; Escape and Tab", () => {
+test("a tag goes to its number, and Show me where shows the tag", () => {
   const p = page()
   p.time.tick(0)
   p.time.tick(OUT)
-  assert.equal(p.press("ArrowRight", p.tabs[0]), true)
-  assert.deepEqual(p.focus.slice(-2), ["numbers", "click numbers"])
-  p.press("End", p.tabs[0])
-  assert.deepEqual(p.focus.slice(-2), ["remove", "click remove"])
-  // A key that is not for the tabs, on a tab: no change of the page.
-  assert.equal(p.press("a", p.tabs[0]), false)
-  // The Tab key: the trap of the hook Sheet (no element: no change).
+
+  // A tap on the tag: the field comes to the middle of the panel, shows a
+  // flash, and its input takes the focus.
+  p.click(p.spots[0], "[data-spot]")
+  assert.deepEqual(p.field.scrolls, [{block: "center", behavior: "smooth"}])
+  assert.equal(p.field.classList.contains("stage-flash"), true)
+  assert.deepEqual(p.focus.at(-1), "field")
+  const [[unflash, ms]] = p.timers
+  assert.equal(ms, 900)
+  unflash()
+  assert.equal(p.field.classList.contains("stage-flash"), false)
+  // A tag with no field in the panel: nothing.
+  p.click(p.spots[1], "[data-spot]")
+  assert.equal(p.field.scrolls.length, 1)
+
+  // Show me where: a ring on the tag. It goes after PING ms. A second tap
+  // starts the time again: the timer of the first tap does nothing.
+  p.click({dataset: {show: "watts"}}, "[data-show]")
+  assert.equal(p.spots[0].classList.contains("stage-ping"), true)
+  p.click({dataset: {show: "watts"}}, "[data-show]")
+  const [[first, pingMs], [second]] = p.timers.slice(-2)
+  assert.equal(pingMs, PING)
+  first()
+  assert.equal(p.spots[0].classList.contains("stage-ping"), true)
+  second()
+  assert.equal(p.spots[0].classList.contains("stage-ping"), false)
+  p.click({dataset: {show: "fuel"}}, "[data-show]")
+  // A click on no link, no tag and no Show me: nothing.
+  assert.equal(p.click(null, "nothing").prevented, false)
+
+  // With less motion, the field comes at once. With no screen, Show me the
+  // screen does nothing.
+  const q = page({reduce: true})
+  q.time.tick(0)
+  q.click(q.spots[0], "[data-spot]")
+  assert.deepEqual(q.field.scrolls, [{block: "center", behavior: "auto"}])
+  q.click({dataset: {show: "screen"}}, "[data-show]")
+})
+
+test("a hub has its screen on its top, and Show me the screen gives it the focus", () => {
+  const p = page({screen: true})
+  // The model comes near: the screen is 300 px wide (the area is wider).
+  assert.equal(p.screen.style.width, `${SCREEN_W}px`)
+  assert.equal(p.screen.style.height, `${SCREEN_W / 2}px`)
+  assert.match(p.screen.style.transform, /^matrix\(1, 0, 0, 1, /)
+  p.time.tick(0)
+  p.time.tick(OUT)
+  p.click({dataset: {show: "screen"}}, "[data-show]")
+  assert.equal(p.screen.classList.contains("stage-ping"), true)
+  assert.equal(p.focus.at(-1), "address")
+})
+
+test("Escape puts the item back, and Tab keeps the focus on the stage", () => {
+  const p = page()
+  p.time.tick(0)
+  p.time.tick(OUT)
+  // A different key does nothing. The Tab key: the trap of the hook Sheet
+  // (no element: no change).
+  assert.equal(p.press("a"), false)
   assert.equal(p.press("Tab"), false)
   assert.equal(p.press("Escape", {}), true)
-  // A click that is not on a close link does nothing.
-  const event = p.click(null)
-  assert.equal(event.prevented, false)
+  assert.equal(p.js.states.at(-1), "closing")
 })
 
 test("with less motion, the item is at once in front, and a close is at once", () => {
@@ -488,8 +581,8 @@ test("with less motion, the item is at once in front, and a close is at once", (
   assert.equal(p.visible(), 11)
   assert.equal(p.model.style.transform, transformOf(FRONT))
   assert.deepEqual(p.js.states, ["placed", "landed"])
-  // The panel shows at once, so its key takes the focus.
-  assert.deepEqual(p.focus, ["use"])
+  // The panel shows at once, so its title takes the focus.
+  assert.deepEqual(p.focus, ["title"])
   p.click(p.closeLink)
   assert.deepEqual(p.js.patches, ["/inside?room=r2"])
   // The panel goes at once.

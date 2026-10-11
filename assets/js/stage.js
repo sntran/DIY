@@ -8,6 +8,12 @@
 // the other direction, and then closes the stage. The key Put it back, the
 // Escape key, and a tap next to the panel close the stage.
 //
+// The panel of the item is next to the model on a wide page, and under it
+// on a narrow page (the CSS). The model goes in the rest of the page. The
+// tags on the model show where a number is on the real item. A tap on a
+// tag goes to its number in the panel. "Show me where" in the panel shows
+// the tag. The LED screen of a hub goes on the top of its model.
+//
 // With less motion (prefers-reduced-motion), the model is at once at its
 // place, and a close is at once. The stage is a modal dialog: the Tab key
 // keeps the focus in it (the hook Sheet).
@@ -17,6 +23,8 @@ import {sheetHook} from "./sheet.js"
 // The time of the flight out and of the flight back, in milliseconds.
 export const OUT = 900
 export const BACK = 650
+// The time of the ring of "Show me where" (three rings of 0.7 s in the CSS).
+export const PING = 2100
 
 // The numbers of a text attribute ("1 2 3").
 export const numbers = (text) => (text ?? "").trim().split(/\s+/).filter(Boolean).map(Number)
@@ -67,48 +75,65 @@ export function restPose(box, view, start, rect) {
 
 export const FRONT = {x: 0, y: 0, s: 1}
 
-// The sizes of the panel on the stage, in px for a font of 16 px. The
-// least width and height let a person read it. A larger font makes them
-// larger. The panel stays EDGE px from the sides of the page.
-export const MIN_W = 260
-export const MIN_H = 150
-export const MAX_W = 440
-export const EDGE = 12
+// The width of the screen of a hub on the stage, in px for a font of
+// 16 px: large enough to read. A larger font makes it larger. A screen
+// that is less wide than SCREEN_MIN is too small to read on the model.
+export const SCREEN_W = 300
+export const SCREEN_MIN = 220
 
-// The places of the model and of its panel on the stage (an area of the
-// page). The region is the place of the panel on the last frame. It has
-// three corners: at the top left, at the top right and at the bottom left.
-// They are in units of the view. The whole model fits in the area when the
-// panel is then large enough to read. Else the model comes nearer. The
-// panel is not wider or higher than the page. The middle of the panel is
-// at the middle of the width, and at 45% of the height. When a side of the
-// panel is then out of the page, the panel moves into the page.
-export function placement(view, region, area, rem = 16) {
+// The area of the model on the stage: the page with no panel. On a wide
+// page the panel is at the right, and on a narrow page at the bottom. The
+// boxes are in px, from the top left of the page.
+export function areaOf(page, panel) {
+  if (panel.left > page.width / 3) return {left: 24, top: 24, width: panel.left - 56, height: page.height - 48}
+  return {left: 16, top: 16, width: page.width - 32, height: panel.top - 40}
+}
+
+// The place of the model in its area: the whole model, at the middle. With
+// a screen (a hub), the model comes near: its screen (the region, three
+// corners in units of the view) is SCREEN_W px wide. On a small area, the
+// screen is as wide or as high as the area, less 24 px.
+// The box has k, the px of a unit of the view.
+export function placement(view, region, area, {screen = false, rem = 16} = {}) {
   const [vx, vy, vw, vh] = view
-  const [ax, ay, bx, by, cx, cy] = region
-  const ru = Math.hypot(bx - ax, by - ay)
-  const rv = Math.hypot(cx - ax, cy - ay)
-  const font = rem / 16
-  const fit = Math.min((area.width * 0.9) / vw, (area.height * 0.75) / vh)
-  const most = Math.min(Math.min(area.width - 2 * EDGE, MAX_W * font) / ru, (area.height - 2 * EDGE) / rv)
-  const k = Math.min(Math.max(fit, (MIN_W * font) / ru, (MIN_H * font) / rv), most)
-  // The middle of the panel, and the half of its box on the page.
-  const [mx, my] = [(bx + cx) / 2, (by + cy) / 2]
-  const hx = Math.max(Math.abs(ax - mx), Math.abs(bx - mx)) * k
-  const hy = Math.max(Math.abs(ay - my), Math.abs(by - my)) * k
-  const px = Math.max(EDGE + hx, Math.min(area.width / 2, area.width - EDGE - hx))
-  const py = Math.max(EDGE + hy, Math.min(area.height * 0.45, area.height - EDGE - hy))
-  const left = px - (mx - vx) * k
-  const top = py - (my - vy) * k
-  return {
-    model: {left, top, width: vw * k, height: vh * k},
-    panel: {
-      width: ru * k,
-      height: rv * k,
-      // The panel goes along the two sides of the region.
-      matrix: [(bx - ax) / ru, (by - ay) / ru, (cx - ax) / rv, (cy - ay) / rv, left + (ax - vx) * k, top + (ay - vy) * k],
-    },
+  if (screen) {
+    const [ax, ay, bx, by, cx, cy] = region
+    const wide = Math.hypot(bx - ax, by - ay)
+    const high = Math.hypot(cx - ax, cy - ay)
+    const k = Math.min(SCREEN_W * rem / 16 / wide, (area.width - 24) / wide, (area.height - 24) / high)
+    const [mx, my] = [(bx + cx) / 2, (by + cy) / 2]
+    return {
+      left: area.left + area.width / 2 - (mx - vx) * k, top: area.top + area.height / 2 - (my - vy) * k,
+      width: vw * k, height: vh * k, k,
+    }
   }
+  const k = Math.min((area.width * 0.92) / vw, (area.height * 0.94) / vh)
+  return {
+    left: area.left + (area.width - vw * k) / 2, top: area.top + (area.height - vh * k) / 2,
+    width: vw * k, height: vh * k, k,
+  }
+}
+
+// A point of the view (a tag) on the page, in the box of the model.
+export const pointAt = (box, view, [x, y]) => [box.left + (x - view[0]) * box.k, box.top + (y - view[1]) * box.k]
+
+// The screen of a hub on the region of the model: its size, and its CSS
+// matrix. The matrix puts the screen along the two sides of the region, so
+// it follows the slant of the top.
+export function screenOf(box, view, region) {
+  const [[ax, ay], [bx, by], [cx, cy]] = [0, 2, 4].map((i) => pointAt(box, view, region.slice(i, i + 2)))
+  const width = Math.hypot(bx - ax, by - ay)
+  const height = Math.hypot(cx - ax, cy - ay)
+  return {width, height, matrix: [(bx - ax) / width, (by - ay) / width, (cx - ax) / height, (cy - ay) / height, ax, ay]}
+}
+
+// The screen of a hub on the page. On a small area (a zoom of 400 %), the
+// screen on the model is too small to read. Then it covers the whole area,
+// with no slant: the person sees the screen from very near.
+export function screenAt(box, view, region, area, rem = 16) {
+  const screen = screenOf(box, view, region)
+  if (screen.width >= Math.min(SCREEN_MIN * rem / 16, area.width - 24) - 0.5) return screen
+  return {width: area.width, height: area.height, matrix: [1, 0, 0, 1, area.left, area.top]}
 }
 
 // A pose between two poses: a at 0, b at 1.
@@ -142,19 +167,12 @@ export const inside = (rect, box) => {
 // escape, so an id cannot end the selector.
 export const cssString = (text) => JSON.stringify(String(text)).slice(1, -1)
 
-// The next tab for an arrow key, Home or End, or null for a different key.
-export function nextTab(tabs, current, key) {
-  const i = tabs.indexOf(current)
-  const moves = {ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: tabs.length - 1}
-  if (!(key in moves)) return null
-  return tabs[(moves[key] + tabs.length) % tabs.length]
-}
-
 // The parts of the browser for the hook (for the tests, fakes).
 export const browserParts = (win) => ({
   now: () => win.performance.now(),
   frame: (f) => win.requestAnimationFrame(f),
   reduce: () => Boolean(win.matchMedia?.("(prefers-reduced-motion: reduce)").matches),
+  wait: (f, ms) => win.setTimeout(f, ms),
   // The size of the font of the page, in px.
   rem: () => Number.parseFloat(win.getComputedStyle(win.document.documentElement).fontSize) || 16,
 })
@@ -170,6 +188,8 @@ export function stageHook(parts = pageParts) {
       this.previous = doc.activeElement
       this.model = this.el.querySelector(".stage-model")
       this.panel = this.el.querySelector(".stage-panel")
+      this.screen = this.el.querySelector(".stage-screen")
+      this.spots = [...this.el.querySelectorAll("[data-spot]")]
       this.frames = [...this.model.querySelectorAll(".stage-frame")]
       this.flight = 0
       this.closing = false
@@ -201,10 +221,11 @@ export function stageHook(parts = pageParts) {
       if (this.closing) return
       this.rest = this.restPose(this.planRect())
       const id = ++this.flight
-      // The panel shows when the model lands: then it takes the focus.
+      // The panel shows when the model lands: then its title takes the
+      // focus, so a screen reader reads the name of the item.
       const landed = () => {
         this.state("landed")
-        this.el.querySelector('[role="tab"][aria-selected="true"]')?.focus({preventScroll: true})
+        this.el.querySelector(".stage-title")?.focus({preventScroll: true})
       }
       if (this.parts.reduce()) {
         this.show(this.frames.length - 1, FRONT)
@@ -235,23 +256,64 @@ export function stageHook(parts = pageParts) {
       this.js().setAttribute(this.el, "data-stage", name)
     },
 
-    // The model and its panel on the stage, for the size of the page and of
-    // its font.
+    // The model, its tags and its screen on the stage, for the size of the
+    // page and of its font. The panel has its place from the CSS: the
+    // offsets do not change in its slide.
     place() {
-      const area = this.el.getBoundingClientRect()
+      const page = {width: this.el.clientWidth, height: this.el.clientHeight}
+      const panel = {
+        left: this.panel.offsetLeft, top: this.panel.offsetTop,
+        width: this.panel.offsetWidth, height: this.panel.offsetHeight,
+      }
       const view = numbers(this.model.dataset.view)
-      const {model, panel} = placement(view, numbers(this.el.dataset.region), area, this.parts.rem())
+      const region = numbers(this.el.dataset.region)
+      const area = areaOf(page, panel)
+      const rem = this.parts.rem()
+      const box = placement(view, region, area, {screen: Boolean(this.screen), rem})
       Object.assign(this.model.style, {
-        left: `${model.left}px`, top: `${model.top}px`, width: `${model.width}px`, height: `${model.height}px`,
+        left: `${box.left}px`, top: `${box.top}px`, width: `${box.width}px`, height: `${box.height}px`,
       })
-      Object.assign(this.panel.style, {
-        width: `${panel.width}px`, height: `${panel.height}px`, transform: `matrix(${panel.matrix.join(", ")})`,
-      })
-      this.panel.style.setProperty("--pw", `${panel.width}px`)
+      for (const spot of this.spots) {
+        const [x, y] = pointAt(box, view, numbers(spot.dataset.at))
+        Object.assign(spot.style, {left: `${x}px`, top: `${y}px`})
+      }
+      if (this.screen) {
+        const {width, height, matrix} = screenAt(box, view, region, area, rem)
+        Object.assign(this.screen.style, {
+          width: `${width}px`, height: `${height}px`, transform: `matrix(${matrix.join(", ")})`,
+        })
+      }
+      // The notch of a panel at the right points at the middle of the model.
+      const middle = box.top + box.height / 2 - panel.top
+      this.panel.style.setProperty("--notch", `${Math.max(24, Math.min(panel.height - 48, middle))}px`)
     },
 
-    // The stage is not on the page now: the flight stops, and a start that
-    // waits for a frame does not start a flight (specs/Stage.tla).
+    // A tap on a tag: its number in the panel, with the focus.
+    goTo(key) {
+      const field = this.el.ownerDocument.getElementById(`param-${key}-field`)
+      if (!field) return
+      field.scrollIntoView({block: "center", behavior: this.parts.reduce() ? "auto" : "smooth"})
+      field.classList.add("stage-flash")
+      this.parts.wait(() => field.classList.remove("stage-flash"), 900)
+      field.querySelector("input:not([type=hidden]), select")?.focus({preventScroll: true})
+    },
+
+    // "Show me where": a ring on the tag of a number, or on the screen of a
+    // hub, three times. With less motion, the ring does not move. It goes
+    // after PING ms. The screen also takes the focus.
+    ping(key) {
+      const target = key === "screen" ? this.screen : this.spots.find((spot) => spot.dataset.spot === key)
+      if (!target) return
+      target.classList.remove("stage-ping")
+      void target.offsetWidth
+      target.classList.add("stage-ping")
+      // A new ring of the same target starts its time again.
+      const ping = (target.stagePing ?? 0) + 1
+      target.stagePing = ping
+      this.parts.wait(() => target.stagePing === ping && target.classList.remove("stage-ping"), PING)
+      if (key === "screen") target.querySelector("input:not([type=hidden])")?.focus({preventScroll: true})
+    },
+
     destroyed() {
       const doc = this.el.ownerDocument
       this.closing = true
@@ -281,13 +343,7 @@ export function stageHook(parts = pageParts) {
     },
 
     key(event) {
-      const tab = event.target?.closest?.('[role="tab"]')
-      const next = tab && nextTab([...this.el.querySelectorAll('[role="tab"]')], tab, event.key)
-      if (next) {
-        event.preventDefault()
-        next.focus()
-        next.click()
-      } else if (event.key === "Escape") {
+      if (event.key === "Escape") {
         event.preventDefault()
         this.back(this.el.querySelector("[data-close]").getAttribute("href"))
       } else if (event.key === "Tab") {
@@ -295,13 +351,18 @@ export function stageHook(parts = pageParts) {
       }
     },
 
-    // A close link: the item flies back first.
+    // A close link: the item flies back first. A tag, or a "Show me where".
     click(event) {
       const link = event.target.closest("[data-close]")
-      if (!link) return
-      event.preventDefault()
-      event.stopPropagation()
-      this.back(link.getAttribute("href"))
+      if (link) {
+        event.preventDefault()
+        event.stopPropagation()
+        return this.back(link.getAttribute("href"))
+      }
+      const spot = event.target.closest("[data-spot]")
+      if (spot) return this.goTo(spot.dataset.spot)
+      const show = event.target.closest("[data-show]")
+      if (show) this.ping(show.dataset.show)
     },
 
     // The flight back, from where the model is now (also in the flight

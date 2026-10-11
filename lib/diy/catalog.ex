@@ -1407,6 +1407,46 @@ defmodule DIY.Catalog do
     label
   end
 
+  @doc """
+  The step of the buttons − and + of a number parameter, at a value. Hours
+  with decimals go by half an hour. For the other numbers, the step is near
+  5% of the value: 1, 2 or 5 times a power of ten. It is 1 at least for a
+  whole number, and 0.1 at least for a number with decimals. For a value
+  near 0, the step is 5% of 1/200 of the range (1/4000 of the range), so it
+  is never 0.
+  """
+  def step(%{unit: "h", type: :float}, _value), do: 0.5
+
+  def step(%{type: type, min: min, max: max}, value) do
+    step = round_step(max(abs(value), (max - min) / 200) * 0.05)
+    if type == :int, do: max(1, round(step)), else: max(0.1, step)
+  end
+
+  # The power of ten times 1, 2 or 5 that is nearest to a number (in its
+  # ratio to the number).
+  defp round_step(n) do
+    ten = :math.pow(10, Float.floor(:math.log10(n)))
+    Enum.min_by([1, 2, 5, 10], &abs(:math.log(n / (&1 * ten)))) * ten
+  end
+
+  @doc """
+  The value after a tap on − (`by` = -1) or + (`by` = 1). It is the next
+  round value (a multiple of the step), down or up. It stays in the range
+  of the parameter.
+  """
+  def stepped(%{type: type, min: min, max: max} = param, value, by) when by in [-1, 1] do
+    step = step(param, value)
+    # The ratio has a round: 0.3 / 0.1 is 2.9999999999999996.
+    ratio = Float.round(value / step, 6)
+    count = if by > 0, do: Float.floor(ratio) + 1, else: Float.ceil(ratio) - 1
+    next = count * step
+
+    case type do
+      :int -> next |> round() |> max(min) |> min(max)
+      :float -> next |> Float.round(2) |> max(min / 1) |> min(max / 1)
+    end
+  end
+
   @doc "The parameters of a type with their default values."
   def defaults(type), do: Map.new(kind(type).params, &{&1.key, &1.default})
 
