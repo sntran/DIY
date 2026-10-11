@@ -1,0 +1,273 @@
+defmodule DIY.BuildWiresTest do
+  use ExUnit.Case, async: true
+  use ExUnitProperties
+
+  alias DIY.{Build, House}
+
+  defp preset do
+    {house, rooms, items} =
+      House.preset(%{size: 1800, year: 2005, floors: 2, heat: "gas", lot: nil})
+
+    {:ok, build} = Build.choose_door(Build.new(), "my_house")
+    {:ok, build} = Build.set_zip(build, "75070")
+    Build.put_house(build, house, rooms, items)
+  end
+
+  defp room(build, name), do: Enum.find(build.rooms, &(&1.name == name)).id
+
+  defp add(build, room, type) do
+    {:ok, build, id} = Build.add_item(build, room, type)
+    {build, id}
+  end
+
+  # A house with a power station and a busbar in the garage.
+  defp garage do
+    build = preset()
+    {build, station} = add(build, room(build, "Garage"), "power_station")
+    {build, bus} = add(build, room(build, "Garage"), "dc_bus")
+    {build, station, bus}
+  end
+
+  defp read(build), do: Build.from_json(Build.to_json(build))
+
+  test "a wire from an item to an item, with typical numbers" do
+    {build, station, bus} = garage()
+    {:ok, wired, id} = Build.add_wire(build, station, bus)
+    assert wired.revision == build.revision + 1
+    assert id == "w#{wired.seq}"
+
+    assert {:ok,
+            %{
+              id: ^id,
+              from: ^station,
+              to: ^bus,
+              system: "12",
+              amps: 30.0,
+              feet: 6.0,
+              two_way: true,
+              awg: nil,
+              from_ocpd: nil,
+              to_ocpd: nil,
+              from_dc: nil,
+              to_dc: nil
+            }} = Build.wire(wired, id)
+
+    assert Build.wire(wired, "w0") == {:error, :wire}
+    assert Build.wires_of(wired, station) == wired.wires
+    assert Build.wires_of(wired, bus) == wired.wires
+    fridge = Enum.find(wired.items, &(&1.type == "fridge"))
+    assert Build.wires_of(wired, fridge.id) == []
+    assert Build.wired?(%{type: "dc_bus"})
+    refute Build.wired?(fridge)
+    assert Build.world(wired, fridge) == :house
+
+    # Two wires between the same items are two circuits.
+    {:ok, two, _id} = Build.add_wire(wired, bus, station)
+    assert length(Build.wires_of(two, station)) == 2
+
+    # The errors: the same item, an item that takes no wires, an item that
+    # is not there, and 100 wires.
+    assert Build.add_wire(build, station, station) == {:error, :wire}
+    assert Build.add_wire(build, station, fridge.id) == {:error, :wire}
+    assert Build.add_wire(build, "i0", bus) == {:error, :item}
+    assert Build.add_wire(build, station, "i0") == {:error, :item}
+
+    full =
+      Enum.reduce(1..100, build, fn _n, build ->
+        {:ok, build, _id} = Build.add_wire(build, station, bus)
+        build
+      end)
+
+    assert Build.add_wire(full, station, bus) == {:error, :wires}
+  end
+
+  test "the numbers of a wire change, and its ends can change places" do
+    {build, station, bus} = garage()
+    {:ok, build, id} = Build.add_wire(build, station, bus)
+
+    {:ok, changed} =
+      Build.update_wire(build, id, %{
+        "system" => "48",
+        "amps" => "25",
+        "awg" => "6",
+        "from_ocpd" => "40",
+        "from_dc" => "60",
+        "to_ocpd" => "60"
+      })
+
+    assert changed.revision == build.revision + 1
+
+    assert {:ok, %{system: "48", amps: 25.0, awg: "6", from_ocpd: 40, from_dc: 60, to_ocpd: 60}} =
+             Build.wire(changed, id)
+
+    # The current comes from the other end: the breakers go with their
+    # ends.
+    {:ok, turned} = Build.update_wire(changed, id, %{"from" => bus, "amps" => "20"})
+
+    assert {:ok,
+            %{
+              from: ^bus,
+              to: ^station,
+              amps: 20.0,
+              from_ocpd: 60,
+              from_dc: nil,
+              to_ocpd: 40,
+              to_dc: 60
+            }} = Build.wire(turned, id)
+
+    # The same end changes nothing of the ends.
+    {:ok, same} = Build.update_wire(turned, id, %{"from" => bus})
+    assert Build.wire(same, id) == Build.wire(turned, id)
+
+    assert Build.update_wire(build, id, %{"amps" => "0"}) == {:error, :amps}
+    assert Build.update_wire(build, "w0", %{}) == {:error, :wire}
+
+    {:ok, removed} = Build.delete_wire(changed, id)
+    assert removed.wires == []
+    assert Build.delete_wire(removed, id) == {:error, :wire}
+  end
+
+  test "a wire goes away with an item at its end" do
+    {build, station, bus} = garage()
+    {:ok, build, _id} = Build.add_wire(build, station, bus)
+    {:ok, gone} = Build.delete_item(build, bus)
+    assert gone.wires == []
+
+    # With its room too.
+    {:ok, gone} = Build.delete_room(build, room(build, "Garage"))
+    assert gone.wires == []
+  end
+
+  test "the wires of a van, and a station that goes to the van and back" do
+    build = preset()
+    {:ok, build, van} = Build.add_item(build, room(build, "Driveway"), "camper_van")
+    bay = Build.zone(build, van, :bay).id
+    {build, battery} = add(build, bay, "van_battery")
+    {build, inverter} = add(build, bay, "inverter")
+    {build, station} = add(build, room(build, "Garage"), "power_station")
+
+    {:ok, build, id} = Build.add_wire(build, battery, inverter)
+    {:ok, wire} = Build.wire(build, id)
+    # The system of the battery: 12 V.
+    assert %{system: "12", two_way: false} = wire
+    {:ok, item} = Build.item(build, battery)
+    assert Build.world(build, item) == "van:" <> van
+
+    # A new wire joins two items of one place: the house, or one van.
+    assert Build.add_wire(build, station, battery) == {:error, :wire}
+
+    # A station of the house in the van, with a wire to the battery. The
+    # wire stays when the station goes home.
+    {:ok, trip} = Build.take_to_van(build, station, van)
+    {:ok, trip, trip_wire} = Build.add_wire(trip, station, battery)
+    {:ok, home} = Build.bring_home(trip, station)
+    assert {:ok, _wire} = Build.wire(home, trip_wire)
+    assert {:ok, _build} = read(home)
+
+    # The removal of the van removes its items and their wires.
+    {:ok, no_van} = Build.delete_item(home, van)
+    assert no_van.wires == []
+  end
+
+  test "the wires in the JSON of the build" do
+    {build, station, bus} = garage()
+    {:ok, build, id} = Build.add_wire(build, station, bus)
+    {:ok, build} = Build.update_wire(build, id, %{"awg" => "6", "from_ocpd" => "40"})
+    assert {:ok, read} = read(build)
+    assert read.wires == build.wires
+
+    map = Jason.decode!(Build.to_json(build))
+    [stored] = map["wires"]
+
+    # A build of an older version has no wires.
+    {:ok, old} = Build.from_json(Jason.encode!(Map.delete(map, "wires")))
+    assert old.wires == []
+
+    # A wire that the app cannot read goes away: the build loads.
+    fridge = Enum.find(build.items, &(&1.type == "fridge")).id
+
+    for bad <- [
+          %{stored | "id" => 5},
+          %{stored | "id" => String.duplicate("w", 21)},
+          %{stored | "from" => "i0"},
+          %{stored | "to" => "i0"},
+          %{stored | "to" => station},
+          %{stored | "to" => fridge},
+          %{stored | "amps" => -1},
+          Map.delete(stored, "to"),
+          "w1"
+        ] do
+      assert {:ok, %{wires: []}} = Build.from_json(Jason.encode!(%{map | "wires" => [bad]}))
+    end
+
+    # A wire with no numbers gets the typical numbers. A second wire with
+    # the same id goes away.
+    plain = Map.take(stored, ~w(id from to))
+    twice = %{map | "wires" => [plain, %{stored | "amps" => 5}]}
+    assert {:ok, %{wires: [wire]}} = Build.from_json(Jason.encode!(twice))
+    assert %{amps: 30.0, awg: nil, system: "12"} = wire
+
+    # 100 wires at most, and the ids of the wires count for the next id.
+    many = for n <- 1..105, do: %{stored | "id" => "w#{n + 200}"}
+    {:ok, loaded} = Build.from_json(Jason.encode!(%{map | "wires" => many}))
+    assert length(loaded.wires) == 100
+    assert loaded.seq >= 300
+
+    # Wires that are not a list: the build is not valid.
+    assert Build.from_json(Jason.encode!(%{map | "wires" => %{}})) == {:error, :wires}
+  end
+
+  property "a wire always has an item that takes wires at each end" do
+    {build, station, bus} = garage()
+    {build, battery} = add(build, room(build, "Garage"), "power_station")
+    ids = [station, bus, battery]
+
+    steps =
+      list_of(
+        one_of([
+          tuple({constant(:add), member_of(ids), member_of(ids)}),
+          tuple({constant(:delete), member_of(ids)}),
+          tuple({constant(:update), integer(0..3), member_of(["5", "0", "48"])})
+        ]),
+        max_length: 12
+      )
+
+    check all(steps <- steps) do
+      final =
+        Enum.reduce(steps, build, fn
+          {:add, a, b}, build ->
+            case Build.add_wire(build, a, b) do
+              {:ok, build, _id} -> build
+              {:error, _} -> build
+            end
+
+          {:delete, id}, build ->
+            case Build.delete_item(build, id) do
+              {:ok, build} -> build
+              {:error, _} -> build
+            end
+
+          {:update, n, value}, build ->
+            case Enum.at(build.wires, n) do
+              nil ->
+                build
+
+              wire ->
+                case Build.update_wire(build, wire.id, %{"amps" => value}) do
+                  {:ok, build} -> build
+                  {:error, :amps} -> build
+                end
+            end
+        end)
+
+      for wire <- final.wires do
+        assert {:ok, a} = Build.item(final, wire.from)
+        assert {:ok, b} = Build.item(final, wire.to)
+        assert a.id != b.id and Build.wired?(a) and Build.wired?(b)
+      end
+
+      assert {:ok, read} = read(final)
+      assert read.wires == final.wires
+    end
+  end
+end

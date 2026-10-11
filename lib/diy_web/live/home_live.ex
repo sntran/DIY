@@ -130,7 +130,9 @@ defmodule DIYWeb.HomeLive do
            %Build{} = build <- socket.assigns[:build],
            {:ok, item} <- Build.item(build, id),
            {:ok, room} <- Build.room(build, item.room),
-           do: {item.type, if(Build.van_level?(room.level), do: :van, else: :house)},
+           do:
+             {DIYWeb.Icon.Shapes.look(item),
+              if(Build.van_level?(room.level), do: :van, else: :house)},
            else: (_none -> nil)
 
     case socket.assigns[:item_frames] do
@@ -263,6 +265,26 @@ defmodule DIYWeb.HomeLive do
       {:error, _reason} -> {:noreply, socket}
     end
   end
+
+  # A wire from the item of the panel to a different item (`DIYWeb.Wires`).
+  def handle_event("add_wire", %{"from" => from, "to" => to}, socket) do
+    case Build.add_wire(socket.assigns.build, from, to) do
+      {:ok, build, _id} -> {:noreply, put(socket, build)}
+      {:error, _reason} -> {:noreply, socket}
+    end
+  end
+
+  # The numbers of a wire. The error of a number shows at its field.
+  def handle_event("wire", %{"wire_id" => id, "wire" => values}, socket) when is_map(values) do
+    case Build.update_wire(socket.assigns.build, id, values) do
+      {:ok, build} -> {:noreply, socket |> assign(:item_error, nil) |> put(build)}
+      {:error, :wire} -> {:noreply, socket}
+      {:error, key} -> {:noreply, assign(socket, :item_error, {:wire, id, key})}
+    end
+  end
+
+  def handle_event("delete_wire", %{"id" => id}, socket),
+    do: with_build(socket, Build.delete_wire(socket.assigns.build, id))
 
   # The sums of a meter file, from the hook UsageFile: the file stays on
   # the device.

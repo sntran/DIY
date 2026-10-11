@@ -2496,6 +2496,160 @@ The tests:
   of the house offers the meter of Home Assistant, and the page Bill
   shows its months.
 
+## The wires
+
+The owner decided this: the person connects the wires. The app warns
+about a connection that is not correct. It uses the rules of the NEC
+(NFPA 70, the edition of 2023) and the facts of the products. The app
+does not do the work. It does not replace an electrician or the
+inspector of a city. It tells the rules, so that the person can ask the
+right questions.
+
+### A wire
+
+A wire is the pair of conductors of one circuit between two items (the
+positive and the negative, or the hot and the neutral). The build keeps
+the wires (`DIY.Build`, `wires`).
+
+- The kinds that take wires have the feature `:wires`. They are a power
+  station, a battery bank, an inverter, a busbar, an alternator charger,
+  a transfer switch and a shore power inlet. Solar panels do not take
+  wires yet. The rules of solar circuits are different (NEC 690.8).
+- A wire goes from the item that gives the current (`from`) to a
+  different item (`to`). A new wire joins two items of one place: the
+  house, or one van. A wire stays when a station goes to a van and back.
+- Its numbers (`DIY.Wire`) are the system, the most current of the
+  port, the length one way, and two ways. The system is 12, 24 or 48 V
+  DC, or 120 or 240 V AC. A wire has two ways when the far end also
+  gives current: a battery, or a busbar with a battery on it.
+- A new wire gets typical numbers: 30 A and 6 ft. Its system is the
+  system of a battery at an end. Else it is 120 V AC at a transfer
+  switch or a shore power inlet, else 12 V DC. On DC, a wire to a
+  battery or to a busbar has two ways.
+- What the person has: the wire size, and the breaker or the fuse at
+  each end with its DC rating. Each one is empty until the person gives
+  it.
+- A build has 100 wires at most. A wire goes away with an item at its
+  end. A wire that the app cannot read goes away when the build loads:
+  a wire must not stop the build from loading.
+
+### The busbar
+
+The new kind "DC busbar or distributor" (`dc_bus`) is a busbar with
+fuse holders, for example a Victron Lynx Distributor. It has two
+numbers. The first is its positions for wires (its studs or its fuse
+holders), from 1 to 24: the Lynx has 4. The second is the smallest fuse
+that its holders take. The Lynx takes MEGA fuses. For 48
+V, the smallest MEGA fuse of Victron is 60 A, rated 80 V (retailer
+listings of the part CIP138060020). The Lynx is 290 by 170 by 80 mm,
+and 2.2 kg (retailer listings). A busbar uses no power: the estimate
+does not count it.
+
+The model of a busbar shows a fuse window and a light for each position
+(`DIYWeb.Icon.Shapes.look/1`). The positions share the width of the
+cover, so each number of positions has the same size on the plan. The
+panel tells how many positions have a wire. When more wires connect to
+the busbar than it has positions, the panel shows a fault.
+
+### The rules
+
+`DIY.Wire.advise/2` gives what the rules ask for. `check/1` gives the
+faults of what the person has.
+
+- The current of the port is a load all the time (a continuous load).
+  So the wire and the breaker are at least 125% of it (NEC 210.19(A)
+  and 210.20(A)).
+- The ampacity of copper wire comes from the 75 °C column of NEC Table
+  310.16. The terminals at the two ends must be rated 75 °C (NEC
+  110.14(C)). The page tells this.
+- A breaker or a fuse protects the wire: its rating is not more than the
+  ampacity of the wire (NEC 240.4). When the ampacity is not a standard
+  rating, the next standard rating is permitted (NEC 240.4(B)). Wire of
+  14, 12 and 10 AWG takes 15, 20 and 30 A at most (NEC 240.4(D)). The
+  standard ratings come from NEC Table 240.6(A).
+- A wire with two ways has a breaker or a fuse at each end: it is
+  protected from all the sources (NEC 705.30). A busbar at an end takes
+  no fuse less than its smallest fuse. So the wire must carry that fuse.
+- On DC, a breaker or a fuse is rated for DC, at the highest voltage of
+  the battery or more (NEC 706.31(C) and 110.3(B)). The app uses
+  LiFePO4: 3.65 V for each cell when it is full. This is 14.6 V for 12
+  V, 29.2 V for 24 V, and 58.4 V for 48 V.
+- The voltage drop is 3% or less. This is the advice of an
+  informational note of NEC 210.19(A), not a rule. The app uses the DC
+  resistance of stranded copper of NEC Chapter 9, Table 8. The current
+  goes out and comes back: the copper is two times the length.
+
+The advice is the smallest wire that meets all the rules, and the
+smallest standard breaker at each end. A wire of 4/0 AWG or less is not
+always enough: then the page tells the person to ask an electrician.
+
+The example of the owner: the cascade port of a Pecron E3600LFP gives
+30 A at 48 V to a Lynx Distributor. The MJ32 cable of Pecron for this
+port gives 44 to 58 V DC, and 1200 W at most for each XT60 plug. The
+breaker at the station is 125% of 30 A at least: 37.5 A, so 40 A. The
+Lynx takes no fuse less than 60 A. So the wire must carry 60 A: 6 AWG
+(65 A, and a fuse of 70 A at most by NEC 240.4(B)). The breaker is for
+DC, at 58.4 V or more. A breaker that is rated 48 V DC is not enough.
+
+The app does not check these yet:
+
+- the rules of solar circuits (NEC 690);
+- the correction for more than three conductors together, or for a hot
+  place (NEC 310.15);
+- the interrupting rating of a fuse next to a large battery (NEC 110.9);
+- wire of aluminum, and the 60 °C column for terminals that are not
+  rated 75 °C;
+- a lead acid battery, which has a different highest voltage;
+- the wires on the plan.
+
+### The panel
+
+The panel of each item that takes wires has the part Wires
+(`DIYWeb.Wires`). It lists the wires of the item. Each wire is a card:
+
+1. Its numbers: the end that gives the current (a choice of the two
+   ends), the system, the current of the port and the length. On DC, a
+   switch tells that the far end also gives current.
+2. What the rules ask for: the wire, and the breaker or the fuse at each
+   end. The breaker has a range: from the smallest rating to the largest
+   that the wire takes. On DC, the page tells the DC rating.
+3. What the person has: the wire size, and the breaker or the fuse at
+   each end with its DC rating.
+4. The faults, each with its rule of the NEC, in a status: a screen
+   reader reads a change. A fault has the color of a danger and a bar
+   at its start, so the color is not the only sign. With no fault, the
+   card tells that what the person has meets the rules.
+5. A button removes the wire. The focus then goes to the title of the
+   part.
+
+Under the cards, the person adds a wire from the item to a different
+item of the same place. A number that is not valid shows its error at
+its field, and the wire does not change.
+
+The TLA+ models do not change. A check is a function of the numbers of
+one wire, with no steps in time. The property tests check it for all
+the numbers.
+
+### The tests of the wires
+
+- `test/diy/wire_test.exs` checks the tables of the NEC, the example
+  of the owner, a wire on AC and the voltage drop. It also checks the
+  numbers from a form or from JSON. Property tests check that the advice
+  meets the rules, and that it is the smallest wire that does. More
+  current never gives a smaller wire or a smaller breaker. A model of
+  the rules gives the same faults as `check/1` for any numbers.
+- `test/diy/build_wires_test.exs` checks a wire between two items, its
+  numbers, and its ends that change places. It checks a wire that goes
+  away with its item, the wires of a van, and the wires in the JSON of
+  the build. A property test checks that each wire has an item that
+  takes wires at each end, after any steps.
+- `test/diy_web/live/wires_live_test.exs` checks the part Wires in the
+  panel. It has the example of the owner, each fault, and the errors of
+  the fields. It also has a wire on AC, and the wires of a van.
+- The browser test: the person adds a busbar and a wire from the power
+  station. The page shows the advice and a fault, and axe checks the
+  panel with the wire.
+
 ## In a car
 
 The owner wants the app in a car later: Android Auto and Android

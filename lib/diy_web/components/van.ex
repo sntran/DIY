@@ -29,7 +29,11 @@ defmodule DIYWeb.VanPage do
   attr :item, :string, default: nil
   attr :add, :string, default: nil
   attr :climate, :map, default: nil
-  attr :item_error, :string, default: nil
+
+  attr :item_error, :any,
+    default: nil,
+    doc: "the key of a number that is not valid, or `{:wire, id, key}`"
+
   attr :item_said, :string, default: nil, doc: "the new value after − or +, for a screen reader"
   attr :item_frames, :map, default: nil, doc: "the frames of the open item (`DIYWeb.Stage`)"
   attr :estimate, :map, required: true

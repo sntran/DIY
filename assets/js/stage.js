@@ -215,6 +215,16 @@ export function stageHook(parts = pageParts) {
       this.parts.frame(() => this.start())
     },
 
+    // A new look of the item, for example a busbar with more positions: the
+    // LiveView sends new frames (with a new id). The frame of the old pose
+    // shows. The model keeps its place.
+    updated() {
+      const frames = [...this.model.querySelectorAll(".stage-frame")]
+      if (frames[0] === this.frames[0]) return
+      this.frames = frames
+      this.show(this.index, this.pose)
+    },
+
     // The flight out, from the item on the plan to the stage.
     start() {
       this.model.style.visibility = ""

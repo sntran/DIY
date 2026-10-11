@@ -915,17 +915,17 @@ defmodule DIYWeb.Cutaway do
         {type, nil} ->
           base = z + Catalog.lift(type) * @m
 
-          Shapes.placed(type, %{
+          Shapes.placed(Shapes.look(item), %{
             at: {x * @m, y * @m, base},
             size: size,
             turn: item.turn,
             camera: camera
           })
 
-        {type, roof} ->
+        {_type, roof} ->
           base = roof_z(roof, z, cy)
 
-          Shapes.placed(type, %{
+          Shapes.placed(Shapes.look(item), %{
             at: {x * @m, y * @m, base},
             size: size,
             turn: item.turn,

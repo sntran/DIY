@@ -90,7 +90,7 @@ defmodule DIY.Estimate do
   @therm 100_000
 
   # The kinds that use no power of the house by themselves (`no_use/0`).
-  @no_use ~w(power_station solar_panels transfer_switch smart_meter camper_van)
+  @no_use ~w(power_station solar_panels transfer_switch smart_meter camper_van dc_bus)
 
   @hvac_range 0.15
   @typical_range 0.20
@@ -933,6 +933,9 @@ defmodule DIY.Estimate do
 
   defp steps(%{type: "transfer_switch"}, _m, _data, _estimate),
     do: ["The device connects the circuits to the grid or to a power station. It uses no power."]
+
+  defp steps(%{type: "dc_bus"}, _m, _data, _estimate),
+    do: ["A busbar connects the wires of the batteries and of the loads. It uses no power."]
 
   defp steps(%{type: "ev", params: p}, m, _data, _estimate),
     do: [

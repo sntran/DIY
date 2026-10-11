@@ -169,7 +169,8 @@ defmodule DIY.Profile do
              "power_station",
              "solar_panels",
              "transfer_switch",
-             "camper_van"
+             "camper_van",
+             "dc_bus"
            ],
       do: 0.0
 

@@ -757,6 +757,24 @@ button.stage-switch { padding: 0; border: 0 }
 .stage-remove { display: flex; flex-direction: column; align-items: flex-start; gap: 0.5rem }
 .stage-confirm { flex-wrap: wrap; align-items: center; gap: 0.5rem }
 .stage-confirm p { flex-basis: 100% }
+/* A wire in the panel of an item (DIYWeb.Wires): a card with its numbers,
+   what the rules ask for, what the person has, and the faults. A fault has
+   the color of a danger and a bar at its start: the color is not the only
+   sign. */
+.wire { display: flex; flex-direction: column; gap: 0.9rem; padding: 1rem; border-radius: 0.9rem;
+  border: 1px solid var(--color-base-300); background: var(--color-base-100) }
+.wire-title { font-size: 1.05rem; font-weight: 700 }
+.wire-head { font-weight: 700 }
+.wire-add { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.5rem }
+.wire-end { margin: 0; padding: 0 0 0 0.75rem; border: 0; border-left: 3px solid var(--color-base-300) }
+.wire-end > legend { padding: 0; margin-bottom: 0.75rem }
+.wire-number { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 0.5rem }
+.wire-advice { display: flex; flex-direction: column; gap: 0.4rem; padding: 0.75rem; border-radius: 0.6rem;
+  background: var(--color-base-200) }
+.wire-faults { display: grid; gap: 0.5rem; font-size: 0.95rem }
+.wire-faults li { padding-left: 0.75rem; border-left: 4px solid var(--stage-danger); color: var(--stage-danger) }
+.wire-over { padding-left: 0.75rem; border-left: 4px solid var(--stage-danger); color: var(--stage-danger); font-size: 0.95rem }
+.wire-ok { padding-left: 0.75rem; border-left: 4px solid var(--stage-on); font-size: 0.95rem }
 /* The parts of the panel that use the classes of daisyUI (the keys that
    move an item, and the card of Home Assistant): the same sizes as the
    controls and the text of the panel. */

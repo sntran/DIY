@@ -430,6 +430,26 @@ test("the stage places the model and its tags, and flies the item out of the pla
   close(Number.parseFloat(p.panel.style["--notch"]), 400 - 24)
 })
 
+test("a new look of the item: the new model shows at the pose of the old one", () => {
+  const p = page()
+  p.time.tick(0)
+  p.time.tick(OUT)
+  // A patch with the same frames changes nothing.
+  p.frames[11].toggleAttribute("hidden", true)
+  p.hook.updated()
+  assert.equal(p.visible(), -1)
+  p.frames[11].toggleAttribute("hidden", false)
+  // A busbar with more positions: the LiveView sends new frames. The frame
+  // of the pose shows, and the model keeps its place.
+  const frames = Array.from({length: 12}, (_, i) => element({frame: i}))
+  const width = p.model.style.width
+  p.model.querySelectorAll = (selector) => (assert.equal(selector, ".stage-frame"), frames)
+  p.hook.updated()
+  assert.deepEqual(frames.map((f) => f.hasAttribute("hidden")), [...Array(11).fill(true), false])
+  assert.equal(p.model.style.transform, transformOf(FRONT))
+  assert.equal(p.model.style.width, width)
+})
+
 test("a close flies the item back, and then closes the stage", () => {
   const p = page()
   p.time.tick(0)

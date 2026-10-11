@@ -596,10 +596,14 @@ async function build(context, name) {
   await page.waitForSelector("#item-stage #ha-status:has-text('Connected to Fake house (Home Assistant 2026.10.0)')")
   assert.equal(new URL(page.url()).search, `?item=${hub}`)
   await page.waitForSelector("#inside[data-ha=connected]")
-  // The light on the pill of the hub is green.
-  assert.equal(
-    await page.$eval(`g.p-hub-label[data-item="${hub}"] .i-ha-light`, (el) => getComputedStyle(el).fill),
-    "rgb(34, 197, 94)",
+  // The light on the pill of the hub is green. The test waits for it: a
+  // patch of the page can come at the same time.
+  await page.waitForFunction(
+    (selector) => {
+      const light = document.querySelector(selector)
+      return light && getComputedStyle(light).fill === "rgb(34, 197, 94)"
+    },
+    `g.p-hub-label[data-item="${hub}"] .i-ha-light`,
   )
   await page.waitForSelector("#item-stage [data-stage=landed]")
   await check(page, `${name} Home Assistant`)
@@ -844,6 +848,26 @@ for (const colorScheme of ["light", "dark"]) {
     await follow(page, 'a[id^="add-"][aria-label="Add an item to Laundry"]')
     await page.click("#add-power_station")
     await page.waitForSelector("#item-stage:has-text('Power station')")
+    await page.click("#item-stage .stage-back")
+    await page.waitForSelector("#item-stage", { state: "detached" })
+
+    // The wires: a busbar next to the station, and a wire from the station
+    // on 48 V. The page tells the rules of the NEC, and a fault.
+    await follow(page, 'a[id^="add-"][aria-label="Add an item to Laundry"]')
+    await page.click("#add-dc_bus")
+    await page.waitForSelector("#item-stage:has-text('DC busbar or distributor')")
+    await page.click("#item-stage .stage-back")
+    await page.waitForSelector("#item-stage", { state: "detached" })
+    await follow(page, 'a[id^="item-"]:has-text("Power station")')
+    await page.selectOption("#wire-to", { label: "DC busbar or distributor, in Laundry" })
+    await page.click("#add-wire-button")
+    await page.waitForSelector(".wire-advice:has-text('Wire: 6 AWG copper or larger')")
+    await page.selectOption(".wire select[name='wire[system]']", "48")
+    await page.waitForSelector(".wire-advice:has-text('58.4 V or more')")
+    await page.selectOption(".wire select[name='wire[awg]']", "10")
+    await page.waitForSelector(".wire-faults:has-text('The wire is too small')")
+    await page.waitForSelector("#item-stage [data-stage=landed]")
+    await check(page, `${name} wire`)
     await page.click("#item-stage .stage-back")
     await page.waitForSelector("#item-stage", { state: "detached" })
     await follow(page, 'a[id^="item-"]:has-text("Fridge")')

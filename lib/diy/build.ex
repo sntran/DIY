@@ -61,12 +61,16 @@ defmodule DIY.Build do
     id), for the rooms with a link (`link_area/3`).
   - `devices`: the device of Home Assistant of each item (its id), for the
     items with a link (`add_device/5`). A device has one item at most.
+  - `wires`: the wires between the items, at most 100 (`add_wire/3`). Each
+    wire has an `id`, the item at each end (`from` gives the current,
+    `to`), and its numbers (`DIY.Wire`). A wire goes away with an item
+    at its end.
 
   After each change, the plan is whole again (`DIY.Layout.fill/1`). Each
   room of the house has a plan, and each item is in its room.
   """
 
-  alias DIY.{Catalog, Layout}
+  alias DIY.{Catalog, Layout, Wire}
 
   @version 1
   @doors ~w(my_house planning)
@@ -75,6 +79,7 @@ defmodule DIY.Build do
   # "swipe" before it had the plan: a stored build can have it, so it
   # stays valid.
   @hints ~w(swipe plan)
+  @max_wires 100
   @places Catalog.places()
 
   @enforce_keys [:revision]
@@ -97,7 +102,8 @@ defmodule DIY.Build do
             seq: 0,
             hints: [],
             areas: %{},
-            devices: %{}
+            devices: %{},
+            wires: []
 
   @type plan :: %{x: integer(), y: integer(), w: pos_integer(), d: pos_integer()}
   @type room :: %{
@@ -119,6 +125,12 @@ defmodule DIY.Build do
           at: %{x: integer(), y: integer()} | nil,
           turn: 0..3,
           size: %{w: pos_integer(), d: pos_integer(), h: pos_integer()} | nil
+        }
+  @type wire :: %{
+          :id => String.t(),
+          :from => String.t(),
+          :to => String.t(),
+          optional(atom()) => term()
         }
   @typedoc "The kWh of a real bill, and the month of the bill (1 to 12)."
   @type bill :: %{month: 1..12, kwh: float()}
@@ -149,7 +161,8 @@ defmodule DIY.Build do
           seq: non_neg_integer(),
           hints: [String.t()],
           areas: %{String.t() => String.t()},
-          devices: %{String.t() => String.t()}
+          devices: %{String.t() => String.t()},
+          wires: [wire()]
         }
 
   @doc "The version of the format of the build."
@@ -185,9 +198,17 @@ defmodule DIY.Build do
   def change(%__MODULE__{revision: revision} = build, fun) do
     %__MODULE__{} = changed = fun.(build)
     %__MODULE__{} = changed = Layout.fill(changed)
-    # An item that went away takes its link to a device with it.
+    # An item that went away takes its link to a device and its wires with
+    # it.
     devices = Map.take(changed.devices, Enum.map(changed.items, & &1.id))
+    %__MODULE__{} = changed = keep_wires(changed)
     %__MODULE__{changed | revision: revision + 1, stamp: new_stamp(), devices: devices}
+  end
+
+  # Only the wires with an item at each end stay.
+  defp keep_wires(build) do
+    ids = MapSet.new(build.items, & &1.id)
+    %{build | wires: Enum.filter(build.wires, &(&1.from in ids and &1.to in ids))}
   end
 
   # 96 random bits: two changes never get the same stamp.
@@ -849,6 +870,91 @@ defmodule DIY.Build do
     end
   end
 
+  @doc "True for an item that takes wires (the feature `:wires`)."
+  @spec wired?(item()) :: boolean()
+  def wired?(item), do: :wires in Catalog.kind(item.type).features
+
+  @doc """
+  The place of an item for its wires: `:house`, or the level of the zones
+  of its van. A new wire joins two items of one place.
+  """
+  @spec world(t(), item()) :: :house | String.t()
+  def world(build, item) do
+    {:ok, room} = room(build, item.room)
+    if van_level?(room.level), do: room.level, else: :house
+  end
+
+  @doc "The wire with an id."
+  @spec wire(t(), String.t()) :: {:ok, wire()} | {:error, :wire}
+  def wire(build, id) do
+    case Enum.find(build.wires, &(&1.id == id)) do
+      nil -> {:error, :wire}
+      wire -> {:ok, wire}
+    end
+  end
+
+  @doc "The wires with an item at one end, in their order."
+  @spec wires_of(t(), String.t()) :: [wire()]
+  def wires_of(build, item_id), do: Enum.filter(build.wires, &(item_id in [&1.from, &1.to]))
+
+  @doc """
+  Adds a wire from an item to a different item, with typical numbers
+  (`DIY.Wire.defaults/2`). The two items must take wires, in one place
+  (`world/2`). A build has 100 wires at most (`:wires`). A wire stays when
+  a station goes to a van and back.
+  """
+  @spec add_wire(t(), String.t(), String.t()) :: {:ok, t(), String.t()} | {:error, atom()}
+  def add_wire(build, from, to) do
+    with {:ok, a} <- item(build, from),
+         {:ok, b} <- item(build, to),
+         true <- (from != to and wired?(a) and wired?(b)) || {:error, :wire},
+         true <- world(build, a) == world(build, b) || {:error, :wire},
+         true <- length(build.wires) < @max_wires || {:error, :wires} do
+      {id, build} = next_id(build, "w")
+      wire = Map.merge(%{id: id, from: from, to: to}, Wire.defaults(a, b))
+      {:ok, change(build, &%{&1 | wires: &1.wires ++ [wire]}), id}
+    end
+  end
+
+  @doc """
+  Changes the numbers of a wire (`DIY.Wire.read/2`). The value `from`
+  can name the item at the other end: then the two ends change places,
+  with the breakers at the ends. The error names the first number that is
+  not valid.
+  """
+  @spec update_wire(t(), String.t(), map()) :: {:ok, t()} | {:error, atom()}
+  def update_wire(build, id, values) when is_map(values) do
+    with {:ok, wire} <- wire(build, id),
+         {:ok, numbers} <- Wire.read(values, wire) do
+      wire = if values["from"] == wire.to, do: turn_wire(numbers), else: numbers
+
+      {:ok,
+       change(
+         build,
+         &%{&1 | wires: Enum.map(&1.wires, fn w -> if w.id == id, do: wire, else: w end)}
+       )}
+    end
+  end
+
+  defp turn_wire(wire) do
+    %{
+      wire
+      | from: wire.to,
+        to: wire.from,
+        from_ocpd: wire.to_ocpd,
+        to_ocpd: wire.from_ocpd,
+        from_dc: wire.to_dc,
+        to_dc: wire.from_dc
+    }
+  end
+
+  @doc "Removes a wire."
+  @spec delete_wire(t(), String.t()) :: {:ok, t()} | {:error, :wire}
+  def delete_wire(build, id) do
+    with {:ok, _wire} <- wire(build, id),
+         do: {:ok, change(build, &%{&1 | wires: Enum.reject(&1.wires, fn w -> w.id == id end)})}
+  end
+
   # With no smart meter, the build keeps no real usage: a person removes the
   # meter to remove the data of the meter.
   defp no_meter_no_usage(build) do
@@ -897,7 +1003,8 @@ defmodule DIY.Build do
       "seq" => build.seq,
       "hints" => build.hints,
       "areas" => build.areas,
-      "devices" => build.devices
+      "devices" => build.devices,
+      "wires" => build.wires
     })
   end
 
@@ -933,10 +1040,12 @@ defmodule DIY.Build do
          {:ok, lesson} <- lesson(map["lesson"]),
          {:ok, lesson_plan} <- lesson_plan(map["lesson_plan"]),
          {:ok, seq} <- count(map["seq"], :seq),
-         seq = last_id(seq, rooms ++ items ++ plans),
          {:ok, hints} <- hints(map["hints"]),
          {:ok, areas} <- areas(map["areas"], rooms),
-         {:ok, devices} <- devices(map["devices"], items, rooms) do
+         {:ok, devices} <- devices(map["devices"], items, rooms),
+         {:ok, wires} <- wires(map["wires"], items) do
+      seq = last_id(seq, rooms ++ items ++ plans ++ wires)
+
       {:ok,
        %__MODULE__{
          revision: revision,
@@ -957,9 +1066,11 @@ defmodule DIY.Build do
          seq: seq,
          hints: hints,
          areas: areas,
-         devices: devices
+         devices: devices,
+         wires: wires
        }
        |> repair_vans()
+       |> keep_wires()
        |> Layout.fill()}
     end
   end
@@ -1466,6 +1577,49 @@ defmodule DIY.Build do
   end
 
   defp devices(_devices, _items, _rooms), do: {:error, :devices}
+
+  # The wires. A build of an older version has none. A wire that the app
+  # cannot read goes away: a wire must not stop the build from loading. A
+  # wire needs a different item that takes wires at each end, and an id of
+  # its own.
+  defp wires(nil, _items), do: {:ok, []}
+
+  defp wires(wires, items) when is_list(wires) do
+    by_id = Map.new(items, &{&1.id, &1})
+
+    {list, _ids} =
+      wires
+      |> Enum.take(@max_wires)
+      |> Enum.reduce({[], MapSet.new()}, fn wire, {list, ids} ->
+        case read_wire(wire, by_id) do
+          {:ok, wire} ->
+            if wire.id in ids,
+              do: {list, ids},
+              else: {[wire | list], MapSet.put(ids, wire.id)}
+
+          :error ->
+            {list, ids}
+        end
+      end)
+
+    {:ok, Enum.reverse(list)}
+  end
+
+  defp wires(_wires, _items), do: {:error, :wires}
+
+  defp read_wire(%{"id" => id, "from" => from, "to" => to} = wire, by_id)
+       when is_binary(id) and byte_size(id) <= 20 and from != to do
+    with %{} = a <- by_id[from],
+         %{} = b <- by_id[to],
+         true <- wired?(a) and wired?(b),
+         {:ok, numbers} <- Wire.read(wire, Wire.defaults(a, b)) do
+      {:ok, Map.merge(%{id: id, from: from, to: to}, numbers)}
+    else
+      _ -> :error
+    end
+  end
+
+  defp read_wire(_wire, _by_id), do: :error
 
   @doc """
   True for a room that can have an area of Home Assistant. It is a room of
