@@ -38,6 +38,7 @@ const day = 86_400_000
 const today = Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate())
 const thisMonth = Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1)
 const lastMonth = Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() - 1, 1)
+const twoMonthsAgo = Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() - 2, 1)
 const energySensor = {
   entity_id: "sensor.ceiling_energy", device_id: "lights", area_id: null, entity_category: null, hidden_by: null,
   disabled_by: null,
@@ -67,7 +68,13 @@ const homeAssistant = await fakeHomeAssistant({
       day: Array.from({ length: 40 }, (_, i) => ({ start: today - (40 - i) * day, end: today - (39 - i) * day, change: 25 })),
     },
     "sensor.ceiling_energy": {
-      month: [{ start: lastMonth, end: thisMonth, change: 12 }, { start: thisMonth, end: today, change: 4 }],
+      // The first month of a sensor does not count: it can be a part of a
+      // month.
+      month: [
+        { start: twoMonthsAgo, end: lastMonth, change: 11 },
+        { start: lastMonth, end: thisMonth, change: 12 },
+        { start: thisMonth, end: today, change: 4 },
+      ],
     },
   },
 })
@@ -702,7 +709,7 @@ async function build(context, name) {
   // house gets a smart meter, and its real months.
   await page.goto(`${site}/`)
   await connected(page)
-  await page.waitForSelector("#real:has-text('Home Assistant has the use of your meter')")
+  await page.waitForSelector("#real:has-text('of usage from your meter')")
   await check(page, `${name} meter of Home Assistant`)
   await page.click("#use-ha-meter")
   await page.waitForSelector("#real-average")

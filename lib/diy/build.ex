@@ -46,7 +46,8 @@ defmodule DIY.Build do
       goes back, or `nil`;
     - `at` (its place in its room), `turn` and `size` (`DIY.Layout`). An
       item in the shell of a van has no `at`.
-  - `usage`: the real usage of the meter file (`DIY.Usage`), or `nil`.
+  - `usage`: the real usage of the meter, from a file or from Home
+    Assistant (`DIY.Usage`), or `nil`.
   - `power`: how the house uses its power stations, and the prices of the
     night and of the power to the grid (`DIY.Power.settings/0`).
   - `plans`: the plans of the worksheet of the plan lesson (`DIY.Plan`), at
@@ -854,7 +855,7 @@ defmodule DIY.Build do
     if Enum.any?(build.items, &(&1.type == "smart_meter")), do: build, else: %{build | usage: nil}
   end
 
-  @doc "Puts the real usage of a meter file, or removes it with `nil`."
+  @doc "Puts the real usage of the meter, or removes it with `nil`."
   @spec set_usage(t(), DIY.Usage.t() | nil) :: t()
   def set_usage(build, usage), do: change(build, &%{&1 | usage: usage})
 

@@ -2156,8 +2156,8 @@ test("after any steps, the LiveView gets the states of Home Assistant, and none 
 const chicago = (month, day) => Date.UTC(2026, month - 1, day, 5)
 
 test("the sensors of the energy settings, and the months in the time zone of Home Assistant", () => {
-  // No settings, then the format of Home Assistant 2025 and later, then
-  // the lists of the old format. A sensor counts one time.
+  // No settings, then the new form of the settings, then the lists of the
+  // old form. A sensor counts one time.
   assert.deepEqual(energySources(null), {from: [], to: [], devices: []})
   assert.deepEqual(energySources({
     energy_sources: [
@@ -2180,6 +2180,26 @@ test("the sensors of the energy settings, and the months in the time zone of Hom
   const many = {device_consumption: Array.from({length: MAX_ENERGY_DEVICES + 5}, (_, i) => ({stat_consumption: `sensor.e${i}`}))}
   assert.equal(energySources(many).devices.length, MAX_ENERGY_DEVICES)
 
+  // A sensor that is a part of a different sensor of its device does not
+  // count. A part of a sensor of a different device, or of a sensor that
+  // the registry does not know, counts.
+  const parts = {
+    device_consumption: [
+      {stat_consumption: "sensor.strip_total"},
+      {stat_consumption: "sensor.strip_outlet_1", included_in_stat: "sensor.strip_total"},
+      {stat_consumption: "sensor.lamp_energy", included_in_stat: "sensor.strip_total"},
+      {stat_consumption: "sensor.unknown", included_in_stat: "sensor.other_unknown"},
+      {stat_consumption: "sensor.tv_energy", included_in_stat: 7},
+    ],
+  }
+  const registered = [
+    haEntity("sensor.strip_total", "strip"), haEntity("sensor.strip_outlet_1", "strip"), haEntity("sensor.lamp_energy", "lamp"),
+    haEntity("sensor.unknown", null), haEntity("sensor.other_unknown", null),
+  ]
+  assert.deepEqual(energySources(parts, registered).devices.map((one) => one.statistic),
+    ["sensor.strip_total", "sensor.lamp_energy", "sensor.unknown", "sensor.tv_energy"])
+  assert.equal(energySources(parts).devices.length, 5)
+
   // A time zone that the browser does not know is UTC.
   assert.equal(zoneOf("America/Chicago"), "America/Chicago")
   assert.equal(zoneOf("Mars/Base"), "UTC")
@@ -2200,45 +2220,77 @@ test("the months of the meter and of each device, from the rows of the statistic
       {start: chicago(9, 30), end: 0, change: 12},
       {start: chicago(10, 1), end: 0, change: 9.25},
       {start: chicago(10, 2), end: 0, change: null},
-      // A new meter: the change under zero counts as zero.
-      {start: chicago(10, 3), end: 0, change: -400},
+      // A dip of the sensor at night: 1000 kWh, then 995, then 1001. The
+      // month counts 1 kWh for the two days, not 6.
+      {start: chicago(10, 3), end: 0, change: -5},
+      {start: chicago(10, 4), end: 0, change: 6},
+      // A month under zero counts as zero.
+      {start: chicago(11, 2), end: 0, change: -3},
     ],
     "sensor.out": [{start: chicago(9, 30), end: 0, change: 3}, {start: chicago(10, 4), end: 0, change: 1.5}],
   }
   assert.deepEqual(meterMonths(stats, ["sensor.in"], ["sensor.out"], "America/Chicago"), [
     {month: "2026-09", kwh: 22.5, export: 3, days: 2},
-    {month: "2026-10", kwh: 9.25, export: 1.5, days: 3},
+    {month: "2026-10", kwh: 10.25, export: 1.5, days: 3},
+    {month: "2026-11", kwh: 0, export: 0, days: 1},
   ])
   assert.deepEqual(meterMonths({}, ["sensor.in"], [], "UTC"), [])
+
+  // The last METER_MONTHS months only: west of UTC, the statistics start
+  // one month earlier, and DIY.Usage takes 24 months at most.
+  const years = {in: Array.from({length: 26}, (_, i) => ({start: Date.UTC(2024, 8 + i, 15), change: 1}))}
+  const kept = meterMonths(years, ["in"], [], "UTC")
+  assert.equal(kept.length, METER_MONTHS)
+  assert.equal(kept[0].month, "2024-11")
+  assert.equal(kept.at(-1).month, "2026-10")
 
   // The months of each device: only a sensor of a device, with data. A
   // row with no time does not count.
   const entities = [
     haEntity("sensor.fridge_energy", "fridge"), haEntity("sensor.lost", "lost"), haEntity("sensor.alone", null),
   ]
+  entities.push(haEntity("sensor.plug_energy", "plug"), haEntity("sensor.new_energy", "new"), haEntity("sensor.dip_energy", "dip"))
   const used = {
+    // The first month of a sensor does not count: a new sensor has only a
+    // part of it.
     "sensor.fridge_energy": [
       {start: chicago(10, 1), end: 0, change: 31},
       {start: chicago(9, 1), end: 0, change: 30.1234},
+      {start: chicago(8, 1), end: 0, change: 29},
       {start: "today", end: 0, change: 5},
     ],
+    // A plug that starts on 25 September: 6 days are not a month.
+    "sensor.plug_energy": [{start: chicago(9, 1), end: 0, change: 144}, {start: chicago(10, 1), end: 0, change: 50}],
+    // A sensor that starts this month: this month counts, as a part of a
+    // month.
+    "sensor.new_energy": [{start: chicago(10, 1), end: 0, change: 2}],
+    // A month under zero counts as zero.
+    "sensor.dip_energy": [{start: chicago(9, 1), end: 0, change: 8}, {start: chicago(10, 1), end: 0, change: -1}],
     "opower:meter": [{start: chicago(10, 1), end: 0, change: 900}],
     "sensor.alone": [{start: chicago(10, 1), end: 0, change: 4}],
   }
   const devices = [
     {statistic: "sensor.fridge_energy", name: "Fridge"},
+    {statistic: "sensor.plug_energy", name: null},
+    {statistic: "sensor.new_energy", name: null},
+    {statistic: "sensor.dip_energy", name: null},
     {statistic: "opower:meter", name: null},
     {statistic: "sensor.lost", name: null},
     {statistic: "sensor.alone", name: null},
   ]
-  assert.deepEqual(deviceEnergy(devices, null, entities, "UTC"), [])
-  assert.deepEqual(deviceEnergy(devices, used, entities, "America/Chicago"), [{
-    device: "fridge", statistic: "sensor.fridge_energy", name: "Fridge",
-    months: [{month: "2026-09", kwh: 30.123}, {month: "2026-10", kwh: 31}],
-  }])
+  assert.deepEqual(deviceEnergy(devices, null, entities, "UTC", "2026-10"), [])
+  assert.deepEqual(deviceEnergy(devices, used, entities, "America/Chicago", "2026-10"), [
+    {
+      device: "fridge", statistic: "sensor.fridge_energy", name: "Fridge",
+      months: [{month: "2026-09", kwh: 30.123}, {month: "2026-10", kwh: 31}],
+    },
+    {device: "plug", statistic: "sensor.plug_energy", name: null, months: [{month: "2026-10", kwh: 50}]},
+    {device: "new", statistic: "sensor.new_energy", name: null, months: [{month: "2026-10", kwh: 2}]},
+    {device: "dip", statistic: "sensor.dip_energy", name: null, months: [{month: "2026-10", kwh: 0}]},
+  ])
   // The last DEVICE_MONTHS months only.
   const long = {"sensor.fridge_energy": Array.from({length: 20}, (_, i) => ({start: Date.UTC(2025, i, 15), change: 1}))}
-  assert.equal(deviceEnergy(devices.slice(0, 1), long, entities, "UTC")[0].months.length, DEVICE_MONTHS)
+  assert.equal(deviceEnergy(devices.slice(0, 1), long, entities, "UTC", "2026-08")[0].months.length, DEVICE_MONTHS)
 })
 
 test("the months of the meter keep the sum and the days of the rows", () => {
@@ -2248,7 +2300,15 @@ test("the months of the meter keep the sum and the days of the rows", () => {
     const start = Date.UTC(2024, 10, 1)
     const rows = (list) => list.map(({day: d, change}) => ({start: start + d * day, end: 0, change}))
     const months = meterMonths({in: rows(from), out: rows(to)}, ["in"], ["out"], "UTC")
-    const sum = (list) => list.reduce((total, one) => total + (one.change === null ? 0 : Math.max(one.change, 0)), 0)
+    // The sum of each month, and zero for a month under zero.
+    const sum = (list) => {
+      const each = new Map()
+      for (const one of list.filter((row) => row.change !== null)) {
+        const month = monthOf(start + one.day * day, "UTC")
+        each.set(month, (each.get(month) ?? 0) + one.change)
+      }
+      return [...each.values()].reduce((total, kwh) => total + Math.max(kwh, 0), 0)
+    }
     // 700 days are in 24 months: no month goes away.
     assert.ok(Math.abs(months.reduce((total, one) => total + one.kwh, 0) - sum(from)) < 0.01 * (months.length + 1))
     assert.ok(Math.abs(months.reduce((total, one) => total + one.export, 0) - sum(to)) < 0.01 * (months.length + 1))
@@ -2278,6 +2338,8 @@ test("the hook reads the energy data of Home Assistant", async () => {
   const page = parts()
   const {link, socket} = await connected(page)
   link.timeZone = "America/Chicago"
+  // 11 October 2026: the months are in the time zone of Home Assistant.
+  page.clock = Date.UTC(2026, 9, 11, 12)
   const ha = registry({
     entities: [haEntity("sensor.fridge_energy", "fridge")],
     prefs: {
@@ -2285,26 +2347,36 @@ test("the hook reads the energy data of Home Assistant", async () => {
       device_consumption: [{stat_consumption: "sensor.fridge_energy", name: "Fridge"}],
     },
     statistics: {
-      "sensor.in": {day: [{start: chicago(10, 1), end: 0, change: 20}, {start: chicago(10, 2), end: 0, change: 22}]},
+      // 3 in the morning of 1 October in UTC is 30 September in Chicago.
+      "sensor.in": {day: [
+        {start: Date.UTC(2026, 9, 1, 3), end: 0, change: 7},
+        {start: chicago(10, 1), end: 0, change: 20},
+        {start: chicago(10, 2), end: 0, change: 22},
+      ]},
       "sensor.out": {day: [{start: chicago(10, 2), end: 0, change: 4}]},
-      "sensor.fridge_energy": {month: [{start: chicago(10, 1), end: 0, change: 31}]},
+      "sensor.fridge_energy": {month: [{start: chicago(9, 1), end: 0, change: 30}, {start: chicago(10, 1), end: 0, change: 31}]},
     },
   })
   const read = link.energy()
   await serve(ha, [socket])
   await read
   assert.deepEqual(page.pushes.at(-1), ["ha:energy", {
-    meter: {source: "home_assistant", months: [{month: "2026-10", kwh: 42, export: 4, days: 2}]},
+    meter: {source: "home_assistant", months: [
+      {month: "2026-09", kwh: 7, export: 0, days: 1},
+      {month: "2026-10", kwh: 42, export: 4, days: 2},
+    ]},
     devices: [{device: "fridge", statistic: "sensor.fridge_energy", name: "Fridge", months: [{month: "2026-10", kwh: 31}]}],
+    month: "2026-10",
   }])
   // The meter for each day of 24 months, and the devices for each month of
-  // 13 months, in kWh.
+  // 13 months and one more (the first month of a sensor does not count),
+  // in kWh.
   assert.deepEqual(ha.reads.map(({statistic_ids, period, types, units, start_time}) =>
     ({statistic_ids, period, types, units, start_time})), [
     {statistic_ids: ["sensor.in", "sensor.out"], period: "day", types: ["change"], units: {energy: "kWh"},
       start_time: new Date(monthStart(page.clock, METER_MONTHS)).toISOString()},
     {statistic_ids: ["sensor.fridge_energy"], period: "month", types: ["change"], units: {energy: "kWh"},
-      start_time: new Date(monthStart(page.clock, DEVICE_MONTHS)).toISOString()},
+      start_time: new Date(monthStart(page.clock, DEVICE_MONTHS + 1)).toISOString()},
   ])
 
   // No energy settings, or settings with no meter and no device: no
@@ -2314,12 +2386,12 @@ test("the hook reads the energy data of Home Assistant", async () => {
   const none = link.energy()
   await serve(ha, [socket])
   await none
-  assert.deepEqual(page.pushes.at(-1), ["ha:energy", {meter: null, devices: []}])
+  assert.deepEqual(page.pushes.at(-1), ["ha:energy", {meter: null, devices: [], month: "2026-10"}])
   ha.prefs = {energy_sources: [{type: "solar", stat_energy_from: "sensor.solar"}], device_consumption: []}
   const empty = link.energy()
   await serve(ha, [socket])
   await empty
-  assert.deepEqual(page.pushes.at(-1), ["ha:energy", {meter: null, devices: []}])
+  assert.deepEqual(page.pushes.at(-1), ["ha:energy", {meter: null, devices: [], month: "2026-10"}])
   assert.equal(ha.reads.length, 0)
 
   // A command that Home Assistant refuses, and no socket.

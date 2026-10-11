@@ -1,7 +1,8 @@
 defmodule DIY.Usage do
   @moduledoc """
-  The real usage of a house, from the file of its smart meter. The browser
-  reads the file (`assets/js/usage.js`), and sends only the sums of each
+  The real usage of a house, from its smart meter: from a file of the
+  meter, or from Home Assistant. The browser reads the file
+  (`assets/js/usage.js`) or Home Assistant, and sends only the sums of each
   month. The usage stays in the build, on the device.
 
   A usage is a map:

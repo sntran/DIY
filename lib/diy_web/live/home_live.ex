@@ -152,6 +152,12 @@ defmodule DIYWeb.HomeLive do
 
   @doc false
   # A build from the device (DIYWeb.Device): update the data of the pages.
+  # Energy data that came before the first build changes it one time. A
+  # build of a different tab does not: two tabs with different data must
+  # not change the build again and again.
+  def build_changed(%{assigns: %{ha_energy_late: true}} = socket),
+    do: socket |> assign(:ha_energy_late, false) |> refresh() |> new_meter_months()
+
   def build_changed(socket), do: refresh(socket)
 
   ## The events
@@ -1067,11 +1073,21 @@ defmodule DIYWeb.HomeLive do
 
   ## The build and its data
 
-  # Changes the build, and updates the data of the pages. The same build
-  # makes no change.
   # The meter of Home Assistant, also when the build uses it already.
   defp own_meter(%{ha_energy: %{meter: %{} = meter}}), do: meter
   defp own_meter(_assigns), do: nil
+
+  # A build that uses the meter of Home Assistant gets its new months. A
+  # different build keeps its usage (a file, or none): the page offers the
+  # meter of Home Assistant.
+  defp new_meter_months(socket) do
+    build = socket.assigns.build
+    usage = own_meter(socket.assigns)
+
+    if usage && build.usage != usage && match?(%{source: "home_assistant"}, build.usage),
+      do: put(socket, Build.set_usage(build, usage)),
+      else: socket
+  end
 
   # The build with a smart meter: the one it has, else a new one outside,
   # else inside.
@@ -1092,6 +1108,8 @@ defmodule DIYWeb.HomeLive do
     end
   end
 
+  # Changes the build, and updates the data of the pages. The same build
+  # makes no change.
   defp put(%{assigns: %{build: build}} = socket, build), do: socket
   defp put(socket, build), do: socket |> Device.put_build(build) |> refresh()
 
@@ -1264,17 +1282,13 @@ defmodule DIYWeb.HomeLive do
   # draws the ghosts again.
   def handle_info(:ha_devices, socket), do: {:noreply, pictures(socket)}
 
-  # New energy data of Home Assistant. A build that uses the meter of Home
-  # Assistant gets its new months. A different build keeps its usage (a
-  # file, or none): the page offers the meter of Home Assistant.
-  def handle_info(:ha_energy, socket) do
-    build = socket.assigns.build
-    usage = own_meter(socket.assigns)
+  # New energy data of Home Assistant (`new_meter_months/1`). The data can
+  # come before the build of the device, for example after a reconnect:
+  # then the build gets the new months when it comes (`build_changed/1`).
+  def handle_info(:ha_energy, %{assigns: %{build: nil}} = socket),
+    do: {:noreply, assign(socket, :ha_energy_late, true)}
 
-    if usage && build.usage != usage && match?(%{source: "home_assistant"}, build.usage),
-      do: {:noreply, put(socket, Build.set_usage(build, usage))},
-      else: {:noreply, socket}
-  end
+  def handle_info(:ha_energy, socket), do: {:noreply, new_meter_months(socket)}
 
   # A message that the page does not know (or a status of a different
   # item): nothing changes.

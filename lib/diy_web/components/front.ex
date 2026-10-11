@@ -437,10 +437,10 @@ defmodule DIYWeb.Front do
                 "From your meter, in an average month"
 
               length(@build.usage.months) == 1 ->
-                "From your meter: the one month of the file"
+                "From your meter: the one month of your usage"
 
               true ->
-                "From your meter: the mean of the #{length(@build.usage.months)} months of the file"
+                "From your meter: the mean of the #{length(@build.usage.months)} months of your usage"
             end}
           </p>
           <p id="real-average" class="text-2xl font-bold">
@@ -451,15 +451,12 @@ defmodule DIYWeb.Front do
             {Format.count(length(@build.usage.months), "month")} of real usage.
             <.link patch={~p"/estimate"} class="link">See them next to the estimate</.link>
           </p>
-        <% @ha_meter -> %>
+        <% @ha_meter && (@meter || @room) -> %>
           <p class="text-sm">
-            Home Assistant has the use of your meter: {Format.count(
-              length(@ha_meter.months),
-              "month"
-            )}. The app can show your real usage with it.
+            Home Assistant has {Format.count(length(@ha_meter.months), "month")} of usage from your meter. The app can show your real usage with them.
           </p>
           <button type="button" id="use-ha-meter" phx-click="ha_use_meter" class="btn btn-sm">
-            Use the meter of Home Assistant
+            Use Home Assistant
           </button>
         <% @meter -> %>
           <p class="text-sm">

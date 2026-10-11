@@ -571,7 +571,7 @@ defmodule DIYWeb.LessonPage do
       <h3 class="font-semibold">Your 12 months</h3>
       <p class="text-xs opacity-80">
         {if @source == :meter,
-          do: "From the file of your meter.",
+          do: "From your meter.",
           else:
             "From the estimate of your house, with its range: a file of your meter gives the real months."}
       </p>

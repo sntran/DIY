@@ -543,9 +543,12 @@ defmodule DIYWeb.Inside do
           else: "from #{Format.month(energy.from)} to #{Format.month(energy.to)}."
         )
 
-    # The estimate of each month of the year (January first), before the
-    # estimate is ready: none.
-    by_month = estimate.ready && get_in(estimate.items, [item.id, :months])
+    # The estimate of each month of the year (January first). Before the
+    # estimate is ready, and for a kind that uses no power, none.
+    by_month =
+      estimate.ready and item.type not in Estimate.no_use() and
+        get_in(estimate.items, [item.id, :months])
+
     same = by_month && same_months(by_month, energy.months)
     measured <> ((same && " The estimate for the same months: #{Format.kwh(same)}.") || "")
   end
@@ -1599,12 +1602,19 @@ defmodule DIYWeb.Inside do
       <h3 class="font-semibold">Your real usage</h3>
       <div :if={@ha_meter} id="ha-meter" class="space-y-2">
         <p class="text-sm">
-          Home Assistant has the use of this meter: {Format.count(length(@ha_meter.months), "month")}, from {Format.month(
+          Home Assistant has {Format.count(length(@ha_meter.months), "month")} of usage from this meter, from {Format.month(
             hd(@ha_meter.months).month
           )} to {Format.month(List.last(@ha_meter.months).month)}.
         </p>
-        <button type="button" id="use-ha-meter" phx-click="ha_use_meter" class="stage-btn">
-          Use the meter of Home Assistant
+        <%!-- The button goes away after the tap: the focus goes to the
+          title of the panel, and the flash tells the result. --%>
+        <button
+          type="button"
+          id="use-ha-meter"
+          phx-click={JS.push("ha_use_meter") |> JS.focus(to: "#item-stage-title")}
+          class="stage-btn"
+        >
+          Use Home Assistant
         </button>
       </div>
       <p :if={@usage} id="usage-months" class="text-sm">

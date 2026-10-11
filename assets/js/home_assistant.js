@@ -773,11 +773,12 @@ export class Link {
         }),
         this.command("config/entity_registry/list"),
       ])
-      const {from, to, devices} = energySources(prefs)
+      const {from, to, devices} = energySources(prefs, entities)
       const zone = zoneOf(this.timeZone)
+      const now = this.now()
       const read = (ids, months, period) => ids.length === 0 ? Promise.resolve({}) :
         this.command("recorder/statistics_during_period", {
-          start_time: new Date(monthStart(this.now(), months)).toISOString(),
+          start_time: new Date(monthStart(now, months)).toISOString(),
           statistic_ids: ids,
           period,
           types: ["change"],
@@ -785,12 +786,13 @@ export class Link {
         })
       const [meter, used] = await Promise.all([
         read([...from, ...to], METER_MONTHS, "day"),
-        read(devices.map((device) => device.statistic), DEVICE_MONTHS, "month"),
+        read(devices.map((device) => device.statistic), DEVICE_MONTHS + 1, "month"),
       ])
       const months = meterMonths(meter, from, to, zone)
       this.push("ha:energy", {
         meter: months.length > 0 ? {source: "home_assistant", months} : null,
-        devices: deviceEnergy(devices, used, entities, zone),
+        devices: deviceEnergy(devices, used, entities, zone, monthOf(now, zone)),
+        month: monthOf(now, zone),
       })
     } catch (error) {
       this.push("ha:energy", {error: error.code === "offline" ? "offline" : "failed"})
@@ -1061,9 +1063,12 @@ export function deviceStates(controls, states) {
 
 // The sensors of the energy settings of Home Assistant (energy/get_prefs).
 // The meter of the house has the kWh from the grid and to the grid. Each
-// device has its sensor. Home Assistant 2025 and later has one sensor for
-// each way of a grid. Before, it had lists (flow_from and flow_to).
-export function energySources(prefs) {
+// device has its sensor. The new form of the settings has one sensor for
+// each way of a grid. The old form has lists (flow_from and flow_to). A
+// sensor that is a part of a different sensor of its device
+// (included_in_stat) does not count: the device has its kWh already. The
+// registry of the entities gives the device of each sensor.
+export function energySources(prefs, entities = []) {
   const from = []
   const to = []
   for (const source of prefs?.energy_sources ?? []) {
@@ -1073,8 +1078,11 @@ export function energySources(prefs) {
     for (const flow of source.flow_from ?? []) if (typeof flow.stat_energy_from === "string") from.push(flow.stat_energy_from)
     for (const flow of source.flow_to ?? []) if (typeof flow.stat_energy_to === "string") to.push(flow.stat_energy_to)
   }
+  const deviceOf = new Map(entities.map((entity) => [entity.entity_id, entity.device_id ?? null]))
+  const sameDevice = (a, b) => deviceOf.get(a) != null && deviceOf.get(a) === deviceOf.get(b)
   const devices = (prefs?.device_consumption ?? [])
     .filter((device) => typeof device.stat_consumption === "string")
+    .filter((device) => !(typeof device.included_in_stat === "string" && sameDevice(device.stat_consumption, device.included_in_stat)))
     .slice(0, MAX_ENERGY_DEVICES)
     .map((device) => ({statistic: device.stat_consumption, name: typeof device.name === "string" ? device.name : null}))
   return {from: [...new Set(from)], to: [...new Set(to)], devices}
@@ -1115,8 +1123,10 @@ const round = (kwh) => Math.round(kwh * 1000) / 1000
 // month is in the time zone of Home Assistant. It has the kWh from the
 // grid, the kWh to the grid, and the days with data. The rows are the
 // days of the statistics ("change": the kWh of the day). A row with no
-// change does not count. A change under zero (a new meter) counts as
-// zero. The last METER_MONTHS months only.
+// change does not count. A day can have a change under zero (a small dip
+// of the sensor). The month adds its days. A month under zero counts as
+// zero. Home Assistant finds a new meter itself. The last METER_MONTHS
+// months only: west of UTC, the statistics start one month earlier.
 export function meterMonths(stats, from, to, timeZone) {
   const months = new Map()
   const add = (ids, key) => {
@@ -1126,7 +1136,7 @@ export function meterMonths(stats, from, to, timeZone) {
         const name = monthOf(row.start, timeZone)
         if (!months.has(name)) months.set(name, {month: name, kwh: 0, export: 0, days: new Set()})
         const month = months.get(name)
-        month[key] += Math.max(row.change, 0)
+        month[key] += row.change
         month.days.add(row.start)
       }
     }
@@ -1138,8 +1148,8 @@ export function meterMonths(stats, from, to, timeZone) {
     .slice(-METER_MONTHS)
     .map((month) => ({
       month: month.month,
-      kwh: round(month.kwh),
-      export: round(month.export),
+      kwh: round(Math.max(month.kwh, 0)),
+      export: round(Math.max(month.export, 0)),
       days: Math.min(month.days.size, daysIn(month.month)),
     }))
 }
@@ -1147,8 +1157,12 @@ export function meterMonths(stats, from, to, timeZone) {
 // The energy of each device: the kWh of each month of its sensor. The
 // registry of the entities gives the device of each sensor. A sensor of
 // no device (for example, a statistic of an integration) does not count,
-// and a sensor with no data neither. The last DEVICE_MONTHS months only.
-export function deviceEnergy(devices, stats, entities, timeZone) {
+// and a sensor with no data neither. A month under zero counts as zero.
+// The first month of a sensor does not count: a new sensor has only a
+// part of it. The hook reads one month more for this. The month of now
+// (current) counts: the page shows it as a part of a month. The last
+// DEVICE_MONTHS months only.
+export function deviceEnergy(devices, stats, entities, timeZone, current) {
   const deviceOf = new Map(entities.map((entity) => [entity.entity_id, entity.device_id ?? null]))
   return devices
     .map(({statistic, name}) => {
@@ -1156,14 +1170,15 @@ export function deviceEnergy(devices, stats, entities, timeZone) {
       for (const row of stats?.[statistic] ?? []) {
         if (typeof row.change !== "number" || typeof row.start !== "number") continue
         const month = monthOf(row.start, timeZone)
-        months.set(month, (months.get(month) ?? 0) + Math.max(row.change, 0))
+        months.set(month, (months.get(month) ?? 0) + row.change)
       }
+      const sorted = [...months].sort(([a], [b]) => (a < b ? -1 : 1))
+      const full = sorted.length > 0 && sorted[0][0] !== current ? sorted.slice(1) : sorted
       return {
         device: deviceOf.get(statistic) ?? null,
         statistic,
         name,
-        months: [...months].sort(([a], [b]) => (a < b ? -1 : 1)).slice(-DEVICE_MONTHS)
-          .map(([month, kwh]) => ({month, kwh: round(kwh)})),
+        months: full.slice(-DEVICE_MONTHS).map(([month, kwh]) => ({month, kwh: round(Math.max(kwh, 0))})),
       }
     })
     .filter((device) => device.device !== null && device.months.length > 0)

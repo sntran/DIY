@@ -369,16 +369,19 @@ defmodule DIYWeb.HomeAssistant do
     source `home_assistant`), or `nil`;
   - `devices`: for each device, its name in the energy settings (or
     `nil`) and the kWh of its months (`%{month: "YYYY-MM", kwh: kwh}`).
-    Two sensors of one device give the sum of their kWh.
+    Two sensors of one device give the sum of their kWh;
+  - `month`: the month of now ("YYYY-MM"), in the time zone of Home
+    Assistant.
 
-  A device that the page cannot read does not count. A payload that the
-  page cannot read gives `nil`.
+  A device that the page cannot read does not count. A meter that the page
+  cannot read is `nil`: the devices stay. A payload that the page cannot
+  read gives `nil`.
   """
   def read_energy(%{"error" => error}) when error in ~w(offline failed), do: %{error: error}
 
-  def read_energy(%{"meter" => meter, "devices" => devices})
-      when is_list(devices) and length(devices) <= @max_energy_devices do
-    with {:ok, meter} <- read_meter(meter) do
+  def read_energy(%{"meter" => meter, "devices" => devices, "month" => month})
+      when is_list(devices) and length(devices) <= @max_energy_devices and is_binary(month) do
+    if month?(month) do
       devices =
         devices
         |> Enum.map(&read_energy_device/1)
@@ -395,24 +398,22 @@ defmodule DIYWeb.HomeAssistant do
           {device, %{name: first.name, months: months}}
         end)
 
-      %{meter: meter, devices: devices}
-    else
-      _ -> nil
+      %{meter: read_meter(meter), devices: devices, month: month}
     end
   end
 
   def read_energy(_params), do: nil
 
-  defp read_meter(nil), do: {:ok, nil}
-
   defp read_meter(%{"source" => "home_assistant"} = meter) do
     case Usage.read(meter) do
-      {:ok, usage} -> {:ok, usage}
-      :error -> :error
+      {:ok, usage} -> usage
+      :error -> nil
     end
   end
 
-  defp read_meter(_meter), do: :error
+  defp read_meter(_meter), do: nil
+
+  defp month?(month), do: month =~ ~r/\A20\d\d-(0[1-9]|1[0-2])\z/
 
   defp read_energy_device(%{"device" => device, "name" => name, "months" => months})
        when is_list(months) and length(months) in 1..@max_energy_months do
@@ -435,7 +436,7 @@ defmodule DIYWeb.HomeAssistant do
 
   defp read_energy_month(%{"month" => month, "kwh" => kwh})
        when is_binary(month) and is_number(kwh) and kwh >= 0 and kwh < 1_000_000 do
-    if month =~ ~r/\A20\d\d-(0[1-9]|1[0-2])\z/, do: %{month: month, kwh: kwh / 1}
+    if month?(month), do: %{month: month, kwh: kwh / 1}
   end
 
   defp read_energy_month(_month), do: nil
@@ -456,14 +457,12 @@ defmodule DIYWeb.HomeAssistant do
   is the energy of the last 12 months that are over (`months` has their
   names). So the page can put the estimate of the same months next to it.
   With no month that is over, it is the energy of this month so far
-  (`partial`). It also has the first and the last month.
+  (`partial`). It also has the first and the last month. The month of now
+  is in the time zone of Home Assistant.
   """
-  def item_energy(assigns, item_id, today \\ Date.utc_today())
-
-  def item_energy(%{ha_energy: %{devices: devices}, build: build}, item_id, today) do
+  def item_energy(%{ha_energy: %{devices: devices, month: current}, build: build}, item_id) do
     with id when is_binary(id) <- build.devices[item_id],
          %{months: [_ | _] = months} <- devices[id] do
-      current = Calendar.strftime(today, "%Y-%m")
       {over, now} = Enum.split_with(months, &(&1.month < current))
       {shown, partial} = if over == [], do: {now, true}, else: {Enum.take(over, -12), false}
 
@@ -479,7 +478,7 @@ defmodule DIYWeb.HomeAssistant do
     end
   end
 
-  def item_energy(_assigns, _item_id, _today), do: nil
+  def item_energy(_assigns, _item_id), do: nil
 
   @doc """
   The devices and the areas of Home Assistant from the hook (`ha:devices`),
