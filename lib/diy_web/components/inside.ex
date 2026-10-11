@@ -800,7 +800,9 @@ defmodule DIYWeb.Inside do
   # control on each item. A number has − and +, a field and its unit. A
   # choice is a row of buttons. Yes or no is a switch. A name is a field.
   # The ids start with "param-". A screen reader reads the unit, the help
-  # and the error of the field with it (aria-describedby).
+  # and the error of the field with it (aria-describedby). At an end of the
+  # range, − or + is dimmed for a screen reader (aria-disabled). It is not
+  # disabled: it keeps the focus, and a tap says the end again.
   defp field(%{param: %{type: :bool}} = assigns) do
     ~H"""
     <div id={"param-#{@param.key}-field"} class="stage-field">
@@ -869,7 +871,14 @@ defmodule DIYWeb.Inside do
         & &1
       )
 
-    assigns = assign(assigns, :described, described != [] && Enum.join(described, " "))
+    value = assigns.value
+
+    assigns =
+      assign(assigns,
+        described: described != [] && Enum.join(described, " "),
+        least: is_number(value) and value <= assigns.param.min,
+        most: is_number(value) and value >= assigns.param.max
+      )
 
     ~H"""
     <div id={"param-#{@param.key}-field"} class="stage-field">
@@ -883,6 +892,7 @@ defmodule DIYWeb.Inside do
           phx-value-key={@param.key}
           phx-value-by="-1"
           aria-label={"Less: #{@param.label}"}
+          aria-disabled={@least && "true"}
         >
           −
         </button>
@@ -909,6 +919,7 @@ defmodule DIYWeb.Inside do
           phx-value-key={@param.key}
           phx-value-by="1"
           aria-label={"More: #{@param.label}"}
+          aria-disabled={@most && "true"}
         >
           +
         </button>

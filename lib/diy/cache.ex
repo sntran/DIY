@@ -6,9 +6,10 @@ defmodule DIY.Cache do
   the VM stops, and that is not a problem: the next request gets the data
   again.
 
-  The cache keeps at most 200 values: the weather of one place is near 28
+  The cache keeps at most 200 values. The weather of one place is near 28
   KB, and the memory of a Durable Object is 128 MB. When it is full, it
-  starts again with no values.
+  starts again with no values. With a maximum of 0 (the tests), it keeps
+  nothing.
   """
   use GenServer
 
@@ -28,6 +29,10 @@ defmodule DIY.Cache do
   it. Only `{:ok, value}` goes into the cache: an error does not stay.
   """
   def fetch(key, fun) do
+    if max() == 0, do: fun.(), else: cached(key, fun)
+  end
+
+  defp cached(key, fun) do
     case :ets.lookup(__MODULE__, key) do
       [{^key, value}] ->
         {:ok, value}

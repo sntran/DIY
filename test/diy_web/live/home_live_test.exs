@@ -36,8 +36,8 @@ defmodule DIYWeb.HomeLiveTest do
     Build.put_house(build, house, rooms, items)
   end
 
-  # The cache of the weather is for all the tests: a test of an error of the
-  # weather uses a ZIP code far from the others.
+  # The tests keep nothing in the cache of the weather and of the markets
+  # (config/test.exs): each test gets the answer of its own stub.
 
   # Waits for the weather and the market in the background.
   defp build(view), do: :sys.get_state(view.pid).socket.assigns.build
@@ -1020,7 +1020,6 @@ defmodule DIYWeb.HomeLiveTest do
 
     view = open(conn, ~p"/settings", house("75009"))
     view |> form("#settings-zip", %{"zip" => "75010"}) |> render_submit()
-    Process.sleep(400)
     settle(view)
     assert %{zip: "75010", market: %{utility: "Oncor"}} = build(view)
   end
@@ -1035,6 +1034,42 @@ defmodule DIYWeb.HomeLiveTest do
     refute render_patch(view, ~p"/") =~ "The page asks Power to Choose"
   end
 
+  test "a ZIP code that comes back gets its market again", %{conn: conn} do
+    view = open(conn, ~p"/settings", house("75023"))
+    settle(view)
+    assert %{utility: "Oncor"} = build(view).market
+
+    # A different ZIP code has no market. The first ZIP code again: the page
+    # asks again, because the build does not keep the market of a ZIP code
+    # that it left.
+    view |> form("#settings-zip", %{"zip" => "10001"}) |> render_submit()
+    settle(view)
+    assert build(view).market == nil
+    view |> form("#settings-zip", %{"zip" => "75023"}) |> render_submit()
+    settle(view)
+    assert %{zip: "75023", market: %{utility: "Oncor"}} = build(view)
+  end
+
+  test "the page asks one time, while it waits and after an error", %{conn: conn} do
+    test = self()
+
+    Req.Test.stub(DIY.Market, fn conn ->
+      send(test, :asked)
+      Process.sleep(100)
+      Plug.Conn.send_resp(conn, 500, "")
+    end)
+
+    # A change of the build while the page waits, and a change after the
+    # error: the page does not ask again.
+    view = open(conn, ~p"/settings", house("75023"))
+    view |> form("#settings-price", %{"price" => "15"}) |> render_submit()
+    settle(view)
+    view |> form("#settings-price", %{"price" => "16"}) |> render_submit()
+    settle(view)
+    assert_received :asked
+    refute_received :asked
+  end
+
   test "the answer for a ZIP code that the build left is thrown away", %{conn: conn} do
     Req.Test.stub(DIY.Market, fn conn ->
       Process.sleep(100)
@@ -1043,13 +1078,11 @@ defmodule DIYWeb.HomeLiveTest do
 
     view = open(conn, ~p"/settings", house("75023"))
     view |> form("#settings-zip", %{"zip" => "10001"}) |> render_submit()
-    Process.sleep(300)
     settle(view)
     assert build(view).market == nil
 
     # The build gets the ZIP code back: the page asks again.
     view |> form("#settings-zip", %{"zip" => "75023"}) |> render_submit()
-    Process.sleep(300)
     settle(view)
     assert %{zip: "75023", market: %{utility: "Oncor"}} = build(view)
   end

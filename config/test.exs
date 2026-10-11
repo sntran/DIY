@@ -26,6 +26,11 @@ config :phoenix,
 config :diy, DIY.Weather, req: [plug: {Req.Test, DIY.Weather}, retry: false]
 config :diy, DIY.Market, req: [plug: {Req.Test, DIY.Market}, retry: false]
 
+# The tests keep nothing in the cache of the weather and of the markets.
+# So a test gets the answer of its own stub, not a value of a different
+# test.
+config :diy, DIY.Cache, max: 0
+
 # The browser tests (mix test --only browser) need a server: DIY_BROWSER=1
 # starts it on the port 4002.
 if System.get_env("DIY_BROWSER") do

@@ -22,7 +22,9 @@
   are orange in the two. In the light theme, white words on a dark orange
   have a contrast of 4.9 (WCAG AA). In the dark theme, dark words on a
   light orange have a contrast of 6.7, and the orange has a contrast of
-  5.2 with the page. */
+  5.2 with the page. The red of an error has a contrast of 4.5 at least
+  with the page and with its words: a dark red in the light theme (5.2 to
+  6.2), and a light red with dark words in the dark theme (6.6 to 8.9). */
 @plugin "daisyui/packages/bundle/daisyui-theme" {
   name: "dark";
   default: false;
@@ -46,8 +48,8 @@
   --color-success-content: oklch(98% 0.014 180.72);
   --color-warning: oklch(66% 0.179 58.318);
   --color-warning-content: oklch(98% 0.022 95.277);
-  --color-error: oklch(58% 0.253 17.585);
-  --color-error-content: oklch(96% 0.015 12.422);
+  --color-error: oklch(78.95% 0.122 27.48);
+  --color-error-content: oklch(25% 0.07 25);
   --radius-selector: 0.25rem;
   --radius-field: 0.25rem;
   --radius-box: 0.5rem;
@@ -81,7 +83,7 @@
   --color-success-content: oklch(98% 0.014 180.72);
   --color-warning: oklch(66% 0.179 58.318);
   --color-warning-content: oklch(98% 0.022 95.277);
-  --color-error: oklch(58% 0.253 17.585);
+  --color-error: oklch(50.03% 0.182 29.51);
   --color-error-content: oklch(96% 0.015 12.422);
   --radius-selector: 0.25rem;
   --radius-field: 0.25rem;
@@ -582,12 +584,12 @@
    (48rem or more), and under it on a narrow page. Each control is 2.75rem
    (44 px) high at least. A link in a text is 1.5rem (24 px) high at least.
    With no script, the panel is at its place, and the model does not show. */
-.stage { --stage-spot: #1d5fd1; --stage-link: #1d5fd1; --stage-danger: #b42318; --stage-on: #15803d;
+.stage { --stage-spot: #1d5fd1; --stage-link: #1d5fd1; --stage-danger: var(--color-error); --stage-on: #15803d;
   --stage-muted: color-mix(in oklab, var(--color-base-content) 70%, var(--color-base-100)); }
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme=light]) .stage { --stage-link: #9cc6ff; --stage-danger: #ff9b8f; --stage-on: #22a355 }
+  :root:not([data-theme=light]) .stage { --stage-link: #9cc6ff; --stage-on: #22a355 }
 }
-[data-theme=dark] .stage { --stage-link: #9cc6ff; --stage-danger: #ff9b8f; --stage-on: #22a355 }
+[data-theme=dark] .stage { --stage-link: #9cc6ff; --stage-on: #22a355 }
 .stage :focus-visible { outline: 3px solid var(--color-primary); outline-offset: 2px }
 .stage-scrim { background: rgb(20 17 14 / 0.6); backdrop-filter: blur(3px); animation: stage-fade 350ms ease-out both }
 [data-stage=closing] .stage-scrim { animation: stage-fade-out 600ms ease-in both }
@@ -665,6 +667,12 @@
 .stage-step { width: 2.75rem; height: 2.75rem; border-radius: 50%; border: 1px solid var(--color-base-300);
   background: var(--color-base-200); color: var(--color-base-content); font-size: 1.3rem; font-weight: 700; cursor: pointer }
 .stage-step:hover { border-color: var(--color-primary) }
+/* − or + at an end of the range: its sign is dimmed, but it keeps the
+   focus. Only the sign is dimmed (a contrast of 3.8 with the key in the
+   light theme, and 4.3 in the dark theme): the ring of the focus keeps its
+   contrast. */
+.stage-step[aria-disabled=true] { color: color-mix(in oklab, var(--color-base-content) 50%, var(--color-base-200)); cursor: default }
+.stage-step[aria-disabled=true]:hover { border-color: var(--color-base-300) }
 .stage-input { min-height: 2.75rem; width: 100%; min-width: 0; padding: 0 0.75rem; border-radius: 0.6rem;
   border: 1px solid var(--stage-muted); background: var(--color-base-100); color: var(--color-base-content); font-size: 1.05rem;
   font-variant-numeric: tabular-nums }
@@ -699,7 +707,6 @@
 .stage-panel .bg-base-200 { color: inherit }
 .stage-panel .link { color: var(--stage-link) }
 .stage-panel :is(.text-xs, .text-sm, .btn, .input) { font-size: 0.95rem; line-height: 1.45 }
-.stage-panel .text-error { color: var(--stage-danger) }
 .stage-panel #item-place { padding: 0; background: none }
 /* The keys that show a tag or the screen show only when the model is in front. */
 .stage:not([data-stage=landed]) [data-show] { display: none }

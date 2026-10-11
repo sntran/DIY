@@ -201,7 +201,9 @@ same name. The answers of the exercise stay in the form after a check.
 The main buttons are orange in the light and the dark theme. In the
 light theme, white words on a dark orange have a contrast of 4.9 (WCAG
 AA). In the dark theme, dark words on a light orange have a contrast of
-6.7.
+6.7. The red of an error (`--color-error`) is dark in the light theme
+and light in the dark theme. Its contrast is 4.5 at least with the page
+(6.2 and 6.6), and with the words on a red message (5.8 and 8.0).
 
 ### The rooms
 
@@ -229,6 +231,12 @@ sends this HTTP through `fetch()` of the Worker. The cache of the VM
 (`DIY.Cache`) keeps the answers: they have no person in them. It keeps at
 most 200 answers: the weather of one place is near 28 KB, and the
 memory of a Durable Object is 128 MB.
+
+The page asks Power to Choose when the build has a Texas ZIP code and no
+market. It does not ask again while it waits, or after an error for the
+same ZIP code (the key Try again asks again). When the person changes the
+ZIP code, the build forgets its market. When the ZIP code comes back, the
+page asks again.
 
 In the data of NASA POWER, the sun of the last months comes later than
 the degree days. A month with no sun keeps its degree days.
@@ -362,7 +370,12 @@ near 10,400 kWh in one year with gas heat, 16,900 with a heat pump, and
   each month in its range, one more item never lowers the estimate, a
   better SEER2 never raises it, more degree days never lower it).
 - The pages: `test/diy_web/live/home_live_test.exs`, with the real
-  answers of NASA POWER and Power to Choose as stubs.
+  answers of NASA POWER and Power to Choose as stubs. The tests run at
+  the same time, so the cache keeps nothing in the tests
+  (`config/test.exs`): each test gets the answer of its own stub. The
+  test of the cache (`test/diy/cache_test.exs`) does not run at the same
+  time as the other tests. The tests do not wait a fixed time for an
+  answer: they wait while the page waits for one (`settle/1`).
 - The browser test (`test/browser/house.mjs`): a person builds a house in
   Chromium, in the light and the dark mode, on a phone and on a desk.
   Axe-core checks each screen. On the plan, a drag moves an item and a
@@ -1560,7 +1573,12 @@ learns it one time, and then knows each item.
     of the number, as 1, 2 or 5 times a power of ten. Hours go by half
     an hour. The range of the number stops it. A screen reader hears the
     new value (a status in the panel), and an end of the range ("the
-    most", "the least");
+    most", "the least"). At an end, the sign of − or + is dimmed, also
+    for a screen reader (`aria-disabled`). It is not disabled, so it
+    keeps the focus, and its ring of the focus keeps its contrast. A tap
+    on it says the end again: the status is empty for 100 ms. The text
+    that comes after it shows only when the same item is open, no newer
+    status came, and the number did not change;
   - a choice is a row of buttons (radio buttons);
   - yes or no is a switch (a checkbox with the role switch);
   - a name is a field.
@@ -1576,8 +1594,8 @@ learns it one time, and then knows each item.
   15 pixels. The headings of the parts and the tags are 14 pixels, in
   capitals for the headings. The label on the screen of a hub is 13.6
   pixels, in capitals. The panel has the colors of the app (daisyUI), in
-  the light and the dark mode. An error is red with a contrast of 4.5 at
-  least (`--stage-danger`).
+  the light and the dark mode. An error has the red of the app, with a
+  contrast of 4.5 at least (`--color-error`).
 
   Two parts are not the same yet. The room is a list (a select): a house
   can have many rooms. The place of an item has smaller fields for its
