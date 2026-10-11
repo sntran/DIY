@@ -11,7 +11,7 @@ import {stageHook} from "./stage.js"
 import {topHook} from "./top.js"
 import {usageHook} from "./usage.js"
 import {eflHook, eflLinksHook} from "./efl.js"
-import {homeAssistantHook, browserParts} from "./home_assistant.js"
+import {homeAssistantHook, browserParts, signInHook, signInParts} from "./home_assistant.js"
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {
@@ -37,6 +37,8 @@ const liveSocket = new LiveSocket("/live", Socket, {
     EflLinks: eflLinksHook,
     // The sign-in to Home Assistant, on the device (assets/js/home_assistant.js).
     HomeAssistant: homeAssistantHook(() => browserParts(window)),
+    // The sign-in page of Home Assistant, in its own tab.
+    HomeAssistantSignIn: signInHook(() => signInParts(window)),
   },
 })
 

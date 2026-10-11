@@ -368,19 +368,24 @@ defmodule DIYWeb.StageLiveTest do
 
     assert has_element?(view, "#item-stage-screen #ha-form input#ha-url[name=url][type=url]")
 
-    assert has_element?(
-             view,
-             "#item-stage-screen #ha-form input[name=back][value='/inside?item=#{hub.id}']"
-           )
+    # Connect gives the address to the hook in the tap: the sign-in opens in
+    # a new tab, so the hub stays on its stage.
+    assert has_element?(view, ~s(#item-stage-screen #ha-form[phx-submit*="ha:connect"]))
+    refute has_element?(view, "#item-stage-screen #ha-form input[name=back]")
 
     assert has_element?(view, "#part-link #home-assistant-card #ha-status")
     refute has_element?(view, "#part-link #ha-form")
     assert has_element?(view, "#part-link #ha-show-screen.stage-link[data-show=screen]")
 
-    # A bad address: the screen tells it next to the field, and a screen
-    # reader reads the error of the panel with the field.
+    # A bad address (the hook tells it): the screen tells it next to the
+    # field. A screen reader reads the error of the panel with the field.
     refute has_element?(view, "#ha-url[aria-invalid]")
-    view |> form("#ha-form", %{"url" => "home.example.com"}) |> render_submit()
+
+    render_hook(view, "ha:status", %{
+      "state" => "none",
+      "url" => "home.example.com",
+      "error" => "url"
+    })
 
     assert has_element?(
              view,

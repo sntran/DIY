@@ -1637,7 +1637,9 @@ learns it one time, and then knows each item.
   page. The rest of the hub is in the same panel as each item. Its part
   Home Assistant has a link to its screen. A bad address shows "Check
   the address." on the screen, and the field keeps the address. A screen
-  reader reads the error of the panel with the field.
+  reader reads the error of the panel with the field. Connect opens the
+  sign-in in a new tab, so the hub stays on its stage. While the new tab
+  waits for the person, the screen tells the person to sign in there.
 - The state of the stage. It is the attribute `data-stage`: placed,
   landed or closing. The CSS has a rule for each. The hook sets it with
   the command of the LiveView (`setAttribute`). The LiveView sets an
@@ -1841,6 +1843,11 @@ A test on a real Home Assistant 2026.10 showed that it accepts this. Its
 token endpoint and its revoke endpoint answer to each origin (CORS), and
 its WebSocket API takes each origin.
 
+The sign-in page of the app gets the code of Home Assistant in its
+address, so the server of the app can see the code. The code is of no use
+without the PKCE verifier, and the verifier stays in the tab of the
+sign-in.
+
 ### The protocol
 
 `assets/js/home_assistant.js` (the hook `HomeAssistant`) and
@@ -1866,67 +1873,98 @@ The hub is an item of a room, as the other items are:
 - The pill is a part of the item for the hook Plan. A tap on it opens the
   hub, and a drag moves it with the hub. Its rank is larger than the area
   of each room, so it shows over the label of a room.
-- Sometimes no hub is on the stage: for example, the hub went away in a
-  different tab during the sign-in. Then the page Rooms shows the error of
-  a sign-in that came back, or of a session that ended.
+- Sometimes no hub is on the stage: for example, the person closed the
+  hub during the sign-in. Then the page Rooms shows the error of the
+  sign-in, or of a session that ended.
 - The pill of a planned hub is pale, as the hub is.
 
 The app links to one Home Assistant. A second hub shows the same link.
 
-1. The person gives the address. The LiveView checks it, and sends
-   `ha:connect`. The hook makes a random state and a PKCE pair (RFC 7636,
-   S256), and keeps them in sessionStorage of the tab. Then it sends the
-   browser to the sign-in page of Home Assistant. The client is the
-   address of the app. The way back is the page of the card: the hub on
-   the stage (`/inside?item=ID`) or Settings. Home Assistant accepts a way
-   back on the host of the client, and adds its answer to the query. The
-   LiveView and the hook take only these two ways back.
-2. Home Assistant sends the browser back with a code and the state. The
+1. The person gives the address, and pushes Connect. The sign-in page of
+   the app (`/ha/sign-in`, `DIYWeb.SignInLive`) opens in a new tab, with
+   the address and a random id of the sign-in. A browser lets a page open
+   a tab only in the tap. So the key sends the address to the hook in the
+   browser, not to the server (`JS.dispatch("ha:connect")`). The hook
+   checks the address, and opens the tab at once. The first tab stays on
+   the hub, and its screen tells the person to sign in on the new tab.
+   When the browser blocks the tab, the card tells the person to let the
+   site open pop-ups.
+2. The new tab (the hook `HomeAssistantSignIn`) starts only when a page of
+   the app opened it (`window.opener` has the origin of the app). Else a
+   link of a different site can send the tab to a server of its choice.
+   Then the store gets the tokens of that server. The page tells the
+   person to connect again on the page of the app. The new tab reads the
+   generation of the store (see below). It makes a random state and a PKCE
+   pair (RFC 7636, S256). It keeps them in its sessionStorage. Then it
+   goes to the sign-in page of Home Assistant. The client is the address
+   of the app, and the way back is the sign-in page of the app. Home
+   Assistant accepts a way back on the host of the client, and adds its
+   answer to the query. The pages of Home Assistant in the new tab get no
+   link to the tab of the app: the new tab sets `window.opener` to null.
+3. Home Assistant sends the new tab back with a code and the state. The
    hook removes them from the address (and `storeToken`, which Home
-   Assistant adds when the person asks it to keep the sign-in). It keeps
-   the item of the stage. It gets the tokens for the code
-   with the verifier, and writes the session in IndexedDB. The session
-   has the address, the two tokens and the end of the access token. A
-   different session in the store is revoked.
-3. The hook opens a WebSocket to `/api/websocket`, signs in with the
-   access token, and asks for the configuration. The page shows the name
-   of the home and the version of Home Assistant.
-4. An access token lasts 30 minutes. When a socket signs in, the hook
+   Assistant adds when the person asks it to keep the sign-in). It gets
+   the tokens for the code with the verifier, and writes the session in
+   IndexedDB. The session has the address, the two tokens and the end of
+   the access token. The hook revokes a different session in the store.
+   The revoke continues after the tab closes (`keepalive`). Then the new
+   tab tells its end to the first tab (`{ended: id, error}` on the
+   BroadcastChannel), and closes. When the sign-in did not work, the new
+   tab shows the error, and the first tab shows it too.
+4. The first tab checks the new tab each second. When the new tab closed
+   with no end, the first tab reads the store, because the sign-in can be
+   done. With no session, it tells that the tab closed before the end.
+   The person can also stop the sign-in on the first tab. The browser
+   closes the new tab only when it shows a page of the app: the new tab
+   has no opener. A sign-in that goes on in the new tab keeps nothing
+   (the generation), and the new tab tells it.
+5. The hook of each tab of the app reads the store. It opens a WebSocket
+   to `/api/websocket`, signs in with the access token, and asks for the
+   configuration. The page shows the name of the home and the version of
+   Home Assistant.
+6. An access token lasts 30 minutes. When a socket signs in, the hook
    first gets a new access token if the old one ends in 60 seconds or
    less. A socket that signed in stays open after the end of its access
    token. When Home Assistant refuses an access token, the hook gets a new
    one and tries again one time.
-5. Home Assistant refuses a refresh token with `invalid_grant` when the
+7. Home Assistant refuses a refresh token with `invalid_grant` when the
    session ended (for example, the person removed it in Home Assistant).
    Then the page asks for a new sign-in. Other refusals can pass (for
    example, a 403 for a user that Home Assistant allows only at home):
    the hook tries again later. A refusal ends a socket only when the
    socket uses the refused session.
-6. When the socket closes, the page shows that Home Assistant does not
+8. When the socket closes, the page shows that Home Assistant does not
    answer. The hook tries again after 1, 2, 4 seconds and so on, up to 60
    seconds. When the device is online again, it tries at once.
-7. A disconnect clears the store and revokes the session on Home
-   Assistant (`/auth/revoke`).
-8. A write or a clear of the store tells the other tabs with a
-   BroadcastChannel. The hook of each other tab reads the store, and
-   follows it: a new socket for a new session, or no socket.
-9. When LiveView mounts the page again, the old hook stops: it takes no
-   more news, and it opens no socket. The hook keeps the state of
-   LiveView in the history when it removes the code from the address.
+9. A disconnect clears the store and revokes the session on Home
+   Assistant (`/auth/revoke`). It also adds one to the generation in the
+   store. A sign-in that started before it keeps nothing, and revokes its
+   new session: the new tab tells that a disconnect stopped the sign-in.
+10. A write or a clear of the store tells the other tabs with a
+    BroadcastChannel. The hook of each other tab reads the store, and
+    follows it: a new socket for a new session, or no socket.
+11. When LiveView mounts the page again, the old hook stops: it takes no
+    more news, and it opens no socket. The new tab of a sign-in stays
+    open, and its session comes to the new hook. When LiveView mounts the
+    sign-in page again, the sign-in does not start again.
 
 The hook sends its state to the LiveView (`ha:status`): `none`,
 `signing_in`, `connecting`, `connected`, `offline` or `signed_out`, and
-an error for the last step. The LiveView takes only the states and the
-errors that it knows, and texts of a limited length.
+an error for the last step. The sign-in page also has `done`. The
+LiveView takes only the states and the errors that it knows, and texts of
+a limited length.
 
 The TLA+ model `specs/HomeAssistant.tla` checks three rules with two
-tabs, three sign-ins and the answers of Home Assistant in any order.
-Each rule has a configuration with the fault, and TLC finds the fault:
+tabs, three sign-ins in their own tabs, and the answers of Home Assistant
+in any order. Each rule has a configuration with the fault, and TLC finds
+the fault:
 
-- **The epoch** (`HomeAssistant.noepoch.cfg`). A disconnect makes a new
-  epoch of the tab. The tokens of a sign-in that come after it are
-  revoked, and the tab keeps nothing. Without the epoch, a disconnect
-  while a sign-in finishes gives a socket after the disconnect.
+- **The generation** (`HomeAssistant.nogen.cfg`). A disconnect adds one
+  to the generation in the store. A sign-in keeps its tokens only when
+  the generation is the same as at its start. Else it revokes them. A
+  sign-in is in a different tab, so the epoch of one tab cannot stop it.
+  Without the generation, a disconnect while a sign-in finishes gives the
+  store the session of a sign-in that started before the disconnect.
 - **The compare and set** (`HomeAssistant.nocas.cfg`). A refresh writes
   its access token only when the store still has its refresh token.
   Without it, a refresh in flight puts back a session that a disconnect
@@ -1938,20 +1976,30 @@ Each rule has a configuration with the fault, and TLC finds the fault:
 
 The tests:
 
-- `test/js/home_assistant.test.js`: the hook with a fake WebSocket, a
-  fake fetch and fake-indexeddb. A property test (fast-check) checks the
-  epoch and the compare and set with two tabs and the answers in any
-  order. It has the shortest steps to each fault as fixed examples, so it
-  finds each fault in each run. A test with fixed steps checks the
-  owner.
-- `test/diy_web/home_assistant_test.exs`: the LiveView part, and the card
-  in Settings and on the panel of a hub. Property tests check the address
-  and the way back.
-- The browser test adds a hub, and signs in from its panel on a fake Home
-  Assistant (`test/browser/fake_ha.mjs`). The fake checks the code, the
-  way back and the PKCE verifier as Home Assistant does. It adds its
-  answer to the query of the way back. The test checks the green light of
-  the pill. Then it disconnects, and checks the revoke.
+- `test/js/home_assistant.test.js`: the hook of the page and the hook of
+  the sign-in page, with a fake WebSocket, a fake fetch, fake tabs and
+  fake-indexeddb. A property test (fast-check) checks the generation and
+  the compare and set. It has two tabs of the app, the tabs of their
+  sign-ins, and the answers in any order. The test counts the disconnects
+  itself: it does not read the generation of the store. It has the
+  shortest steps to each fault as fixed examples, so it finds each fault
+  in each run. A test with fixed steps checks the owner. A property test
+  checks that the sign-in page stays on the app, and gives back the
+  address and the id. A sign-in page that no tab of the app opened does
+  not leave the app.
+- `test/diy_web/home_assistant_test.exs` and
+  `test/diy_web/live/sign_in_live_test.exs`: the LiveView part, the card
+  in Settings and on the panel of a hub, and the sign-in page. A property
+  test checks that the sign-in page shows only the states and the errors
+  that it knows.
+- The browser test adds a hub, and signs in from its screen on a fake
+  Home Assistant (`test/browser/fake_ha.mjs`). The sign-in opens in a new
+  tab. While the new tab waits for the person, the screen of the hub
+  tells it. The fake checks the code, the way back and the PKCE verifier
+  as Home Assistant does. It adds its answer to the query of the way
+  back. The new tab closes, and the first tab stays on the hub. The test
+  checks the green light of the pill. Then it disconnects, and checks the
+  revoke. It also opens the sign-in page with a bad address.
 - A test by hand used Home Assistant 2026.10 with its demo. It signed in
   on the page of Home Assistant, loaded the page again, opened a second
   tab, and disconnected. Home Assistant then had no session of the app.

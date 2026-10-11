@@ -1,15 +1,15 @@
-// The tests of assets/js/home_assistant.js: the sign-in to Home Assistant,
-// the store of the session (fake-indexeddb), and the socket (a fake
-// WebSocket and a fake fetch).
+// The tests of assets/js/home_assistant.js: the sign-in to Home Assistant
+// in its own tab, and the store of the session (fake-indexeddb). Also the
+// socket, with a fake WebSocket and a fake fetch.
 import {test} from "node:test"
 import assert from "node:assert/strict"
 import {createHash} from "node:crypto"
 import fc from "fast-check"
 import {IDBFactory} from "fake-indexeddb"
 import {
-  DB, STORE, KEY, CHANNEL, PENDING, EARLY, FIRST_WAIT, MAX_WAIT,
-  address, blocked, socketUrl, clientOf, wayBack, randomText, pkce, authorizeUrl,
-  open, sessionStore, Link, homeAssistantHook, browserParts, key, CommandError,
+  DB, STORE, KEY, GENERATION, CHANNEL, PENDING, SIGN_IN, TAB, TAB_CHECK, EARLY, FIRST_WAIT, MAX_WAIT,
+  address, blocked, socketUrl, clientOf, signInPage, signInId, randomText, pkce, authorizeUrl,
+  open, sessionStore, Link, SignIn, homeAssistantHook, signInHook, browserParts, signInParts, key, CommandError,
 } from "../../assets/js/home_assistant.js"
 
 const HA = "http://ha.test:8123"
@@ -41,44 +41,59 @@ const answer = (status, body = {}) => ({ok: status >= 200 && status < 300, statu
 const tokens = (access, refresh, expires = 1800) =>
   answer(200, {access_token: access, refresh_token: refresh, expires_in: expires, token_type: "Bearer"})
 
-// The parts of a browser for a Link, with fakes. fetch gives the answers of
-// respond(url, fields).
-function parts({search = "", pathname = "/settings", protocol = "http:", respond = () => answer(200), store, factory} = {}) {
+// The parts of a browser for a Link or a SignIn, with fakes. The fake
+// fetch gives the answers of respond(url, fields). The fake openTab gives a
+// fake tab, or null when the browser blocks it (tabs: false).
+function parts({
+  search = "", pathname = "/settings", protocol = "http:", respond = () => answer(200), store, factory,
+  tabs = true, storage = new Map(),
+} = {}) {
   const calls = []
   const pushes = []
   const timers = new Map()
   let nextTimer = 1
-  const storage = new Map()
   const listened = {}
   const page = {
-    calls, pushes, timers, storage, listened, assigned: [], replaced: [], clock: 1_000_000,
+    calls, pushes, timers, storage, listened, went: [], replaced: [], opened: [], told: [], closes: 0,
+    inits: [], clock: 1_000_000,
   }
   const notified = []
   page.notified = notified
   page.deps = {
     store: store ?? sessionStore(factory ?? new IDBFactory(), () => notified.push("changed")),
-    listen: (onNews, onOnline) => {
+    listen: (onNews, onOnline, onConnect) => {
       listened.news = onNews
       listened.online = onOnline
+      listened.connect = onConnect
       return () => { listened.stopped = true }
     },
     fetch: async (url, init) => {
       const fields = Object.fromEntries(init.body)
       calls.push({url, fields})
+      page.inits.push(init)
       return respond(url, fields)
     },
     WebSocket: FakeSocket,
     location: {
       origin: APP, protocol, pathname, search,
-      assign: (url) => page.assigned.push(url),
+      replace: (url) => page.went.push(url),
     },
-    history: {state: {type: "patch", id: "phx-1"}, replaceState: (...args) => page.replaced.push(args)},
+    history: {replaceState: (...args) => page.replaced.push(args)},
     storage: {
       getItem: (key) => storage.has(key) ? storage.get(key) : null,
       setItem: (key, value) => storage.set(key, value),
       removeItem: (key) => storage.delete(key),
     },
     crypto: globalThis.crypto,
+    openTab: (path) => {
+      if (!tabs) return null
+      const tab = {path, closed: false, close() { this.closed = true }}
+      page.opened.push(tab)
+      return tab
+    },
+    tell: (message) => page.told.push(message),
+    closeTab: () => { page.closes += 1 },
+    fromApp: true,
     now: () => page.clock,
     setTimer: (f, ms) => { const id = nextTimer++; timers.set(id, {f, ms}); return id },
     clearTimer: (id) => timers.delete(id),
@@ -89,14 +104,31 @@ function parts({search = "", pathname = "/settings", protocol = "http:", respond
 
 const last = (page) => page.pushes.at(-1)[1]
 
+// Lets the page run until cond() is true (for example, WebCrypto).
+async function until(cond) {
+  for (let i = 0; i < 1000 && !cond(); i++) await settle(1)
+  assert.ok(cond())
+}
+
+// Runs the timers that wait now.
+function tick(page) {
+  for (const [id, timer] of [...page.timers]) {
+    page.timers.delete(id)
+    timer.f()
+  }
+}
+
 // A session in the store, as a sign-in leaves it.
 const session = (refresh = "r1", extra = {}) =>
   ({url: HA, client: APP + "/", access: "a-" + refresh, refresh, expires: 1_000_000 + 1_800_000, ...extra})
 
+// Keeps a session in the store, as a sign-in of this generation does.
+const keep = async (store, stored) => store.write(stored, await store.generation())
+
 // A link with a stored session, and its open socket after the sign-in of
 // the socket.
 async function connected(page, stored = session()) {
-  await page.deps.store.write(stored)
+  await keep(page.deps.store, stored)
   const link = new Link(page.deps)
   await link.start()
   await settle()
@@ -109,14 +141,42 @@ async function connected(page, stored = session()) {
   return {link, socket}
 }
 
+// The tab of a sign-in, from its page: it goes to Home Assistant. Then
+// Home Assistant sends it back with the code (back(query)). It shares the
+// store of the test, and has its own sessionStorage.
+async function signInTab({path, factory, store, respond, protocol = "http:", tell} = {}) {
+  const storage = new Map()
+  const options = {factory, store, respond, protocol, storage}
+  const first = parts({...options, pathname: SIGN_IN, search: new URL(APP + path).search})
+  if (tell) first.deps.tell = tell
+  const begin = new SignIn(first.deps)
+  await begin.start()
+  const authorize = first.went[0] ? new URL(first.went[0]) : null
+  return {
+    first,
+    begin,
+    authorize,
+    state: authorize?.searchParams.get("state"),
+    back: (query) => {
+      const page = parts({...options, pathname: SIGN_IN, search: "?" + query})
+      if (tell) page.deps.tell = tell
+      page.signIn = new SignIn(page.deps)
+      page.done = page.signIn.start()
+      return page
+    },
+  }
+}
+
 test("address gives the origin and the path of Home Assistant", () => {
   assert.equal(address("https://Home.Example.com/"), "https://home.example.com")
   assert.equal(address("  http://192.168.1.5:8123  "), "http://192.168.1.5:8123")
   assert.equal(address("https://example.com:443/ha//?x=1#y"), "https://example.com/ha")
+  assert.equal(address("http://[::1]:8123"), "http://[::1]:8123")
   assert.equal(address("ftp://example.com"), null)
   assert.equal(address("home.example.com"), null)
   assert.equal(address("https://user:pass@example.com"), null)
   assert.equal(address(undefined), null)
+  assert.equal(address(null), null)
 })
 
 test("address gives the same address again, and no / at the end", () => {
@@ -138,27 +198,31 @@ test("an HTTPS page cannot use an http address", () => {
   assert.equal(clientOf({origin: APP}), APP + "/")
 })
 
-test("the way back is Settings or the sheet of an item", () => {
-  assert.equal(wayBack("/inside?item=i42"), "/inside?item=i42")
-  assert.equal(wayBack("/inside?item=" + "a".repeat(40)), "/inside?item=" + "a".repeat(40))
-  assert.equal(wayBack("/settings"), "/settings")
-  for (const bad of [
-    "//evil.example/x", "/\\evil.example", "https://evil.example", "inside", "/plans",
-    "/inside?item=x&y=1", "/inside?item=" + "a".repeat(41), "/settings/", undefined, 5,
-  ]) {
-    assert.equal(wayBack(bad), "/settings", String(bad))
+test("the sign-in page of the app gets the address and the id of the sign-in", () => {
+  assert.equal(SIGN_IN, "/ha/sign-in")
+  assert.equal(signInPage(HA, "s1"), "/ha/sign-in?url=http%3A%2F%2Fha.test%3A8123&id=s1")
+  assert.equal(signInId("abc_D-9"), "abc_D-9")
+  assert.equal(signInId("a".repeat(64)), "a".repeat(64))
+  for (const bad of ["", "a".repeat(65), "a b", "a&b", "ä", null, undefined, 5]) {
+    assert.equal(signInId(bad), null, String(bad))
   }
 })
 
-test("each way back stays on this app", () => {
-  fc.assert(fc.property(fc.oneof(fc.string(), fc.webPath(), fc.webUrl()), (text) => {
-    const back = wayBack(text)
-    assert.equal(new URL(APP + back).origin, APP)
-    assert.ok(back === "/settings" || /^\/inside\?item=[A-Za-z0-9_-]{1,40}$/.test(back))
+test("the page of a sign-in stays on this app, and gives back its address and its id", () => {
+  fc.assert(fc.property(fc.webUrl(), fc.string(), (text, id) => {
+    const url = address(text)
+    if (url === null) return
+    const page = new URL(APP + signInPage(url, id))
+    assert.equal(page.origin, APP)
+    assert.equal(page.pathname, SIGN_IN)
+    assert.equal(address(page.searchParams.get("url")), url)
+    assert.equal(page.searchParams.get("id"), id)
+    const safe = signInId(id)
+    assert.ok(safe === null || safe === id)
   }))
 })
 
-test("the sign-in page gets the client, the way back, the state and the challenge", async () => {
+test("the sign-in page of Home Assistant gets the client, the way back, the state and the challenge", async () => {
   const {verifier, challenge} = await pkce(globalThis.crypto)
   assert.match(verifier, /^[A-Za-z0-9_-]{64}$/)
   const digest = createHash("sha256").update(verifier).digest("base64url")
@@ -170,25 +234,24 @@ test("the sign-in page gets the client, the way back, the state and the challeng
   assert.deepEqual(Object.fromEntries(url.searchParams), {
     response_type: "code",
     client_id: APP + "/",
-    redirect_uri: APP + "/settings",
+    redirect_uri: APP + "/ha/sign-in",
     state: "s1",
     code_challenge: challenge,
     code_challenge_method: "S256",
   })
-  const hub = new URL(authorizeUrl(HA, {client: APP + "/", state: "s1", challenge, back: "/inside?item=i42"}))
-  assert.equal(hub.searchParams.get("redirect_uri"), APP + "/inside?item=i42")
 })
 
-test("the store reads, writes, updates with a compare and set, and clears", async () => {
+test("the store reads, writes in its generation, updates with a compare and set, and clears", async () => {
   const notified = []
   const store = sessionStore(new IDBFactory(), () => notified.push(1))
   assert.equal(await store.read(), null)
+  assert.equal(await store.generation(), 0)
   assert.equal(await store.update("r1", {access: "x"}), false)
-  assert.equal(await store.clear(), null)
+  assert.equal(await store.clear("r1"), null)
   assert.equal(notified.length, 0)
 
-  assert.equal(await store.write(session("r1")), null)
-  assert.deepEqual(await store.write(session("r2")), session("r1"))
+  assert.deepEqual(await store.write(session("r1"), 0), {kept: true, old: null})
+  assert.deepEqual(await store.write(session("r2"), 0), {kept: true, old: session("r1")})
   assert.equal(notified.length, 2)
 
   assert.equal(await store.update("r1", {access: "x"}), false)
@@ -196,17 +259,34 @@ test("the store reads, writes, updates with a compare and set, and clears", asyn
   assert.equal((await store.read()).access, "x")
   assert.equal(notified.length, 2)
 
+  // Home Assistant ended a session: only that session goes.
   assert.equal(await store.clear("r1"), null)
   assert.equal((await store.clear("r2")).refresh, "r2")
   assert.equal(await store.read(), null)
-  await store.write(session("r3"))
-  assert.equal((await store.clear()).refresh, "r3")
+  assert.equal(await store.generation(), 0)
+  assert.equal(notified.length, 3)
+
+  // A disconnect: a new generation, and no session. A sign-in of the old
+  // generation writes nothing.
+  await store.write(session("r3"), 0)
+  assert.equal((await store.disconnect()).refresh, "r3")
+  assert.equal(await store.generation(), 1)
+  assert.equal(await store.read(), null)
   assert.equal(notified.length, 5)
+  assert.deepEqual(await store.write(session("r4"), 0), {kept: false, old: null})
+  assert.equal(await store.read(), null)
+  assert.equal(notified.length, 5)
+
+  // A disconnect with no session: a new generation, and no news.
+  assert.equal(await store.disconnect(), null)
+  assert.equal(await store.generation(), 2)
+  assert.equal(notified.length, 5)
+  assert.deepEqual(await store.write(session("r5"), 2), {kept: true, old: null})
 })
 
 test("the store gives an error when IndexedDB stops the transaction", async () => {
   const store = sessionStore(new IDBFactory(), () => {})
-  await assert.rejects(store.write({...session(), f() {}}))
+  await assert.rejects(store.write({...session(), f() {}}, 0))
   assert.equal(await store.read(), null)
 })
 
@@ -215,7 +295,7 @@ test("the store opens the database again after the browser closes it", async () 
   const dbs = []
   const counting = {open: (...args) => { const request = factory.open(...args); dbs.push(request); return request }}
   const store = sessionStore(counting, () => {})
-  await store.write(session())
+  await keep(store, session())
   dbs[0].result.onclose()
   assert.equal((await store.read()).refresh, "r1")
   assert.equal(dbs.length, 2)
@@ -234,6 +314,7 @@ test("the store opens the database again after the browser closes it", async () 
   const db = await open(new IDBFactory())
   assert.deepEqual([...db.objectStoreNames], [STORE])
   assert.equal(KEY, "session")
+  assert.equal(GENERATION, "generation")
 })
 
 test("a page with no session shows none", async () => {
@@ -248,56 +329,236 @@ test("a store that the page cannot read shows the error", async () => {
   assert.equal(last(page).error, "storage")
 })
 
-test("connect sends the browser to the sign-in page with a new state", async () => {
+test("connect opens the sign-in page of the app in a new tab, in the tap", async () => {
   const page = parts()
   const link = new Link(page.deps)
-  await link.connect(HA + "/")
-  const pending = JSON.parse(page.storage.get(PENDING))
-  assert.equal(pending.url, HA)
-  const url = new URL(page.assigned[0])
-  assert.equal(url.searchParams.get("state"), pending.state)
-  const challenge = createHash("sha256").update(pending.verifier).digest("base64url")
-  assert.equal(url.searchParams.get("code_challenge"), challenge)
-  assert.equal(last(page).state, "signing_in")
+  await link.start()
+  // The key Connect gives the text of the field (browserParts).
+  page.listened.connect(HA + "/")
+  // The tab opens before any wait: a browser blocks a tab that opens later.
+  assert.equal(page.opened.length, 1)
+  const url = new URL(APP + page.opened[0].path)
+  assert.equal(url.pathname, SIGN_IN)
+  assert.equal(url.searchParams.get("url"), HA)
+  const id = url.searchParams.get("id")
+  assert.equal(signInId(id), id)
+  assert.deepEqual(last(page), {state: "signing_in", url: HA, name: null, version: null, error: null})
+  assert.equal(link.tab.id, id)
+  assert.equal(page.timers.size, 1)
+  assert.equal([...page.timers.values()][0].ms, TAB_CHECK)
 
-  // From the sheet of a hub: the sign-in comes back to the sheet. A bad
-  // way back gives Settings.
-  await link.connect(HA, "/inside?item=i42")
-  assert.equal(new URL(page.assigned[1]).searchParams.get("redirect_uri"), APP + "/inside?item=i42")
-  await link.connect(HA, "//evil.example")
-  assert.equal(new URL(page.assigned[2]).searchParams.get("redirect_uri"), APP + "/settings")
+  // A second connect: a new id, and one check of the tab.
+  link.connect(HA)
+  assert.notEqual(new URL(APP + page.opened[1].path).searchParams.get("id"), id)
+  assert.equal(page.timers.size, 1)
 
-  await link.connect("not an address")
-  assert.deepEqual(last(page), {state: "none", url: null, name: null, version: null, error: "url"})
+  // A bad address: no tab. The field keeps the text, so the person can
+  // correct it.
+  const other = parts()
+  const second = new Link(other.deps)
+  second.connect("home.example.com")
+  assert.deepEqual(last(other), {state: "none", url: "home.example.com", name: null, version: null, error: "url"})
+  second.connect(undefined)
+  assert.deepEqual(last(other), {state: "none", url: null, name: null, version: null, error: "url"})
   const https = parts({protocol: "https:"})
-  await new Link(https.deps).connect(HA)
+  new Link(https.deps).connect(HA)
   assert.deepEqual(last(https), {state: "none", url: HA, name: null, version: null, error: "blocked"})
-  assert.equal(https.assigned.length, 0)
+  assert.equal(other.opened.length + https.opened.length, 0)
+
+  // The browser blocks the tab.
+  const blocking = parts({tabs: false})
+  const third = new Link(blocking.deps)
+  third.connect(HA)
+  assert.deepEqual(last(blocking), {state: "none", url: HA, name: null, version: null, error: "tab"})
+  assert.equal(third.tab, null)
+  assert.equal(blocking.timers.size, 0)
 })
 
-test("the way back gets the tokens, keeps them, and connects", async () => {
-  const page = parts({
-    search: "?code=c1&state=s1",
-    respond: (url) => url.endsWith("/auth/token") ? tokens("a1", "r1") : answer(200),
-  })
-  page.storage.set(PENDING, JSON.stringify({url: HA, state: "s1", verifier: "v1"}))
+test("the tab of a sign-in that closes: the page reads the store", async () => {
+  const page = parts()
   const link = new Link(page.deps)
   await link.start()
+  link.connect(HA)
+  const tab = page.opened[0]
+
+  // The tab is still open: a new check later.
+  tick(page)
+  assert.equal(page.timers.size, 1)
+  assert.equal(last(page).state, "signing_in")
+
+  // The person closed the tab before the end.
+  tab.closed = true
+  tick(page)
+  await settle()
+  assert.deepEqual(last(page), {state: "none", url: null, name: null, version: null, error: "closed"})
+  assert.equal(link.tab, null)
+  assert.equal(page.timers.size, 0)
+
+  // The tab closed after the end, and its news did not come (a browser
+  // with no BroadcastChannel): the store has the session.
+  link.connect(HA)
+  await keep(page.deps.store, session())
+  page.opened[1].closed = true
+  tick(page)
+  await settle()
+  assert.equal(last(page).state, "connecting")
+  link.stop()
+})
+
+test("the end of a sign-in comes to the tab that opened it", async () => {
+  const page = parts()
+  const link = new Link(page.deps)
+  await link.start()
+  link.connect(HA)
+  const {id} = link.tab
+
+  // The end of a different sign-in, or the news of the store, changes
+  // nothing.
+  await page.listened.news({ended: "other", error: "denied"})
+  await page.listened.news("changed")
+  assert.equal(last(page).state, "signing_in")
+  assert.equal(link.tab.id, id)
+
+  // An error: the page shows it, and does not check the tab again.
+  await page.listened.news({ended: id, error: "denied"})
+  assert.deepEqual(last(page), {state: "none", url: null, name: null, version: null, error: "denied"})
+  assert.equal(link.tab, null)
+  assert.equal(page.timers.size, 0)
+
+  // A sign-in that worked: the page uses the session.
+  link.connect(HA)
+  await keep(page.deps.store, session())
+  await page.listened.news({ended: link.tab.id})
+  assert.equal(last(page).state, "connecting")
+  // A late end changes nothing.
+  await page.listened.news({ended: id, error: "denied"})
+  assert.equal(last(page).state, "connecting")
+  link.stop()
+})
+
+test("a stop of the sign-in: its session does not count, also in a tab that stays open", async () => {
+  const factory = new IDBFactory()
+  let release
+  const respond = (url) => url.endsWith("/auth/token")
+    ? new Promise((resolve) => { release = () => resolve(tokens("a1", "r1")) })
+    : answer(200)
+  const page = parts({factory, respond})
+  const link = new Link(page.deps)
+  await link.start()
+  link.connect(HA)
+  const tab = page.opened[0]
+  const told = []
+  const signIn = await signInTab({path: tab.path, factory, respond, tell: (message) => told.push(message)})
+  const back = signIn.back(`code=c1&state=${signIn.state}`)
   await settle()
 
-  assert.deepEqual(page.calls[0], {
-    url: HA + "/auth/token",
-    fields: {grant_type: "authorization_code", code: "c1", client_id: APP + "/", code_verifier: "v1"},
-  })
-  assert.equal(page.storage.has(PENDING), false)
-  // The state of LiveView stays in the history.
-  assert.deepEqual(page.replaced, [[{type: "patch", id: "phx-1"}, "", "/settings"]])
-  assert.deepEqual(await page.deps.store.read(), {
-    url: HA, client: APP + "/", access: "a1", refresh: "r1", expires: page.clock + 1_800_000,
-  })
-  assert.equal(page.notified.length, 1)
-  assert.ok(page.pushes.some(([, state]) => state.state === "signing_in"))
+  // The person stops the sign-in on the first tab, while the exchange
+  // waits. The tab shows a page of Home Assistant and has no opener, so the
+  // browser does not close it.
+  let asked = 0
+  tab.close = () => { asked += 1 }
+  await link.disconnect()
+  assert.equal(asked, 1)
+  assert.equal(tab.closed, false)
+  assert.equal(link.tab, null)
+  assert.equal(page.timers.size, 0)
+  release()
+  await back.done
+  await settle()
+  assert.equal(await page.deps.store.read(), null)
+  assert.deepEqual(back.calls.at(-1), {url: HA + "/auth/revoke", fields: {token: "r1"}})
+  assert.deepEqual(last(back), {state: "none", url: HA, name: null, version: null, error: "cancelled"})
+  assert.deepEqual(told, [{ended: tab.path.split("id=")[1], error: "cancelled"}])
+  assert.equal(back.closes, 0)
+  assert.equal(last(page).state, "none")
+})
 
+test("the sign-in tab goes to Home Assistant with a new state and the generation", async () => {
+  const factory = new IDBFactory()
+  const store = sessionStore(factory, () => {})
+  await store.disconnect()
+  const tab = await signInTab({path: signInPage(HA, "s1"), factory})
+  const pending = JSON.parse(tab.first.storage.get(PENDING))
+  assert.deepEqual(Object.keys(pending).sort(), ["generation", "id", "state", "url", "verifier"])
+  assert.equal(pending.url, HA)
+  assert.equal(pending.id, "s1")
+  assert.equal(pending.generation, 1)
+  assert.equal(tab.state, pending.state)
+  assert.equal(tab.authorize.origin + tab.authorize.pathname, HA + "/auth/authorize")
+  assert.equal(tab.authorize.searchParams.get("redirect_uri"), APP + SIGN_IN)
+  const challenge = createHash("sha256").update(pending.verifier).digest("base64url")
+  assert.equal(tab.authorize.searchParams.get("code_challenge"), challenge)
+  assert.deepEqual(last(tab.first), {state: "signing_in", url: HA, name: null, version: null, error: null})
+  assert.deepEqual(tab.first.told, [])
+
+  // A page with a bad address, an http address on an HTTPS page, or a
+  // store that the page cannot read. The tab shows the error, and the
+  // first tab gets it.
+  for (const [path, protocol, broken, error, id] of [
+    [SIGN_IN + "?url=home.example.com&id=s2", "http:", false, "url", "s2"],
+    [SIGN_IN + "?id=s3", "http:", false, "url", "s3"],
+    [signInPage(HA, "s4"), "https:", false, "blocked", "s4"],
+    [signInPage(HA, "s5"), "http:", true, "storage", "s5"],
+  ]) {
+    const store = broken ? {generation: async () => { throw new Error("no") }} : undefined
+    const bad = await signInTab({path, protocol, store, factory})
+    assert.equal(bad.authorize, null)
+    assert.equal(last(bad.first).state, "none")
+    assert.equal(last(bad.first).error, error)
+    assert.deepEqual(bad.first.told, [{ended: id, error}])
+  }
+  // An id that is not safe: the sign-in goes on, and no tab waits for it.
+  const unsafe = await signInTab({path: signInPage(HA, "a b"), factory})
+  assert.equal(JSON.parse(unsafe.first.storage.get(PENDING)).id, null)
+  const respond = (url) => url.endsWith("/auth/token") ? tokens("a1", "r1") : answer(200)
+  const bad = await signInTab({path: SIGN_IN + "?url=x", factory, respond})
+  assert.deepEqual(bad.first.told, [])
+  const back = (await signInTab({path: signInPage(HA, "a b"), factory, respond})).back("x")
+  await back.done
+  assert.deepEqual(back.told, [])
+})
+
+test("a sign-in page that no tab of the app opened does not leave the app", async () => {
+  // For example, a link of a different site to the sign-in page, with the
+  // address of a server of its choice.
+  const page = parts({pathname: SIGN_IN, search: "?" + new URLSearchParams({url: "https://evil.example", id: "s1"})})
+  page.deps.fromApp = false
+  await new SignIn(page.deps).start()
+  assert.deepEqual(page.went, [])
+  assert.equal(page.storage.has(PENDING), false)
+  assert.deepEqual(page.told, [])
+  assert.deepEqual(last(page), {state: "none", url: null, name: null, version: null, error: "unasked"})
+  assert.equal(page.closes, 0)
+})
+
+test("the sign-in tab gets the tokens, keeps them, tells the first tab, and closes", async () => {
+  const factory = new IDBFactory()
+  const respond = (url) => url.endsWith("/auth/token") ? tokens("a1", "r1") : answer(200)
+  const tab = await signInTab({path: signInPage(HA, "s1"), factory, respond})
+  const pending = JSON.parse(tab.first.storage.get(PENDING))
+  const back = tab.back(`code=c1&state=${tab.state}&storeToken=true`)
+  await back.done
+
+  assert.deepEqual(back.calls[0], {
+    url: HA + "/auth/token",
+    fields: {grant_type: "authorization_code", code: "c1", client_id: APP + "/", code_verifier: pending.verifier},
+  })
+  assert.equal(back.storage.has(PENDING), false)
+  // The code and the state go away from the address.
+  assert.deepEqual(back.replaced, [[null, "", SIGN_IN]])
+  assert.deepEqual(await back.deps.store.read(), {
+    url: HA, client: APP + "/", access: "a1", refresh: "r1", expires: back.clock + 1_800_000,
+  })
+  assert.equal(back.notified.length, 1)
+  assert.deepEqual(back.pushes.map(([, state]) => state.state), ["signing_in", "done"])
+  assert.deepEqual(last(back), {state: "done", url: HA, name: null, version: null, error: null})
+  assert.deepEqual(back.told, [{ended: "s1", error: null}])
+  assert.equal(back.closes, 1)
+
+  // The first tab gets the end, and connects.
+  const page = parts({factory})
+  const link = new Link(page.deps)
+  await link.start()
   const socket = FakeSocket.all.at(-1)
   assert.equal(socket.url, "ws://ha.test:8123/api/websocket")
   assert.equal(last(page).state, "connecting")
@@ -317,45 +578,29 @@ test("the way back gets the tokens, keeps them, and connects", async () => {
   // The LiveView reconnects: the hook tells the state again.
   link.report()
   assert.equal(last(page).state, "connected")
-})
-
-test("the way back to the sheet of a hub keeps the item in the address", async () => {
-  const page = parts({
-    pathname: "/inside",
-    search: "?item=i42&code=c1&state=s1&storeToken=true",
-    respond: (url) => url.endsWith("/auth/token") ? tokens("a1", "r1") : answer(200),
-  })
-  page.storage.set(PENDING, JSON.stringify({url: HA, state: "s1", verifier: "v1"}))
-  await new Link(page.deps).start()
-  await settle()
-  assert.deepEqual(page.replaced, [[{type: "patch", id: "phx-1"}, "", "/inside?item=i42"]])
-  assert.equal((await page.deps.store.read()).refresh, "r1")
+  link.stop()
 })
 
 test("a way back with a wrong state, no code, or a bad text keeps nothing", async () => {
-  for (const [pending, search, error] of [
-    [{url: HA, state: "other", verifier: "v"}, "?code=c&state=s1", "state"],
-    [null, "?code=c&state=s1", "state"],
-    ["{bad json", "?code=c&state=s1", "state"],
-    [{url: HA, state: "s1", verifier: "v"}, "?error=access_denied&state=s1", "denied"],
+  for (const [pending, search, error, told] of [
+    [{url: HA, state: "other", verifier: "v", generation: 0, id: "s1"}, "?code=c&state=s1", "state",
+      [{ended: "s1", error: "state"}]],
+    [null, "?code=c&state=s1", "state", []],
+    ["{bad json", "?code=c&state=s1", "state", []],
+    ["5", "?code=c&state=s1", "state", []],
+    [{url: HA, state: "s1", verifier: "v", generation: 0, id: "s1"}, "?error=access_denied&state=s1", "denied",
+      [{ended: "s1", error: "denied"}]],
   ]) {
-    const page = parts({search})
+    const page = parts({pathname: SIGN_IN, search})
     if (pending !== null) page.storage.set(PENDING, typeof pending === "string" ? pending : JSON.stringify(pending))
-    await new Link(page.deps).start()
-    await settle()
+    await new SignIn(page.deps).start()
     assert.equal(page.calls.length, 0)
     assert.equal(last(page).error, error)
+    assert.deepEqual(page.told, told)
+    assert.equal(page.closes, 0)
     assert.equal(await page.deps.store.read(), null)
-    // The answer of the sign-in goes away from the address.
-    assert.deepEqual(page.replaced.at(-1), [{type: "patch", id: "phx-1"}, "", "/settings"])
+    assert.deepEqual(page.replaced.at(-1), [null, "", SIGN_IN])
   }
-
-  // A wrong state, with a stored session: the page connects with it.
-  const page = parts({search: "?code=c&state=s1"})
-  await page.deps.store.write(session())
-  await new Link(page.deps).start()
-  await settle()
-  assert.equal(last(page).state, "connecting")
 })
 
 test("the exchange of the code can fail", async () => {
@@ -364,81 +609,62 @@ test("the exchange of the code can fail", async () => {
     [() => answer(400, {error: "invalid_request"}), "token"],
     [() => ({ok: true, status: 200, json: async () => { throw new SyntaxError("not JSON") }}), "token"],
   ]) {
-    const page = parts({search: "?code=c&state=s1", respond})
-    page.storage.set(PENDING, JSON.stringify({url: HA, state: "s1", verifier: "v"}))
-    await new Link(page.deps).start()
-    await settle()
+    const page = parts({pathname: SIGN_IN, search: "?code=c&state=s1", respond})
+    page.storage.set(PENDING, JSON.stringify({url: HA, state: "s1", verifier: "v", generation: 0, id: "s1"}))
+    await new SignIn(page.deps).start()
     assert.deepEqual(last(page), {state: "none", url: HA, name: null, version: null, error})
+    assert.deepEqual(page.told, [{ended: "s1", error}])
     assert.equal(await page.deps.store.read(), null)
   }
 })
 
 test("a sign-in replaces and revokes the old session, and a store error revokes the new one", async () => {
   const respond = (url) => url.endsWith("/auth/token") ? tokens("a2", "r2") : answer(200)
-  const page = parts({search: "?code=c&state=s1", respond})
-  page.storage.set(PENDING, JSON.stringify({url: HA, state: "s1", verifier: "v"}))
-  await page.deps.store.write(session("r1"))
-  await new Link(page.deps).start()
-  await settle()
+  const pending = JSON.stringify({url: HA, state: "s1", verifier: "v", generation: 0, id: "s1"})
+  const page = parts({pathname: SIGN_IN, search: "?code=c&state=s1", respond})
+  page.storage.set(PENDING, pending)
+  await keep(page.deps.store, session("r1"))
+  await new SignIn(page.deps).start()
   assert.equal((await page.deps.store.read()).refresh, "r2")
   assert.deepEqual(page.calls.at(-1), {url: HA + "/auth/revoke", fields: {token: "r1"}})
+  // The tab closes at once: the revoke continues after it (keepalive). The
+  // exchange of the code does not need it.
+  assert.equal(page.closes, 1)
+  assert.equal(page.inits.at(-1).keepalive, true)
+  assert.equal(page.inits[0].keepalive, undefined)
 
   // The same session again: nothing to revoke.
-  const again = parts({search: "?code=c&state=s1", respond})
-  again.storage.set(PENDING, JSON.stringify({url: HA, state: "s1", verifier: "v"}))
-  await again.deps.store.write(session("r2"))
-  await new Link(again.deps).start()
-  await settle()
+  const again = parts({pathname: SIGN_IN, search: "?code=c&state=s1", respond})
+  again.storage.set(PENDING, pending)
+  await keep(again.deps.store, session("r2"))
+  await new SignIn(again.deps).start()
   assert.equal(again.calls.filter((call) => call.url.endsWith("/revoke")).length, 0)
 
   const failing = parts({
+    pathname: SIGN_IN,
     search: "?code=c&state=s1",
     respond,
     store: {write: async () => { throw new Error("full") }},
   })
-  failing.storage.set(PENDING, JSON.stringify({url: HA, state: "s1", verifier: "v"}))
-  await new Link(failing.deps).start()
-  await settle()
+  failing.storage.set(PENDING, pending)
+  await new SignIn(failing.deps).start()
   assert.equal(last(failing).error, "storage")
+  assert.deepEqual(failing.told, [{ended: "s1", error: "storage"}])
   assert.deepEqual(failing.calls.at(-1), {url: HA + "/auth/revoke", fields: {token: "r2"}})
 })
 
-test("a disconnect during the exchange revokes the new session and keeps nothing", async () => {
-  let release
-  const page = parts({
-    search: "?code=c&state=s1",
-    respond: (url) => url.endsWith("/auth/token")
-      ? new Promise((resolve) => { release = () => resolve(tokens("a1", "r1")) })
-      : Promise.reject(new Error("offline")),
-  })
-  page.storage.set(PENDING, JSON.stringify({url: HA, state: "s1", verifier: "v"}))
+test("a disconnect after the store write keeps the disconnect", async () => {
+  const factory = new IDBFactory()
+  const respond = (url) => url.endsWith("/auth/token") ? tokens("a1", "r1") : answer(200)
+  const page = parts({factory, respond})
   const link = new Link(page.deps)
-  link.start()
-  await settle()
+  await link.start()
+  const tab = await signInTab({path: signInPage(HA, "s1"), factory, respond})
+  await tab.back(`code=c1&state=${tab.state}`).done
+  assert.equal((await page.deps.store.read()).refresh, "r1")
   await link.disconnect()
-  release()
-  await settle()
   assert.equal(await page.deps.store.read(), null)
   assert.deepEqual(page.calls.at(-1), {url: HA + "/auth/revoke", fields: {token: "r1"}})
-  assert.equal(last(page).state, "none")
-})
-
-test("a disconnect after the store write keeps the disconnect", async () => {
-  let stored
-  const factory = new IDBFactory()
-  const real = sessionStore(factory, () => {})
-  const page = parts({
-    search: "?code=c&state=s1",
-    respond: (url) => url.endsWith("/auth/token") ? tokens("a1", "r1") : answer(200),
-    store: {...real, write: async (s) => { const old = await real.write(s); stored(); return old }},
-  })
-  page.storage.set(PENDING, JSON.stringify({url: HA, state: "s1", verifier: "v"}))
-  const link = new Link(page.deps)
-  stored = () => link.disconnect()
-  link.start()
-  await settle()
-  assert.equal(await real.read(), null)
-  assert.ok(page.calls.some((call) => call.url.endsWith("/auth/revoke")))
   assert.equal(last(page).state, "none")
 })
 
@@ -449,6 +675,7 @@ test("a disconnect clears the store, revokes the session and closes the socket",
   await link.disconnect()
   assert.equal(socket.closed, true)
   assert.equal(await page.deps.store.read(), null)
+  assert.equal(await page.deps.store.generation(), 1)
   assert.deepEqual(page.calls.at(-1), {url: HA + "/auth/revoke", fields: {token: "r1"}})
   assert.equal(last(page).state, "none")
 
@@ -463,7 +690,7 @@ test("a disconnect clears the store, revokes the session and closes the socket",
   await second.link.disconnect()
   await settle()
   assert.equal(last(other).state, "none")
-  const broken = parts({store: {read: async () => null, clear: async () => { throw new Error("no") }}})
+  const broken = parts({store: {read: async () => null, disconnect: async () => { throw new Error("no") }}})
   const alone = new Link(broken.deps)
   await alone.disconnect()
   assert.equal(last(broken).state, "none")
@@ -472,7 +699,7 @@ test("a disconnect clears the store, revokes the session and closes the socket",
 test("the access token gets a refresh before its end, with a compare and set", async () => {
   const page = parts({respond: () => answer(200, {access_token: "a-new", expires_in: 1800})})
   const stored = session("r1", {expires: 1_000_000 + EARLY})
-  await page.deps.store.write(stored)
+  await keep(page.deps.store, stored)
   const link = new Link(page.deps)
   await link.start()
   const socket = FakeSocket.all.at(-1)
@@ -497,7 +724,7 @@ test("a refresh can fail, end the session, or come too late", async () => {
     () => ({ok: true, status: 200, json: async () => { throw new SyntaxError("not JSON") }}),
   ]) {
     const page = parts({respond})
-    await page.deps.store.write(expired)
+    await keep(page.deps.store, expired)
     await new Link(page.deps).start()
     const socket = FakeSocket.all.at(-1)
     socket.receive({type: "auth_required"})
@@ -508,7 +735,7 @@ test("a refresh can fail, end the session, or come too late", async () => {
 
   // Home Assistant refuses the refresh token: the session ended.
   const ended = parts({respond: () => answer(400, {error: "invalid_grant"})})
-  await ended.deps.store.write(expired)
+  await keep(ended.deps.store, expired)
   await new Link(ended.deps).start()
   FakeSocket.all.at(-1).receive({type: "auth_required"})
   await settle()
@@ -518,7 +745,7 @@ test("a refresh can fail, end the session, or come too late", async () => {
   // The same, with a disconnect in the clear of the store: the disconnect
   // wins.
   const both = parts({respond: () => answer(400, {error: "invalid_grant"})})
-  await both.deps.store.write(expired)
+  await keep(both.deps.store, expired)
   const bothLink = new Link(both.deps)
   const clear = both.deps.store.clear
   both.deps.store.clear = async (...args) => { const result = await clear(...args); bothLink.epoch += 1; return result }
@@ -533,9 +760,9 @@ test("a refresh can fail, end the session, or come too late", async () => {
   const other = sessionStore(factory, () => {})
   const changed = parts({
     factory,
-    respond: async () => { await other.write(session("r2")); return answer(200, {access_token: "a-old", expires_in: 1800}) },
+    respond: async () => { await keep(other, session("r2")); return answer(200, {access_token: "a-old", expires_in: 1800}) },
   })
-  await changed.deps.store.write(expired)
+  await keep(changed.deps.store, expired)
   await new Link(changed.deps).start()
   FakeSocket.all.at(-1).receive({type: "auth_required"})
   await settle()
@@ -547,7 +774,7 @@ test("a refresh can fail, end the session, or come too late", async () => {
   const late = parts({respond: (url) => url.endsWith("/token")
     ? new Promise((resolve) => { release = () => resolve(answer(200, {access_token: "a-late", expires_in: 1800})) })
     : answer(200)})
-  await late.deps.store.write(expired)
+  await keep(late.deps.store, expired)
   const link = new Link(late.deps)
   await link.start()
   const socket = FakeSocket.all.at(-1)
@@ -561,7 +788,7 @@ test("a refresh can fail, end the session, or come too late", async () => {
 
   // A store that fails at the write of the new access token.
   const full = parts({respond: () => answer(200, {access_token: "a-full", expires_in: 1800})})
-  await full.deps.store.write(expired)
+  await keep(full.deps.store, expired)
   full.deps.store.update = async () => { throw new Error("full") }
   await new Link(full.deps).start()
   FakeSocket.all.at(-1).receive({type: "auth_required"})
@@ -570,7 +797,7 @@ test("a refresh can fail, end the session, or come too late", async () => {
 
   // The refresh ends after a disconnect, in the store write.
   const slow = parts({respond: () => answer(200, {access_token: "a-slow", expires_in: 1800})})
-  await slow.deps.store.write(expired)
+  await keep(slow.deps.store, expired)
   const slowLink = new Link(slow.deps)
   const update = slow.deps.store.update
   slow.deps.store.update = async (...args) => { const result = await update(...args); slowLink.epoch += 1; return result }
@@ -588,12 +815,12 @@ test("a late refusal of an old session does not end the new session", async () =
   const page = parts({respond: (url) => url.endsWith("/token")
     ? new Promise((resolve) => { refuse = () => resolve(answer(400, {error: "invalid_grant"})) })
     : answer(200)})
-  await page.deps.store.write(session("r1", {expires: 0}))
+  await keep(page.deps.store, session("r1", {expires: 0}))
   const link = new Link(page.deps)
   await link.start()
   FakeSocket.all.at(-1).receive({type: "auth_required"})
   await settle()
-  await page.deps.store.write(session("r2"))
+  await keep(page.deps.store, session("r2"))
   await page.listened.news()
   const second = FakeSocket.all.at(-1)
   refuse()
@@ -608,11 +835,11 @@ test("a late refusal of an old session does not end the new session", async () =
   const other = parts({respond: (url) => url.endsWith("/token")
     ? new Promise((resolve) => { refuse = () => resolve(answer(400, {error: "invalid_grant"})) })
     : answer(200)})
-  await other.deps.store.write(session("r1", {expires: 0}))
+  await keep(other.deps.store, session("r1", {expires: 0}))
   await new Link(other.deps).start()
   FakeSocket.all.at(-1).receive({type: "auth_required"})
   await settle()
-  await other.deps.store.clear()
+  await other.deps.store.disconnect()
   await other.listened.news()
   refuse()
   await settle()
@@ -701,20 +928,20 @@ test("the news of a different tab: the tab reads the store", async () => {
   assert.equal(FakeSocket.all.length, count)
 
   // A new session: a new socket.
-  await page.deps.store.write(session("r2"))
+  await keep(page.deps.store, session("r2"))
   await page.listened.news()
   assert.equal(socket.closed, true)
   assert.equal(FakeSocket.all.length, count + 1)
 
   // No session: no socket.
-  await page.deps.store.clear()
+  await page.deps.store.disconnect()
   await page.listened.news()
   assert.equal(FakeSocket.all.at(-1).closed, true)
   assert.equal(last(page).state, "none")
   assert.equal(link.socket, null)
 
   // News for an old epoch changes nothing.
-  await page.deps.store.write(session("r3"))
+  await keep(page.deps.store, session("r3"))
   const reading = link.load(link.epoch - 1)
   await reading
   assert.equal(link.session, null)
@@ -732,10 +959,12 @@ test("the hook of LiveView", async () => {
   self.mounted()
   await settle()
   assert.deepEqual(page.pushes.at(-1), ["hook:ha:status", {state: "none", url: null, name: null, version: null, error: null}])
-  await handlers["ha:connect"]({url: HA, back: "/inside?item=i1"})
-  assert.equal(page.assigned.length, 1)
-  assert.equal(new URL(page.assigned[0]).searchParams.get("redirect_uri"), APP + "/inside?item=i1")
+  // The server sends no address: the key Connect gives it to the hook.
+  assert.deepEqual(Object.keys(handlers).sort(), ["ha:add_areas", "ha:disconnect", "ha:rooms_fetch"])
+  page.listened.connect(HA)
+  assert.equal(page.opened.length, 1)
   await handlers["ha:disconnect"]()
+  assert.equal(page.opened[0].closed, true)
   assert.equal(page.pushes.at(-1)[1].state, "none")
   // With no socket, the match of the rooms gets no floors and no areas.
   await handlers["ha:rooms_fetch"]()
@@ -750,9 +979,32 @@ test("the hook of LiveView", async () => {
   assert.equal(self.link.epoch, 2)
 })
 
+test("the hook of the sign-in page starts the sign-in one time", async () => {
+  const page = parts({pathname: SIGN_IN, search: "?" + new URLSearchParams({url: HA, id: "s1"})})
+  let made = 0
+  const hook = signInHook(() => { made += 1; return page.deps })
+  const self = {...hook, pushEvent: (event, payload) => page.pushes.push(["first:" + event, payload])}
+  self.mounted()
+  await until(() => page.went.length > 0)
+  assert.equal(page.went.length, 1)
+  assert.deepEqual(page.pushes.at(-1), ["first:ha:status", {state: "signing_in", url: HA, name: null, version: null, error: null}])
+  self.reconnected()
+  assert.equal(page.pushes.at(-1)[0], "first:ha:status")
+
+  // LiveView mounts the page again: the hook tells the state, and does not
+  // start again.
+  const again = {...hook, pushEvent: (event, payload) => page.pushes.push(["again:" + event, payload])}
+  again.mounted()
+  await settle()
+  assert.equal(made, 1)
+  assert.equal(page.went.length, 1)
+  assert.deepEqual(page.pushes.at(-1), ["again:ha:status", {state: "signing_in", url: HA, name: null, version: null, error: null}])
+})
+
 test("the parts of the browser", async () => {
   const events = []
   const posted = []
+  const opened = []
   class Channel {
     constructor(name) { this.name = name; Channel.last = this }
     postMessage(message) { posted.push([this.name, message]) }
@@ -768,21 +1020,35 @@ test("the parts of the browser", async () => {
     history: {},
     sessionStorage: {},
     crypto: globalThis.crypto,
+    open: (...args) => { opened.push(args); return "tab" },
+    close: () => events.push(["close"]),
+    opener: {},
     setTimeout: (f, ms) => ["timer", ms],
     clearTimeout: (id) => events.push(["clear", id]),
   }
   const browser = browserParts(window)
-  await browser.store.write(session())
+  await keep(browser.store, session())
   assert.deepEqual(posted, [[CHANNEL, "changed"]])
-  const news = () => {}
+  const news = []
   const online = () => {}
-  const unlisten = browser.listen(news, online)
-  assert.equal(Channel.last.onmessage, news)
-  assert.deepEqual(events, [["online", online]])
+  const connects = []
+  const unlisten = browser.listen((message) => news.push(message), online, (text) => connects.push(text))
+  // The channel gives the message, not the event.
+  Channel.last.onmessage({data: {ended: "s1", error: null}})
+  assert.deepEqual(news, [{ended: "s1", error: null}])
+  assert.deepEqual(events.map(([event]) => event), ["online", "ha:connect"])
+  // The key Connect: the text of the field url of its form.
+  const connect = events[1][1]
+  const form = (value) => ({target: {elements: {namedItem: (name) => name === "url" && value !== undefined ? {value} : null}}})
+  connect(form("https://ha.example.com"))
+  connect(form(undefined))
+  assert.deepEqual(connects, ["https://ha.example.com", undefined])
   unlisten()
   assert.equal(Channel.last.onmessage, null)
-  assert.deepEqual(events.at(-1), ["remove online", online])
+  assert.deepEqual(events.slice(-2).map(([event, f]) => [event, f]), [["remove online", online], ["remove ha:connect", connect]])
   assert.deepEqual(await browser.fetch("u", {method: "POST"}), ["fetched", "u", {method: "POST"}])
+  assert.equal(browser.openTab("/ha/sign-in?url=x"), "tab")
+  assert.deepEqual(opened, [["/ha/sign-in?url=x", TAB]])
   assert.ok(Math.abs(browser.now() - Date.now()) < 1000)
   assert.deepEqual(browser.setTimer(() => {}, 5), ["timer", 5])
   browser.clearTimer(7)
@@ -790,23 +1056,55 @@ test("the parts of the browser", async () => {
 
   // A browser with no BroadcastChannel: the hook works in this tab only.
   const alone = browserParts({...window, BroadcastChannel: undefined, indexedDB: new IDBFactory()})
-  await alone.store.write(session())
-  alone.listen(news, online)()
+  await keep(alone.store, session())
+  alone.listen(() => {}, online, () => {})()
   assert.equal(posted.length, 1)
+
+  // The sign-in page: a page of the app opened it. The pages of Home
+  // Assistant in its tab get no link to the tab of the app.
+  window.location = {origin: APP}
+  window.opener = {location: {origin: APP}}
+  const tab = signInParts(window)
+  assert.equal(tab.fromApp, true)
+  assert.equal(window.opener, null)
+  // No opener, or the page of a different site: its origin throws.
+  assert.equal(signInParts(window).fromApp, false)
+  window.opener = {location: {get origin() { throw new DOMException("cross origin", "SecurityError") }}}
+  assert.equal(signInParts(window).fromApp, false)
+  assert.equal(window.opener, null)
+  window.opener = {location: {origin: "https://evil.example"}}
+  assert.equal(signInParts(window).fromApp, false)
+  await keep(tab.store, session())
+  tab.tell({ended: "s1", error: null})
+  assert.deepEqual(posted.slice(1), [[CHANNEL, "changed"], [CHANNEL, {ended: "s1", error: null}]])
+  assert.deepEqual(await tab.fetch("u"), ["fetched", "u"])
+  assert.equal(tab.location, window.location)
+  assert.equal(tab.history, window.history)
+  assert.equal(tab.storage, window.sessionStorage)
+  assert.equal(tab.crypto, window.crypto)
+  assert.ok(Math.abs(tab.now() - Date.now()) < 1000)
+  tab.closeTab()
+  assert.deepEqual(events.at(-1), ["close"])
+  const lone = signInParts({...window, BroadcastChannel: undefined, indexedDB: new IDBFactory()})
+  await keep(lone.store, session())
+  lone.tell({ended: "s2", error: null})
+  assert.equal(posted.length, 3)
 })
 
 // The property of the model (specs/HomeAssistant.tla) on the real code. It
-// has two tabs, one store, and a fake Home Assistant that answers in any
-// order. The sign-ins, refreshes, disconnects and news come in any order. The store never
-// has a revoked session. After a disconnect, a tab has no socket of its own
-// sign-ins, until the person signs in again on it. It can follow a session
-// of a sign-in on the other tab (Notice in the model).
-test("two tabs in any order: no revoked session in the store, no socket after a disconnect", async () => {
+// has two tabs of the app, the tabs of their sign-ins, one store, and a
+// fake Home Assistant that answers in any order. The sign-ins, refreshes,
+// disconnects, news and checks of the tabs come in any order. The store
+// never has a revoked session, and never has the session of a sign-in that
+// started before the last disconnect (the generation). After a disconnect
+// on a tab, the tab has no socket of a sign-in that started before it.
+test("two tabs and their sign-ins in any order: no revoked or old session in the store", async () => {
   const step = fc.oneof(
     fc.record({kind: fc.constant("signIn"), tab: fc.integer({min: 0, max: 1})}),
     fc.record({kind: fc.constant("disconnect"), tab: fc.integer({min: 0, max: 1})}),
     fc.record({kind: fc.constant("refresh"), tab: fc.integer({min: 0, max: 1})}),
     fc.record({kind: fc.constant("news"), tab: fc.integer({min: 0, max: 1})}),
+    fc.record({kind: fc.constant("tick"), tab: fc.integer({min: 0, max: 1})}),
     fc.record({kind: fc.constant("answer"), index: fc.nat()}),
   )
 
@@ -814,16 +1112,21 @@ test("two tabs in any order: no revoked session in the store, no socket after a 
     const factory = new IDBFactory()
     const inFlight = []
     const revoked = new Set()
-    const writer = new Map()
+    // The count of the disconnects, and its value at the start of the
+    // sign-in of each code and of each session. The test counts them: it
+    // does not read the generation of the store.
+    let disconnects = 0
+    const codes = new Map()
+    const born = new Map()
     let sessions = 0
     const tabs = []
-    const off = new Set()
+    const offAt = new Map()
 
-    // The answers of Home Assistant for a tab. A revoke is at once. The
-    // other answers wait for an "answer" step. Home Assistant answers a
-    // refresh as the session is at the request: a new access token, or a
-    // refusal of a revoked session.
-    const respond = (tab) => (url, fields) => {
+    // The answers of Home Assistant. A revoke is at once. The other
+    // answers wait for an "answer" step. Home Assistant answers a refresh
+    // as the session is at the request: a new access token, or a refusal
+    // of a revoked session.
+    const respond = (url, fields) => {
       if (url.endsWith("/auth/revoke")) {
         revoked.add(fields.token)
         return answer(200)
@@ -833,7 +1136,7 @@ test("two tabs in any order: no revoked session in the store, no socket after a 
         inFlight.push(() => {
           if (fields.grant_type === "authorization_code") {
             sessions += 1
-            writer.set("r" + sessions, tab)
+            born.set("r" + sessions, codes.get(fields.code))
             resolve(tokens("a" + sessions, "r" + sessions))
           } else if (refused) {
             resolve(answer(400, {error: "invalid_grant"}))
@@ -843,12 +1146,14 @@ test("two tabs in any order: no revoked session in the store, no socket after a 
         })
       })
     }
+    // The BroadcastChannel: each tab of the app gets each message.
+    const broadcast = (message) => {
+      for (const {page} of tabs) setImmediate(() => page.listened.news(message))
+    }
+    const store = () => sessionStore(factory, () => broadcast("changed"))
 
-    for (const tab of [0, 1]) {
-      const page = parts({factory, respond: respond(tab), store: sessionStore(factory, () => {
-        const other = tabs[1 - tab]
-        if (other) setImmediate(() => other.page.listened.news())
-      })})
+    for (let tab = 0; tab < 2; tab++) {
+      const page = parts({factory, respond, store: store()})
       const link = new Link(page.deps)
       tabs.push({page, link})
       await link.start()
@@ -860,28 +1165,40 @@ test("two tabs in any order: no revoked session in the store, no socket after a 
       } else {
         const {page, link} = tabs[s.tab]
         if (s.kind === "signIn") {
-          off.delete(s.tab)
-          page.storage.set(PENDING, JSON.stringify({url: HA, state: "s", verifier: "v"}))
-          link.finish(new URLSearchParams("code=c&state=s"))
+          // The key Connect opens the tab. The tab goes to Home Assistant,
+          // and the person signs in there: the exchange waits for its
+          // answer.
+          link.connect(HA)
+          const opened = page.opened.at(-1)
+          const tab = await signInTab({path: opened.path, store: store(), respond, tell: broadcast})
+          const code = "c" + (codes.size + 1)
+          codes.set(code, disconnects)
+          const back = tab.back(`code=${code}&state=${tab.state}`)
+          back.deps.closeTab = () => { opened.closed = true }
         } else if (s.kind === "disconnect") {
-          off.add(s.tab)
-          link.disconnect()
+          await link.disconnect()
+          disconnects += 1
+          offAt.set(s.tab, disconnects)
         } else if (s.kind === "refresh" && link.socket) {
           link.session = {...link.session, expires: 0}
           link.socket.receive({type: "auth_required"})
         } else if (s.kind === "news") {
-          page.listened.news()
+          page.listened.news("changed")
+        } else if (s.kind === "tick") {
+          tick(page)
         }
       }
       await settle(6)
 
       const stored = await tabs[0].page.deps.store.read()
       assert.ok(!stored || !revoked.has(stored.refresh), `the store has a revoked session: ${stored?.refresh}`)
-      for (const tab of off) {
+      assert.ok(!stored || born.get(stored.refresh) === disconnects,
+        `the store has ${stored?.refresh} of a sign-in before a disconnect`)
+      for (const [tab, at] of offAt) {
         const {link} = tabs[tab]
         assert.ok(
-          !link.socket || writer.get(link.session.refresh) !== tab,
-          `tab ${tab} has a socket of its own sign-in after a disconnect`,
+          !link.socket || born.get(link.session.refresh) >= at,
+          `tab ${tab} has a socket of a sign-in before its disconnect`,
         )
       }
     }
@@ -896,6 +1213,7 @@ test("two tabs in any order: no revoked session in the store, no socket after a 
       [[{kind: "signIn", tab: 0}, {kind: "answer", index: 0}, {kind: "refresh", tab: 0},
         {kind: "disconnect", tab: 1}, {kind: "answer", index: 0}]],
       [[{kind: "signIn", tab: 0}, {kind: "disconnect", tab: 0}, {kind: "answer", index: 0}]],
+      [[{kind: "signIn", tab: 0}, {kind: "disconnect", tab: 1}, {kind: "answer", index: 0}]],
     ],
   })
 })
@@ -986,7 +1304,7 @@ test("the hook reads the floors, the areas and the user of Home Assistant", asyn
 test("the rooms are offline with no socket, a socket that closes, or an error", async () => {
   // A socket that does not have the sign-in yet takes no commands.
   const page = parts()
-  await page.deps.store.write(session())
+  await keep(page.deps.store, session())
   const link = new Link(page.deps)
   await link.start()
   await settle()
