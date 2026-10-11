@@ -52,13 +52,21 @@ defmodule DIYWeb.HomeAssistant do
     hook (`control/3`, `ha:control`), and the hook tells its end
     (`ha:control_done`).
 
+  The energy data of Home Assistant uses the assign `:ha_energy`
+  (`read_energy/1`). It has the meter of the house (`DIY.Usage`, with the
+  source `home_assistant`) and the energy of each device. It is `nil` before the
+  hook reads it, and `%{error: error}` when the hook cannot read it. The
+  page asks for it when the link becomes connected (`ha:energy_fetch`),
+  and forgets it after a disconnect. Each change sends the message
+  `:ha_energy` to the LiveView.
+
   The sign-in page uses `on_mount {DIYWeb.HomeAssistant, :sign_in}`: it
   takes only the states of the sign-in (`none`, `signing_in` and `done`),
   and no other event.
   """
   use DIYWeb, :html
 
-  alias DIY.{Build, HomeAssistant}
+  alias DIY.{Build, HomeAssistant, Usage}
   alias DIYWeb.Inside
   alias Phoenix.LiveView
 
@@ -89,6 +97,11 @@ defmodule DIYWeb.HomeAssistant do
   @max_devices 1000
   @max_domains 30
 
+  # The most devices with energy, and the most months of one device, that
+  # the page takes from the hook.
+  @max_energy_devices 200
+  @max_energy_months 13
+
   # The domains of the entities that the app turns on and off, and the
   # states of a device.
   @controls ~w(fan light switch)
@@ -100,6 +113,7 @@ defmodule DIYWeb.HomeAssistant do
       socket
       |> assign(:ha, %{state: "loading", url: nil, name: nil, version: nil, error: nil})
       |> assign(ha_rooms: nil, ha_sync: nil, ha_devices: nil, ha_states: %{}, ha_control: %{})
+      |> assign(ha_energy: nil)
 
     {:cont, LiveView.attach_hook(socket, :home_assistant, :handle_event, &handle_event/3)}
   end
@@ -122,6 +136,12 @@ defmodule DIYWeb.HomeAssistant do
   answer is the event `ha:devices`.
   """
   def fetch_devices(socket), do: LiveView.push_event(socket, "ha:devices_fetch", %{})
+
+  @doc """
+  Asks the hook for the energy data of Home Assistant. The answer is the
+  event `ha:energy`.
+  """
+  def fetch_energy(socket), do: LiveView.push_event(socket, "ha:energy_fetch", %{})
 
   @doc """
   Asks the hook to turn a device on or off (`ha:control`). The control
@@ -207,6 +227,16 @@ defmodule DIYWeb.HomeAssistant do
   end
 
   def handle_event("ha:devices", _params, socket), do: {:halt, socket}
+
+  # The energy data counts only while the link is connected.
+  def handle_event("ha:energy", params, %{assigns: %{ha: %{state: "connected"}}} = socket) do
+    case read_energy(params) do
+      nil -> {:halt, socket}
+      energy -> {:halt, energy_changed(socket, energy)}
+    end
+  end
+
+  def handle_event("ha:energy", _params, socket), do: {:halt, socket}
 
   # The states count only while the link is connected. A payload that the
   # page cannot read changes nothing.
@@ -302,10 +332,11 @@ defmodule DIYWeb.HomeAssistant do
     socket =
       cond do
         state == "connected" and before != "connected" ->
-          fetch_devices(socket)
+          socket |> fetch_devices() |> fetch_energy()
 
-        state in ~w(none signed_out) and socket.assigns.ha_devices != nil ->
-          devices_changed(socket, nil)
+        state in ~w(none signed_out) and
+            (socket.assigns.ha_devices != nil or socket.assigns.ha_energy != nil) ->
+          socket |> devices_changed(nil) |> energy_changed(nil)
 
         true ->
           socket
@@ -324,6 +355,132 @@ defmodule DIYWeb.HomeAssistant do
     send(self(), :ha_devices)
     assign(socket, :ha_devices, devices)
   end
+
+  defp energy_changed(socket, energy) do
+    send(self(), :ha_energy)
+    assign(socket, :ha_energy, energy)
+  end
+
+  @doc """
+  The energy data of Home Assistant from the hook (`ha:energy`), or
+  `%{error: error}`:
+
+  - `meter`: the months of the meter of the house (`DIY.Usage`, with the
+    source `home_assistant`), or `nil`;
+  - `devices`: for each device, its name in the energy settings (or
+    `nil`) and the kWh of its months (`%{month: "YYYY-MM", kwh: kwh}`).
+    Two sensors of one device give the sum of their kWh;
+  - `month`: the month of now ("YYYY-MM"), in the time zone of Home
+    Assistant.
+
+  A device that the page cannot read does not count. A meter that the page
+  cannot read is `nil`: the devices stay. A payload that the page cannot
+  read gives `nil`.
+  """
+  def read_energy(%{"error" => error}) when error in ~w(offline failed), do: %{error: error}
+
+  def read_energy(%{"meter" => meter, "devices" => devices, "month" => month})
+      when is_list(devices) and length(devices) <= @max_energy_devices and is_binary(month) do
+    if month?(month) do
+      devices =
+        devices
+        |> Enum.map(&read_energy_device/1)
+        |> Enum.reject(&is_nil/1)
+        |> Enum.group_by(& &1.device)
+        |> Map.new(fn {device, [first | _] = all} ->
+          months =
+            all
+            |> Enum.flat_map(& &1.months)
+            |> Enum.group_by(& &1.month, & &1.kwh)
+            |> Enum.map(fn {month, kwh} -> %{month: month, kwh: Enum.sum(kwh)} end)
+            |> Enum.sort_by(& &1.month)
+
+          {device, %{name: first.name, months: months}}
+        end)
+
+      %{meter: read_meter(meter), devices: devices, month: month}
+    end
+  end
+
+  def read_energy(_params), do: nil
+
+  defp read_meter(%{"source" => "home_assistant"} = meter) do
+    case Usage.read(meter) do
+      {:ok, usage} -> usage
+      :error -> nil
+    end
+  end
+
+  defp read_meter(_meter), do: nil
+
+  defp month?(month), do: month =~ ~r/\A20\d\d-(0[1-9]|1[0-2])\z/
+
+  defp read_energy_device(%{"device" => device, "name" => name, "months" => months})
+       when is_list(months) and length(months) in 1..@max_energy_months do
+    with device when is_binary(device) <- text(device, @max_id),
+         true <- is_nil(name) or is_binary(text(name, @max_name)),
+         months when is_list(months) <- read_energy_months(months) do
+      %{device: device, name: name, months: months}
+    else
+      _ -> nil
+    end
+  end
+
+  defp read_energy_device(_device), do: nil
+
+  defp read_energy_months(months) do
+    months = Enum.map(months, &read_energy_month/1)
+    names = Enum.map(months, &(&1 && &1.month))
+    if Enum.all?(months) and names == Enum.uniq(names), do: months
+  end
+
+  defp read_energy_month(%{"month" => month, "kwh" => kwh})
+       when is_binary(month) and is_number(kwh) and kwh >= 0 and kwh < 1_000_000 do
+    if month?(month), do: %{month: month, kwh: kwh / 1}
+  end
+
+  defp read_energy_month(_month), do: nil
+
+  @doc """
+  The meter of Home Assistant, when the build does not use it yet: the
+  page offers it (`ha_use_meter`). `nil` when the build uses it already,
+  or when Home Assistant has no meter.
+  """
+  def meter_offer(%{ha_energy: %{meter: %{} = meter}, build: build}) do
+    if match?(%{source: "home_assistant"}, build.usage), do: nil, else: meter
+  end
+
+  def meter_offer(_assigns), do: nil
+
+  @doc """
+  The energy of the device of an item, from Home Assistant, or `nil`. It
+  is the energy of the last 12 months that are over (`months` has their
+  names). So the page can put the estimate of the same months next to it.
+  With no month that is over, it is the energy of this month so far
+  (`partial`). It also has the first and the last month. The month of now
+  is in the time zone of Home Assistant. A month after it does not count.
+  """
+  def item_energy(%{ha_energy: %{devices: devices, month: current}, build: build}, item_id) do
+    with id when is_binary(id) <- build.devices[item_id],
+         %{months: months} <- devices[id],
+         over = Enum.filter(months, &(&1.month < current)),
+         now = Enum.filter(months, &(&1.month == current)),
+         [_ | _] = shown <- if(over == [], do: now, else: Enum.take(over, -12)) do
+      partial = over == []
+
+      %{
+        kwh: shown |> Enum.map(& &1.kwh) |> Enum.sum(),
+        months: Enum.map(shown, & &1.month),
+        from: hd(shown).month,
+        to: List.last(shown).month,
+        partial: partial
+      }
+    else
+      _ -> nil
+    end
+  end
+
+  def item_energy(_assigns, _item_id), do: nil
 
   @doc """
   The devices and the areas of Home Assistant from the hook (`ha:devices`),

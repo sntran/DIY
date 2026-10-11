@@ -27,11 +27,22 @@ let faults = 0
 // A fake Home Assistant on this computer (test/browser/fake_ha.mjs), with
 // a floor, three areas and devices. Two devices are in the living room,
 // and one is on the patio. The sun is a service, not a device of the
-// house. The ceiling lights are on.
+// house. The ceiling lights are on. The energy settings have the meter
+// of the house: 25 kWh each day of the last 40 days. They also have the
+// ceiling lights: 12 kWh last month, and 4 kWh this month.
 const device = (id, name, area_id, entity, extra = {}) => ({
   device: { id, name, name_by_user: null, area_id, entry_type: null, disabled_by: null, model: null, ...extra },
   entity: { entity_id: entity, device_id: id, area_id: null, entity_category: null, hidden_by: null, disabled_by: null },
 })
+const day = 86_400_000
+const today = Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate())
+const thisMonth = Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1)
+const lastMonth = Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() - 1, 1)
+const twoMonthsAgo = Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() - 2, 1)
+const energySensor = {
+  entity_id: "sensor.ceiling_energy", device_id: "lights", area_id: null, entity_category: null, hidden_by: null,
+  disabled_by: null,
+}
 const devices = [
   device("lights", "Ceiling Lights", "living_room", "light.ceiling"),
   device("tv", "Living Room TV", "living_room", "media_player.tv"),
@@ -46,8 +57,26 @@ const homeAssistant = await fakeHomeAssistant({
     { area_id: "guest_suite", name: "Guest Suite", floor_id: null },
   ],
   devices: devices.map((one) => one.device),
-  entities: devices.map((one) => one.entity),
+  entities: [...devices.map((one) => one.entity), energySensor],
   states: { "light.ceiling": "on", "media_player.tv": "playing" },
+  prefs: {
+    energy_sources: [{ type: "grid", stat_energy_from: "sensor.grid_in", stat_energy_to: null }],
+    device_consumption: [{ stat_consumption: "sensor.ceiling_energy", name: "Ceiling Lights" }],
+  },
+  statistics: {
+    "sensor.grid_in": {
+      day: Array.from({ length: 40 }, (_, i) => ({ start: today - (40 - i) * day, end: today - (39 - i) * day, change: 25 })),
+    },
+    "sensor.ceiling_energy": {
+      // The first month of a sensor does not count: it can be a part of a
+      // month.
+      month: [
+        { start: twoMonthsAgo, end: lastMonth, change: 11 },
+        { start: lastMonth, end: thisMonth, change: 12 },
+        { start: thisMonth, end: today, change: 4 },
+      ],
+    },
+  },
 })
 
 // axe on the page as it is now.
@@ -654,6 +683,10 @@ async function build(context, name) {
   await page.waitForSelector("#ha-switch[aria-checked=false][aria-disabled=false]")
   assert.equal(await page.evaluate(() => document.activeElement?.id), "ha-switch")
   await check(page, `${name} switch`)
+  // The energy that Home Assistant measured for the lights, next to the
+  // estimate of the same months. This month is not over: it does not count.
+  await page.waitForSelector("#ha-energy:has-text('Home Assistant measured 12 kWh in 1 month')")
+  await page.waitForSelector("#ha-energy:has-text('The estimate for the same months')")
   await page.click("#item-stage .stage-back")
   await page.waitForSelector("#item-stage", { state: "detached" })
   await page.waitForSelector('#plan-svg g.p-ghost[data-ghost="lights"]', { state: "detached" })
@@ -671,6 +704,27 @@ async function build(context, name) {
   await page.click("#item-stage .stage-back")
   await page.waitForSelector("#item-stage", { state: "detached" })
   await page.waitForSelector("#ha-ghosts:has-text('1 device of Home Assistant is not in the house yet.')")
+
+  // The meter of Home Assistant: the front of the house offers it. The
+  // house gets a smart meter, and its real months.
+  await page.goto(`${site}/`)
+  await connected(page)
+  await page.waitForSelector("#real:has-text('of usage from your meter')")
+  await check(page, `${name} meter of Home Assistant`)
+  await page.click("#use-ha-meter")
+  await page.waitForSelector("#real-average")
+  await page.goto(`${site}/estimate`)
+  await connected(page)
+  await page.waitForSelector("#real-months")
+  // The person removes the meter: its real months go too. The walk later
+  // adds a meter with a file.
+  await page.goto(`${site}/inside`)
+  await connected(page)
+  await follow(page, '#plan-list a[id^="item-"]:has-text("Smart meter")')
+  await page.waitForSelector("#item-stage #usage-months:has-text('Home Assistant')")
+  await page.click("#ask-remove")
+  await page.click("#delete-item")
+  await page.waitForSelector("#item-stage", { state: "detached" })
 
   await page.goto(`${site}/inside?item=${hub}`)
   await connected(page)

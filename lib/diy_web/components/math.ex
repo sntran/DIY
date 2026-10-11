@@ -37,7 +37,7 @@ defmodule DIYWeb.Math do
         <p>
           The estimate comes from the weather of your place and the items of your house. It is a range, not one number:
           the weather changes from year to year, and the numbers of the items are not exact.
-          A file of your smart meter gives your real usage.
+          Your smart meter gives your real usage: from its file, or from Home Assistant.
         </p>
         <p :if={@planned > 0} id="planned-note" class="text-sm">
           The planned items ({@planned}) are not in this bill.
@@ -258,7 +258,7 @@ defmodule DIYWeb.Math do
       </table>
     </div>
     <p :if={Enum.any?(@compare.rows, & &1.partial)} class="text-xs opacity-80">
-      For a part of a month, the app gives the other days the mean of the days in the file.
+      For a part of a month, the app gives the other days the mean of the days with data.
     </p>
     <div :if={@fit} id="fit" class="text-sm space-y-1">
       <p class="font-semibold">
@@ -274,12 +274,16 @@ defmodule DIYWeb.Math do
       </p>
     </div>
     <p :if={is_nil(@fit) and @weather.climate} id="no-fit" class="text-sm opacity-80">
-      To find the numbers of your house, the app needs 6 months of the file. Each month needs 20 days of data or more, and the weather of NASA POWER. The weather of the app ends with {@weather.climate.last}. A file with more months of {@weather.climate.last} or before gives the numbers of your house.
+      To find the numbers of your house, the app needs 6 months of your usage. Each month needs 20 days of data or more, and the weather of NASA POWER. The weather of the app ends with {@weather.climate.last}. More months of {@weather.climate.last} or before give the numbers of your house.
     </p>
     <button
       type="button"
       phx-click="clear_usage"
-      data-confirm="Remove the real usage? The file stays on your device."
+      data-confirm={
+        if @build.usage.source == "home_assistant",
+          do: "Remove the real usage? Home Assistant keeps its data.",
+          else: "Remove the real usage? The file stays on your device."
+      }
       class="btn btn-sm btn-ghost"
     >
       Remove the real usage

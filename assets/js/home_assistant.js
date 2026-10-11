@@ -74,6 +74,12 @@ export const STATE_WAIT = 150
 // The longest wait for the end of a control. After it, the hook stops the
 // wait: Home Assistant does not answer now.
 export const CONTROL_WAIT = 10_000
+// The energy data that the hook reads. The meter of the house: each day of
+// the last 24 months. Each device: each month of the last 13 months. Also
+// the most devices with energy that the hook reads.
+export const METER_MONTHS = 24
+export const DEVICE_MONTHS = 13
+export const MAX_ENERGY_DEVICES = 200
 // The first and the longest wait before the hook opens the socket again.
 export const FIRST_WAIT = 1_000
 export const MAX_WAIT = 60_000
@@ -273,6 +279,7 @@ export class Link {
     this.wait = FIRST_WAIT
     this.invalids = 0
     this.version = null
+    this.timeZone = null
     this.state = {state: "none", url: null, name: null, version: null, error: null}
   }
 
@@ -460,6 +467,9 @@ export class Link {
       this.invalid(epoch)
     } else if (message.type === "result" && message.id === CONFIG && message.success) {
       this.wait = FIRST_WAIT
+      // The months of the energy data are in the time zone of Home
+      // Assistant.
+      this.timeZone = message.result.time_zone ?? null
       this.show("connected", {name: message.result.location_name, version: this.version})
     } else if (message.type === "result" && this.commands.has(message.id)) {
       const {resolve, reject} = this.commands.get(message.id)
@@ -746,6 +756,49 @@ export class Link {
     }
   }
 
+  // Sends the energy data of Home Assistant to the LiveView (ha:energy):
+  // the meter of the house (meterMonths) and the energy of each device
+  // (deviceEnergy). The energy settings of Home Assistant name their
+  // sensors (energy/get_prefs), and its statistics give their kWh
+  // (recorder/statistics_during_period). With no energy settings, the
+  // meter is null and the list of the devices is empty. With no socket, it
+  // sends {error: "offline"}. When Home Assistant refuses a command, it
+  // sends {error: "failed"}.
+  async energy() {
+    try {
+      const [prefs, entities] = await Promise.all([
+        this.command("energy/get_prefs").catch((error) => {
+          if (error.code === "not_found") return null
+          throw error
+        }),
+        this.command("config/entity_registry/list"),
+      ])
+      const {from, to, devices} = energySources(prefs, entities)
+      const zone = zoneOf(this.timeZone)
+      const now = this.now()
+      const read = (ids, months, period) => ids.length === 0 ? Promise.resolve({}) :
+        this.command("recorder/statistics_during_period", {
+          start_time: new Date(monthStart(now, months)).toISOString(),
+          statistic_ids: ids,
+          period,
+          types: ["change"],
+          units: {energy: "kWh"},
+        })
+      const [meter, used] = await Promise.all([
+        read([...from, ...to], METER_MONTHS, "day"),
+        read(devices.map((device) => device.statistic), DEVICE_MONTHS + 1, "month"),
+      ])
+      const months = meterMonths(meter, from, to, zone)
+      this.push("ha:energy", {
+        meter: months.length > 0 ? {source: "home_assistant", months} : null,
+        devices: deviceEnergy(devices, used, entities, zone, monthOf(now, zone)),
+        month: monthOf(now, zone),
+      })
+    } catch (error) {
+      this.push("ha:energy", {error: error.code === "offline" ? "offline" : "failed"})
+    }
+  }
+
   // Adds an area for each room: [{room, name, level, floor}]. The level is
   // the level of the floor in Home Assistant (null: no floor), and floor is
   // the name of a new floor. It sends the areas of the rooms, and the rooms
@@ -914,6 +967,7 @@ export function homeAssistantHook(deps) {
       this.handleEvent("ha:devices_fetch", () => this.link.devices())
       this.handleEvent("ha:add_areas", ({areas}) => this.link.addAreas(areas))
       this.handleEvent("ha:control", ({device, on}) => this.link.control(device, on === true))
+      this.handleEvent("ha:energy_fetch", () => this.link.energy())
       this.link.start()
     },
     reconnected() { this.link.report() },
@@ -1005,6 +1059,150 @@ export function deviceStates(controls, states) {
     result[device] = values.includes("on") ? "on" : values.includes("off") ? "off" : "unavailable"
   }
   return result
+}
+
+// The sensors of the energy settings of Home Assistant (energy/get_prefs).
+// The meter of the house has the kWh from the grid and to the grid. Each
+// device has its sensor. The new form of the settings has one sensor for
+// each way of a grid. The old form has lists (flow_from and flow_to). A
+// sensor that is a part of a different sensor of its device
+// (included_in_stat) does not count: the device has its kWh already. The
+// registry of the entities gives the device of each sensor.
+export function energySources(prefs, entities = []) {
+  const from = []
+  const to = []
+  for (const source of prefs?.energy_sources ?? []) {
+    if (source.type !== "grid") continue
+    if (typeof source.stat_energy_from === "string") from.push(source.stat_energy_from)
+    if (typeof source.stat_energy_to === "string") to.push(source.stat_energy_to)
+    for (const flow of source.flow_from ?? []) if (typeof flow.stat_energy_from === "string") from.push(flow.stat_energy_from)
+    for (const flow of source.flow_to ?? []) if (typeof flow.stat_energy_to === "string") to.push(flow.stat_energy_to)
+  }
+  const deviceOf = new Map(entities.map((entity) => [entity.entity_id, entity.device_id ?? null]))
+  const sameDevice = (a, b) => deviceOf.get(a) != null && deviceOf.get(a) === deviceOf.get(b)
+  const devices = (prefs?.device_consumption ?? [])
+    .filter((device) => typeof device.stat_consumption === "string")
+    .filter((device) => !(typeof device.included_in_stat === "string" && sameDevice(device.stat_consumption, device.included_in_stat)))
+    .slice(0, MAX_ENERGY_DEVICES)
+    .map((device) => ({statistic: device.stat_consumption, name: typeof device.name === "string" ? device.name : null}))
+  return {from: [...new Set(from)], to: [...new Set(to)], devices}
+}
+
+// A time zone that the browser knows, else UTC.
+export function zoneOf(timeZone) {
+  try {
+    new Intl.DateTimeFormat("en-US", {timeZone: timeZone ?? "UTC"})
+    return timeZone ?? "UTC"
+  } catch {
+    return "UTC"
+  }
+}
+
+// The month ("YYYY-MM") of a time (ms) in a time zone.
+export function monthOf(time, timeZone) {
+  const parts = new Intl.DateTimeFormat("en-US", {timeZone, year: "numeric", month: "2-digit"}).formatToParts(new Date(time))
+  const part = (type) => parts.find((one) => one.type === type).value
+  return `${part("year")}-${part("month")}`
+}
+
+// The start (ms, UTC) of the month that is months - 1 months before the
+// month of now: the first month of the energy data.
+export function monthStart(now, months) {
+  const date = new Date(now)
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth() - (months - 1), 1)
+}
+
+const daysIn = (month) => {
+  const [year, number] = month.split("-").map(Number)
+  return new Date(Date.UTC(year, number, 0)).getUTCDate()
+}
+
+const round = (kwh) => Math.round(kwh * 1000) / 1000
+
+const DAY = 86_400_000
+
+// The date of a time (ms) in a time zone, as a number of days from 1970.
+export function dayOf(time, timeZone) {
+  const parts = new Intl.DateTimeFormat("en-US", {timeZone, year: "numeric", month: "2-digit", day: "2-digit"})
+    .formatToParts(new Date(time))
+  const part = (type) => Number(parts.find((one) => one.type === type).value)
+  return Date.UTC(part("year"), part("month") - 1, part("day")) / DAY
+}
+
+// The months of the meter, as a meter file gives them (DIY.Usage). Each
+// month is in the time zone of Home Assistant. It has the kWh from the
+// grid, the kWh to the grid, and the days with data. The rows are the
+// days of the statistics ("change": the kWh since the row before). A row
+// with no change does not count. After a stop of Home Assistant, a row
+// can come after a gap of days. Its change is for all these days, so the
+// hook divides it between them. A day can have a change under zero (a
+// small dip of the sensor). The month adds its days. A month under zero
+// counts as zero. Home Assistant finds a new meter itself. The last
+// METER_MONTHS months only: west of UTC, the statistics start one day
+// earlier, in the month before.
+export function meterMonths(stats, from, to, timeZone) {
+  const months = new Map()
+  const add = (ids, key) => {
+    for (const id of ids) {
+      const rows = (stats?.[id] ?? [])
+        .filter((row) => typeof row.change === "number" && typeof row.start === "number")
+        .map((row) => ({day: dayOf(row.start, timeZone), change: row.change}))
+        .sort((a, b) => a.day - b.day)
+      let before = null
+      for (const {day, change} of rows) {
+        const span = before === null ? 1 : Math.max(1, day - before)
+        for (let back = 0; back < span; back++) {
+          const name = new Date((day - back) * DAY).toISOString().slice(0, 7)
+          if (!months.has(name)) months.set(name, {month: name, kwh: 0, export: 0, days: new Set()})
+          const month = months.get(name)
+          month[key] += change / span
+          month.days.add(day - back)
+        }
+        before = day
+      }
+    }
+  }
+  add(from, "kwh")
+  add(to, "export")
+  return [...months.values()]
+    .sort((a, b) => (a.month < b.month ? -1 : 1))
+    .slice(-METER_MONTHS)
+    .map((month) => ({
+      month: month.month,
+      kwh: round(Math.max(month.kwh, 0)),
+      export: round(Math.max(month.export, 0)),
+      days: Math.min(month.days.size, daysIn(month.month)),
+    }))
+}
+
+// The energy of each device: the kWh of each month of its sensor. The
+// registry of the entities gives the device of each sensor. A sensor of
+// no device (for example, a statistic of an integration) does not count,
+// and a sensor with no data neither. A month under zero counts as zero.
+// The first month of a sensor does not count: a new sensor has only a
+// part of it. The hook reads one month more for this. The month of now
+// (current) counts: the page shows it as a part of a month. The last
+// DEVICE_MONTHS months only.
+export function deviceEnergy(devices, stats, entities, timeZone, current) {
+  const deviceOf = new Map(entities.map((entity) => [entity.entity_id, entity.device_id ?? null]))
+  return devices
+    .map(({statistic, name}) => {
+      const months = new Map()
+      for (const row of stats?.[statistic] ?? []) {
+        if (typeof row.change !== "number" || typeof row.start !== "number") continue
+        const month = monthOf(row.start, timeZone)
+        months.set(month, (months.get(month) ?? 0) + row.change)
+      }
+      const sorted = [...months].sort(([a], [b]) => (a < b ? -1 : 1))
+      const full = sorted.length > 0 && sorted[0][0] !== current ? sorted.slice(1) : sorted
+      return {
+        device: deviceOf.get(statistic) ?? null,
+        statistic,
+        name,
+        months: full.slice(-DEVICE_MONTHS).map(([month, kwh]) => ({month, kwh: round(Math.max(kwh, 0))})),
+      }
+    })
+    .filter((device) => device.device !== null && device.months.length > 0)
 }
 
 // The parts of the browser for the hook of a page.

@@ -1,13 +1,15 @@
 defmodule DIY.Usage do
   @moduledoc """
-  The real usage of a house, from the file of its smart meter. The browser
-  reads the file (`assets/js/usage.js`), and sends only the sums of each
+  The real usage of a house, from its smart meter: from a file of the
+  meter, or from Home Assistant. The browser reads the file
+  (`assets/js/usage.js`) or Home Assistant, and sends only the sums of each
   month. The usage stays in the build, on the device.
 
   A usage is a map:
 
-  - `source`: `"smt"` (Smart Meter Texas), `"green_button"`, or `"csv"`
-    (a different CSV).
+  - `source`: `"smt"` (Smart Meter Texas), `"green_button"`, `"csv"` (a
+    different CSV), or `"home_assistant"` (the meter in the energy
+    settings of Home Assistant, `DIYWeb.HomeAssistant`).
   - `months`: for each month (`"YYYY-MM"`), the kWh from the grid, the kWh
     to the grid (`export`), and the days with data.
 
@@ -17,7 +19,7 @@ defmodule DIY.Usage do
   and of heating.
   """
 
-  @sources ~w(smt green_button csv)
+  @sources ~w(smt green_button csv home_assistant)
   @max_months 24
 
   @type month :: %{month: String.t(), kwh: float(), export: float(), days: pos_integer()}
@@ -27,6 +29,7 @@ defmodule DIY.Usage do
   def source_name("smt"), do: "Smart Meter Texas"
   def source_name("green_button"), do: "Green Button"
   def source_name("csv"), do: "A CSV file"
+  def source_name("home_assistant"), do: "Home Assistant"
 
   @doc """
   Reads a usage from the browser or from a stored build. It accepts only

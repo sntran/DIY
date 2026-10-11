@@ -430,7 +430,7 @@ defmodule DIYWeb.HomeLiveTest do
     assert has_element?(view, "#no-fit", "The weather of the app ends with 2025")
     html = render_patch(view, ~p"/")
     assert html =~ "1 month of real usage"
-    assert html =~ "From your meter: the one month of the file"
+    assert html =~ "From your meter: the one month of your usage"
 
     {:ok, two} =
       DIY.Usage.read(%{
@@ -442,7 +442,7 @@ defmodule DIYWeb.HomeLiveTest do
       })
 
     view = open(conn, ~p"/", Build.set_usage(house(), two))
-    assert settle(view) =~ "From your meter: the mean of the 2 months of the file"
+    assert settle(view) =~ "From your meter: the mean of the 2 months of your usage"
   end
 
   test "the math of the estimate", %{conn: conn} do

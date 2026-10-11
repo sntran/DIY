@@ -29,9 +29,9 @@ The owner decides about each item.
   The goal: the person sets automation rules, and the app shows the use
   of the home with these rules, as in real life. A rule changes the real
   home only when an integration allows it, for example Home Assistant.
-- Later, real energy data comes from Home Assistant first: its energy
-  settings and its statistics. The files of a meter (Green Button, Smart
-  Meter Texas) are the other source.
+- Real energy data comes from Home Assistant first: its energy settings
+  and its statistics. The files of a meter (Green Button, Smart Meter
+  Texas) are the other source. The app reads both now.
 
 ## Open questions
 
