@@ -1822,8 +1822,9 @@ camera and the same look. A tap on the picture opens the plan.
 Many people keep their rooms, their devices and their meters in Home
 Assistant. The app links to it, so that the person does not type them
 again. The parts that are done: the link (the sign-in and the socket),
-and the match of the rooms. The next parts bring in the devices, show
-their state, turn them on and off, and read the use of power.
+the match of the rooms, and the devices as ghosts in their rooms. The
+next parts show the state of the devices, turn them on and off, and read
+the use of power.
 
 ### The sign-in stays on the device
 
@@ -2102,6 +2103,150 @@ The tests:
   Assistant has a floor and three areas: the living room matches, and
   two areas come in as rooms. Home Assistant adds the other rooms, with
   a new floor for floor 2.
+
+### The devices as ghosts
+
+The devices of Home Assistant come into the house as ghosts: pale models
+in their rooms. A tap on a ghost puts its item in the house. The
+prototype "Hub in Hand" showed this way: things in the house, not cards.
+
+1. When the link becomes connected, the LiveView sends
+   `ha:devices_fetch`. The hook reads the devices, their entities and the
+   areas of Home Assistant (`config/device_registry/list`,
+   `config/entity_registry/list` and `config/area_registry/list`). It
+   sends a short list to the LiveView (`ha:devices`, `deviceList` in
+   `assets/js/home_assistant.js`):
+   - A device of a service (for example, the sun or a backup) does not
+     count, and a device that the person disabled neither.
+   - The main entities of a device give its domains: `light`, `fan`,
+     `switch` and so on. The entities of its configuration or of its
+     diagnostics do not count, and the hidden or disabled ones neither. A
+     device with no main entity does not count.
+   - The area of a device is its own area, else the area of its first main
+     entity with an area. A device in no area does not count: it can be
+     no ghost, and no match of the rooms can help it.
+   - A device with no name has the name of its model.
+2. After the first read, the hook watches the three registries
+   (`subscribe_events` for `device_registry_updated`,
+   `entity_registry_updated` and `area_registry_updated`). After a
+   change, it waits 1 second (`REGISTRY_WAIT`) and reads the devices
+   again: one read for many changes. When the socket closes, the watch
+   stops. When Home Assistant refuses the watch, the next read tries
+   again.
+3. The LiveView takes 1000 devices and 500 areas at most, with texts of 255
+   bytes at most (`DIYWeb.HomeAssistant.read_devices/1`). It reads the
+   kind of each device one time. It takes an answer only while the link
+   is connected. After a disconnect, it forgets the devices.
+4. `DIY.HomeAssistant.kind_of/1` gives the kind of the catalog for a
+   device, or none. The words of its name come first, then the words of
+   its model: "Kitchen fridge" is a fridge. Of two words, the last in the
+   name wins: "TV room lights" are lights. When two words end at one
+   place, the longer one wins. For example, a water heater is not a
+   space heater, and a microwave oven is not a range. A word can have an
+   "s" at its end, and two words can be one word ("HeatPump"). With no
+   word, the domains give the kind: a light, a fan or a water heater. A
+   thermostat, a speaker or a plug can be many things: with no word, it
+   gets no kind. The search starts at the last word and looks one time
+   at each word, so a long name costs little.
+5. `DIY.HomeAssistant.ghosts/4` gives the ghosts, and the count of all
+   of them. A ghost is a device with a kind and with no item, in the area
+   of a room. The match of the rooms gives the room of an area: the
+   links, then the names. The kind must go in the room: a pool pump is
+   not a ghost in a living room. A device with no name has the name of
+   its kind. A large Home Assistant can have hundreds of devices: the
+   plan shows 8 ghosts in a room and 60 in the house at most. The next
+   ones come when the person adds them.
+6. Each ghost gets a free place in its room. It is the place that is the
+   farthest from the other items and from the ghosts before it
+   (`DIY.HomeAssistant.spread/3`). So the ghosts and their names do not
+   cover each other. The places are on a grid of about 30 steps on each
+   side, with steps of 12 inches at least. An item that hangs on a wall
+   (a mini split) goes on the back wall. A ceiling fan is on the ceiling:
+   it can be anywhere. A ghost keeps its place while that place is free.
+   So when the person adds one ghost, the other ghosts do not move.
+7. The LiveView keeps the ghosts. It finds them again only when the
+   rooms, the items, the areas, the links or the devices change. The
+   plan with 60 ghosts takes about 100 ms more for each change of the
+   build, as a plan with 60 more items does.
+
+On the plan (`DIYWeb.Cutaway.ghost_view/5`), a ghost is the model of its
+kind, pale and blue, with a dashed edge and no shadow. The edge has a
+contrast of 3:1 at least on each floor: #0b3375 in the light mode and
+#bbdefb in the dark mode. A pill over it has the name of the device. The
+pill shows over the name of a room, and under the pill of a hub. With
+motion, a ghost comes in, and its opacity goes down and up one time. A
+tap on a ghost or on its pill adds the item (`ha_add_device`). The item
+goes to the place of its ghost. A drag on a ghost moves the view, as a
+drag on the floor does. On a hidden layer, the pills of the ghosts and
+of the hubs take no tap, as the rest of the layer.
+
+The list of the rooms has a key for each ghost, for a keyboard and a
+screen reader: "Add Kitchen Lights from Home Assistant (Lights)". Over
+the plan, a status (`#ha-ghosts`) tells how many devices are not in the
+house yet. It tells that a keyboard can use the list of the rooms. When
+the plan does not show all the ghosts, it tells how many it shows. It
+also tells how many devices are in an area with no room, with a link to
+the match of the rooms. The status is on the page before its text, so a
+screen reader reads each new text. When the page cannot read the
+devices, the status tells it:
+
+- "Home Assistant has more than 1,000 devices in its areas: too many
+  for the ghosts."
+- "The app cannot read the devices of Home Assistant now." (no socket,
+  or Home Assistant refused a command)
+
+The item of a device (`DIY.Build.add_device/5`):
+
+- It has the numbers of one device: one bulb, one fan
+  (`DIY.Build.device_params/1`). The lights of a preset are the bulbs of
+  a whole house.
+- It goes to the place of its ghost (`at`). A place out of the limits of
+  the layout is no place: the item goes to a free place.
+- The build keeps the link of the item to the device (`devices`: the id
+  of the device for each item). A device has one item at most. When the
+  item goes away, its link goes too. A new house has no links. In a
+  stored build, only an item in a room of the house keeps a link, and the
+  first item of a device keeps it.
+- Its panel has the part Home Assistant. It tells the device: "This is
+  Kitchen Lights in Home Assistant". When Home Assistant does not have
+  the device now, the part tells it. The house can have a different item
+  of the same kind with no link, for example the TV of the preset. Then
+  the part tells that it can be the same thing. This is not for the
+  lights and the fans: a house has many of them. A hub has its own part
+  for Home Assistant: it does not get this part too.
+
+Two tabs can show the same ghost. The build on the device has a compare
+and set (see "The build on the device", and `specs/Device.tla`). A save
+from an old build gets a conflict, and the tab takes the stored build.
+So two tabs cannot add two items for one device, and the TLA+ models do
+not change.
+
+The tests:
+
+- `test/diy/home_assistant_devices_test.exs`: the kinds of the names,
+  the ghosts, their places, the limits of 8 and 60, and the devices away.
+  A property test checks that each kind is a kind of the catalog. A
+  property test checks each ghost: it is a device with no item, in a room
+  of its area. Its kind can go there. Each device with a kind is a
+  ghost, an item, away, or in a room where its kind cannot go. A
+  property test checks that a place of `spread/3` is in its room and on
+  no box, when the room has a free place.
+- `test/diy/build_devices_test.exs`: the item of a device, its place,
+  the errors, and the links in the text of a build. A property test
+  checks that each device has one item of the house at most.
+- `test/diy_web/live/ghost_live_test.exs`: the ghosts on the plan and in
+  the list, the status, the tap, and the place of the new item. It also
+  checks the panel of the item and of a hub, and the answers that the
+  page cannot read.
+- `test/js/home_assistant.test.js`: the list of the devices, with a
+  property test, the watch of the registries, and the commands.
+  `test/js/plan.test.js`: a tap on a ghost, and a drag on it.
+- The browser test: a fake Home Assistant has two devices in the living
+  room and a fan on the patio. After the match, the walk adds the lights
+  with the keyboard, and the TV with a tap on the plan. It checks the
+  color and the dashes of the edge of a ghost, and that a pill on a
+  hidden layer takes no tap. Axe checks the page with the ghosts, and
+  the panel of the new item.
 
 ## In a car
 

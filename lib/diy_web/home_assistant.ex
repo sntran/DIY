@@ -30,6 +30,18 @@ defmodule DIYWeb.HomeAssistant do
     reads them (`fetch_rooms/1`). It is `%{error: error}` when the hook
     cannot read them (`rooms_message/1`).
   - `:ha_sync`: what the last match did, or `nil`.
+
+  The ghosts of the devices (`DIY.HomeAssistant.ghosts/4`) use the assign
+  `:ha_devices`: the devices and the areas of Home Assistant. It is `nil`
+  before the hook reads them, and `%{error: error}` when the hook cannot
+  read them. The page asks for them when the link becomes connected
+  (`ha:devices_fetch`), and forgets them after a disconnect. Each change
+  sends the message `:ha_devices` to the LiveView, so that it draws the
+  ghosts again.
+
+  The sign-in page uses `on_mount {DIYWeb.HomeAssistant, :sign_in}`: it
+  takes only the states of the sign-in (`none`, `signing_in` and `done`),
+  and no other event.
   """
   use DIYWeb, :html
 
@@ -38,7 +50,8 @@ defmodule DIYWeb.HomeAssistant do
   alias Phoenix.LiveView
 
   # The states of the link on a page of the app, and on the sign-in page
-  # (`DIYWeb.SignInLive`).
+  # (`DIYWeb.SignInLive`). The ghosts of the devices show while the link
+  # is open.
   @states ~w(none signing_in connecting connected offline signed_out)
   @tab_states ~w(none signing_in done)
   @errors ~w(url blocked tab closed cancelled unasked state denied token unreachable storage signed_out)
@@ -58,15 +71,39 @@ defmodule DIYWeb.HomeAssistant do
   @max_areas 500
   @max_adds 50
 
+  # The most devices that the page takes from the hook, and the most
+  # domains of the entities of one device.
+  @max_devices 1000
+  @max_domains 30
+
   @doc false
   def on_mount(:default, _params, _session, socket) do
     socket =
       socket
       |> assign(:ha, %{state: "loading", url: nil, name: nil, version: nil, error: nil})
-      |> assign(ha_rooms: nil, ha_sync: nil)
+      |> assign(ha_rooms: nil, ha_sync: nil, ha_devices: nil)
 
     {:cont, LiveView.attach_hook(socket, :home_assistant, :handle_event, &handle_event/3)}
   end
+
+  def on_mount(:sign_in, _params, _session, socket) do
+    socket =
+      assign(socket, :ha, %{state: "loading", url: nil, name: nil, version: nil, error: nil})
+
+    {:cont, LiveView.attach_hook(socket, :home_assistant, :handle_event, &sign_in_event/3)}
+  end
+
+  @doc false
+  def sign_in_event("ha:status", %{"state" => state} = params, socket) when state in @tab_states,
+    do: {:halt, assign(socket, :ha, read_status(state, params))}
+
+  def sign_in_event(_event, _params, socket), do: {:halt, socket}
+
+  @doc """
+  Asks the hook for the devices and the areas of Home Assistant. The
+  answer is the event `ha:devices`.
+  """
+  def fetch_devices(socket), do: LiveView.push_event(socket, "ha:devices_fetch", %{})
 
   @doc """
   Asks the hook for the floors and the areas of Home Assistant. The answer
@@ -79,12 +116,21 @@ defmodule DIYWeb.HomeAssistant do
   end
 
   @doc false
-  def handle_event("ha:status", %{} = params, socket) do
-    state = params["state"]
-    if state in states(socket), do: status(socket, state, params), else: {:halt, socket}
-  end
+  def handle_event("ha:status", %{"state" => state} = params, socket) when state in @states,
+    do: status(socket, state, params)
 
   def handle_event("ha:status", _params, socket), do: {:halt, socket}
+
+  # The devices count only while the link is connected: an answer that
+  # comes after a disconnect changes nothing.
+  def handle_event("ha:devices", params, %{assigns: %{ha: %{state: "connected"}}} = socket) do
+    case read_devices(params) do
+      nil -> {:halt, socket}
+      devices -> {:halt, devices_changed(socket, devices)}
+    end
+  end
+
+  def handle_event("ha:devices", _params, socket), do: {:halt, socket}
 
   def handle_event("ha:rooms", %{"error" => error}, socket) when error in ~w(offline failed),
     do: {:halt, assign(socket, :ha_rooms, %{error: error})}
@@ -111,21 +157,33 @@ defmodule DIYWeb.HomeAssistant do
 
   def handle_event(_event, _params, socket), do: {:cont, socket}
 
-  # The sign-in page takes only its own states.
-  defp states(%{view: DIYWeb.SignInLive}), do: @tab_states
-  defp states(_socket), do: @states
-
-  defp status(socket, state, params) do
-    ha = %{
+  defp read_status(state, params) do
+    %{
       state: state,
       url: text(params["url"], @max_url),
       name: text(params["name"], @max_text),
       version: text(params["version"], @max_text),
       error: if(params["error"] in @errors, do: params["error"])
     }
+  end
 
+  defp status(socket, state, params) do
     before = socket.assigns.ha.state
-    socket = assign(socket, :ha, ha)
+    socket = assign(socket, :ha, read_status(state, params))
+
+    # The link becomes connected: the page reads the devices. After a
+    # disconnect, it forgets them.
+    socket =
+      cond do
+        state == "connected" and before != "connected" ->
+          fetch_devices(socket)
+
+        state in ~w(none signed_out) and socket.assigns.ha_devices != nil ->
+          devices_changed(socket, nil)
+
+        true ->
+          socket
+      end
 
     # The link comes back while the sheet of the match is open: the sheet
     # reads the areas again. They can be different now.
@@ -135,6 +193,61 @@ defmodule DIYWeb.HomeAssistant do
        do: {:halt, fetch_rooms(socket)},
        else: {:halt, socket}
   end
+
+  defp devices_changed(socket, devices) do
+    send(self(), :ha_devices)
+    assign(socket, :ha_devices, devices)
+  end
+
+  @doc """
+  The devices and the areas of Home Assistant from the hook (`ha:devices`),
+  or `%{error: error}`. A device or an area that the page cannot read does
+  not count, and a second device with the same id neither. Too many
+  devices or areas give `%{error: "too_many"}`. A payload that the page
+  cannot read gives `nil`.
+  """
+  def read_devices(%{"error" => error}) when error in ~w(offline failed), do: %{error: error}
+
+  def read_devices(%{"devices" => devices, "areas" => areas})
+      when is_list(devices) and is_list(areas) do
+    if length(devices) <= @max_devices and length(areas) <= @max_areas do
+      %{
+        devices:
+          devices
+          |> Enum.map(&read_device/1)
+          |> Enum.reject(&is_nil/1)
+          |> Enum.uniq_by(& &1.id),
+        areas: areas |> Enum.map(&read_area/1) |> Enum.reject(&is_nil/1)
+      }
+    else
+      %{error: "too_many"}
+    end
+  end
+
+  def read_devices(_params), do: nil
+
+  defp read_device(%{"id" => id, "name" => name, "area" => area, "domains" => domains} = device)
+       when is_list(domains) and length(domains) <= @max_domains do
+    with id when is_binary(id) <- text(id, @max_id),
+         name when is_binary(name) <- text(name, @max_name),
+         true <- is_nil(area) or is_binary(text(area, @max_id)),
+         true <- Enum.all?(domains, &is_binary(text(&1, 40))) do
+      device = %{
+        id: id,
+        name: name,
+        area: area,
+        domains: domains,
+        model: text(device["model"], @max_name)
+      }
+
+      # The page reads the kind of a device one time.
+      Map.put(device, :kind, HomeAssistant.kind_of(device))
+    else
+      _ -> nil
+    end
+  end
+
+  defp read_device(_device), do: nil
 
   defp text(value, max) when is_binary(value) and byte_size(value) <= max, do: value
   defp text(_value, _max), do: nil

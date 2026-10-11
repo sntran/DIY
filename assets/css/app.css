@@ -566,6 +566,31 @@
    to its item (DIYWeb.Cutaway.hub_label/4). */
 .p-hub-label { cursor: pointer }
 .p-hub-label .p-label { pointer-events: auto }
+/* A ghost of a device of Home Assistant (DIYWeb.Cutaway.ghost_view/5): the
+   model of its kind, pale and blue, with a dashed edge and no shadow. The
+   id of the plan gives the rule more weight than the colors of the items
+   of the house. The edge has a contrast of 3:1 at least on each floor
+   (#0b3375 in the light mode, #bbdefb in the dark mode). Its pill has a
+   dashed edge too. A tap on the ghost or on its pill adds its item. With
+   motion, the ghost comes in, and its opacity goes down and up one time. */
+.p-ghost { cursor: pointer; --p-ghost: #0b3375; --p-ghost-fill: #1e88e5 }
+#plan-svg .p-ghost polygon { fill: color-mix(in oklab, var(--p-ghost-fill) 22%, transparent); stroke: var(--p-ghost);
+  stroke-width: 1.5; stroke-dasharray: 3 2; vector-effect: non-scaling-stroke }
+#plan-svg .p-ghost .p-shadow { display: none }
+.p-ghost-label { cursor: pointer; --p-ghost: #1565c0 }
+.p-ghost-label .p-label { pointer-events: auto; fill: var(--p-ghost) }
+.cutaway-house .p-ghost-label .p-pill { stroke: var(--p-ghost); stroke-dasharray: 4 3 }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme=light]) .p-ghost { --p-ghost: #bbdefb; --p-ghost-fill: #90caf9 }
+  :root:not([data-theme=light]) .p-ghost-label { --p-ghost: #90caf9 }
+}
+[data-theme=dark] .p-ghost { --p-ghost: #bbdefb; --p-ghost-fill: #90caf9 }
+[data-theme=dark] .p-ghost-label { --p-ghost: #90caf9 }
+@media (prefers-reduced-motion: no-preference) {
+  .p-ghost { animation: p-ghost-in 700ms ease-out both, p-ghost-pulse 2.6s ease-in-out 700ms 1 }
+}
+@keyframes p-ghost-in { from { opacity: 0 } to { opacity: 1 } }
+@keyframes p-ghost-pulse { 50% { opacity: 0.6 } }
 /* The tab of a layer (assets/js/plan.js): in the van, the other layers are
    pale. In the house, they hide, and a tap goes through them. The ids of
    the layers come from DIYWeb.Cutaway.view/1 (the house) and
@@ -576,6 +601,14 @@
 .cutaway[data-dim=attic] > #plan-attic, .cutaway[data-dim=roof] > #plan-roof, .cutaway[data-dim=floor] > #plan-floor {
   opacity: 1; pointer-events: auto
 }
+/* The pill of a hub or of a ghost takes a tap: on a hidden layer, it takes
+   none, as the rest of the layer. */
+.cutaway-house[data-dim] > g[data-box] :is(.p-hub-label, .p-ghost-label) .p-label { pointer-events: none }
+.cutaway-house[data-dim=ground] > #plan-ground :is(.p-hub-label, .p-ghost-label) .p-label,
+.cutaway-house[data-dim=f2] > #plan-f2 :is(.p-hub-label, .p-ghost-label) .p-label,
+.cutaway-house[data-dim=f3] > #plan-f3 :is(.p-hub-label, .p-ghost-label) .p-label,
+.cutaway-house[data-dim=attic] > #plan-attic :is(.p-hub-label, .p-ghost-label) .p-label,
+.cutaway-house[data-dim=roof] > #plan-roof :is(.p-hub-label, .p-ghost-label) .p-label { pointer-events: auto }
 .p-handle { r: var(--p-handle, 2px); fill: var(--p-halo); stroke: var(--p-chosen); stroke-width: 2.5; vector-effect: non-scaling-stroke; cursor: move }
 
 /* The stage of an item (DIYWeb.Stage, assets/js/stage.js): the model in

@@ -56,6 +56,10 @@ defmodule DIY.Build do
     id of a plan, or `"example"`), or `nil`. Step 3 uses a different plan.
   - `seq`: the number of the last id.
   - `hints`: the hints that the user closed.
+  - `areas`: the area of Home Assistant of each room of the house (its
+    id), for the rooms with a link (`link_area/3`).
+  - `devices`: the device of Home Assistant of each item (its id), for the
+    items with a link (`add_device/5`). A device has one item at most.
 
   After each change, the plan is whole again (`DIY.Layout.fill/1`). Each
   room of the house has a plan, and each item is in its room.
@@ -91,7 +95,8 @@ defmodule DIY.Build do
             lesson_plan: nil,
             seq: 0,
             hints: [],
-            areas: %{}
+            areas: %{},
+            devices: %{}
 
   @type plan :: %{x: integer(), y: integer(), w: pos_integer(), d: pos_integer()}
   @type room :: %{
@@ -142,7 +147,8 @@ defmodule DIY.Build do
           lesson_plan: String.t() | nil,
           seq: non_neg_integer(),
           hints: [String.t()],
-          areas: %{String.t() => String.t()}
+          areas: %{String.t() => String.t()},
+          devices: %{String.t() => String.t()}
         }
 
   @doc "The version of the format of the build."
@@ -178,7 +184,9 @@ defmodule DIY.Build do
   def change(%__MODULE__{revision: revision} = build, fun) do
     %__MODULE__{} = changed = fun.(build)
     %__MODULE__{} = changed = Layout.fill(changed)
-    %__MODULE__{changed | revision: revision + 1, stamp: new_stamp()}
+    # An item that went away takes its link to a device with it.
+    devices = Map.take(changed.devices, Enum.map(changed.items, & &1.id))
+    %__MODULE__{changed | revision: revision + 1, stamp: new_stamp(), devices: devices}
   end
 
   # 96 random bits: two changes never get the same stamp.
@@ -259,7 +267,7 @@ defmodule DIY.Build do
   @spec put_house(t(), house(), [map()], [map()]) :: t()
   def put_house(build, house, rooms, items) do
     change(build, fn build ->
-      build = %{build | house: house, rooms: [], items: [], areas: %{}}
+      build = %{build | house: house, rooms: [], items: [], areas: %{}, devices: %{}}
 
       {build, ids} =
         Enum.reduce(rooms, {build, %{}}, fn room, {build, ids} ->
@@ -468,15 +476,52 @@ defmodule DIY.Build do
 
   @doc "Adds an item of a type to a room, with the default numbers."
   @spec add_item(t(), String.t(), String.t()) :: {:ok, t(), String.t()} | {:error, atom()}
-  def add_item(build, room_id, type) do
+  def add_item(build, room_id, type), do: add_item(build, room_id, type, %{}, nil, nil)
+
+  defp add_item(build, room_id, type, params, device, at) do
     with {:ok, room} <- room(build, room_id),
          %{} = kind <- Catalog.kind(type) || {:error, :type},
          true <- room.place in kind.places || {:error, :place} do
       {id, build} = next_id(build, "i")
-      item = new_item(id, type, room_id, Catalog.defaults(type))
-      {:ok, change(build, &(%{&1 | items: &1.items ++ [item]} |> van_zones(item))), id}
+      item = %{new_item(id, type, room_id, Map.merge(Catalog.defaults(type), params)) | at: at}
+      devices = if device, do: Map.put(build.devices, id, device), else: build.devices
+
+      {:ok,
+       change(build, &(%{&1 | items: &1.items ++ [item], devices: devices} |> van_zones(item))),
+       id}
     end
   end
+
+  @doc """
+  Adds an item for a device of Home Assistant (the id of the device) to a
+  room of the house, and links them. The item gets the numbers of one
+  device (`device_params/1`): for example one bulb, not the lights of a
+  whole house. A device has one item at most: a device with an item is an
+  error (`:taken`). The item goes to its place in the room (`at`, the
+  place of its ghost), or to a free place (`nil`).
+  """
+  @spec add_device(t(), String.t(), String.t(), String.t(), map() | nil) ::
+          {:ok, t(), String.t()} | {:error, atom()}
+  def add_device(build, room_id, type, device, at \\ nil) do
+    with true <- (is_binary(device) and ha_id?(device)) || {:error, :device},
+         true <- device_item(build, device) == nil || {:error, :taken},
+         {:ok, room} <- room(build, room_id),
+         true <- area_room?(room) || {:error, :room} do
+      add_item(build, room_id, type, device_params(type), device, valid_at(at))
+    end
+  end
+
+  @doc """
+  The numbers of an item for one device of Home Assistant: one bulb, one
+  fan. The other kinds have their default numbers.
+  """
+  def device_params("lights"), do: %{"bulbs" => 1}
+  def device_params("ceiling_fan"), do: %{"count" => 1}
+  def device_params(_type), do: %{}
+
+  @doc "The id of the item of a device of Home Assistant, or `nil`."
+  def device_item(build, device),
+    do: Enum.find_value(build.devices, fn {item, other} -> other == device && item end)
 
   # A camper van gets its zones. Its numbers are the numbers of its model:
   # typical, until the user checks them on the label of the van.
@@ -850,7 +895,8 @@ defmodule DIY.Build do
       "lesson_plan" => build.lesson_plan,
       "seq" => build.seq,
       "hints" => build.hints,
-      "areas" => build.areas
+      "areas" => build.areas,
+      "devices" => build.devices
     })
   end
 
@@ -888,7 +934,8 @@ defmodule DIY.Build do
          {:ok, seq} <- count(map["seq"], :seq),
          seq = last_id(seq, rooms ++ items ++ plans),
          {:ok, hints} <- hints(map["hints"]),
-         {:ok, areas} <- areas(map["areas"], rooms) do
+         {:ok, areas} <- areas(map["areas"], rooms),
+         {:ok, devices} <- devices(map["devices"], items, rooms) do
       {:ok,
        %__MODULE__{
          revision: revision,
@@ -908,7 +955,8 @@ defmodule DIY.Build do
          lesson_plan: lesson_plan,
          seq: seq,
          hints: hints,
-         areas: areas
+         areas: areas,
+         devices: devices
        }
        |> repair_vans()
        |> Layout.fill()}
@@ -1334,6 +1382,13 @@ defmodule DIY.Build do
 
   defp read_at(_at), do: nil
 
+  # A place in a room for a new item, or nil. Layout.fill/1 keeps the item
+  # in its room.
+  defp valid_at(%{x: x, y: y}) when is_integer(x) and is_integer(y),
+    do: if(abs(x) <= Layout.max_at() and abs(y) <= Layout.max_at(), do: %{x: x, y: y})
+
+  defp valid_at(_at), do: nil
+
   defp item_turn(%{"turn" => turn}) when turn in 0..3, do: turn
   defp item_turn(_item), do: 0
 
@@ -1364,7 +1419,7 @@ defmodule DIY.Build do
   defp areas(nil, _rooms), do: {:ok, %{}}
 
   defp areas(areas, rooms) when is_map(areas) do
-    if Enum.all?(areas, fn {_room, area} -> is_binary(area) and area_id?(area) end) do
+    if Enum.all?(areas, fn {_room, area} -> is_binary(area) and ha_id?(area) end) do
       {links, _used} =
         Enum.reduce(rooms, {%{}, MapSet.new()}, fn room, {links, used} ->
           area = areas[room.id]
@@ -1382,8 +1437,34 @@ defmodule DIY.Build do
 
   defp areas(_areas, _rooms), do: {:error, :areas}
 
-  # The id of an area of Home Assistant: a short text.
-  defp area_id?(id), do: id != "" and byte_size(id) <= 255
+  # The id of an area or of a device of Home Assistant: a short text.
+  defp ha_id?(id), do: id != "" and byte_size(id) <= 255
+
+  # The links of the items to the devices of Home Assistant. Only an item
+  # in a room of the house keeps a link. A device has one item at most:
+  # the first item keeps it.
+  defp devices(nil, _items, _rooms), do: {:ok, %{}}
+
+  defp devices(devices, items, rooms) when is_map(devices) do
+    if Enum.all?(devices, fn {_item, device} -> is_binary(device) and ha_id?(device) end) do
+      house = rooms |> Enum.filter(&area_room?/1) |> MapSet.new(& &1.id)
+
+      {links, _used} =
+        Enum.reduce(items, {%{}, MapSet.new()}, fn item, {links, used} ->
+          device = devices[item.id]
+
+          if device && MapSet.member?(house, item.room) && not MapSet.member?(used, device),
+            do: {Map.put(links, item.id, device), MapSet.put(used, device)},
+            else: {links, used}
+        end)
+
+      {:ok, links}
+    else
+      {:error, :devices}
+    end
+  end
+
+  defp devices(_devices, _items, _rooms), do: {:error, :devices}
 
   @doc """
   True for a room that can have an area of Home Assistant. It is a room of
@@ -1400,7 +1481,7 @@ defmodule DIY.Build do
   def link_area(build, room_id, area) do
     with {:ok, room} <- room(build, room_id),
          true <- area_room?(room) || {:error, :room},
-         true <- (is_nil(area) or (is_binary(area) and area_id?(area))) || {:error, :area},
+         true <- (is_nil(area) or (is_binary(area) and ha_id?(area))) || {:error, :area},
          true <- not taken?(build, room_id, area) || {:error, :taken} do
       areas =
         if area, do: Map.put(build.areas, room_id, area), else: Map.delete(build.areas, room_id)

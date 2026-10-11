@@ -52,6 +52,8 @@ defmodule DIYWeb.Cutaway do
     its room). The hook gives the pill the size of the label;
   - the label of a Home Assistant hub (`hub_label/4`): it is a part of its
     item, with `data-item`, `data-in` and `data-at`;
+  - each ghost of a device of Home Assistant (`ghost_view/5`), and its
+    label: `data-ghost` (the id of the device). A tap on it adds its item;
   - each layer: `data-box` (its box in the SVG), for a zoom to the layer.
 
   The math of the points is in `DIYWeb.Geometry` (one unit is a meter) and
@@ -88,12 +90,13 @@ defmodule DIYWeb.Cutaway do
     the front);
   - the names of the rooms (`labels`).
   """
-  def view(build) do
+  def view(build, ghosts \\ []) do
     camera = Camera.house()
     house = build |> Layout.house_box() |> meters()
     gap = gap(camera, house, @full)
     by_layer = build.rooms |> Enum.filter(& &1.plan) |> Enum.group_by(&Layout.layer/1)
     items = Enum.group_by(build.items, & &1.room)
+    ghosts = ghosts |> Enum.with_index(1) |> Enum.group_by(fn {ghost, _i} -> ghost.room end)
     floors = build.house.floors
 
     layers =
@@ -105,7 +108,7 @@ defmodule DIYWeb.Cutaway do
       for {id, name, z} <- layers,
           rooms = Map.get(by_layer, id, []),
           id in ["ground", "f2", "f3"] or rooms != [] do
-        level(%{id: id, name: name, z: z, camera: camera}, rooms, items, house)
+        level(%{id: id, name: name, z: z, camera: camera}, rooms, {items, ghosts}, house)
       end
 
     # The page starts on floor 1 (`data-start`).
@@ -131,7 +134,7 @@ defmodule DIYWeb.Cutaway do
 
   defp meters(%{x: x, y: y, w: w, d: d}), do: %{x: x * @m, y: y * @m, w: w * @m, d: d * @m}
 
-  defp level(%{id: id, camera: camera} = level, rooms, items, house) do
+  defp level(%{id: id, camera: camera} = level, rooms, {items, ghosts}, house) do
     floor_z = fn room -> level.z + floor_height(id, room) end
     {outdoor, indoor} = Enum.split_with(rooms, &(id == "ground" and &1.place == :outdoor))
     low = Enum.map(outdoor, &room_view(&1, floor_z.(&1), camera))
@@ -142,6 +145,11 @@ defmodule DIYWeb.Cutaway do
       for room <- rooms,
           item <- Map.get(items, room.id, []),
           do: item_view(item, room, floor_z.(room), camera)
+
+    ghost_views =
+      for room <- rooms,
+          {ghost, i} <- Map.get(ghosts, room.id, []),
+          do: ghost_view(ghost, i, room, floor_z.(room), camera)
 
     # The furniture of each room: it does not hide the items of the layer.
     decor =
@@ -167,7 +175,7 @@ defmodule DIYWeb.Cutaway do
       low: low,
       slabs: slabs,
       rooms: others,
-      objects: walls ++ decor ++ item_views,
+      objects: walls ++ decor ++ item_views ++ ghost_views,
       labels:
         Enum.map(rooms, &label(&1, floor_z.(&1), camera)) ++
           for(
@@ -175,6 +183,11 @@ defmodule DIYWeb.Cutaway do
             item <- Map.get(items, room.id, []),
             item.type == "home_assistant",
             do: hub_label(item, room, floor_z.(room), camera)
+          ) ++
+          for(
+            room <- rooms,
+            {ghost, i} <- Map.get(ghosts, room.id, []),
+            do: ghost_label(ghost, i, room, floor_z.(room), camera)
           )
     })
   end
@@ -752,6 +765,10 @@ defmodule DIYWeb.Cutaway do
   # The rank of the label of a hub is more than the area of each room. So
   # the hook shows it over the label of a room.
   @hub_rank 100_000_000
+  # The rank of the label of a ghost: more than the area of each room, and
+  # less than the rank of a hub. So the name of a device shows over the
+  # name of a room.
+  @ghost_rank 50_000_000
 
   @doc """
   The label of a Home Assistant hub: a pill over the hub, with the light of
@@ -771,6 +788,48 @@ defmodule DIYWeb.Cutaway do
       text: "Home Assistant",
       rank: @hub_rank,
       item: %{room: room.id, at: "#{round(cx)} #{round(cy)}", planned: item.planned}
+    }
+  end
+
+  @doc """
+  A ghost of a device of Home Assistant (`DIY.HomeAssistant.ghosts/4`).
+  It is the model of its kind at its free place in its room, with the
+  number of the ghost (`i`). It is not an item yet: it has the id of its
+  device, and the name of the device.
+  """
+  def ghost_view(ghost, i, room, z, camera) do
+    item = %{
+      id: "g#{i}",
+      type: ghost.type,
+      room: room.id,
+      at: ghost.at,
+      turn: 0,
+      size: nil,
+      params: Catalog.defaults(ghost.type),
+      planned: false
+    }
+
+    item
+    |> item_view(room, z, camera)
+    |> Map.merge(%{kind: :ghost, name: ghost.name, device: ghost.device})
+  end
+
+  @doc """
+  The label of a ghost: a pill over it with the name of the device. It
+  shows over the name of a room.
+  """
+  def ghost_label(ghost, i, room, z, camera) do
+    {w, d, _h} = Catalog.size(ghost.type)
+    {cx, cy} = {room.plan.x + ghost.at.x + w / 2, room.plan.y + ghost.at.y + d / 2}
+    {sx, sy} = Camera.at(camera, {0, 0}, {cx * @m, cy * @m, z + 0.5})
+
+    %{
+      id: "g#{i}",
+      x: Camera.round1(sx),
+      y: Camera.round1(sy),
+      text: ghost.name,
+      rank: @ghost_rank,
+      ghost: ghost.device
     }
   end
 
@@ -1101,14 +1160,22 @@ defmodule DIYWeb.Cutaway do
           data-at={object.kind == :item && object.at}
           data-of={object.kind == :wall && Map.get(object, :room)}
           data-with={object.kind == :fixture && Map.get(object, :room)}
+          data-ghost={object.kind == :ghost && object.device}
         >
-          <title :if={object.kind == :item}>{object.name}</title>
+          <title :if={object.kind in [:item, :ghost]}>{object.name}</title>
           <polygon :for={{points, class} <- object.polys} points={points} class={class} />
         </g>
         <g
           :for={label <- level.labels}
           :key={label.id}
-          class={label[:item] && ["p-hub-label", label.item.planned && "p-planned"]}
+          class={
+            cond do
+              label[:item] -> ["p-hub-label", label.item.planned && "p-planned"]
+              label[:ghost] -> "p-ghost-label"
+              true -> nil
+            end
+          }
+          data-ghost={label[:ghost]}
           data-item={label[:item] && label.id}
           data-in={label[:item] && label.item.room}
           data-at={label[:item] && label.item.at}
@@ -1126,7 +1193,7 @@ defmodule DIYWeb.Cutaway do
             data-rank={label.rank}
             data-label={label.id}
           >
-            <tspan :if={label[:item]} class="i-ha-light">● </tspan>{label.text}
+            <tspan :if={label[:item]} class="i-ha-light">{"● "}</tspan><tspan :if={label[:ghost]}>{"+ "}</tspan>{label.text}
           </text>
         </g>
       </g>
@@ -1154,6 +1221,7 @@ defmodule DIYWeb.Cutaway do
   # An item can move. A fixed part of a van (a seat, the dash) does not take
   # a tap: the tap goes to the zone under it.
   defp object_class(%{kind: :item, planned: planned}), do: ["p-item", planned && "p-planned"]
+  defp object_class(%{kind: :ghost}), do: "p-ghost"
   defp object_class(%{kind: :fixture}), do: "p-fixture"
   defp object_class(_wall), do: nil
 

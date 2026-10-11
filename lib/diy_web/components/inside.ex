@@ -49,6 +49,22 @@ defmodule DIYWeb.Inside do
   attr :ha_rooms, :map, default: nil, doc: "the floors and the areas of Home Assistant"
   attr :ha_sync, :map, default: nil, doc: "what the last match of the rooms did"
 
+  attr :ha_devices, :map,
+    default: nil,
+    doc: "the devices and the areas of Home Assistant (`DIYWeb.HomeAssistant`)"
+
+  attr :ghosts, :list,
+    default: [],
+    doc: "the ghosts of the devices of Home Assistant (`DIY.HomeAssistant.ghosts/4`)"
+
+  attr :ha_count, :integer,
+    default: 0,
+    doc: "the count of all the ghosts: the plan shows some of them (`DIY.HomeAssistant.ghosts/4`)"
+
+  attr :ha_away, :integer,
+    default: 0,
+    doc: "the count of the devices in an area with no room (`DIY.HomeAssistant.away/3`)"
+
   attr :outage, :string,
     default: nil,
     doc: "the hours of backup (`DIYWeb.PowerPage.outage_text/2`)"
@@ -76,7 +92,11 @@ defmodule DIYWeb.Inside do
         chosen: room,
         levels: Build.levels(assigns.build.house.floors),
         ha_alert:
-          assigns.ha.error in ~w(state denied token unreachable signed_out) and not hub_open
+          assigns.ha.error in ~w(state denied token unreachable signed_out) and not hub_open,
+        devices_error:
+          if(assigns.ha.state == "connected" and match?(%{error: _}, assigns.ha_devices),
+            do: assigns.ha_devices.error
+          )
       )
 
     ~H"""
@@ -103,6 +123,29 @@ defmodule DIYWeb.Inside do
           Drag an item to move it. Tap an item to open it. Tap a room to change it. Pinch or use the buttons to zoom.
         </span>
         <button type="button" phx-click="hint" phx-value-hint="plan" class="btn btn-sm">OK</button>
+      </div>
+
+      <%!-- A screen reader reads a new text in the status: the status is on
+        the page before its text. --%>
+      <div id="ha-ghosts" role="status">
+        <div
+          :if={@ha_count > 0 or @ha_away > 0 or @devices_error != nil}
+          class="rounded-box border border-base-300 bg-base-200 p-3 text-sm space-y-1"
+        >
+          <p :if={@ha_count > 0}>
+            {ghost_text(@ha_count)} Tap a ghost on the plan to put it in the house. With a keyboard, use the list of the rooms.
+            <span :if={@ha_count > length(@ghosts)}>
+              The plan shows {length(@ghosts)} of them now. The next ones come when you add them.
+            </span>
+          </p>
+          <p :if={@ha_away > 0}>
+            {away_text(@ha_away)}
+            <.link patch={~p"/inside?#{[sheet: "ha_rooms"]}"} class="link">
+              Match the rooms with Home Assistant
+            </.link>
+          </p>
+          <p :if={@devices_error}>{devices_message(@devices_error)}</p>
+        </div>
       </div>
 
       <div id="house-plan" phx-hook="Plan" class="space-y-2">
@@ -150,6 +193,7 @@ defmodule DIYWeb.Inside do
           price={@price}
           away={@away}
           chosen={@chosen && @chosen.id}
+          ghosts={@ghosts}
         />
         <p id="plan-status" class="sr-only" aria-live="polite">{@status}</p>
       </div>
@@ -166,6 +210,7 @@ defmodule DIYWeb.Inside do
         said={@item_said}
         outage={@outage}
         ha={@ha}
+        ha_devices={@ha_devices}
       />
       <.add_sheet
         :if={@add && match?({:ok, _}, Build.room(@build, @add))}
@@ -334,6 +379,7 @@ defmodule DIYWeb.Inside do
   attr :price, :map, required: true
   attr :away, :list, default: []
   attr :chosen, :string, default: nil, doc: "the chosen room: it stays when an item opens"
+  attr :ghosts, :list, default: [], doc: "the ghosts of the devices of Home Assistant"
 
   # The rooms and their items, as a list: for a screen reader, and for a
   # keyboard (it shows when it has the focus). The arrow keys move an item
@@ -378,6 +424,17 @@ defmodule DIYWeb.Inside do
                   {Catalog.name(item)}{item_note(item, @estimate, @price, @gas)}
                 </.link>
               </li>
+              <li :for={{ghost, i} <- Enum.with_index(@ghosts, 1)} :if={ghost.room == room.id}>
+                <button
+                  type="button"
+                  id={"ghost-g#{i}"}
+                  phx-click="ha_add_device"
+                  phx-value-id={ghost.device}
+                  class="link text-left"
+                >
+                  Add {ghost.name} from Home Assistant ({Catalog.kind(ghost.type).name})
+                </button>
+              </li>
               <li :for={{item, van} <- @away} :if={item.home == room.id}>
                 <.link patch={~p"/van?#{[id: van.id]}"} id={"away-#{item.id}"} class="link">
                   {Catalog.name(item)}: in the van now
@@ -400,6 +457,70 @@ defmodule DIYWeb.Inside do
       <.link patch={~p"/inside?#{[sheet: "new_room"]}"} class="link">Add a room</.link>
     </section>
     """
+  end
+
+  # The ghosts on the plan, and the devices in an area with no room, in
+  # words.
+  defp ghost_text(1), do: "1 device of Home Assistant is not in the house yet."
+  defp ghost_text(n), do: "#{n} devices of Home Assistant are not in the house yet."
+
+  defp devices_message("too_many"),
+    do: "Home Assistant has more than 1,000 devices in its areas: too many for the ghosts."
+
+  defp devices_message(_error), do: "The app cannot read the devices of Home Assistant now."
+
+  # A name in a sentence: its first letter in lower case, but not in a
+  # word of capitals ("TV").
+  defp lower_first(name) do
+    {first, rest} = String.split_at(name, 1)
+    second = String.slice(rest, 0, 1)
+    if String.downcase(second) == second, do: String.downcase(first) <> rest, else: name
+  end
+
+  defp away_text(1), do: "1 device is in an area of Home Assistant with no room here."
+  defp away_text(n), do: "#{n} devices are in areas of Home Assistant with no room here."
+
+  # The device of Home Assistant of an item. It is `{:known, name}` when the
+  # page has the devices, and `:gone` when Home Assistant does not have it
+  # now. It is `:linked` when the page does not have the devices, and `nil`
+  # with no link.
+  defp device(build, item, ha_devices) do
+    case {build.devices[item.id], ha_devices} do
+      {nil, _devices} ->
+        nil
+
+      {id, %{devices: devices}} ->
+        case Enum.find(devices, &(&1.id == id)) do
+          nil -> :gone
+          device -> {:known, device.name}
+        end
+
+      {_id, _devices} ->
+        :linked
+    end
+  end
+
+  defp device_text({:known, name}), do: "This is #{name} in Home Assistant."
+  defp device_text(:gone), do: "Its device is not in Home Assistant now."
+  defp device_text(:linked), do: "It has a link to a device of Home Assistant."
+
+  # An item of the house with no device, of the same kind as the item of a
+  # device. Only for an appliance, not for the lights or the fans of a
+  # house. It can be the same thing two times.
+  defp twin(build, item) do
+    with id when is_binary(id) <- build.devices[item.id],
+         true <- item.type not in ~w(lights ceiling_fan always_on other),
+         %{} = other <-
+           Enum.find(
+             build.items,
+             &(&1.type == item.type and &1.id != item.id and
+                 not Map.has_key?(build.devices, &1.id))
+           ),
+         {:ok, room} <- Build.room(build, other.room) do
+      %{name: Catalog.name(other), room: room.name, kind: lower_first(Catalog.name(item))}
+    else
+      _ -> nil
+    end
   end
 
   # The usage, the cost and the flags of an item, as a text. The cost of a
@@ -546,6 +667,10 @@ defmodule DIYWeb.Inside do
   attr :ha, :map, required: true
   attr :frames, :map, required: true, doc: "the frames of its kind (`DIYWeb.Stage.frames/2`)"
 
+  attr :ha_devices, :map,
+    default: nil,
+    doc: "the devices of Home Assistant (`DIYWeb.HomeAssistant`), for an item with a device"
+
   attr :van, :map,
     default: nil,
     doc: "on the page Van: the van of the item, or the van itself (`DIYWeb.VanPage`)"
@@ -607,7 +732,9 @@ defmodule DIYWeb.Inside do
         spots: MapSet.new(assigns.frames.spots, & &1.key),
         gas: Prices.gas(assigns.build),
         solar: solar,
-        name: Catalog.name(assigns.item)
+        name: Catalog.name(assigns.item),
+        device: device(assigns.build, assigns.item, assigns.ha_devices),
+        twin: twin(assigns.build, assigns.item)
       )
 
     ~H"""
@@ -730,6 +857,19 @@ defmodule DIYWeb.Inside do
       >
         <h3 id="part-link-title" class="stage-sec-title">Home Assistant</h3>
         <HomeAssistant.card ha={@ha} title={false} form={false} />
+      </section>
+
+      <section
+        :if={@device && @item.type != "home_assistant"}
+        id="part-link"
+        class="stage-sec"
+        aria-labelledby="part-link-title"
+      >
+        <h3 id="part-link-title" class="stage-sec-title">Home Assistant</h3>
+        <p id="ha-device" class="text-sm">{device_text(@device)}</p>
+        <p :if={@twin} id="ha-twin" class="text-sm">
+          The house also has {@twin.name} in {@twin.room}, with no link to Home Assistant. If it is the same {@twin.kind}, remove one of them.
+        </p>
       </section>
 
       <section

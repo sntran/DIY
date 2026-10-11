@@ -25,7 +25,19 @@ const browser = await chromium.launch({ executablePath: process.env.CHROMIUM })
 let faults = 0
 
 // A fake Home Assistant on this computer (test/browser/fake_ha.mjs), with
-// a floor and three areas.
+// a floor, three areas and devices. Two devices are in the living room,
+// and one is on the patio. The sun is a service, not a device of the
+// house.
+const device = (id, name, area_id, entity, extra = {}) => ({
+  device: { id, name, name_by_user: null, area_id, entry_type: null, disabled_by: null, model: null, ...extra },
+  entity: { entity_id: entity, device_id: id, area_id: null, entity_category: null, hidden_by: null, disabled_by: null },
+})
+const devices = [
+  device("lights", "Ceiling Lights", "living_room", "light.ceiling"),
+  device("tv", "Living Room TV", "living_room", "media_player.tv"),
+  device("fan", "Patio fan", "patio", "fan.patio"),
+  device("sun", "Sun", null, "sensor.sun", { entry_type: "service" }),
+]
 const homeAssistant = await fakeHomeAssistant({
   floors: [{ floor_id: "ground", name: "Ground floor", level: 0 }],
   areas: [
@@ -33,6 +45,8 @@ const homeAssistant = await fakeHomeAssistant({
     { area_id: "patio", name: "Patio", floor_id: null },
     { area_id: "guest_suite", name: "Guest Suite", floor_id: null },
   ],
+  devices: devices.map((one) => one.device),
+  entities: devices.map((one) => one.entity),
 })
 
 // axe on the page as it is now.
@@ -582,6 +596,59 @@ async function build(context, name) {
   assert.equal(area("Bedroom 1").floor_id, upstairs.floor_id)
   assert.equal(area("Garage").floor_id, null)
   assert.equal(homeAssistant.registry.areas.length, new Set(homeAssistant.registry.areas.map((one) => one.name)).size)
+
+  // The ghosts of the devices. The ceiling lights and the TV are in the
+  // living room. The fan is on the patio (a room after the match). One
+  // comes in with the keyboard (the list of the rooms). One comes in with
+  // a tap on the plan.
+  await page.goto(`${site}/inside`)
+  await connected(page)
+  await page.waitForSelector("#ha-ghosts:has-text('3 devices of Home Assistant are not in the house yet.')")
+  assert.equal(await page.locator("#plan-svg g.p-ghost").count(), 3)
+  // A ghost is pale and blue, with a dashed edge: not the colors of an
+  // item. Its edge has a contrast of 3:1 at least on the floors.
+  const look = await page.$eval("#plan-svg g.p-ghost polygon:not(.p-shadow)", (polygon) => {
+    const style = getComputedStyle(polygon)
+    return { stroke: style.stroke, dash: style.strokeDasharray }
+  })
+  assert.ok(["rgb(11, 51, 117)", "rgb(187, 222, 251)"].includes(look.stroke), `the edge of a ghost is ${look.stroke}`)
+  assert.equal(look.dash, "3px, 2px")
+  // On a hidden layer, the pill of a ghost takes no tap.
+  const hidden = await page.evaluate(() => {
+    const svg = document.getElementById("plan-svg")
+    const pill = document.querySelector("#plan-ground .p-ghost-label text")
+    const box = pill.getBoundingClientRect()
+    const point = [box.x + box.width / 2, box.y + box.height / 2]
+    const before = document.elementFromPoint(...point)?.closest("[data-ghost]") != null
+    svg.setAttribute("data-dim", "f2")
+    const after = document.elementFromPoint(...point)?.closest("[data-ghost]") != null
+    svg.removeAttribute("data-dim")
+    return { before, after }
+  })
+  assert.deepEqual(hidden, { before: true, after: false })
+  await check(page, `${name} ghosts`)
+  await follow(page, "#plan-list button:has-text('Add Ceiling Lights from Home Assistant')")
+  await page.waitForSelector("#item-stage #ha-device:has-text('This is Ceiling Lights in Home Assistant.')")
+  await page.waitForSelector("#item-stage [data-stage=landed]")
+  await check(page, `${name} ghost item`)
+  await page.click("#item-stage .stage-back")
+  await page.waitForSelector("#item-stage", { state: "detached" })
+  await page.waitForSelector('#plan-svg g.p-ghost[data-ghost="lights"]', { state: "detached" })
+  // The largest face of the ghost of the TV, for a tap.
+  const face = await page.evaluate(() => {
+    const boxes = [...document.querySelectorAll('#plan-svg g.p-ghost[data-ghost="tv"] polygon')]
+      .map((polygon) => polygon.getBoundingClientRect())
+    const box = boxes.reduce((a, b) => (b.width * b.height > a.width * a.height ? b : a))
+    return { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+  })
+  await page.mouse.click(face.x, face.y)
+  // The house has a TV of the preset: the panel tells that it can be the
+  // same TV.
+  await page.waitForSelector("#item-stage #ha-twin")
+  await page.click("#item-stage .stage-back")
+  await page.waitForSelector("#item-stage", { state: "detached" })
+  await page.waitForSelector("#ha-ghosts:has-text('1 device of Home Assistant is not in the house yet.')")
+
   await page.goto(`${site}/inside?item=${hub}`)
   await connected(page)
   await page.waitForSelector("#item-stage #ha-status:has-text('Connected to Fake house')")
@@ -598,6 +665,8 @@ async function build(context, name) {
   assert.equal(homeAssistant.sessions.size, 0)
   await page.click("#item-stage .stage-back")
   await page.waitForSelector("#item-stage", { state: "detached" })
+  // After the disconnect, no ghost.
+  assert.equal(await page.locator("#plan-svg [data-ghost]").count(), 0)
 
   // The sign-in page that no tab of the app opened, for example from a link
   // of a different site. It does not leave the app, and tells the error.
