@@ -329,6 +329,9 @@ function setup({storage = new Map(), chosen = true, width = 400, height = 800, w
   const pillText = add({}, fridgePill)
   // A table of the kitchen (furniture).
   const tableG = add({"data-with": "r1"}, ground)
+  // A ghost of a device of Home Assistant.
+  const ghostG = add({"data-ghost": "dev-1"}, ground)
+  const ghostFace = add({}, ghostG)
   // Floor 2, over floor 1: a bedroom with its wall, and a lamp in it.
   const upper = add({id: "plan-f2", "data-box": "0 -100 150 80"}, svg)
   const bedroom = add({"data-room": "r4", "data-plan": "0 0 100 100", "data-origin": "0 -100"}, upper)
@@ -423,9 +426,23 @@ function setup({storage = new Map(), chosen = true, width = 400, height = 800, w
   return {
     hook, svg, root, kitchen, living, roof, fridge, fridgeG, fridgePill, pillText, kitchenG, empty, selection, outlineEl, handles, labels, pills,
     pushed, pointer, storage, setUnder: (list) => (under = list), win, timers, hint, wallFace, slab,
-    zoomIn, zoomOut, fitButton, focus, focusF2, listItem, listRoom, other, tableG, bedroom, upper,
+    zoomIn, zoomOut, fitButton, focus, focusF2, listItem, listRoom, other, tableG, bedroom, upper, ghostFace,
   }
 }
+
+test("a tap on a ghost adds its item, and a drag on it moves the view", () => {
+  const {pointer, pushed, ghostFace, hook} = setup({chosen: false})
+  pointer("pointerdown", 1, 50, 50, ghostFace)
+  pointer("pointerup", 1, 50, 50)
+  assert.deepEqual(pushed, [["ha_add_device", {id: "dev-1"}]])
+  // A drag on a ghost moves the view, as a drag on the floor does.
+  pointer("pointerdown", 1, 50, 50, ghostFace)
+  pointer("pointermove", 1, 80, 50, ghostFace)
+  assert.equal(hook.drag.kind, "pan")
+  assert.equal(hook.drag.moved, true)
+  pointer("pointerup", 1, 80, 50)
+  assert.equal(pushed.length, 1)
+})
 
 test("the view: the box of the house, or the view that the person had", () => {
   const first = setup()

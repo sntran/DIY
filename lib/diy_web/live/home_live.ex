@@ -80,6 +80,7 @@ defmodule DIYWeb.HomeLive do
      |> assign(:van_view, nil)
      |> assign(:shown_van, nil)
      |> assign(:cutaway, nil)
+     |> assign(ghosts: [], ha_away: 0)
      |> assign(:outside, nil)
      |> assign(:room, nil)
      |> assign(:sheet, nil)
@@ -221,6 +222,18 @@ defmodule DIYWeb.HomeLive do
 
       {:error, _reason} ->
         {:noreply, socket}
+    end
+  end
+
+  # A tap on a ghost of a device of Home Assistant. Its item comes into the
+  # house, with a link to the device, and its panel opens.
+  def handle_event("ha_add_device", %{"id" => device}, socket) do
+    with %{} = ghost <- Enum.find(socket.assigns.ghosts, &(&1.device == device)),
+         {:ok, build, id} <-
+           Build.add_device(socket.assigns.build, ghost.room, ghost.type, ghost.device) do
+      {:noreply, socket |> put(build) |> push_patch(to: item_path(socket, build, id))}
+    else
+      _ -> {:noreply, socket}
     end
   end
 
@@ -1053,14 +1066,36 @@ defmodule DIYWeb.HomeLive do
     |> assign(:van_scene, van && Scene.van_parts(build, van))
     |> assign(:shown_van, van && van.id)
     |> assign(:van_view, if(van_page?, do: VanCutaway.view(build, van)))
-    |> assign(
-      :cutaway,
-      if(socket.assigns.live_action == :inside, do: Cutaway.view(Build.house_view(build)))
+    |> ghosts()
+    |> then(
+      &assign(
+        &1,
+        :cutaway,
+        if(&1.assigns.live_action == :inside,
+          do: Cutaway.view(Build.house_view(build), &1.assigns.ghosts)
+        )
+      )
     )
     |> assign(:outside, if(socket.assigns.live_action == :front, do: Outside.view(build)))
   end
 
   defp pictures(socket), do: socket
+
+  # The ghosts of the devices of Home Assistant on the page Rooms, and the
+  # count of the devices in an area with no room (DIY.HomeAssistant).
+  defp ghosts(
+         %{assigns: %{live_action: :inside, ha_devices: %{devices: devices, areas: areas}}} =
+           socket
+       ) do
+    build = socket.assigns.build
+
+    assign(socket,
+      ghosts: DIY.HomeAssistant.ghosts(build, devices, areas),
+      ha_away: DIY.HomeAssistant.away(build, devices, areas)
+    )
+  end
+
+  defp ghosts(socket), do: assign(socket, ghosts: [], ha_away: 0)
 
   defp load_weather(%{assigns: %{build: %{zip: nil}}} = socket), do: socket
 
@@ -1158,6 +1193,10 @@ defmodule DIYWeb.HomeLive do
         {:noreply, socket}
     end
   end
+
+  # The devices of Home Assistant changed (DIYWeb.HomeAssistant): the page
+  # draws the ghosts again.
+  def handle_info(:ha_devices, socket), do: {:noreply, pictures(socket)}
 
   # A message that the page does not know (or a status of a different
   # item): nothing changes.
@@ -1298,6 +1337,9 @@ defmodule DIYWeb.HomeLive do
               item_frames={@item_frames}
               ha_rooms={@ha_rooms}
               ha_sync={@ha_sync}
+              ha_devices={@ha_devices}
+              ghosts={@ghosts}
+              ha_away={@ha_away}
             />
           <% @live_action == :estimate -> %>
             <DIYWeb.Math.estimate

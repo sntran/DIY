@@ -29,6 +29,9 @@
 //   store still has the same refresh token.
 // - The owner: a refused refresh ends only the socket of its own session.
 //
+// The ghosts of the devices read the devices, the entities and the areas of
+// Home Assistant (devices(), and DIY.HomeAssistant.ghosts/3).
+//
 // The match of the rooms reads the floors and the areas of Home Assistant.
 // It adds the areas of the rooms that the person chose
 // (DIYWeb.HomeAssistant.rooms_sheet, and the TLA+ model specs/RoomSync.tla).
@@ -521,6 +524,26 @@ export class Link {
     }
   }
 
+  // Sends the devices and the areas of Home Assistant to the LiveView
+  // (ha:devices): only the parts that the ghosts need (deviceList). With
+  // no socket, it sends {error: "offline"}. When Home Assistant refuses a
+  // command, it sends {error: "failed"}.
+  async devices() {
+    try {
+      const [devices, entities, areas] = await Promise.all([
+        this.command("config/device_registry/list"),
+        this.command("config/entity_registry/list"),
+        this.command("config/area_registry/list"),
+      ])
+      this.push("ha:devices", {
+        devices: deviceList(devices, entities),
+        areas: areas.map((area) => ({id: area.area_id, name: area.name, floor: area.floor_id ?? null})),
+      })
+    } catch (error) {
+      this.push("ha:devices", {error: error.code === "offline" ? "offline" : "failed"})
+    }
+  }
+
   // Adds an area for each room: [{room, name, level, floor}]. The level is
   // the level of the floor in Home Assistant (null: no floor), and floor is
   // the name of a new floor. It sends the areas of the rooms, and the rooms
@@ -684,6 +707,7 @@ export function homeAssistantHook(deps) {
       this.link = new Link({...deps(), push: (event, payload) => this.pushEvent(event, payload)})
       this.handleEvent("ha:disconnect", () => this.link.disconnect())
       this.handleEvent("ha:rooms_fetch", () => this.link.rooms())
+      this.handleEvent("ha:devices_fetch", () => this.link.devices())
       this.handleEvent("ha:add_areas", ({areas}) => this.link.addAreas(areas))
       this.link.start()
     },
@@ -714,6 +738,35 @@ export function signInHook(deps) {
 // The BroadcastChannel of the sign-in, or null in a browser with none.
 const channelOf = (window) =>
   typeof window.BroadcastChannel === "function" ? new window.BroadcastChannel(CHANNEL) : null
+
+// The devices of Home Assistant for the ghosts: {id, name, area, domains,
+// model}. A device of a service (for example, the sun or a backup), or a
+// device that the person disabled, does not count. The main entities of a
+// device give its domains (light, fan, switch...). The entities of its
+// configuration or of its diagnostics are not main entities, and the
+// hidden or disabled ones neither. A device with no main entity does not
+// count. The area of a device is its own area, else the area of its first
+// main entity with an area.
+export function deviceList(devices, entities) {
+  const main = new Map()
+  for (const entity of entities) {
+    if (entity.entity_category || entity.hidden_by || entity.disabled_by || !entity.device_id) continue
+    if (!main.has(entity.device_id)) main.set(entity.device_id, [])
+    main.get(entity.device_id).push(entity)
+  }
+  return devices
+    .filter((device) => device.entry_type !== "service" && !device.disabled_by && main.has(device.id))
+    .map((device) => {
+      const own = main.get(device.id)
+      return {
+        id: device.id,
+        name: device.name_by_user || device.name || "",
+        area: device.area_id ?? own.find((entity) => entity.area_id)?.area_id ?? null,
+        domains: [...new Set(own.map((entity) => entity.entity_id.split(".")[0]))].sort(),
+        model: device.model ?? null,
+      }
+    })
+}
 
 // The parts of the browser for the hook of a page.
 export function browserParts(window) {

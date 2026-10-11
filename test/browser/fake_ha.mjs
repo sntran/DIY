@@ -1,7 +1,8 @@
 // A fake Home Assistant for the browser test. It has the sign-in page,
 // the tokens, the revoke and the WebSocket API: only the parts that the
 // app uses. The registry of the floors and of the areas refuses a second
-// floor or area with the same name, as Home Assistant does. The sign-in
+// floor or area with the same name, as Home Assistant does. It has the
+// registries of the devices and of their entities. The sign-in
 // page has a link "Log in" that sends the tab back with a code. The token
 // endpoint checks the client, the way back and the PKCE verifier, as Home
 // Assistant does.
@@ -27,8 +28,10 @@ export async function fakeHomeAssistant({
   floors = [],
   areas = [],
   admin = true,
+  devices = [],
+  entities = [],
 } = {}) {
-  const registry = { floors: structuredClone(floors), areas: structuredClone(areas) }
+  const registry = { floors: structuredClone(floors), areas: structuredClone(areas), devices, entities }
   const codes = new Map()
   const sessions = new Map()
   const accesses = new Map()
@@ -119,6 +122,10 @@ export async function fakeHomeAssistant({
         return ok(registry.areas)
       case "auth/current_user":
         return ok({ id: "u1", name: "Owner", is_admin: admin })
+      case "config/device_registry/list":
+        return ok(registry.devices)
+      case "config/entity_registry/list":
+        return ok(registry.entities)
       case "config/floor_registry/create": {
         if (inUse(registry.floors)) return refuse()
         const floor = { floor_id: key(message.name), name: message.name, level: message.level ?? null, aliases: [] }

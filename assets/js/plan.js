@@ -480,6 +480,9 @@ export const planHook = {
     const target = e.target
     const handle = target.closest("[data-handle]")
     const item = target.closest("[data-item]")
+    // A ghost of a device of Home Assistant: a tap adds its item, and a
+    // drag moves the view.
+    const ghost = target.closest("[data-ghost]")
     const room = target.closest("[data-room]") || this.roomOf(target)
     const chosen = this.svg.querySelector("[data-outline]")
     let kind = "pan"
@@ -490,7 +493,7 @@ export const planHook = {
       [kind, el] = ["room", room]
     // A finger on a view of all the house scrolls the page up or down.
     const scroll = kind === "pan" && e.pointerType === "touch" && this.whole()
-    this.drag = {kind, el, room, x: e.clientX, y: e.clientY, last: e.clientY, scroll, view: this.view, moved: false, t: e.timeStamp, v: 0, halted}
+    this.drag = {kind, el, room, ghost, x: e.clientX, y: e.clientY, last: e.clientY, scroll, view: this.view, moved: false, t: e.timeStamp, v: 0, halted}
   },
 
   move(e) {
@@ -663,10 +666,12 @@ export const planHook = {
     return {dx: Math.round(dx) + 0, dy: Math.round(dy) + 0}
   },
 
-  // A tap: an item opens; a room is chosen, and the view zooms in to it;
-  // the empty place clears the choice.
+  // A tap: an item opens, and a ghost adds its item. A tap on a room
+  // chooses it, and the view zooms in to it. A tap on the empty place
+  // clears the choice.
   tap(drag) {
     if (drag.kind === "handle") return
+    if (drag.ghost) return this.pushEvent("ha_add_device", {id: drag.ghost.getAttribute("data-ghost")})
     if (drag.kind === "item") return this.pushEvent("open_item", {id: drag.el.getAttribute("data-item")})
     const id = drag.room ? drag.room.getAttribute("data-room") : ""
     // The view zooms in now. The reply of the server is not a new choice:

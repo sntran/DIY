@@ -566,6 +566,26 @@
    to its item (DIYWeb.Cutaway.hub_label/4). */
 .p-hub-label { cursor: pointer }
 .p-hub-label .p-label { pointer-events: auto }
+/* A ghost of a device of Home Assistant (DIYWeb.Cutaway.ghost_view/5): the
+   model of its kind, pale and blue, with a dashed edge and no shadow. Its
+   pill has a dashed edge too. A tap on the ghost or on its pill adds its
+   item. With motion, the ghost comes in and breathes. */
+.p-ghost { cursor: pointer; --p-ghost: #1e88e5 }
+.p-ghost polygon { fill: color-mix(in oklab, var(--p-ghost) 18%, transparent); stroke: var(--p-ghost);
+  stroke-width: 1; stroke-dasharray: 3 2; vector-effect: non-scaling-stroke }
+.p-ghost .p-shadow { display: none }
+.p-ghost-label { cursor: pointer; --p-ghost: #1565c0 }
+.p-ghost-label .p-label { pointer-events: auto; fill: var(--p-ghost) }
+.cutaway-house .p-ghost-label .p-pill { stroke: var(--p-ghost); stroke-dasharray: 4 3 }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme=light]) .p-ghost, :root:not([data-theme=light]) .p-ghost-label { --p-ghost: #90caf9 }
+}
+[data-theme=dark] .p-ghost, [data-theme=dark] .p-ghost-label { --p-ghost: #90caf9 }
+@media (prefers-reduced-motion: no-preference) {
+  .p-ghost { animation: p-ghost-in 700ms ease-out both, p-ghost-breathe 2.6s ease-in-out 700ms infinite }
+}
+@keyframes p-ghost-in { from { opacity: 0 } to { opacity: 1 } }
+@keyframes p-ghost-breathe { 50% { opacity: 0.6 } }
 /* The tab of a layer (assets/js/plan.js): in the van, the other layers are
    pale. In the house, they hide, and a tap goes through them. The ids of
    the layers come from DIYWeb.Cutaway.view/1 (the house) and

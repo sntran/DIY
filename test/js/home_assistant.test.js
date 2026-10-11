@@ -10,6 +10,7 @@ import {
   DB, STORE, KEY, GENERATION, CHANNEL, PENDING, SIGN_IN, TAB, TAB_CHECK, EARLY, FIRST_WAIT, MAX_WAIT,
   address, blocked, socketUrl, clientOf, signInPage, signInId, randomText, pkce, authorizeUrl,
   open, sessionStore, Link, SignIn, homeAssistantHook, signInHook, browserParts, signInParts, key, CommandError,
+  deviceList,
 } from "../../assets/js/home_assistant.js"
 
 const HA = "http://ha.test:8123"
@@ -960,7 +961,7 @@ test("the hook of LiveView", async () => {
   await settle()
   assert.deepEqual(page.pushes.at(-1), ["hook:ha:status", {state: "none", url: null, name: null, version: null, error: null}])
   // The server sends no address: the key Connect gives it to the hook.
-  assert.deepEqual(Object.keys(handlers).sort(), ["ha:add_areas", "ha:disconnect", "ha:rooms_fetch"])
+  assert.deepEqual(Object.keys(handlers).sort(), ["ha:add_areas", "ha:devices_fetch", "ha:disconnect", "ha:rooms_fetch"])
   page.listened.connect(HA)
   assert.equal(page.opened.length, 1)
   await handlers["ha:disconnect"]()
@@ -1221,8 +1222,11 @@ test("two tabs and their sign-ins in any order: no revoked or old session in the
 // A fake registry of Home Assistant: the floors, the areas and the user.
 // Home Assistant refuses a second floor or area with the same name
 // (invalid_info). fail(message) can give the error of a command.
-function registry({floors = [], areas = [], admin = true, fail = () => null} = {}) {
-  const ha = {floors: structuredClone(floors), areas: structuredClone(areas), admin, fail, answered: new WeakMap()}
+function registry({floors = [], areas = [], admin = true, fail = () => null, devices = [], entities = []} = {}) {
+  const ha = {
+    floors: structuredClone(floors), areas: structuredClone(areas), admin, fail, answered: new WeakMap(),
+    devices: structuredClone(devices), entities: structuredClone(entities),
+  }
   ha.reply = (message) => {
     const error = ha.fail(message, ha)
     if (error) return {success: false, error}
@@ -1233,6 +1237,8 @@ function registry({floors = [], areas = [], admin = true, fail = () => null} = {
       case "config/floor_registry/list": return ok(ha.floors)
       case "config/area_registry/list": return ok(ha.areas)
       case "auth/current_user": return ok({id: "u1", name: "Owner", is_admin: ha.admin})
+      case "config/device_registry/list": return ok(ha.devices)
+      case "config/entity_registry/list": return ok(ha.entities)
       case "config/floor_registry/create": {
         if (taken(ha.floors)) return {success: false, error: inUse()}
         const floor = {floor_id: "floor_" + (ha.floors.length + 1), name: message.name, level: message.level, aliases: []}
@@ -1489,3 +1495,118 @@ test("two tabs add rooms in any order: one area for each name, and each room get
     for (const {link} of tabs) link.stop()
   }), {numRuns: 300})
 })
+
+// A device and an entity of the registries of Home Assistant, with the
+// fields that the hook reads.
+const haDevice = (id, fields = {}) => ({
+  id, name: id, name_by_user: null, area_id: null, entry_type: null, disabled_by: null, model: null, ...fields,
+})
+const haEntity = (entity_id, device_id, fields = {}) => ({
+  entity_id, device_id, area_id: null, entity_category: null, hidden_by: null, disabled_by: null, ...fields,
+})
+
+test("the devices for the ghosts: the main entities give the domains and the area", () => {
+  const devices = [
+    haDevice("lamp", {name: "Lamp", area_id: "living", model: "Bulb 2"}),
+    haDevice("tv", {name: "TV", name_by_user: "Den TV"}),
+    haDevice("sun", {entry_type: "service"}),
+    haDevice("old", {disabled_by: "user"}),
+    haDevice("hub"),
+    haDevice("plug", {name: null}),
+  ]
+  const entities = [
+    haEntity("light.lamp", "lamp"),
+    haEntity("sensor.lamp_power", "lamp"),
+    haEntity("sensor.lamp_signal", "lamp", {entity_category: "diagnostic"}),
+    haEntity("media_player.tv", "tv", {area_id: "den"}),
+    haEntity("sensor.tv_hidden", "tv", {hidden_by: "user", area_id: "attic"}),
+    haEntity("sensor.sun", "sun"),
+    haEntity("light.old", "old"),
+    haEntity("button.hub_restart", "hub", {entity_category: "config"}),
+    haEntity("switch.plug", "plug", {disabled_by: "user"}),
+    haEntity("switch.plug_2", "plug"),
+    haEntity("sun.sun", null),
+  ]
+  assert.deepEqual(deviceList(devices, entities), [
+    {id: "lamp", name: "Lamp", area: "living", domains: ["light", "sensor"], model: "Bulb 2"},
+    {id: "tv", name: "Den TV", area: "den", domains: ["media_player"], model: null},
+    {id: "plug", name: "", area: null, domains: ["switch"], model: null},
+  ])
+})
+
+test("each device of the list is a device of a person, with a main entity", () => {
+  const device = fc.record({
+    id: fc.constantFrom("a", "b", "c", "d"),
+    name: fc.option(fc.string(), {nil: null}),
+    name_by_user: fc.option(fc.string(), {nil: null}),
+    area_id: fc.option(fc.constantFrom("x", "y"), {nil: null}),
+    entry_type: fc.option(fc.constant("service"), {nil: null}),
+    disabled_by: fc.option(fc.constant("user"), {nil: null}),
+    model: fc.option(fc.string(), {nil: undefined}),
+  })
+  const entity = fc.record({
+    entity_id: fc.tuple(fc.constantFrom("light", "switch", "sensor"), fc.nat(9)).map(([d, n]) => `${d}.e${n}`),
+    device_id: fc.option(fc.constantFrom("a", "b", "c", "d"), {nil: null}),
+    area_id: fc.option(fc.constantFrom("x", "z"), {nil: null}),
+    entity_category: fc.option(fc.constantFrom("config", "diagnostic"), {nil: null}),
+    hidden_by: fc.option(fc.constant("user"), {nil: null}),
+    disabled_by: fc.option(fc.constant("user"), {nil: null}),
+  })
+  fc.assert(fc.property(fc.uniqueArray(device, {selector: (d) => d.id}), fc.array(entity), (devices, entities) => {
+    const main = entities.filter((e) => e.device_id && !e.entity_category && !e.hidden_by && !e.disabled_by)
+    const list = deviceList(devices, entities)
+    for (const item of list) {
+      const source = devices.find((d) => d.id === item.id)
+      const own = main.filter((e) => e.device_id === item.id)
+      assert.ok(source.entry_type !== "service" && !source.disabled_by)
+      assert.ok(own.length > 0)
+      assert.deepEqual(item.domains, [...new Set(own.map((e) => e.entity_id.split(".")[0]))].sort())
+      assert.equal(item.area, source.area_id ?? own.find((e) => e.area_id)?.area_id ?? null)
+      assert.equal(typeof item.name, "string")
+    }
+    // Each device of a person with a main entity is in the list.
+    const kept = devices.filter((d) => d.entry_type !== "service" && !d.disabled_by && main.some((e) => e.device_id === d.id))
+    assert.deepEqual(list.map((d) => d.id), kept.map((d) => d.id))
+  }))
+})
+
+test("the hook reads the devices, the entities and the areas of Home Assistant", async () => {
+  const page = parts()
+  const {link, socket} = await connected(page)
+  const ha = registry({
+    areas: [{area_id: "living", name: "Living Room", floor_id: "ground"}, {area_id: "yard", name: "Yard"}],
+    devices: [haDevice("lamp", {name: "Lamp", area_id: "living"}), haDevice("sun", {entry_type: "service"})],
+    entities: [haEntity("light.lamp", "lamp"), haEntity("sensor.sun", "sun")],
+  })
+  const done = link.devices()
+  await serve(ha, [socket])
+  await done
+  assert.deepEqual(socket.sent.slice(2).map((message) => message.type), [
+    "config/device_registry/list", "config/entity_registry/list", "config/area_registry/list",
+  ])
+  assert.deepEqual(page.pushes.at(-1), ["ha:devices", {
+    devices: [{id: "lamp", name: "Lamp", area: "living", domains: ["light"], model: null}],
+    areas: [{id: "living", name: "Living Room", floor: "ground"}, {id: "yard", name: "Yard", floor: null}],
+  }])
+
+  // A command that Home Assistant refuses, and no socket.
+  const failing = registry({fail: (message) => message.type === "config/entity_registry/list" ? {code: "unauthorized"} : null})
+  const again = link.devices()
+  await serve(failing, [socket])
+  await again
+  assert.deepEqual(page.pushes.at(-1), ["ha:devices", {error: "failed"}])
+  link.stop()
+  await link.devices()
+  assert.deepEqual(page.pushes.at(-1), ["ha:devices", {error: "offline"}])
+
+  // The LiveView asks for the devices.
+  const other = parts()
+  const handlers = {}
+  const hook = homeAssistantHook(() => other.deps)
+  const self = {...hook, pushEvent: (event, payload) => other.pushes.push([event, payload]), handleEvent: (event, f) => { handlers[event] = f }}
+  self.mounted()
+  await handlers["ha:devices_fetch"]()
+  assert.deepEqual(other.pushes.at(-1), ["ha:devices", {error: "offline"}])
+  self.destroyed()
+})
+
