@@ -2266,8 +2266,8 @@ off from the panel of its item.
    `switch` and `fan`. A media player or a climate entity does not count:
    its service is not on and off only. One switch turns all these
    entities of a device on or off: for example, the light and the fan of
-   a ceiling fan. The owner chose one switch for each device (October
-   2026).
+   a ceiling fan. This is a decision of the owner (October 2026): one
+   switch for each device.
 2. The hook watches the states of these entities (`subscribe_entities`
    with their ids). Home Assistant sends all their states first (`a`),
    then each change (`c`) and each entity that goes (`r`). A change of
@@ -2392,8 +2392,8 @@ The tests:
 The owner wants the app in a car later: Android Auto and Android
 Automotive OS. For now, the app is a web app only. This is a decision
 of the owner (October 2026): a native app is too much work, and it
-needs the approval of the stores. The parts of the app that a car can show follow
-these rules now, so that a car app can use them.
+needs the approval of the stores. The parts of the app that a car can
+show follow these rules now, so that a car app can use them.
 
 The facts of the platform (developer.android.com, "Use the Android for
 Cars App Library", "Build IoT apps for cars", "Template restrictions",
