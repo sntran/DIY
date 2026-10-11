@@ -2,19 +2,49 @@
 
 The owner decides about each item.
 
-## Open questions of the plan
+## The decisions of the owner (October 2026)
 
-- Van builds before or after the plan lesson?
-- Money: free, donations, or referral fees? Referral fees conflict with
-  honesty rule 4.
-- Keep all user data on the device, or offer an account to sync between
-  devices? Today: on the device (`docs/design.md`).
-- Languages at launch: English only, or also Vietnamese and Spanish? Today:
-  English only, with no Gettext.
-- Step-by-step wiring guides, or explain the idea and link to code and
-  permits only?
-- Web app only, or also app stores?
-- The name of the app. Today: "Small Steps Home", a name that is not final.
+- The order of the phases: the plan lesson came before the van builds.
+- Money: the app is free. A person can buy the owner a coffee, or give
+  money. The app has no referral fees (honesty rule 4).
+- The data of a person stays on the device. A person can make an account
+  that syncs the devices, only when the person asks for it. The device
+  encrypts the build before it goes to the server, so the server cannot
+  read it.
+- Languages: English, Spanish and Vietnamese.
+- Wiring: the person does the wiring. The app checks each connection with
+  the NEC and with the facts of the products. It warns about a wire that
+  is too small or a breaker that is not there. For example, from the 30 A
+  port of a Pecron E3600 to a Lynx Distributor, the app tells 6 AWG wire
+  and a DC breaker. Each warning gives the rule and the numbers. The
+  local inspector decides.
+- The app is a web app. A native app is too much work, and it needs the
+  approval of the stores. The car app (Android Auto) can wait.
+- The name: the owner wants a name from the letters D, I and Y. It has
+  three words, for example "Draw It Yourself" or "Decide It Yourself". A
+  free domain decides the name. Today the name is "Small Steps Home".
+- Home Assistant: one switch for each device. For a ceiling fan with a
+  light, the switch turns both on or off.
+- Controls for most kinds of devices come later. The goal is automations:
+  the person sets rules, and the app shows the use of the home with these
+  rules, as in real life. With Home Assistant, a rule can also change the
+  real home, when the integrations allow it.
+- Real energy data comes from Home Assistant first: its energy settings
+  and its statistics. The files of a meter (Green Button, Smart Meter
+  Texas) are the other source.
+
+## Open questions
+
+- The word "plan" has two meanings (the second play test). It is an item
+  that the person plans to buy, and also a rate plan of a provider.
+- Must the worksheet rank the rate plans ("Am I on a good plan?")? Today
+  it does not (honesty rule 4).
+- A new station or new panels: must they start as an item to buy, so
+  that the person does not tick "it is a plan"?
+- The page Bill: the math of the model, or the parts of a real bill?
+- The link for the donations.
+- A person who speaks Spanish, and a person who speaks Vietnamese, to
+  check the texts.
 
 ## Ideas
 
@@ -104,8 +134,6 @@ other faults are in the next pull requests.
 ## Ideas of the play test
 
 A play test in the role of a neighbor with no skill in power (October
-2026) gave these ideas. The fixes of the other findings are in #16 and
-the next pull requests.
-
-- "Am I on a good plan?" The app does not rank plans (honesty rule 4).
-  The owner decides if the worksheet must rank them.
+2026) gave one idea that needs the owner. It is in "Open questions":
+the rank of the rate plans. The other findings have their fixes in #16
+and the next pull requests.
