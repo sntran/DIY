@@ -1584,7 +1584,10 @@ defmodule DIYWeb.Inside do
   defp feature(:power_view), do: "the view of what feeds what, and the permit notes"
   defp feature(:solar), do: "the power of the sun"
   defp feature(:ev), do: "the cost of the home charge next to gas"
-  defp feature(:usage), do: "your real usage, from the file of the meter"
+
+  defp feature(:usage),
+    do: "your real usage, from the file of the meter or from Home Assistant"
+
   defp feature(:van), do: "the build of the van: its zones, its weight and its power"
   defp feature(:weight), do: "the weight budget of the van"
   defp feature(:van_power), do: "the power budget of the van"
@@ -1599,7 +1602,7 @@ defmodule DIYWeb.Inside do
   defp usage(assigns) do
     ~H"""
     <div id="usage" class="space-y-2 rounded-box bg-base-200 p-3">
-      <h3 class="font-semibold">Your real usage</h3>
+      <h3 id="usage-title" class="font-semibold" tabindex="-1">Your real usage</h3>
       <div :if={@ha_meter} id="ha-meter" class="space-y-2">
         <p class="text-sm">
           Home Assistant has {Format.count(length(@ha_meter.months), "month")} of usage from this meter, from {Format.month(
@@ -1607,11 +1610,11 @@ defmodule DIYWeb.Inside do
           )} to {Format.month(List.last(@ha_meter.months).month)}.
         </p>
         <%!-- The button goes away after the tap: the focus goes to the
-          title of the panel, and the flash tells the result. --%>
+          title of the usage, and the flash tells the result. --%>
         <button
           type="button"
           id="use-ha-meter"
-          phx-click={JS.push("ha_use_meter") |> JS.focus(to: "#item-stage-title")}
+          phx-click={JS.push("ha_use_meter") |> JS.focus(to: "#usage-title")}
           class="stage-btn"
         >
           Use Home Assistant

@@ -1119,25 +1119,46 @@ const daysIn = (month) => {
 
 const round = (kwh) => Math.round(kwh * 1000) / 1000
 
+const DAY = 86_400_000
+
+// The date of a time (ms) in a time zone, as a number of days from 1970.
+export function dayOf(time, timeZone) {
+  const parts = new Intl.DateTimeFormat("en-US", {timeZone, year: "numeric", month: "2-digit", day: "2-digit"})
+    .formatToParts(new Date(time))
+  const part = (type) => Number(parts.find((one) => one.type === type).value)
+  return Date.UTC(part("year"), part("month") - 1, part("day")) / DAY
+}
+
 // The months of the meter, as a meter file gives them (DIY.Usage). Each
 // month is in the time zone of Home Assistant. It has the kWh from the
 // grid, the kWh to the grid, and the days with data. The rows are the
-// days of the statistics ("change": the kWh of the day). A row with no
-// change does not count. A day can have a change under zero (a small dip
-// of the sensor). The month adds its days. A month under zero counts as
-// zero. Home Assistant finds a new meter itself. The last METER_MONTHS
-// months only: west of UTC, the statistics start one month earlier.
+// days of the statistics ("change": the kWh since the row before). A row
+// with no change does not count. After a stop of Home Assistant, a row
+// can come after a gap of days. Its change is for all these days, so the
+// hook divides it between them. A day can have a change under zero (a
+// small dip of the sensor). The month adds its days. A month under zero
+// counts as zero. Home Assistant finds a new meter itself. The last
+// METER_MONTHS months only: west of UTC, the statistics start one day
+// earlier, in the month before.
 export function meterMonths(stats, from, to, timeZone) {
   const months = new Map()
   const add = (ids, key) => {
     for (const id of ids) {
-      for (const row of stats?.[id] ?? []) {
-        if (typeof row.change !== "number" || typeof row.start !== "number") continue
-        const name = monthOf(row.start, timeZone)
-        if (!months.has(name)) months.set(name, {month: name, kwh: 0, export: 0, days: new Set()})
-        const month = months.get(name)
-        month[key] += row.change
-        month.days.add(row.start)
+      const rows = (stats?.[id] ?? [])
+        .filter((row) => typeof row.change === "number" && typeof row.start === "number")
+        .map((row) => ({day: dayOf(row.start, timeZone), change: row.change}))
+        .sort((a, b) => a.day - b.day)
+      let before = null
+      for (const {day, change} of rows) {
+        const span = before === null ? 1 : Math.max(1, day - before)
+        for (let back = 0; back < span; back++) {
+          const name = new Date((day - back) * DAY).toISOString().slice(0, 7)
+          if (!months.has(name)) months.set(name, {month: name, kwh: 0, export: 0, days: new Set()})
+          const month = months.get(name)
+          month[key] += change / span
+          month.days.add(day - back)
+        }
+        before = day
       }
     }
   }

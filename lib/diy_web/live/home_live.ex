@@ -1283,8 +1283,8 @@ defmodule DIYWeb.HomeLive do
   def handle_info(:ha_devices, socket), do: {:noreply, pictures(socket)}
 
   # New energy data of Home Assistant (`new_meter_months/1`). The data can
-  # come before the build of the device, for example after a reconnect:
-  # then the build gets the new months when it comes (`build_changed/1`).
+  # come before the build of the device, for example after a reconnect.
+  # Then the build gets the new months when it comes (`build_changed/1`).
   def handle_info(:ha_energy, %{assigns: %{build: nil}} = socket),
     do: {:noreply, assign(socket, :ha_energy_late, true)}
 

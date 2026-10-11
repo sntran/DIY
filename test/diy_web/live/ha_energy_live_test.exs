@@ -270,9 +270,9 @@ defmodule DIYWeb.HaEnergyLiveTest do
     assert has_element?(view, "#ha-meter", "Home Assistant has 1 month of usage from this meter")
 
     # The button goes away after the tap: the focus goes to the title of
-    # the panel.
-    assert render(view) =~
-             ~r/id="use-ha-meter"[^>]*phx-click="[^"]*focus[^"]*item-stage-title/
+    # the usage.
+    assert has_element?(view, "#usage-title[tabindex='-1']", "Your real usage")
+    assert render(view) =~ ~r/id="use-ha-meter"[^>]*phx-click="[^"]*focus[^"]*usage-title/
 
     # A file of the meter: the build keeps it, and the panel offers Home
     # Assistant. The front does not: it shows the file. A tap uses Home
@@ -331,8 +331,8 @@ defmodule DIYWeb.HaEnergyLiveTest do
 
     # The month that is not over does not count. With only this month, the
     # panel tells it, with no estimate. The month of now is in the time zone
-    # of Home Assistant: on 31 October at 20:00 in Chicago, it is still
-    # October, also when it is November in UTC.
+    # of Home Assistant. At 20:00 on 31 October in Chicago, it is still
+    # October there, and it is November in UTC.
     both = [%{"month" => "2026-01", "kwh" => 41}, %{"month" => "2026-10", "kwh" => 3}]
     energy(view, nil, [%{"device" => "d1", "name" => nil, "months" => both}])
     assert has_element?(view, "#ha-energy", "Home Assistant measured 41 kWh in 1 month")
@@ -346,6 +346,21 @@ defmodule DIYWeb.HaEnergyLiveTest do
 
     energy(view, nil, [%{"device" => "d1", "name" => nil, "months" => tl(both)}], "2026-11")
     assert has_element?(view, "#ha-energy", "Home Assistant measured 3 kWh in 1 month")
+
+    # In the part case, only the month of now counts: a month after it does
+    # not (for example, with a clock that is late). With only a month after
+    # now, the panel tells nothing.
+    later = [%{"month" => "2026-09", "kwh" => 40}, %{"month" => "2026-10", "kwh" => 15}]
+    energy(view, nil, [%{"device" => "d1", "name" => nil, "months" => later}], "2026-09")
+
+    assert has_element?(
+             view,
+             "#ha-energy",
+             "Home Assistant measured 40 kWh in September 2026, a part"
+           )
+
+    energy(view, nil, [%{"device" => "d1", "name" => nil, "months" => tl(later)}], "2026-09")
+    refute has_element?(view, "#ha-energy")
 
     # The last 12 months that are over, of 13.
     year = for m <- 1..12, do: %{"month" => "2025-#{pad(m)}", "kwh" => 10}

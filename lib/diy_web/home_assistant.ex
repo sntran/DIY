@@ -458,13 +458,15 @@ defmodule DIYWeb.HomeAssistant do
   names). So the page can put the estimate of the same months next to it.
   With no month that is over, it is the energy of this month so far
   (`partial`). It also has the first and the last month. The month of now
-  is in the time zone of Home Assistant.
+  is in the time zone of Home Assistant. A month after it does not count.
   """
   def item_energy(%{ha_energy: %{devices: devices, month: current}, build: build}, item_id) do
     with id when is_binary(id) <- build.devices[item_id],
-         %{months: [_ | _] = months} <- devices[id] do
-      {over, now} = Enum.split_with(months, &(&1.month < current))
-      {shown, partial} = if over == [], do: {now, true}, else: {Enum.take(over, -12), false}
+         %{months: months} <- devices[id],
+         over = Enum.filter(months, &(&1.month < current)),
+         now = Enum.filter(months, &(&1.month == current)),
+         [_ | _] = shown <- if(over == [], do: now, else: Enum.take(over, -12)) do
+      partial = over == []
 
       %{
         kwh: shown |> Enum.map(& &1.kwh) |> Enum.sum(),

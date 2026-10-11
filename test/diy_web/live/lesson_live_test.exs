@@ -565,4 +565,18 @@ defmodule DIYWeb.LessonLiveTest do
     view = open(conn, ~p"/plans?step=4", Build.set_usage(build, usage))
     assert has_element?(view, "#worksheet-table th", "–")
   end
+
+  test "the 12 months of the meter of Home Assistant tell no file", %{conn: conn} do
+    months =
+      for m <- 1..12 do
+        name = "2025-#{String.pad_leading("#{m}", 2, "0")}"
+        %{"month" => name, "kwh" => 900, "export" => 0, "days" => Usage.days_in(name)}
+      end
+
+    {:ok, usage} = Usage.read(%{"source" => "home_assistant", "months" => months})
+    view = open(conn, ~p"/plans?step=2", Build.set_usage(Build.set_lesson(house(), 2), usage))
+    html = render(view)
+    assert html =~ "From your meter."
+    refute html =~ "From the file of your meter."
+  end
 end

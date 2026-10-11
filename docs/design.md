@@ -2418,17 +2418,22 @@ browser, so the data stays on the device, as with the file of a meter.
 4. `meterMonths` makes the months of the meter in the time zone of Home
    Assistant (from `get_config`). Each month has the kWh from the grid,
    the kWh to the grid, and the days with data. These are the numbers of
-   the file of a meter (`DIY.Usage`, with the source `home_assistant`). A
-   day can have a change under zero (a small dip of the sensor). The
-   month adds its days. A month under zero counts as zero. Home
-   Assistant finds a new meter itself. West of UTC, the statistics start
-   one month earlier: the hook keeps the last 24 months.
+   the file of a meter (`DIY.Usage`, with the source `home_assistant`).
+   The change of a row is the kWh since the row before. After a stop of
+   Home Assistant, a row can come after a gap of days: the hook divides
+   its change between these days. (Home Assistant fills only the last 10
+   days of a stop.) A day can have a change under zero (a small dip of
+   the sensor). The month adds its days. A month under zero counts as
+   zero. Home Assistant finds a new meter itself. West of UTC, the
+   statistics start one day earlier, in the month before: the hook keeps
+   the last 24 months.
 5. `deviceEnergy` makes the kWh of each month of each device. The
    registry of the entities gives the device of each sensor. A sensor of
    no device (for example, a statistic of an integration) does not count.
    The rows of Home Assistant have no count of days. So the first month
    of a sensor does not count: a new sensor has only a part of it. The
-   month of now counts, as a part of a month.
+   month of now counts, as a part of a month. A month after it does not
+   count.
 6. The hook sends `ha:energy`: `{meter, devices, month}`, or `{error:
    "offline"}` or `{error: "failed"}`. The month is the month of now, in
    the time zone of Home Assistant.
@@ -2446,7 +2451,8 @@ The LiveView (`DIYWeb.HomeAssistant.read_energy/1`):
   time. The data can come before the build of the device, for example
   after a reconnect: then the build gets them when it comes. A build of a
   different tab does not get them: two tabs with different data must not
-  change the build again and again.
+  change the build again and again. A different Home Assistant also
+  gives its meter to a build that uses the meter of Home Assistant.
 - A different build keeps its usage: a file, or no usage. The panel of
   the smart meter offers the meter of Home Assistant. The front of the
   house offers it to a build with no usage, when the house has a smart
@@ -2471,13 +2477,13 @@ device has a compare and set (`specs/Device.tla`).
 
 The tests:
 
-- `test/js/home_assistant.test.js`: the sensors of both forms of the
-  settings, a sensor that is a part of a different sensor, the months in
-  a time zone, and the months of the meter and of each device. It checks
-  a dip of a sensor, a month under zero, the first month of a sensor, and
-  24 months at most. It also checks the commands. A property test checks
-  that the months of the meter keep the sum of each month and the days
-  with data.
+- `test/js/home_assistant.test.js` checks the sensors of both forms of
+  the settings, and a sensor that is a part of a different sensor. It
+  checks the months in a time zone, also at the end of a month, and the
+  months of the meter and of each device. It checks a dip of a sensor, a
+  month under zero, and a stop of Home Assistant. It checks the first
+  month of a sensor, and 24 months at most. It also checks the commands. A property
+  test compares the months of the meter with a model of the rules.
 - `test/diy_web/live/ha_energy_live_test.exs`: the energy data that the
   page reads, with a property test against a model of the rules. It
   checks the offer of the meter, the new months, a file that stays, and a
