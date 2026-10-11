@@ -2141,8 +2141,8 @@ prototype "Hub in Hand" showed this way: things in the house, not cards.
    device, or none. The words of its name come first, then the words of
    its model: "Kitchen fridge" is a fridge. Of two words, the last in the
    name wins: "TV room lights" are lights. When two words end at one
-   place, the longer one wins: a water heater is not a space heater, and
-   a microwave oven is not a range. A word can have an "s" at its end,
+   place, the longer one wins. For example, a water heater is not a
+   space heater, and a microwave oven is not a range. A word can have an "s" at its end,
    and two words can be one word ("HeatPump"). With no word, the domains
    give the kind: a light, a fan or a water heater. A thermostat, a
    speaker or a plug can be many things: with no word, it gets no kind.
@@ -2178,10 +2178,10 @@ of the hubs take no tap, as the rest of the layer.
 The list of the rooms has a key for each ghost, for a keyboard and a
 screen reader: "Add Kitchen Lights from Home Assistant (Lights)". Over
 the plan, a status (`#ha-ghosts`) tells how many devices are not in the
-house yet, and that a keyboard can use the list of the rooms. When the
-plan does not show all the ghosts, it tells how many it shows. It also
-tells how many devices are in an area with no room, with a link to the
-match of the rooms. The status is on the page before its text, so a
+house yet. It tells that a keyboard can use the list of the rooms. When
+the plan does not show all the ghosts, it tells how many it shows. It
+also tells how many devices are in an area with no room, with a link to
+the match of the rooms. The status is on the page before its text, so a
 screen reader reads each new text. When the page cannot read the
 devices, the status tells it:
 
@@ -2230,8 +2230,9 @@ The tests:
   the errors, and the links in the text of a build. A property test
   checks that each device has one item of the house at most.
 - `test/diy_web/live/ghost_live_test.exs`: the ghosts on the plan and in
-  the list, the status, the tap and the place of the new item, the panel
-  of the item and of a hub, and the answers that the page cannot read.
+  the list, the status, the tap, and the place of the new item. It also
+  checks the panel of the item and of a hub, and the answers that the
+  page cannot read.
 - `test/js/home_assistant.test.js`: the list of the devices, with a
   property test, the watch of the registries, and the commands.
   `test/js/plan.test.js`: a tap on a ghost, and a drag on it.

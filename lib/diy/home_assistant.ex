@@ -258,9 +258,10 @@ defmodule DIY.HomeAssistant do
   The ghosts of the devices of Home Assistant on the plan, and the count
   of all the ghosts: `{ghosts, count}`. A ghost is a device with no item,
   in the area of a room of the house (`match/2`). It has a kind that can go
-  in the room. A ghost has its device, the name of the device (else the
-  name of its kind), its room, its kind, and a free place in its room
-  (`at`). The plan shows 8 ghosts in a room and 60 in the house at most.
+  in the room. A ghost has its device, the name of the device, its room,
+  its kind, and a free place in its room (`at`). A device with no name
+  gives the name of its kind. The plan shows 8 ghosts in a room and 60 in
+  the house at most.
 
   A device can have its kind already (`kind`): then the app does not read
   its name again.
