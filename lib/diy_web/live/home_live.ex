@@ -80,7 +80,7 @@ defmodule DIYWeb.HomeLive do
      |> assign(:van_view, nil)
      |> assign(:shown_van, nil)
      |> assign(:cutaway, nil)
-     |> assign(ghosts: [], ha_away: 0)
+     |> assign(ghosts: [], ha_count: 0, ha_away: 0, ghost_key: nil)
      |> assign(:outside, nil)
      |> assign(:room, nil)
      |> assign(:sheet, nil)
@@ -230,7 +230,7 @@ defmodule DIYWeb.HomeLive do
   def handle_event("ha_add_device", %{"id" => device}, socket) do
     with %{} = ghost <- Enum.find(socket.assigns.ghosts, &(&1.device == device)),
          {:ok, build, id} <-
-           Build.add_device(socket.assigns.build, ghost.room, ghost.type, ghost.device) do
+           Build.add_device(socket.assigns.build, ghost.room, ghost.type, ghost.device, ghost.at) do
       {:noreply, socket |> put(build) |> push_patch(to: item_path(socket, build, id))}
     else
       _ -> {:noreply, socket}
@@ -1083,19 +1083,30 @@ defmodule DIYWeb.HomeLive do
 
   # The ghosts of the devices of Home Assistant on the page Rooms, and the
   # count of the devices in an area with no room (DIY.HomeAssistant).
+  # The page computes them again only when the rooms, the items, the links
+  # or the devices change: not for a patch of the page.
   defp ghosts(
-         %{assigns: %{live_action: :inside, ha_devices: %{devices: devices, areas: areas}}} =
+         %{assigns: %{live_action: :inside, ha_devices: %{devices: devices, areas: areas} = ha}} =
            socket
        ) do
     build = socket.assigns.build
+    key = :erlang.phash2({build.rooms, build.items, build.areas, build.devices, ha})
 
-    assign(socket,
-      ghosts: DIY.HomeAssistant.ghosts(build, devices, areas),
-      ha_away: DIY.HomeAssistant.away(build, devices, areas)
-    )
+    if socket.assigns.ghost_key == key do
+      socket
+    else
+      {ghosts, count} = DIY.HomeAssistant.ghosts(build, devices, areas)
+
+      assign(socket,
+        ghosts: ghosts,
+        ha_count: count,
+        ha_away: DIY.HomeAssistant.away(build, devices, areas),
+        ghost_key: key
+      )
+    end
   end
 
-  defp ghosts(socket), do: assign(socket, ghosts: [], ha_away: 0)
+  defp ghosts(socket), do: assign(socket, ghosts: [], ha_count: 0, ha_away: 0, ghost_key: nil)
 
   defp load_weather(%{assigns: %{build: %{zip: nil}}} = socket), do: socket
 
@@ -1339,6 +1350,7 @@ defmodule DIYWeb.HomeLive do
               ha_sync={@ha_sync}
               ha_devices={@ha_devices}
               ghosts={@ghosts}
+              ha_count={@ha_count}
               ha_away={@ha_away}
             />
           <% @live_action == :estimate -> %>

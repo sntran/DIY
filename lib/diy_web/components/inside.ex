@@ -57,6 +57,10 @@ defmodule DIYWeb.Inside do
     default: [],
     doc: "the ghosts of the devices of Home Assistant (`DIY.HomeAssistant.ghosts/3`)"
 
+  attr :ha_count, :integer,
+    default: 0,
+    doc: "the count of all the ghosts: the plan shows some of them (`DIY.HomeAssistant.ghosts/3`)"
+
   attr :ha_away, :integer,
     default: 0,
     doc: "the count of the devices in an area with no room (`DIY.HomeAssistant.away/3`)"
@@ -88,7 +92,11 @@ defmodule DIYWeb.Inside do
         chosen: room,
         levels: Build.levels(assigns.build.house.floors),
         ha_alert:
-          assigns.ha.error in ~w(state denied token unreachable signed_out) and not hub_open
+          assigns.ha.error in ~w(state denied token unreachable signed_out) and not hub_open,
+        devices_error:
+          assigns.ha.state == "connected" &&
+            match?(%{error: _}, assigns.ha_devices) &&
+            assigns.ha_devices.error
       )
 
     ~H"""
@@ -117,21 +125,27 @@ defmodule DIYWeb.Inside do
         <button type="button" phx-click="hint" phx-value-hint="plan" class="btn btn-sm">OK</button>
       </div>
 
-      <div
-        :if={@ghosts != [] or @ha_away > 0}
-        id="ha-ghosts"
-        role="status"
-        class="rounded-box border border-base-300 bg-base-200 p-3 text-sm space-y-1"
-      >
-        <p :if={@ghosts != []}>
-          {ghost_text(length(@ghosts))} Tap a ghost on the plan to put it in the house.
-        </p>
-        <p :if={@ha_away > 0}>
-          {away_text(@ha_away)}
-          <.link patch={~p"/inside?#{[sheet: "ha_rooms"]}"} class="link">
-            Match the rooms with Home Assistant
-          </.link>
-        </p>
+      <%!-- A screen reader reads a new text in the status: the status is on
+        the page before its text. --%>
+      <div id="ha-ghosts" role="status">
+        <div
+          :if={@ha_count > 0 or @ha_away > 0 or @devices_error != nil}
+          class="rounded-box border border-base-300 bg-base-200 p-3 text-sm space-y-1"
+        >
+          <p :if={@ha_count > 0}>
+            {ghost_text(@ha_count)} Tap a ghost on the plan to put it in the house. With a keyboard, use the list of the rooms.
+            <span :if={@ha_count > length(@ghosts)}>
+              The plan shows {length(@ghosts)} of them now. The next ones come when you add them.
+            </span>
+          </p>
+          <p :if={@ha_away > 0}>
+            {away_text(@ha_away)}
+            <.link patch={~p"/inside?#{[sheet: "ha_rooms"]}"} class="link">
+              Match the rooms with Home Assistant
+            </.link>
+          </p>
+          <p :if={@devices_error}>{devices_message(@devices_error)}</p>
+        </div>
       </div>
 
       <div id="house-plan" phx-hook="Plan" class="space-y-2">
@@ -450,6 +464,19 @@ defmodule DIYWeb.Inside do
   defp ghost_text(1), do: "1 device of Home Assistant is not in the house yet."
   defp ghost_text(n), do: "#{n} devices of Home Assistant are not in the house yet."
 
+  defp devices_message("too_many"),
+    do: "Home Assistant has more than 1,000 devices in its areas: too many for the ghosts."
+
+  defp devices_message(_error), do: "The app cannot read the devices of Home Assistant now."
+
+  # A name in a sentence: its first letter in lower case, but not in a
+  # word of capitals ("TV").
+  defp lower_first(name) do
+    {first, rest} = String.split_at(name, 1)
+    second = String.slice(rest, 0, 1)
+    if String.downcase(second) == second, do: String.downcase(first) <> rest, else: name
+  end
+
   defp away_text(1), do: "1 device is in an area of Home Assistant with no room here."
   defp away_text(n), do: "#{n} devices are in areas of Home Assistant with no room here."
 
@@ -490,7 +517,7 @@ defmodule DIYWeb.Inside do
                  not Map.has_key?(build.devices, &1.id))
            ),
          {:ok, room} <- Build.room(build, other.room) do
-      %{name: Catalog.name(other), room: room.name, kind: String.downcase(Catalog.name(item))}
+      %{name: Catalog.name(other), room: room.name, kind: lower_first(Catalog.name(item))}
     else
       _ -> nil
     end
@@ -833,7 +860,7 @@ defmodule DIYWeb.Inside do
       </section>
 
       <section
-        :if={@device}
+        :if={@device && @item.type != "home_assistant"}
         id="part-link"
         class="stage-sec"
         aria-labelledby="part-link-title"

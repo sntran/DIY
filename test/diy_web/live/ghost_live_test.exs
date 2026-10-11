@@ -67,7 +67,10 @@ defmodule DIYWeb.GhostLiveTest do
     view = page(conn, ~p"/inside")
     connected(view)
     assert_push_event(view, "ha:devices_fetch", %{})
-    refute has_element?(view, "#ha-ghosts")
+    # The status is on the page before its text: a screen reader reads the
+    # text when it comes.
+    assert has_element?(view, "#ha-ghosts[role=status]")
+    refute has_element?(view, "#ha-ghosts p")
 
     devices(view)
 
@@ -85,6 +88,9 @@ defmodule DIYWeb.GhostLiveTest do
              "#ha-ghosts[role=status]",
              "2 devices of Home Assistant are not in the house yet."
            )
+
+    assert has_element?(view, "#ha-ghosts", "With a keyboard, use the list of the rooms.")
+    refute has_element?(view, "#ha-ghosts", "The plan shows")
 
     assert has_element?(
              view,
@@ -120,7 +126,7 @@ defmodule DIYWeb.GhostLiveTest do
     assert_push_event(view, "ha:devices_fetch", %{})
     render_hook(view, "ha:status", %{"state" => "none"})
     refute has_element?(view, "#plan-svg [data-ghost]")
-    refute has_element?(view, "#ha-ghosts")
+    refute has_element?(view, "#ha-ghosts p")
     # A late answer after the disconnect changes nothing.
     devices(view)
     refute has_element?(view, "#plan-svg [data-ghost]")
@@ -137,12 +143,17 @@ defmodule DIYWeb.GhostLiveTest do
     render_hook(view, "ha_add_device", %{"id" => "nothing"})
     assert length(build_of(view).items) == before
 
+    # The item comes at the place of its ghost. The other ghost stays at its
+    # place.
+    [lights, tv] = :sys.get_state(view.pid).socket.assigns.ghosts
     view |> element("#ghost-g1") |> render_click()
     build = build_of(view)
     assert length(build.items) == before + 1
     id = Build.device_item(build, "d1")
     {:ok, item} = Build.item(build, id)
     assert {item.type, item.params["bulbs"]} == {"lights", 1}
+    assert item.at == lights.at
+    assert :sys.get_state(view.pid).socket.assigns.ghosts == [tv]
     assert_patch(view, ~p"/inside?#{[item: id]}")
 
     # The panel of the item tells its device. The ghost is gone.
@@ -164,7 +175,7 @@ defmodule DIYWeb.GhostLiveTest do
     assert has_element?(
              view,
              "#ha-twin",
-             "The house also has TV in Living room, with no link to Home Assistant. If it is the same tv, remove one of them."
+             "The house also has TV in Living room, with no link to Home Assistant. If it is the same TV, remove one of them."
            )
 
     # No ghost now. The porch light is still in an area with no room.
@@ -234,9 +245,10 @@ defmodule DIYWeb.GhostLiveTest do
       })
 
     # The first device with an id counts. A model that is too long is nil.
+    # The page reads the kind of each device one time.
     assert devices == [
-             %{id: "d1", name: "Lamp", area: nil, domains: ["light"], model: nil},
-             %{id: "d2", name: "Lamp", area: nil, domains: ["light"], model: nil}
+             %{id: "d1", name: "Lamp", area: nil, domains: ["light"], model: nil, kind: "lights"},
+             %{id: "d2", name: "Lamp", area: nil, domains: ["light"], model: nil, kind: "lights"}
            ]
 
     assert areas == [%{id: "a", name: "A", floor: nil}]
@@ -250,6 +262,19 @@ defmodule DIYWeb.GhostLiveTest do
     assert has_element?(view, "#plan-svg [data-ghost=d1]")
     render_hook(view, "ha:devices", %{"error" => "offline"})
     refute has_element?(view, "#plan-svg [data-ghost]")
+
+    assert has_element?(
+             view,
+             "#ha-ghosts",
+             "The app cannot read the devices of Home Assistant now."
+           )
+
+    render_hook(view, "ha:devices", %{
+      "devices" => List.duplicate(hd(@devices), 1001),
+      "areas" => @areas
+    })
+
+    assert has_element?(view, "#ha-ghosts", "more than 1,000 devices")
 
     # The sign-in page takes no devices.
     {:ok, tab, _html} = live(conn, ~p"/ha/sign-in")
@@ -268,5 +293,43 @@ defmodule DIYWeb.GhostLiveTest do
     assert has_element?(view, "#plan-svg [data-ghost=d1]")
     render_patch(view, ~p"/estimate")
     refute has_element?(view, "#ha-ghosts")
+  end
+
+  test "the plan shows some of many ghosts, and a hub with a link has one part of Home Assistant",
+       %{conn: conn} do
+    view = page(conn, ~p"/inside")
+    connected(view)
+
+    lamps =
+      for i <- 1..10,
+          do: %{
+            "id" => "k#{i}",
+            "name" => "Lamp #{i}",
+            "area" => "kitchen",
+            "domains" => ["light"]
+          }
+
+    devices(view, lamps)
+
+    assert has_element?(
+             view,
+             "#ha-ghosts",
+             "10 devices of Home Assistant are not in the house yet."
+           )
+
+    assert has_element?(view, "#ha-ghosts", "The plan shows 8 of them now.")
+    assert view |> render() |> String.split("class=\"p-ghost\"") |> length() == 9
+
+    # A stored build can link a hub to a device: its panel has one part
+    # Home Assistant, the card of the link.
+    build = build()
+    living = Enum.find(build.rooms, &(&1.name == "Living room"))
+    {:ok, build, hub} = Build.add_item(build, living.id, "home_assistant")
+    build = %{build | devices: %{hub => "d9"}}
+    view = page(conn, ~p"/inside?#{[item: hub]}", build)
+    assert view |> render() |> String.split("id=\"part-link\"") |> length() == 2
+    assert has_element?(view, "#part-link #home-assistant-card")
+    # The pill of the hub on the plan has a space after its light.
+    assert render(view) =~ ~r{<tspan class="i-ha-light">● </tspan>Home Assistant}
   end
 end

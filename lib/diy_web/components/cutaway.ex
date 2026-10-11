@@ -1193,7 +1193,7 @@ defmodule DIYWeb.Cutaway do
             data-rank={label.rank}
             data-label={label.id}
           >
-            <tspan :if={label[:item]} class="i-ha-light">●</tspan><tspan :if={label[:ghost]}>+ </tspan>{label.text}
+            <tspan :if={label[:item]} class="i-ha-light">{"● "}</tspan><tspan :if={label[:ghost]}>{"+ "}</tspan>{label.text}
           </text>
         </g>
       </g>

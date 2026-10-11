@@ -605,6 +605,27 @@ async function build(context, name) {
   await connected(page)
   await page.waitForSelector("#ha-ghosts:has-text('3 devices of Home Assistant are not in the house yet.')")
   assert.equal(await page.locator("#plan-svg g.p-ghost").count(), 3)
+  // A ghost is pale and blue, with a dashed edge: not the colors of an
+  // item. Its edge has a contrast of 3:1 at least on the floors.
+  const look = await page.$eval("#plan-svg g.p-ghost polygon:not(.p-shadow)", (polygon) => {
+    const style = getComputedStyle(polygon)
+    return { stroke: style.stroke, dash: style.strokeDasharray }
+  })
+  assert.ok(["rgb(13, 71, 161)", "rgb(187, 222, 251)"].includes(look.stroke), `the edge of a ghost is ${look.stroke}`)
+  assert.equal(look.dash, "3px, 2px")
+  // On a hidden layer, the pill of a ghost takes no tap.
+  const hidden = await page.evaluate(() => {
+    const svg = document.getElementById("plan-svg")
+    const pill = document.querySelector("#plan-ground .p-ghost-label text")
+    const box = pill.getBoundingClientRect()
+    const point = [box.x + box.width / 2, box.y + box.height / 2]
+    const before = document.elementFromPoint(...point)?.closest("[data-ghost]") != null
+    svg.setAttribute("data-dim", "f2")
+    const after = document.elementFromPoint(...point)?.closest("[data-ghost]") != null
+    svg.removeAttribute("data-dim")
+    return { before, after }
+  })
+  assert.deepEqual(hidden, { before: true, after: false })
   await check(page, `${name} ghosts`)
   await follow(page, "#plan-list button:has-text('Add Ceiling Lights from Home Assistant')")
   await page.waitForSelector("#item-stage #ha-device:has-text('This is Ceiling Lights in Home Assistant.')")

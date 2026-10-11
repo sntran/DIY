@@ -232,7 +232,16 @@ defmodule DIYWeb.HomeAssistant do
          name when is_binary(name) <- text(name, @max_name),
          true <- is_nil(area) or is_binary(text(area, @max_id)),
          true <- Enum.all?(domains, &is_binary(text(&1, 40))) do
-      %{id: id, name: name, area: area, domains: domains, model: text(device["model"], @max_name)}
+      device = %{
+        id: id,
+        name: name,
+        area: area,
+        domains: domains,
+        model: text(device["model"], @max_name)
+      }
+
+      # The page reads the kind of a device one time.
+      Map.put(device, :kind, HomeAssistant.kind_of(device))
     else
       _ -> nil
     end

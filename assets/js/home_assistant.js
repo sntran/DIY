@@ -55,6 +55,9 @@ export const TAB_CHECK = 1_000
 // A socket that signs in gets a new access token when the old one ends in
 // 60 seconds or less.
 export const EARLY = 60_000
+// The wait after a change of a registry of Home Assistant before the hook
+// reads the devices again: one read for many changes.
+export const REGISTRY_WAIT = 1_000
 // The first and the longest wait before the hook opens the socket again.
 export const FIRST_WAIT = 1_000
 export const MAX_WAIT = 60_000
@@ -241,6 +244,9 @@ export class Link {
     this.tab = null
     this.watcher = null
     this.commands = new Map()
+    this.events = new Map()
+    this.watching = false
+    this.reread = null
     this.next = CONFIG + 1
     this.wait = FIRST_WAIT
     this.invalids = 0
@@ -373,10 +379,15 @@ export class Link {
     socket?.close()
   }
 
-  // The socket is gone: the commands on it get no answer.
+  // The socket is gone: the commands on it get no answer, and its
+  // subscriptions end.
   drop() {
     for (const {reject} of this.commands.values()) reject(offline())
     this.commands.clear()
+    this.events.clear()
+    this.watching = false
+    if (this.reread) this.clearTimer(this.reread)
+    this.reread = null
     this.next = CONFIG + 1
   }
 
@@ -389,8 +400,21 @@ export class Link {
     return new Promise((resolve, reject) => this.commands.set(id, {resolve, reject}))
   }
 
+  // Starts a subscription on the socket: onEvent gets each of its events.
+  // It gives the result of the command.
+  subscribe(type, fields, onEvent) {
+    const id = this.next
+    const done = this.command(type, fields)
+    this.events.set(id, onEvent)
+    return done.catch((error) => {
+      this.events.delete(id)
+      throw error
+    })
+  }
+
   async message(socket, epoch, message) {
     if (socket !== this.socket) return
+    if (message.type === "event") return this.events.get(message.id)?.(message.event)
     if (message.type === "auth_required") {
       const access = await this.access(epoch)
       if (access && socket === this.socket) socket.send(JSON.stringify({type: "auth", access_token: access}))
@@ -528,6 +552,9 @@ export class Link {
   // (ha:devices): only the parts that the ghosts need (deviceList). With
   // no socket, it sends {error: "offline"}. When Home Assistant refuses a
   // command, it sends {error: "failed"}.
+  // The first read also starts to watch the registries of the devices, of
+  // the entities and of the areas. After a change, the hook reads the
+  // devices again (REGISTRY_WAIT).
   async devices() {
     try {
       const [devices, entities, areas] = await Promise.all([
@@ -539,8 +566,29 @@ export class Link {
         devices: deviceList(devices, entities),
         areas: areas.map((area) => ({id: area.area_id, name: area.name, floor: area.floor_id ?? null})),
       })
+      this.watchRegistries()
     } catch (error) {
       this.push("ha:devices", {error: error.code === "offline" ? "offline" : "failed"})
+    }
+  }
+
+  // A watch that Home Assistant refuses (or a socket that closes) is not
+  // a watch: the next read tries again.
+  async watchRegistries() {
+    if (this.watching) return
+    this.watching = true
+    const changed = () => {
+      if (this.reread) return
+      this.reread = this.setTimer(() => {
+        this.reread = null
+        this.devices()
+      }, REGISTRY_WAIT)
+    }
+    try {
+      await Promise.all(["device_registry_updated", "entity_registry_updated", "area_registry_updated"]
+        .map((event) => this.subscribe("subscribe_events", {event_type: event}, changed)))
+    } catch {
+      this.watching = false
     }
   }
 
@@ -746,7 +794,8 @@ const channelOf = (window) =>
 // configuration or of its diagnostics are not main entities, and the
 // hidden or disabled ones neither. A device with no main entity does not
 // count. The area of a device is its own area, else the area of its first
-// main entity with an area.
+// main entity with an area. A device in no area does not count: it can be
+// no ghost. With no name, a device has the name of its model.
 export function deviceList(devices, entities) {
   const main = new Map()
   for (const entity of entities) {
@@ -760,12 +809,13 @@ export function deviceList(devices, entities) {
       const own = main.get(device.id)
       return {
         id: device.id,
-        name: device.name_by_user || device.name || "",
+        name: device.name_by_user || device.name || device.model || "",
         area: device.area_id ?? own.find((entity) => entity.area_id)?.area_id ?? null,
         domains: [...new Set(own.map((entity) => entity.entity_id.split(".")[0]))].sort(),
         model: device.model ?? null,
       }
     })
+    .filter((device) => device.area !== null)
 }
 
 // The parts of the browser for the hook of a page.

@@ -37,6 +37,12 @@ defmodule DIY.HomeAssistantDevicesTest do
     assert kind("CPAP") == "cpap"
     assert kind("EV Charger") == "ev"
     assert kind("Pool pump") == "pool_pump"
+    # Two words that make one appliance.
+    assert kind("Microwave Oven") == "microwave"
+    assert kind("Dish washer") == "dishwasher"
+    assert kind("Washer Dryer") == "dryer"
+    assert kind("Fridge Freezer") == "fridge"
+    assert kind("TV backlight") == "lights"
     # The last word wins, and of two words that end at one place, the
     # longer one: a water heater is not a space heater.
     assert kind("TV Room Lights") == "lights"
@@ -103,7 +109,7 @@ defmodule DIY.HomeAssistantDevicesTest do
       device("d7", "Kitchen TV", "cook", ["media_player"])
     ]
 
-    ghosts = HomeAssistant.ghosts(build, devices, areas)
+    {ghosts, 3} = HomeAssistant.ghosts(build, devices, areas)
 
     # Only the devices with a kind, in the area of a room, where the kind
     # can go. A pool pump is outside, not in the living room.
@@ -141,9 +147,42 @@ defmodule DIY.HomeAssistantDevicesTest do
 
     # A device with an item is not a ghost.
     {:ok, build, _id} = Build.add_device(build, kitchen.id, "lights", "d1")
-    assert Enum.map(HomeAssistant.ghosts(build, devices, areas), & &1.device) == ["d2", "d7"]
+    {ghosts, 2} = HomeAssistant.ghosts(build, devices, areas)
+    assert Enum.map(ghosts, & &1.device) == ["d2", "d7"]
     {:ok, build, _id} = Build.add_device(build, kitchen.id, "lights", "d4")
     assert HomeAssistant.away(build, devices, areas) == 0
+  end
+
+  test "the plan shows 8 ghosts in a room and 60 in the house, and a device with no name has the name of its kind" do
+    build = preset()
+    rooms = HomeAssistant.rooms(build)
+    areas = for room <- rooms, do: %{id: "a-#{room.id}", name: room.name, floor: nil}
+    kitchen = room_named(build, "Kitchen")
+
+    lamps = for i <- 1..10, do: device("k#{i}", "Lamp #{i}", "a-#{kitchen.id}", ["light"])
+    {ghosts, 10} = HomeAssistant.ghosts(build, lamps, areas)
+    assert Enum.map(ghosts, & &1.device) == Enum.map(Enum.take(lamps, 8), & &1.id)
+
+    many =
+      for room <- rooms,
+          room.place == :indoor,
+          i <- 1..9,
+          do: device("#{room.id}-#{i}", "Lamp", "a-#{room.id}", ["light"])
+
+    {ghosts, count} = HomeAssistant.ghosts(build, many, areas)
+    assert count == length(many)
+    assert length(ghosts) == 60
+    assert ghosts |> Enum.frequencies_by(& &1.room) |> Map.values() |> Enum.max() == 8
+
+    # A kind read before counts: the name does not count then.
+    {[ghost], 1} =
+      HomeAssistant.ghosts(
+        build,
+        [Map.put(device("x", "  ", "a-#{kitchen.id}"), :kind, "tv")],
+        areas
+      )
+
+    assert {ghost.type, ghost.name} == {"tv", "TV"}
   end
 
   test "a ghost goes far from the other items, a mini split on the back wall" do
@@ -152,10 +191,10 @@ defmodule DIY.HomeAssistantDevicesTest do
     corner = [%{x: 0, y: 0, w: 24, d: 24}]
 
     # Far from the item in the back corner: the front corner (on a grid of
-    # 6 inches).
+    # 12 inches).
     %{x: x, y: y} = HomeAssistant.spread(item.("tv"), room, corner)
     {w, d} = Layout.extent(item.("tv"))
-    assert x + w > 240 - 6 and y + d > 240 - 6
+    assert x + w > 240 - 12 and y + d > 240 - 12
 
     # A mini split hangs on the back wall. A ceiling fan is on the ceiling.
     assert %{y: 0} = HomeAssistant.spread(item.("mini_split"), room, corner)
@@ -169,6 +208,41 @@ defmodule DIY.HomeAssistantDevicesTest do
              x: 0,
              y: 0
            }
+
+    # An item that is larger than its room: the back corner.
+    {fan_w, _fan_d} = Layout.extent(item.("ceiling_fan"))
+    narrow = %{w: fan_w - 1, d: 304}
+    assert HomeAssistant.spread(item.("ceiling_fan"), narrow, corner) == %{x: 0, y: 0}
+  end
+
+  property "a place of spread/3 is in its room, and on no box, when the room has a free place" do
+    check all(
+            rw <- integer(30..400),
+            rd <- integer(30..400),
+            type <- member_of(~w(tv lights fridge mini_split ceiling_fan)),
+            boxes <-
+              list_of(
+                map({integer(0..380), integer(0..380), integer(6..90), integer(6..90)}, fn {x, y,
+                                                                                            w, d} ->
+                  %{x: x, y: y, w: w, d: d}
+                end),
+                max_length: 6
+              )
+          ) do
+      item = %{type: type, size: nil, turn: 0, params: Catalog.defaults(type)}
+      room = %{w: rw, d: rd}
+      at = HomeAssistant.spread(item, room, boxes)
+      {w, d} = Layout.extent(item)
+      box = %{x: at.x, y: at.y, w: w, d: d}
+
+      if at == %{x: 0, y: 0} do
+        :ok
+      else
+        assert at.x >= 0 and at.y >= 0 and at.x + w <= rw and at.y + d <= rd
+        refute Enum.any?(boxes, &Layout.overlap?(&1, box))
+        if Catalog.lift(type) > 0 and type != "ceiling_fan", do: assert(at.y == 0)
+      end
+    end
   end
 
   property "each ghost is a device with no item, in a room of its area, with a kind that can go there" do
@@ -189,7 +263,20 @@ defmodule DIY.HomeAssistantDevicesTest do
               ),
             linked <- list_of(boolean(), length: length(devices))
           ) do
-      areas = for room <- rooms, do: %{id: "a-#{room.id}", name: room.name, floor: nil}
+      # Some rooms have a link to an area of a different name.
+      areas =
+        for room <- rooms do
+          name = if rem(:erlang.phash2(room.id), 3) == 0, do: "Area #{room.id}", else: room.name
+          %{id: "a-#{room.id}", name: name, floor: nil}
+        end
+
+      build =
+        Enum.reduce(areas, build, fn area, build ->
+          if String.starts_with?(area.name, "Area "),
+            do: elem(Build.link_area(build, String.trim_leading(area.id, "a-"), area.id), 1),
+            else: build
+        end)
+
       devices = for {id, name, area} <- devices, do: device(id, name, area)
 
       # Some devices have an item already.
@@ -207,7 +294,8 @@ defmodule DIY.HomeAssistantDevicesTest do
             build
         end)
 
-      ghosts = HomeAssistant.ghosts(build, devices, areas)
+      {ghosts, count} = HomeAssistant.ghosts(build, devices, areas)
+      assert count == length(ghosts)
       items = MapSet.new(Map.values(build.devices))
 
       for ghost <- ghosts do

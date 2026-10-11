@@ -33,6 +33,23 @@ defmodule DIY.BuildDevicesTest do
     {:ok, item} = Build.item(build2, fan)
     assert item.params["count"] == 1
     {:ok, build3, tv} = Build.add_device(build2, kitchen.id, "tv", "dev-3")
+
+    # At the place of its ghost, in its room. A place out of the limits is
+    # no place: the item goes to a free place.
+    {:ok, at_build, at_id} =
+      Build.add_device(build3, kitchen.id, "microwave", "dev-4", %{x: 60, y: 120})
+
+    assert {:ok, %{at: %{x: 60, y: 120}}} = Build.item(at_build, at_id)
+
+    {:ok, far, far_id} =
+      Build.add_device(build3, kitchen.id, "microwave", "dev-4", %{x: 99_999, y: 0})
+
+    assert {:ok, %{at: %{x: _, y: _}}} = Build.item(far, far_id)
+
+    {:ok, bad, bad_id} =
+      Build.add_device(build3, kitchen.id, "microwave", "dev-4", %{x: "a", y: 0})
+
+    assert {:ok, %{at: %{x: _, y: _}}} = Build.item(bad, bad_id)
     {:ok, item} = Build.item(build3, tv)
     assert item.params == DIY.Catalog.defaults("tv")
 

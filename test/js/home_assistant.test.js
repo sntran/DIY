@@ -10,7 +10,7 @@ import {
   DB, STORE, KEY, GENERATION, CHANNEL, PENDING, SIGN_IN, TAB, TAB_CHECK, EARLY, FIRST_WAIT, MAX_WAIT,
   address, blocked, socketUrl, clientOf, signInPage, signInId, randomText, pkce, authorizeUrl,
   open, sessionStore, Link, SignIn, homeAssistantHook, signInHook, browserParts, signInParts, key, CommandError,
-  deviceList,
+  deviceList, REGISTRY_WAIT,
 } from "../../assets/js/home_assistant.js"
 
 const HA = "http://ha.test:8123"
@@ -1237,6 +1237,7 @@ function registry({floors = [], areas = [], admin = true, fail = () => null, dev
       case "config/floor_registry/list": return ok(ha.floors)
       case "config/area_registry/list": return ok(ha.areas)
       case "auth/current_user": return ok({id: "u1", name: "Owner", is_admin: ha.admin})
+      case "subscribe_events": return ok(null)
       case "config/device_registry/list": return ok(ha.devices)
       case "config/entity_registry/list": return ok(ha.entities)
       case "config/floor_registry/create": {
@@ -1512,7 +1513,9 @@ test("the devices for the ghosts: the main entities give the domains and the are
     haDevice("sun", {entry_type: "service"}),
     haDevice("old", {disabled_by: "user"}),
     haDevice("hub"),
-    haDevice("plug", {name: null}),
+    haDevice("plug", {name: null, area_id: "hall"}),
+    haDevice("strip", {name: null, model: "LED strip", area_id: "hall"}),
+    haDevice("lost"),
   ]
   const entities = [
     haEntity("light.lamp", "lamp"),
@@ -1525,12 +1528,17 @@ test("the devices for the ghosts: the main entities give the domains and the are
     haEntity("button.hub_restart", "hub", {entity_category: "config"}),
     haEntity("switch.plug", "plug", {disabled_by: "user"}),
     haEntity("switch.plug_2", "plug"),
+    haEntity("light.strip", "strip"),
+    haEntity("light.lost", "lost"),
     haEntity("sun.sun", null),
   ]
+  // A device in no area can be no ghost: it is not in the list. With no
+  // name, a device has the name of its model.
   assert.deepEqual(deviceList(devices, entities), [
     {id: "lamp", name: "Lamp", area: "living", domains: ["light", "sensor"], model: "Bulb 2"},
     {id: "tv", name: "Den TV", area: "den", domains: ["media_player"], model: null},
-    {id: "plug", name: "", area: null, domains: ["switch"], model: null},
+    {id: "plug", name: "", area: "hall", domains: ["switch"], model: null},
+    {id: "strip", name: "LED strip", area: "hall", domains: ["light"], model: "LED strip"},
   ])
 })
 
@@ -1564,9 +1572,13 @@ test("each device of the list is a device of a person, with a main entity", () =
       assert.equal(item.area, source.area_id ?? own.find((e) => e.area_id)?.area_id ?? null)
       assert.equal(typeof item.name, "string")
     }
-    // Each device of a person with a main entity is in the list.
-    const kept = devices.filter((d) => d.entry_type !== "service" && !d.disabled_by && main.some((e) => e.device_id === d.id))
+    // Each device of a person with a main entity and an area is in the
+    // list.
+    const kept = devices.filter((d) => d.entry_type !== "service" && !d.disabled_by &&
+      main.some((e) => e.device_id === d.id) &&
+      (d.area_id || main.some((e) => e.device_id === d.id && e.area_id)))
     assert.deepEqual(list.map((d) => d.id), kept.map((d) => d.id))
+    assert.ok(list.every((d) => d.area !== null))
   }))
 })
 
@@ -1581,32 +1593,81 @@ test("the hook reads the devices, the entities and the areas of Home Assistant",
   const done = link.devices()
   await serve(ha, [socket])
   await done
-  assert.deepEqual(socket.sent.slice(2).map((message) => message.type), [
-    "config/device_registry/list", "config/entity_registry/list", "config/area_registry/list",
+  // The first read also watches the three registries.
+  assert.deepEqual(socket.sent.slice(2).map((message) => [message.type, message.event_type]), [
+    ["config/device_registry/list", undefined], ["config/entity_registry/list", undefined],
+    ["config/area_registry/list", undefined],
+    ["subscribe_events", "device_registry_updated"], ["subscribe_events", "entity_registry_updated"],
+    ["subscribe_events", "area_registry_updated"],
   ])
   assert.deepEqual(page.pushes.at(-1), ["ha:devices", {
     devices: [{id: "lamp", name: "Lamp", area: "living", domains: ["light"], model: null}],
     areas: [{id: "living", name: "Living Room", floor: "ground"}, {id: "yard", name: "Yard", floor: null}],
   }])
+  assert.equal(link.watching, true)
+
+  // A change of a registry: one new read for many changes, after a wait.
+  // A read does not watch again. An event of no subscription changes
+  // nothing.
+  const subscriptions = socket.sent.filter((message) => message.type === "subscribe_events").map((message) => message.id)
+  ha.devices.push(haDevice("fan", {name: "Fan", area_id: "yard"}))
+  ha.entities.push(haEntity("fan.fan", "fan"))
+  socket.receive({id: 99, type: "event", event: {}})
+  assert.equal(page.timers.size, 0)
+  socket.receive({id: subscriptions[0], type: "event", event: {action: "create"}})
+  socket.receive({id: subscriptions[2], type: "event", event: {action: "update"}})
+  assert.equal(page.timers.size, 1)
+  assert.equal([...page.timers.values()][0].ms, REGISTRY_WAIT)
+  tick(page)
+  await serve(ha, [socket])
+  assert.deepEqual(page.pushes.at(-1)[1].devices.map((device) => device.id), ["lamp", "fan"])
+  assert.equal(socket.sent.filter((message) => message.type === "subscribe_events").length, 3)
+
+  // The socket closes: no more watch, and no read waits.
+  socket.receive({id: subscriptions[1], type: "event", event: {}})
+  assert.equal(page.timers.size, 1)
+  socket.drop()
+  assert.equal(link.watching, false)
+  assert.equal(link.reread, null)
+  assert.equal(link.events.size, 0)
+  link.stop()
+
+  // Home Assistant refuses the watch: the devices still come, and the
+  // next read tries again.
+  const other = parts()
+  const second = await connected(other)
+  const refusing = registry({
+    devices: [haDevice("lamp", {name: "Lamp", area_id: "living"})], entities: [haEntity("light.lamp", "lamp")],
+    fail: (message) => message.type === "subscribe_events" ? {code: "unauthorized", message: "Unauthorized"} : null,
+  })
+  const read = second.link.devices()
+  await serve(refusing, [second.socket])
+  await read
+  assert.equal(other.pushes.at(-1)[1].devices.length, 1)
+  assert.equal(second.link.watching, false)
+  assert.equal(second.link.events.size, 0)
+  second.link.stop()
 
   // A command that Home Assistant refuses, and no socket.
+  const third = parts()
+  const failed = await connected(third)
   const failing = registry({fail: (message) => message.type === "config/entity_registry/list" ? {code: "unauthorized"} : null})
-  const again = link.devices()
-  await serve(failing, [socket])
+  const again = failed.link.devices()
+  await serve(failing, [failed.socket])
   await again
-  assert.deepEqual(page.pushes.at(-1), ["ha:devices", {error: "failed"}])
-  link.stop()
-  await link.devices()
-  assert.deepEqual(page.pushes.at(-1), ["ha:devices", {error: "offline"}])
+  assert.deepEqual(third.pushes.at(-1), ["ha:devices", {error: "failed"}])
+  failed.link.stop()
+  await failed.link.devices()
+  assert.deepEqual(third.pushes.at(-1), ["ha:devices", {error: "offline"}])
 
   // The LiveView asks for the devices.
-  const other = parts()
+  const fourth = parts()
   const handlers = {}
-  const hook = homeAssistantHook(() => other.deps)
-  const self = {...hook, pushEvent: (event, payload) => other.pushes.push([event, payload]), handleEvent: (event, f) => { handlers[event] = f }}
+  const hook = homeAssistantHook(() => fourth.deps)
+  const self = {...hook, pushEvent: (event, payload) => fourth.pushes.push([event, payload]), handleEvent: (event, f) => { handlers[event] = f }}
   self.mounted()
   await handlers["ha:devices_fetch"]()
-  assert.deepEqual(other.pushes.at(-1), ["ha:devices", {error: "offline"}])
+  assert.deepEqual(fourth.pushes.at(-1), ["ha:devices", {error: "offline"}])
   self.destroyed()
 })
 

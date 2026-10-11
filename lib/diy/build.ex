@@ -59,7 +59,7 @@ defmodule DIY.Build do
   - `areas`: the area of Home Assistant of each room of the house (its
     id), for the rooms with a link (`link_area/3`).
   - `devices`: the device of Home Assistant of each item (its id), for the
-    items with a link (`add_device/4`). A device has one item at most.
+    items with a link (`add_device/5`). A device has one item at most.
 
   After each change, the plan is whole again (`DIY.Layout.fill/1`). Each
   room of the house has a plan, and each item is in its room.
@@ -476,14 +476,14 @@ defmodule DIY.Build do
 
   @doc "Adds an item of a type to a room, with the default numbers."
   @spec add_item(t(), String.t(), String.t()) :: {:ok, t(), String.t()} | {:error, atom()}
-  def add_item(build, room_id, type), do: add_item(build, room_id, type, %{}, nil)
+  def add_item(build, room_id, type), do: add_item(build, room_id, type, %{}, nil, nil)
 
-  defp add_item(build, room_id, type, params, device) do
+  defp add_item(build, room_id, type, params, device, at) do
     with {:ok, room} <- room(build, room_id),
          %{} = kind <- Catalog.kind(type) || {:error, :type},
          true <- room.place in kind.places || {:error, :place} do
       {id, build} = next_id(build, "i")
-      item = new_item(id, type, room_id, Map.merge(Catalog.defaults(type), params))
+      item = %{new_item(id, type, room_id, Map.merge(Catalog.defaults(type), params)) | at: at}
       devices = if device, do: Map.put(build.devices, id, device), else: build.devices
 
       {:ok,
@@ -497,16 +497,17 @@ defmodule DIY.Build do
   room of the house, and links them. The item gets the numbers of one
   device (`device_params/1`): for example one bulb, not the lights of a
   whole house. A device has one item at most: a device with an item is an
-  error (`:taken`).
+  error (`:taken`). The item goes to its place in the room (`at`, the
+  place of its ghost), or to a free place (`nil`).
   """
-  @spec add_device(t(), String.t(), String.t(), String.t()) ::
+  @spec add_device(t(), String.t(), String.t(), String.t(), map() | nil) ::
           {:ok, t(), String.t()} | {:error, atom()}
-  def add_device(build, room_id, type, device) do
+  def add_device(build, room_id, type, device, at \\ nil) do
     with true <- (is_binary(device) and ha_id?(device)) || {:error, :device},
          true <- device_item(build, device) == nil || {:error, :taken},
          {:ok, room} <- room(build, room_id),
          true <- area_room?(room) || {:error, :room} do
-      add_item(build, room_id, type, device_params(type), device)
+      add_item(build, room_id, type, device_params(type), device, valid_at(at))
     end
   end
 
@@ -1380,6 +1381,13 @@ defmodule DIY.Build do
     do: if(abs(x) <= Layout.max_at() and abs(y) <= Layout.max_at(), do: %{x: x, y: y})
 
   defp read_at(_at), do: nil
+
+  # A place in a room for a new item, or nil. Layout.fill/1 keeps the item
+  # in its room.
+  defp valid_at(%{x: x, y: y}) when is_integer(x) and is_integer(y),
+    do: if(abs(x) <= Layout.max_at() and abs(y) <= Layout.max_at(), do: %{x: x, y: y})
+
+  defp valid_at(_at), do: nil
 
   defp item_turn(%{"turn" => turn}) when turn in 0..3, do: turn
   defp item_turn(_item), do: 0

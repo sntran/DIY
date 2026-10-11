@@ -16,7 +16,7 @@ defmodule DIY.HomeAssistant do
   The devices of Home Assistant come into the house as ghosts
   (`ghosts/3`). A ghost is a device in an area of a room, with a kind of
   the catalog (`kind_of/1`). It has no item. A tap on a ghost adds its item
-  (`DIY.Build.add_device/4`).
+  (`DIY.Build.add_device/5`).
   """
 
   alias DIY.{Build, Catalog, Layout}
@@ -35,6 +35,11 @@ defmodule DIY.HomeAssistant do
   # end at the same place, the longer one wins: a "water heater" is not a
   # space heater.
   @phrases [
+    {~w(microwave oven), "microwave"},
+    {~w(dish washer), "dishwasher"},
+    {~w(washer dryer), "dryer"},
+    {~w(fridge freezer), "fridge"},
+    {~w(backlight), "lights"},
     {~w(water heater), "water_heater"},
     {~w(space heater), "space_heater"},
     {~w(heater), "space_heater"},
@@ -73,6 +78,12 @@ defmodule DIY.HomeAssistant do
   # The domains of the entities of a device with no word of a kind. A
   # thermostat, a speaker or a plug can be many things: no kind.
   @domains [{"light", "lights"}, {"fan", "ceiling_fan"}, {"water_heater", "water_heater"}]
+
+  # The most ghosts on the plan in one room, and in the house. A large
+  # Home Assistant can have hundreds of devices: the plan shows the first
+  # ones, and the next ones come when the person adds them.
+  @per_room 8
+  @in_house 60
 
   # The words of a name of an area outside: in a yard, and in a garage or a
   # shed. An attic is under the roof.
@@ -244,25 +255,42 @@ defmodule DIY.HomeAssistant do
   end
 
   @doc """
-  The ghosts of the devices of Home Assistant. A ghost is a device with
-  no item, in the area of a room of the house (`match/2`). It has a kind
-  that can go in the room. A ghost has its device, the name of the device,
-  its room, its kind, and a free place in its room (`at`).
+  The ghosts of the devices of Home Assistant on the plan, and the count
+  of all the ghosts: `{ghosts, count}`. A ghost is a device with no item,
+  in the area of a room of the house (`match/2`). It has a kind that can go
+  in the room. A ghost has its device, the name of the device (else the
+  name of its kind), its room, its kind, and a free place in its room
+  (`at`). The plan shows 8 ghosts in a room and 60 in the house at most.
+
+  A device can have its kind already (`kind`): then the app does not read
+  its name again.
   """
   def ghosts(build, devices, areas) do
     rooms = for {room, area} <- match(build, areas).both, into: %{}, do: {area.id, room}
     linked = MapSet.new(Map.values(build.devices))
 
-    ghosts =
+    all =
       for device <- devices,
           not MapSet.member?(linked, device.id),
           room = rooms[device.area],
           room != nil and room.plan != nil,
-          type = kind_of(device),
+          type = Map.get_lazy(device, :kind, fn -> kind_of(device) end),
           type != nil and room.place in Catalog.kind(type).places,
-          do: %{device: device.id, name: device.name, room: room.id, type: type}
+          do: %{device: device.id, name: name(device.name, type), room: room.id, type: type}
 
-    place(build, ghosts)
+    shown =
+      all
+      |> Enum.group_by(& &1.room)
+      |> Enum.flat_map(fn {_room, ghosts} -> Enum.take(ghosts, @per_room) end)
+      |> MapSet.new(& &1.device)
+
+    ghosts = all |> Enum.filter(&MapSet.member?(shown, &1.device)) |> Enum.take(@in_house)
+    {place(build, ghosts), length(all)}
+  end
+
+  # A device with no name has the name of its kind.
+  defp name(name, type) do
+    if String.trim(name) == "", do: Catalog.kind(type).name, else: name
   end
 
   # A free place for each ghost in its room, where no item and no ghost
@@ -291,24 +319,31 @@ defmodule DIY.HomeAssistant do
   @doc """
   A free place for an item in a room, where it does not overlap the boxes
   of the others. At this place, the nearest center of a box is the
-  farthest. The places are on a grid of about 60 steps on each side, as in
-  `DIY.Layout.free_at/3`. An item that hangs on a wall (a mini split) is
+  farthest. The places are on a grid of about 30 steps on each side, 12
+  inches at least. An item that hangs on a wall (a mini split) is
   on the back wall. A ceiling fan is on the ceiling: it can be anywhere.
-  With no free place, it is the back corner.
+  With no free place (or for an item larger than the room), it is the
+  back corner.
   """
   def spread(item, room, others) do
     {w, d} = Layout.extent(item)
-    step = max(6, round(max(room.w, room.d) / 60))
+    step = max(12, round(max(room.w, room.d) / 30))
     centers = Enum.map(others, &{&1.x + &1.w / 2, &1.y + &1.d / 2})
     wall? = Catalog.lift(item.type) > 0 and item.type != "ceiling_fan"
     back = if wall?, do: 0, else: max(room.d - d, 0)
 
+    # An item that is larger than its room has no free place in it.
     free =
-      for y <- 0..back//step,
-          x <- 0..max(room.w - w, 0)//step,
-          box = %{x: x, y: y, w: w, d: d},
-          not Enum.any?(others, &Layout.overlap?(&1, box)),
-          do: {x, y}
+      if w > room.w or d > room.d,
+        do: [],
+        else:
+          for(
+            y <- 0..back//step,
+            x <- 0..(room.w - w)//step,
+            box = %{x: x, y: y, w: w, d: d},
+            not Enum.any?(others, &Layout.overlap?(&1, box)),
+            do: {x, y}
+          )
 
     case free do
       [] ->
@@ -343,7 +378,8 @@ defmodule DIY.HomeAssistant do
     Enum.count(
       devices,
       &(&1.area != nil and not MapSet.member?(linked, &1.id) and
-          not MapSet.member?(rooms, &1.area) and kind_of(&1) != nil)
+          not MapSet.member?(rooms, &1.area) and
+          Map.get_lazy(&1, :kind, fn -> kind_of(&1) end) != nil)
     )
   end
 end
