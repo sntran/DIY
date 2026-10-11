@@ -47,6 +47,12 @@ Why on the device:
 The cost: a build is on one browser only. A file export and import moves
 a build to a different device (phase 1).
 
+Later, a person can make an account that syncs the build between
+devices, only when the person asks for it. This is a decision of the
+owner (October 2026). The device encrypts the build before it goes to
+the server, so the server keeps only a text that it cannot read. A person
+with no account keeps all the data on the device, as today.
+
 Why IndexedDB, not localStorage: the save is a compare and set, and it
 must be atomic for all the tabs of the browser. IndexedDB runs the
 transactions of all the tabs one at a time. localStorage does not give
@@ -2260,7 +2266,8 @@ off from the panel of its item.
    `switch` and `fan`. A media player or a climate entity does not count:
    its service is not on and off only. One switch turns all these
    entities of a device on or off: for example, the light and the fan of
-   a ceiling fan.
+   a ceiling fan. This is a decision of the owner (October 2026): one
+   switch for each device.
 2. The hook watches the states of these entities (`subscribe_entities`
    with their ids). Home Assistant sends all their states first (`a`),
    then each change (`c`) and each entity that goes (`r`). A change of
@@ -2383,8 +2390,10 @@ The tests:
 ## In a car
 
 The owner wants the app in a car later: Android Auto and Android
-Automotive OS. The parts of the app that a car can show follow these
-rules now, so that a car app can use them.
+Automotive OS. For now, the app is a web app only. This is a decision
+of the owner (October 2026): a native app is too much work, and it
+needs the approval of the stores. The parts of the app that a car can
+show follow these rules now, so that a car app can use them.
 
 The facts of the platform (developer.android.com, "Use the Android for
 Cars App Library", "Build IoT apps for cars", "Template restrictions",
