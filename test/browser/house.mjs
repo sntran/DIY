@@ -599,11 +599,16 @@ async function build(context, name) {
   await page.click("#item-stage .stage-back")
   await page.waitForSelector("#item-stage", { state: "detached" })
 
-  // The sign-in page by itself, with a bad address: it tells the error.
+  // The sign-in page that no tab of the app opened, for example from a link
+  // of a different site. It does not leave the app, and tells the error.
   const lone = await page.context().newPage()
-  await lone.goto(`${site}/ha/sign-in?url=home.example.com&id=x1`)
-  await lone.waitForSelector("#ha-error:has-text('Give the address')")
+  const outside = []
+  lone.on("request", (request) => { if (!request.url().startsWith(site)) outside.push(request.url()) })
+  await lone.goto(`${site}/ha/sign-in?${new URLSearchParams({ url: homeAssistant.url, id: "x1" })}`)
+  await lone.waitForSelector("#ha-error:has-text('Only the key Connect of the app can start a sign-in.')")
   await lone.waitForSelector("#ha-close")
+  assert.equal(new URL(lone.url()).origin, new URL(site).origin)
+  assert.deepEqual(outside, [])
   await check(lone, `${name} sign-in page`)
   await lone.close()
 

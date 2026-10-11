@@ -37,8 +37,11 @@ defmodule DIYWeb.HomeAssistant do
   alias DIYWeb.Inside
   alias Phoenix.LiveView
 
-  @states ~w(none signing_in connecting connected offline signed_out done)
-  @errors ~w(url blocked tab closed cancelled state denied token unreachable storage signed_out)
+  # The states of the link on a page of the app, and on the sign-in page
+  # (`DIYWeb.SignInLive`).
+  @states ~w(none signing_in connecting connected offline signed_out)
+  @tab_states ~w(none signing_in done)
+  @errors ~w(url blocked tab closed cancelled unasked state denied token unreachable storage signed_out)
 
   # The longest address, and the longest name or version, that the page
   # takes from the hook.
@@ -76,25 +79,9 @@ defmodule DIYWeb.HomeAssistant do
   end
 
   @doc false
-  def handle_event("ha:status", %{"state" => state} = params, socket) when state in @states do
-    ha = %{
-      state: state,
-      url: text(params["url"], @max_url),
-      name: text(params["name"], @max_text),
-      version: text(params["version"], @max_text),
-      error: if(params["error"] in @errors, do: params["error"])
-    }
-
-    before = socket.assigns.ha.state
-    socket = assign(socket, :ha, ha)
-
-    # The link comes back while the sheet of the match is open: the sheet
-    # reads the areas again. They can be different now.
-    if state == "connected" and socket.assigns[:live_action] == :inside and
-         socket.assigns[:sheet] == "ha_rooms" and
-         (before != "connected" or not match?(%{areas: _}, socket.assigns.ha_rooms)),
-       do: {:halt, fetch_rooms(socket)},
-       else: {:halt, socket}
+  def handle_event("ha:status", %{} = params, socket) do
+    state = params["state"]
+    if state in states(socket), do: status(socket, state, params), else: {:halt, socket}
   end
 
   def handle_event("ha:status", _params, socket), do: {:halt, socket}
@@ -123,6 +110,31 @@ defmodule DIYWeb.HomeAssistant do
     do: {:halt, LiveView.push_event(socket, "ha:disconnect", %{})}
 
   def handle_event(_event, _params, socket), do: {:cont, socket}
+
+  # The sign-in page takes only its own states.
+  defp states(%{view: DIYWeb.SignInLive}), do: @tab_states
+  defp states(_socket), do: @states
+
+  defp status(socket, state, params) do
+    ha = %{
+      state: state,
+      url: text(params["url"], @max_url),
+      name: text(params["name"], @max_text),
+      version: text(params["version"], @max_text),
+      error: if(params["error"] in @errors, do: params["error"])
+    }
+
+    before = socket.assigns.ha.state
+    socket = assign(socket, :ha, ha)
+
+    # The link comes back while the sheet of the match is open: the sheet
+    # reads the areas again. They can be different now.
+    if state == "connected" and socket.assigns[:live_action] == :inside and
+         socket.assigns[:sheet] == "ha_rooms" and
+         (before != "connected" or not match?(%{areas: _}, socket.assigns.ha_rooms)),
+       do: {:halt, fetch_rooms(socket)},
+       else: {:halt, socket}
+  end
 
   defp text(value, max) when is_binary(value) and byte_size(value) <= max, do: value
   defp text(_value, _max), do: nil
@@ -170,6 +182,15 @@ defmodule DIYWeb.HomeAssistant do
   def tab_status(%{state: "done"}), do: "The sign-in is done."
   def tab_status(_ha), do: "The sign-in did not finish."
 
+  @doc """
+  Why the sign-in did not work, in words, for the sign-in page. The page
+  has no field of the address.
+  """
+  def tab_message("url"),
+    do: "The address of Home Assistant is not correct. Connect again on the page of the app."
+
+  def tab_message(error), do: message(error)
+
   @doc "Why the last step did not work, in words."
   def message("url"),
     do: "Give the address of your Home Assistant, for example https://home.example.com."
@@ -180,10 +201,15 @@ defmodule DIYWeb.HomeAssistant do
 
   def message("tab"),
     do:
-      "The browser did not open a new tab for the sign-in. Let this site open pop-ups, and connect again."
+      "The browser did not open a new tab for the sign-in. Let this site open pop-ups. Then connect again."
 
   def message("closed"), do: "The tab of the sign-in closed before the end. Connect again."
   def message("cancelled"), do: "A disconnect stopped this sign-in. Connect again."
+
+  def message("unasked"),
+    do:
+      "Only the key Connect of the app can start a sign-in. Connect again on the page of the app."
+
   def message("state"), do: "The sign-in did not finish. Try again."
   def message("denied"), do: "Home Assistant did not give access."
   def message("token"), do: "Home Assistant did not accept the sign-in. Try again."

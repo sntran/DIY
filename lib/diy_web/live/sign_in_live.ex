@@ -27,7 +27,7 @@ defmodule DIYWeb.SignInLive do
           {HomeAssistant.tab_status(@ha)}
         </p>
         <p :if={@ha.error} id="ha-error" role="alert" class="text-sm text-error">
-          {HomeAssistant.message(@ha.error)}
+          {HomeAssistant.tab_message(@ha.error)}
         </p>
         <p :if={@ha.state in ~w(none done)} id="ha-close" class="text-sm">
           You can close this tab. The page of the app shows the link to Home Assistant.

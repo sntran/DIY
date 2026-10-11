@@ -6,8 +6,9 @@
 //   or in Settings. The key Connect opens the sign-in page of the app
 //   (SIGN_IN) in a new tab. The tab opens in the tap: a browser blocks a
 //   tab that a page opens later.
-// - The new tab (SignIn) makes a random state and a PKCE challenge, and
-//   keeps them in its sessionStorage. It goes to the sign-in page of Home
+// - The new tab (SignIn) starts only when a tab of the app opened it: a
+//   link of a different site cannot start a sign-in. It makes a random
+//   state and a PKCE challenge, and keeps them in its sessionStorage. It goes to the sign-in page of Home
 //   Assistant. Home Assistant sends it back with a code. The new tab gets
 //   the tokens for the code, and keeps them in IndexedDB, for all the tabs.
 //   The server of the app never sees them. Then the new tab tells its end
@@ -129,12 +130,13 @@ export function authorizeUrl(url, {client, state, challenge}) {
   return `${url}/auth/authorize?${query}`
 }
 
-const post = (fetch, url, path, fields) =>
-  fetch(url + path, {method: "POST", body: new URLSearchParams(fields)})
+const post = (fetch, url, path, fields, options = {}) =>
+  fetch(url + path, {method: "POST", body: new URLSearchParams(fields), ...options})
 
-// Ends a session on Home Assistant. The hook does not wait for it.
+// Ends a session on Home Assistant. The hook does not wait for it. The
+// request continues when the tab closes (keepalive).
 const revoke = (fetch, session) => {
-  post(fetch, session.url, "/auth/revoke", {token: session.refresh}).catch(() => {})
+  post(fetch, session.url, "/auth/revoke", {token: session.refresh}, {keepalive: true}).catch(() => {})
 }
 
 // Opens the database of the sign-in.
@@ -332,6 +334,8 @@ export class Link {
 
   // The person asks to disconnect, or to stop a sign-in. A sign-in in a
   // different tab that started before it keeps nothing (the generation).
+  // The browser closes the tab of a sign-in only when the tab shows a page
+  // of the app: the tab has no opener.
   async disconnect() {
     this.epoch += 1
     const epoch = this.epoch
@@ -587,8 +591,10 @@ export class SignIn {
 
   // Goes to the sign-in page of Home Assistant. The page keeps the
   // generation of the store: a disconnect after this start ends the
-  // sign-in.
+  // sign-in. Only a tab of the app starts a sign-in (fromApp). Else a link
+  // of a different site can send the tab to a server of its choice.
   async begin(params) {
+    if (!this.fromApp) return this.end(null, null, "unasked")
     const id = signInId(params.get("id"))
     const url = address(params.get("url"))
     if (!url) return this.end(id, null, "url")
@@ -618,7 +624,7 @@ export class SignIn {
     this.storage.removeItem(PENDING)
     // The code and the state go away from the address.
     this.history.replaceState(null, "", SIGN_IN)
-    if (pending?.state !== params.get("state")) return this.end(null, null, "state")
+    if (pending?.state !== params.get("state")) return this.end(signInId(pending?.id), null, "state")
     const {url, id} = pending
     const code = params.get("code")
     if (!code) return this.end(id, url, "denied")
@@ -687,8 +693,7 @@ export function homeAssistantHook(deps) {
 }
 
 // The hook of the sign-in page. deps() gives the parts of the browser for
-// SignIn: store, tell, fetch, location, history, storage, crypto, now and
-// closeTab. When LiveView mounts the page again, the sign-in does not start
+// SignIn (signInParts). When LiveView mounts the page again, the sign-in does not start
 // again: the hook tells its state.
 export function signInHook(deps) {
   let signIn = null
@@ -741,12 +746,20 @@ export function browserParts(window) {
   }
 }
 
-// The parts of the browser for the sign-in page. The pages of Home
-// Assistant in this tab get no link to the tab of the app.
+// The parts of the browser for the sign-in page. fromApp is true when a
+// page of the app opened this tab. Then the pages of Home Assistant in
+// this tab get no link to the tab of the app.
 export function signInParts(window) {
+  let fromApp = false
+  try {
+    fromApp = window.opener?.location.origin === window.location.origin
+  } catch {
+    // The page of a different site opened this tab.
+  }
   window.opener = null
   const channel = channelOf(window)
   return {
+    fromApp,
     store: sessionStore(window.indexedDB, () => channel?.postMessage("changed")),
     tell: (message) => channel?.postMessage(message),
     fetch: (...args) => window.fetch(...args),

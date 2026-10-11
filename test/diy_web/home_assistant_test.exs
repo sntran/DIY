@@ -68,9 +68,14 @@ defmodule DIYWeb.HomeAssistantTest do
     assert HomeAssistant.status(%{ha | state: "offline"}) =~ "does not answer now"
 
     for error <-
-          ~w(url blocked tab closed cancelled state denied token unreachable storage signed_out) do
+          ~w(url blocked tab closed cancelled unasked state denied token unreachable storage signed_out) do
       assert HomeAssistant.message(error) =~ ~r/^[A-Z].*\.$/
+      assert HomeAssistant.tab_message(error) =~ ~r/^[A-Z].*\.$/
     end
+
+    # The sign-in page has no field of the address.
+    assert HomeAssistant.tab_message("url") =~ "Connect again on the page of the app."
+    assert HomeAssistant.tab_message("denied") == HomeAssistant.message("denied")
 
     # The words of the sign-in page in its own tab.
     assert HomeAssistant.tab_status(%{ha | state: "loading"}) ==
@@ -174,11 +179,14 @@ defmodule DIYWeb.HomeAssistantTest do
     view = settings(conn)
     status(view, %{"state" => "connected", "url" => "https://ha.example.com", "name" => "Home"})
 
+    # "done" is a state of the sign-in page only.
     for bad <- [
           %{"state" => "hacked"},
           %{"state" => 5},
+          %{"state" => "done"},
           %{},
-          %{"url" => "x"}
+          %{"url" => "x"},
+          ["state", "none"]
         ] do
       status(view, bad)
       assert has_element?(view, "#ha-status", "Connected to Home")

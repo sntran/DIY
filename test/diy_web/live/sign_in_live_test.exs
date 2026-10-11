@@ -38,19 +38,38 @@ defmodule DIYWeb.SignInLiveTest do
 
     status(view, %{"state" => "none", "error" => "cancelled"})
     assert has_element?(view, "#ha-error", "A disconnect stopped this sign-in.")
+
+    # A page that no tab of the app opened, or a page that the person
+    # loaded again: no field of the address on this page.
+    status(view, %{"state" => "none", "error" => "unasked"})
+    assert has_element?(view, "#ha-error", "Only the key Connect of the app can start a sign-in.")
+    status(view, %{"state" => "none", "error" => "url"})
+    assert has_element?(view, "#ha-error", "Connect again on the page of the app.")
+    refute has_element?(view, "#ha-error", "Give the address")
+
+    # The states of a page of the app change nothing here.
+    status(view, %{"state" => "connected", "url" => "https://ha.example.com"})
+    assert has_element?(view, "#ha-status", "The sign-in did not finish.")
   end
 
   # The page takes only the states and the errors that it knows, and texts
   # of a limited length. Each status shows one of its known texts.
   property "a status that the page cannot read shows no unknown text", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/ha/sign-in")
-    known = ~w(none signing_in connecting connected offline signed_out done)
+    known = ~w(none signing_in done)
+    others = ~w(connecting connected offline signed_out)
 
     errors =
-      ~w(url blocked tab closed cancelled state denied token unreachable storage signed_out)
+      ~w(url blocked tab closed cancelled unasked state denied token unreachable storage signed_out)
 
     check all(
-            state <- one_of([member_of(known), string(:printable, max_length: 12), integer()]),
+            state <-
+              one_of([
+                member_of(known),
+                member_of(others),
+                string(:printable, max_length: 12),
+                integer()
+              ]),
             error <-
               one_of([member_of(errors), string(:printable, max_length: 12), constant(nil)]),
             url <-

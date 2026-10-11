@@ -55,7 +55,7 @@ function parts({
   const listened = {}
   const page = {
     calls, pushes, timers, storage, listened, went: [], replaced: [], opened: [], told: [], closes: 0,
-    clock: 1_000_000,
+    inits: [], clock: 1_000_000,
   }
   const notified = []
   page.notified = notified
@@ -70,6 +70,7 @@ function parts({
     fetch: async (url, init) => {
       const fields = Object.fromEntries(init.body)
       calls.push({url, fields})
+      page.inits.push(init)
       return respond(url, fields)
     },
     WebSocket: FakeSocket,
@@ -92,6 +93,7 @@ function parts({
     },
     tell: (message) => page.told.push(message),
     closeTab: () => { page.closes += 1 },
+    fromApp: true,
     now: () => page.clock,
     setTimer: (f, ms) => { const id = nextTimer++; timers.set(id, {f, ms}); return id },
     clearTimer: (id) => timers.delete(id),
@@ -434,7 +436,7 @@ test("the end of a sign-in comes to the tab that opened it", async () => {
   link.stop()
 })
 
-test("a stop of the sign-in closes its tab, and its session does not count", async () => {
+test("a stop of the sign-in: its session does not count, also in a tab that stays open", async () => {
   const factory = new IDBFactory()
   let release
   const respond = (url) => url.endsWith("/auth/token")
@@ -451,9 +453,13 @@ test("a stop of the sign-in closes its tab, and its session does not count", asy
   await settle()
 
   // The person stops the sign-in on the first tab, while the exchange
-  // waits.
+  // waits. The tab shows a page of Home Assistant and has no opener, so the
+  // browser does not close it.
+  let asked = 0
+  tab.close = () => { asked += 1 }
   await link.disconnect()
-  assert.equal(tab.closed, true)
+  assert.equal(asked, 1)
+  assert.equal(tab.closed, false)
   assert.equal(link.tab, null)
   assert.equal(page.timers.size, 0)
   release()
@@ -512,6 +518,19 @@ test("the sign-in tab goes to Home Assistant with a new state and the generation
   assert.deepEqual(back.told, [])
 })
 
+test("a sign-in page that no tab of the app opened does not leave the app", async () => {
+  // For example, a link of a different site to the sign-in page, with the
+  // address of a server of its choice.
+  const page = parts({pathname: SIGN_IN, search: "?" + new URLSearchParams({url: "https://evil.example", id: "s1"})})
+  page.deps.fromApp = false
+  await new SignIn(page.deps).start()
+  assert.deepEqual(page.went, [])
+  assert.equal(page.storage.has(PENDING), false)
+  assert.deepEqual(page.told, [])
+  assert.deepEqual(last(page), {state: "none", url: null, name: null, version: null, error: "unasked"})
+  assert.equal(page.closes, 0)
+})
+
 test("the sign-in tab gets the tokens, keeps them, tells the first tab, and closes", async () => {
   const factory = new IDBFactory()
   const respond = (url) => url.endsWith("/auth/token") ? tokens("a1", "r1") : answer(200)
@@ -564,7 +583,8 @@ test("the sign-in tab gets the tokens, keeps them, tells the first tab, and clos
 
 test("a way back with a wrong state, no code, or a bad text keeps nothing", async () => {
   for (const [pending, search, error, told] of [
-    [{url: HA, state: "other", verifier: "v", generation: 0, id: "s1"}, "?code=c&state=s1", "state", []],
+    [{url: HA, state: "other", verifier: "v", generation: 0, id: "s1"}, "?code=c&state=s1", "state",
+      [{ended: "s1", error: "state"}]],
     [null, "?code=c&state=s1", "state", []],
     ["{bad json", "?code=c&state=s1", "state", []],
     ["5", "?code=c&state=s1", "state", []],
@@ -607,6 +627,11 @@ test("a sign-in replaces and revokes the old session, and a store error revokes 
   await new SignIn(page.deps).start()
   assert.equal((await page.deps.store.read()).refresh, "r2")
   assert.deepEqual(page.calls.at(-1), {url: HA + "/auth/revoke", fields: {token: "r1"}})
+  // The tab closes at once: the revoke continues after it (keepalive). The
+  // exchange of the code does not need it.
+  assert.equal(page.closes, 1)
+  assert.equal(page.inits.at(-1).keepalive, true)
+  assert.equal(page.inits[0].keepalive, undefined)
 
   // The same session again: nothing to revoke.
   const again = parts({pathname: SIGN_IN, search: "?code=c&state=s1", respond})
@@ -1035,10 +1060,20 @@ test("the parts of the browser", async () => {
   alone.listen(() => {}, online, () => {})()
   assert.equal(posted.length, 1)
 
-  // The sign-in page: the pages of Home Assistant in its tab get no link
-  // to the tab of the app.
+  // The sign-in page: a page of the app opened it. The pages of Home
+  // Assistant in its tab get no link to the tab of the app.
+  window.location = {origin: APP}
+  window.opener = {location: {origin: APP}}
   const tab = signInParts(window)
+  assert.equal(tab.fromApp, true)
   assert.equal(window.opener, null)
+  // No opener, or the page of a different site: its origin throws.
+  assert.equal(signInParts(window).fromApp, false)
+  window.opener = {location: {get origin() { throw new DOMException("cross origin", "SecurityError") }}}
+  assert.equal(signInParts(window).fromApp, false)
+  assert.equal(window.opener, null)
+  window.opener = {location: {origin: "https://evil.example"}}
+  assert.equal(signInParts(window).fromApp, false)
   await keep(tab.store, session())
   tab.tell({ended: "s1", error: null})
   assert.deepEqual(posted.slice(1), [[CHANNEL, "changed"], [CHANNEL, {ended: "s1", error: null}]])
@@ -1077,8 +1112,10 @@ test("two tabs and their sign-ins in any order: no revoked or old session in the
     const factory = new IDBFactory()
     const inFlight = []
     const revoked = new Set()
-    // The generation at the start of the sign-in of each code, and of each
-    // session.
+    // The count of the disconnects, and its value at the start of the
+    // sign-in of each code and of each session. The test counts them: it
+    // does not read the generation of the store.
+    let disconnects = 0
     const codes = new Map()
     const born = new Map()
     let sessions = 0
@@ -1135,12 +1172,13 @@ test("two tabs and their sign-ins in any order: no revoked or old session in the
           const opened = page.opened.at(-1)
           const tab = await signInTab({path: opened.path, store: store(), respond, tell: broadcast})
           const code = "c" + (codes.size + 1)
-          codes.set(code, JSON.parse(tab.first.storage.get(PENDING)).generation)
+          codes.set(code, disconnects)
           const back = tab.back(`code=${code}&state=${tab.state}`)
           back.deps.closeTab = () => { opened.closed = true }
         } else if (s.kind === "disconnect") {
           await link.disconnect()
-          offAt.set(s.tab, await tabs[0].page.deps.store.generation())
+          disconnects += 1
+          offAt.set(s.tab, disconnects)
         } else if (s.kind === "refresh" && link.socket) {
           link.session = {...link.session, expires: 0}
           link.socket.receive({type: "auth_required"})
@@ -1153,9 +1191,8 @@ test("two tabs and their sign-ins in any order: no revoked or old session in the
       await settle(6)
 
       const stored = await tabs[0].page.deps.store.read()
-      const generation = await tabs[0].page.deps.store.generation()
       assert.ok(!stored || !revoked.has(stored.refresh), `the store has a revoked session: ${stored?.refresh}`)
-      assert.ok(!stored || born.get(stored.refresh) === generation,
+      assert.ok(!stored || born.get(stored.refresh) === disconnects,
         `the store has ${stored?.refresh} of a sign-in before a disconnect`)
       for (const [tab, at] of offAt) {
         const {link} = tabs[tab]

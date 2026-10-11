@@ -1889,27 +1889,35 @@ The app links to one Home Assistant. A second hub shows the same link.
    and its screen tells the person to sign in on the new tab. When the
    browser blocks the tab, the card tells the person to let the site open
    pop-ups.
-2. The new tab (the hook `HomeAssistantSignIn`) reads the generation of
-   the store (see below). It makes a random state and a PKCE pair (RFC
-   7636, S256). It keeps them in its sessionStorage. Then it goes to the
+2. The new tab (the hook `HomeAssistantSignIn`) starts only when a page
+   of the app opened it (`window.opener` has the origin of the app). Else
+   a link of a different site can send the tab to a server of its choice.
+   Then the store gets the tokens of that server. The page tells the
+   person to connect again on the page of the app. The new tab reads the
+   generation of the store (see below). It makes a random state and a
+   PKCE pair (RFC 7636, S256). It keeps them in its sessionStorage. Then it goes to the
    sign-in page of Home Assistant. The client is the address of the app,
    and the way back is the sign-in page of the app. Home Assistant accepts
    a way back on the host of the client, and adds its answer to the query.
-   The new tab takes away the pages of Home Assistant in it from the tab
-   of the app (`window.opener`).
+   The pages of Home Assistant in the new tab get no link to the tab of
+   the app: the new tab sets `window.opener` to null.
 3. Home Assistant sends the new tab back with a code and the state. The
    hook removes them from the address (and `storeToken`, which Home
    Assistant adds when the person asks it to keep the sign-in). It gets
    the tokens for the code with the verifier, and writes the session in
    IndexedDB. The session has the address, the two tokens and the end of
-   the access token. A different session in the store is revoked. Then
-   the new tab tells its end to the first tab (`{ended: id, error}` on the
+   the access token. The hook revokes a different session in the store.
+   The revoke continues after the tab closes (`keepalive`). Then the new
+   tab tells its end to the first tab (`{ended: id, error}` on the
    BroadcastChannel), and closes. When the sign-in did not work, the new
    tab shows the error, and the first tab shows it too.
 4. The first tab checks the new tab each second. When the new tab closed
    with no end, the first tab reads the store, because the sign-in can be
-   done. With no session, it tells that the tab closed before the end. The person can also stop
-   the sign-in on the first tab: this closes the new tab.
+   done. With no session, it tells that the tab closed before the end.
+   The person can also stop the sign-in on the first tab. The browser
+   closes the new tab only when it shows a page of the app: the new tab
+   has no opener. A sign-in that goes on in the new tab keeps nothing
+   (the generation), and the new tab tells it.
 5. The hook of each tab of the app reads the store. It opens a WebSocket
    to `/api/websocket`, signs in with the access token, and asks for the
    configuration. The page shows the name of the home and the version of
@@ -1972,10 +1980,12 @@ The tests:
   the sign-in page, with a fake WebSocket, a fake fetch, fake tabs and
   fake-indexeddb. A property test (fast-check) checks the generation and
   the compare and set. It has two tabs of the app, the tabs of their
-  sign-ins, and the answers in any order. It has the shortest steps to
+  sign-ins, and the answers in any order. The test counts the disconnects
+  itself: it does not read the generation of the store. It has the shortest steps to
   each fault as fixed examples, so it finds each fault in each run. A
   test with fixed steps checks the owner. A property test checks that the
   sign-in page stays on the app, and gives back the address and the id.
+  A sign-in page that no tab of the app opened does not leave the app.
 - `test/diy_web/home_assistant_test.exs` and
   `test/diy_web/live/sign_in_live_test.exs`: the LiveView part, the card
   in Settings and on the panel of a hub, and the sign-in page. A property
