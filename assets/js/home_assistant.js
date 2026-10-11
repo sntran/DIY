@@ -30,7 +30,14 @@
 // - The owner: a refused refresh ends only the socket of its own session.
 //
 // The ghosts of the devices read the devices, the entities and the areas of
-// Home Assistant (devices(), and DIY.HomeAssistant.ghosts/3).
+// Home Assistant (devices(), and DIY.HomeAssistant.ghosts/4).
+//
+// The hook watches the states of the lights, the switches and the fans
+// (watchStates()), and turns them on and off (control()). Three rules
+// come from the TLA+ model specs/HomeAssistantStates.tla:
+// - The socket: the hook takes the messages of its open socket only.
+// - The clear: a new watch and a closed socket clear the states.
+// - The end: a new watch ends the old watch.
 //
 // The match of the rooms reads the floors and the areas of Home Assistant.
 // It adds the areas of the rooms that the person chose
@@ -58,6 +65,11 @@ export const EARLY = 60_000
 // The wait after a change of a registry of Home Assistant before the hook
 // reads the devices again: one read for many changes.
 export const REGISTRY_WAIT = 1_000
+// The domains of the entities that the app turns on and off.
+export const CONTROLS = ["fan", "light", "switch"]
+// The wait after a change of a state before the hook sends the states to
+// the LiveView: one message for many changes.
+export const STATE_WAIT = 150
 // The first and the longest wait before the hook opens the socket again.
 export const FIRST_WAIT = 1_000
 export const MAX_WAIT = 60_000
@@ -247,6 +259,12 @@ export class Link {
     this.events = new Map()
     this.watching = false
     this.reread = null
+    this.controls = new Map()
+    this.states = new Map()
+    this.statesOf = null
+    this.watched = null
+    this.statesReady = false
+    this.statesTimer = null
     this.next = CONFIG + 1
     this.wait = FIRST_WAIT
     this.invalids = 0
@@ -388,6 +406,8 @@ export class Link {
     this.watching = false
     if (this.reread) this.clearTimer(this.reread)
     this.reread = null
+    this.statesOf = null
+    this.forgetStates()
     this.next = CONFIG + 1
   }
 
@@ -564,7 +584,8 @@ export class Link {
   // command, it sends {error: "failed"}.
   // The first read also starts to watch the registries of the devices, of
   // the entities and of the areas. After a change, the hook reads the
-  // devices again (REGISTRY_WAIT).
+  // devices again (REGISTRY_WAIT). Each read also watches the states of
+  // the entities that the app turns on and off (watchStates).
   async devices() {
     try {
       const [devices, entities, areas] = await Promise.all([
@@ -572,11 +593,14 @@ export class Link {
         this.command("config/entity_registry/list"),
         this.command("config/area_registry/list"),
       ])
+      const list = deviceList(devices, entities)
       this.push("ha:devices", {
-        devices: deviceList(devices, entities),
+        devices: list,
         areas: areas.map((area) => ({id: area.area_id, name: area.name, floor: area.floor_id ?? null})),
       })
+      this.controls = controlList(list, entities)
       this.watchRegistries()
+      this.watchStates()
     } catch (error) {
       this.push("ha:devices", {error: error.code === "offline" ? "offline" : "failed"})
     }
@@ -602,6 +626,89 @@ export class Link {
     } catch {
       this.watching = false
       for (const {id, done} of subscriptions) done.then(() => this.unsubscribe(id), () => {})
+    }
+  }
+
+  // Watches the states of the entities that the app turns on and off
+  // (subscribe_entities). Home Assistant sends all their states first,
+  // then each change. When the entities change, the hook ends the old
+  // watch and starts a new one. When they do not change, the hook sends
+  // the states that it has again: a new LiveView has none.
+  async watchStates() {
+    const key = JSON.stringify([...this.controls])
+    if (key === this.watched) {
+      if (this.statesReady) this.sendStates()
+      return
+    }
+    this.endStates()
+    this.watched = key
+    const ids = [...this.controls.values()].flat().sort()
+    // With no entity, Home Assistant sends the states of all its entities.
+    if (ids.length === 0) return this.push("ha:states", {states: {}})
+    const {id, done} = this.subscribe("subscribe_entities", {entity_ids: ids}, (event) => this.stateEvent(event))
+    this.statesOf = id
+    try {
+      await done
+    } catch {
+      // A refused watch is no watch: the next read tries again.
+      if (this.statesOf === id) {
+        this.statesOf = null
+        this.watched = null
+      }
+    }
+  }
+
+  // Ends the watch of the states. Its late events change nothing.
+  endStates() {
+    if (this.statesOf !== null) this.unsubscribe(this.statesOf)
+    this.statesOf = null
+    this.forgetStates()
+  }
+
+  forgetStates() {
+    this.states = new Map()
+    this.watched = null
+    this.statesReady = false
+    if (this.statesTimer) this.clearTimer(this.statesTimer)
+    this.statesTimer = null
+  }
+
+  // An event of the watch: "a" adds states, "c" changes them, and "r"
+  // removes entities. A change of the attributes only has no "s".
+  stateEvent(event) {
+    for (const [id, state] of Object.entries(event.a ?? {})) this.states.set(id, state.s)
+    for (const [id, change] of Object.entries(event.c ?? {})) {
+      if (change["+"] && "s" in change["+"]) this.states.set(id, change["+"].s)
+    }
+    for (const id of event.r ?? []) this.states.delete(id)
+    this.statesReady = true
+    if (this.statesTimer) return
+    this.statesTimer = this.setTimer(() => {
+      this.statesTimer = null
+      this.sendStates()
+    }, STATE_WAIT)
+  }
+
+  // Sends the state of each device to the LiveView (ha:states).
+  sendStates() {
+    this.push("ha:states", {states: deviceStates(this.controls, this.states)})
+  }
+
+  // Turns the entities of a device on or off (call_service), for the
+  // switch of its item. It tells the end to the LiveView
+  // (ha:control_done): with no error, or with "offline" or "failed". The
+  // new state comes with the watch of the states.
+  async control(device, on) {
+    try {
+      const ids = this.controls.get(device)
+      if (!ids) throw new CommandError("unknown", "The app does not turn this device on or off")
+      const domains = new Map()
+      for (const id of ids) domains.set(domainOf(id), [...(domains.get(domainOf(id)) ?? []), id])
+      await Promise.all([...domains].map(([domain, entityIds]) =>
+        this.command("call_service", {domain, service: on ? "turn_on" : "turn_off", target: {entity_id: entityIds}})))
+      this.push("ha:control_done", {device, error: null})
+    } catch (error) {
+      this.push("ha:control_done", {device, error: error.code === "offline" ? "offline" : "failed"})
     }
   }
 
@@ -770,6 +877,7 @@ export function homeAssistantHook(deps) {
       this.handleEvent("ha:rooms_fetch", () => this.link.rooms())
       this.handleEvent("ha:devices_fetch", () => this.link.devices())
       this.handleEvent("ha:add_areas", ({areas}) => this.link.addAreas(areas))
+      this.handleEvent("ha:control", ({device, on}) => this.link.control(device, on === true))
       this.link.start()
     },
     reconnected() { this.link.report() },
@@ -811,8 +919,7 @@ const channelOf = (window) =>
 // no ghost. With no name, a device has the name of its model.
 export function deviceList(devices, entities) {
   const main = new Map()
-  for (const entity of entities) {
-    if (entity.entity_category || entity.hidden_by || entity.disabled_by || !entity.device_id) continue
+  for (const entity of entities.filter(isMain)) {
     if (!main.has(entity.device_id)) main.set(entity.device_id, [])
     main.get(entity.device_id).push(entity)
   }
@@ -824,11 +931,44 @@ export function deviceList(devices, entities) {
         id: device.id,
         name: device.name_by_user || device.name || device.model || "",
         area: device.area_id ?? own.find((entity) => entity.area_id)?.area_id ?? null,
-        domains: [...new Set(own.map((entity) => entity.entity_id.split(".")[0]))].sort(),
+        domains: [...new Set(own.map((entity) => domainOf(entity.entity_id)))].sort(),
         model: device.model ?? null,
       }
     })
     .filter((device) => device.area !== null)
+}
+
+// A main entity of a device: not of its configuration or of its
+// diagnostics, and not hidden or disabled.
+const isMain = (entity) =>
+  !entity.entity_category && !entity.hidden_by && !entity.disabled_by && Boolean(entity.device_id)
+
+const domainOf = (entityId) => entityId.split(".")[0]
+
+// The entities that the app turns on and off, for each device of the list
+// (deviceList). These are its main entities of a domain in CONTROLS, in
+// order. A device with no such entity does not count.
+export function controlList(list, entities) {
+  const devices = new Set(list.map((device) => device.id))
+  const controls = new Map()
+  for (const entity of entities) {
+    if (!devices.has(entity.device_id) || !isMain(entity) || !CONTROLS.includes(domainOf(entity.entity_id))) continue
+    controls.set(entity.device_id, [...(controls.get(entity.device_id) ?? []), entity.entity_id].sort())
+  }
+  return controls
+}
+
+// The state of each device that the app turns on and off. It is "on" when
+// one of its entities is on, and "off" when one is off and none is on.
+// Else it is "unavailable": Home Assistant cannot reach it, or does not
+// have it.
+export function deviceStates(controls, states) {
+  const result = {}
+  for (const [device, ids] of controls) {
+    const values = ids.map((id) => states.get(id))
+    result[device] = values.includes("on") ? "on" : values.includes("off") ? "off" : "unavailable"
+  }
+  return result
 }
 
 // The parts of the browser for the hook of a page.

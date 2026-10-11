@@ -10,7 +10,7 @@ import {
   DB, STORE, KEY, GENERATION, CHANNEL, PENDING, SIGN_IN, TAB, TAB_CHECK, EARLY, FIRST_WAIT, MAX_WAIT,
   address, blocked, socketUrl, clientOf, signInPage, signInId, randomText, pkce, authorizeUrl,
   open, sessionStore, Link, SignIn, homeAssistantHook, signInHook, browserParts, signInParts, key, CommandError,
-  deviceList, REGISTRY_WAIT,
+  deviceList, REGISTRY_WAIT, controlList, deviceStates, CONTROLS, STATE_WAIT,
 } from "../../assets/js/home_assistant.js"
 
 const HA = "http://ha.test:8123"
@@ -961,7 +961,9 @@ test("the hook of LiveView", async () => {
   await settle()
   assert.deepEqual(page.pushes.at(-1), ["hook:ha:status", {state: "none", url: null, name: null, version: null, error: null}])
   // The server sends no address: the key Connect gives it to the hook.
-  assert.deepEqual(Object.keys(handlers).sort(), ["ha:add_areas", "ha:devices_fetch", "ha:disconnect", "ha:rooms_fetch"])
+  assert.deepEqual(Object.keys(handlers).sort(), [
+    "ha:add_areas", "ha:control", "ha:devices_fetch", "ha:disconnect", "ha:rooms_fetch",
+  ])
   page.listened.connect(HA)
   assert.equal(page.opened.length, 1)
   await handlers["ha:disconnect"]()
@@ -1222,12 +1224,25 @@ test("two tabs and their sign-ins in any order: no revoked or old session in the
 // A fake registry of Home Assistant: the floors, the areas and the user.
 // Home Assistant refuses a second floor or area with the same name
 // (invalid_info). fail(message) can give the error of a command.
-function registry({floors = [], areas = [], admin = true, fail = () => null, devices = [], entities = []} = {}) {
+function registry({
+  floors = [], areas = [], admin = true, fail = () => null, devices = [], entities = [], states = {},
+} = {}) {
   const ha = {
     floors: structuredClone(floors), areas: structuredClone(areas), admin, fail, answered: new WeakMap(),
-    devices: structuredClone(devices), entities: structuredClone(entities),
+    devices: structuredClone(devices), entities: structuredClone(entities), states: {...states},
+    watches: [], calls: [], early: [], late: [],
   }
-  ha.reply = (message) => {
+  // A new state of an entity: an event for each watch of it. A person
+  // changes a state now (send), a service before its result (early).
+  ha.set = (id, state, queue = null) => {
+    ha.states[id] = state
+    for (const watch of ha.watches.filter((watch) => watch.ids.includes(id))) {
+      const event = {id: watch.id, type: "event", event: {c: {[id]: {"+": {s: state, lc: 2}}}}}
+      if (queue) queue.push({socket: watch.socket, event})
+      else watch.socket.receive(event)
+    }
+  }
+  ha.reply = (message, socket) => {
     const error = ha.fail(message, ha)
     if (error) return {success: false, error}
     const ok = (result) => ({success: true, result: structuredClone(result)})
@@ -1238,7 +1253,24 @@ function registry({floors = [], areas = [], admin = true, fail = () => null, dev
       case "config/area_registry/list": return ok(ha.areas)
       case "auth/current_user": return ok({id: "u1", name: "Owner", is_admin: ha.admin})
       case "subscribe_events": return ok(null)
-      case "unsubscribe_events": return ok(null)
+      case "unsubscribe_events": {
+        ha.watches = ha.watches.filter((watch) => watch.socket !== socket || watch.id !== message.subscription)
+        return ok(null)
+      }
+      // All the states of the entities first, after the result.
+      case "subscribe_entities": {
+        ha.watches.push({socket, id: message.id, ids: message.entity_ids})
+        const a = Object.fromEntries(message.entity_ids.filter((id) => id in ha.states)
+          .map((id) => [id, {s: ha.states[id], a: {}, c: "ctx", lc: 1}]))
+        ha.late.push({socket, event: {id: message.id, type: "event", event: {a}}})
+        return ok(null)
+      }
+      // The new states come before the result, as in Home Assistant.
+      case "call_service": {
+        ha.calls.push({domain: message.domain, service: message.service, ids: message.target.entity_id})
+        for (const id of message.target.entity_id) ha.set(id, message.service === "turn_on" ? "on" : "off", ha.early)
+        return ok({context: {id: "ctx"}})
+      }
       case "config/device_registry/list": return ok(ha.devices)
       case "config/entity_registry/list": return ok(ha.entities)
       case "config/floor_registry/create": {
@@ -1275,7 +1307,10 @@ async function serve(ha, sockets, pick = () => 0) {
     if (waiting.length === 0) return
     const {socket, message, done} = waiting[pick(waiting.length) % waiting.length]
     done.add(message.id)
-    socket.receive({id: message.id, type: "result", ...ha.reply(message)})
+    const reply = ha.reply(message, socket)
+    for (const {socket: to, event} of ha.early.splice(0)) to.receive(event)
+    socket.receive({id: message.id, type: "result", ...reply})
+    for (const {socket: to, event} of ha.late.splice(0)) to.receive(event)
   }
   throw new Error("the commands do not end")
 }
@@ -1599,13 +1634,16 @@ test("the hook reads the devices, the entities and the areas of Home Assistant",
     ["config/device_registry/list", undefined], ["config/entity_registry/list", undefined],
     ["config/area_registry/list", undefined],
     ["subscribe_events", "device_registry_updated"], ["subscribe_events", "entity_registry_updated"],
-    ["subscribe_events", "area_registry_updated"],
+    ["subscribe_events", "area_registry_updated"], ["subscribe_entities", undefined],
   ])
   assert.deepEqual(page.pushes.at(-1), ["ha:devices", {
     devices: [{id: "lamp", name: "Lamp", area: "living", domains: ["light"], model: null}],
     areas: [{id: "living", name: "Living Room", floor: "ground"}, {id: "yard", name: "Yard", floor: null}],
   }])
   assert.equal(link.watching, true)
+  // The states of the lamp come after a short wait.
+  tick(page)
+  assert.deepEqual(page.pushes.at(-1), ["ha:states", {states: {lamp: "unavailable"}}])
 
   // A change of a registry: one new read for many changes, after a wait.
   // A read does not watch again. An event of no subscription changes
@@ -1623,6 +1661,7 @@ test("the hook reads the devices, the entities and the areas of Home Assistant",
   await serve(ha, [socket])
   assert.deepEqual(page.pushes.at(-1)[1].devices.map((device) => device.id), ["lamp", "fan"])
   assert.equal(socket.sent.filter((message) => message.type === "subscribe_events").length, 3)
+  tick(page)
 
   // The socket closes: no more watch, and no read waits.
   socket.receive({id: subscriptions[1], type: "event", event: {}})
@@ -1646,7 +1685,8 @@ test("the hook reads the devices, the entities and the areas of Home Assistant",
   await read
   assert.equal(other.pushes.at(-1)[1].devices.length, 1)
   assert.equal(second.link.watching, false)
-  assert.equal(second.link.events.size, 0)
+  // Only the watch of the states stays.
+  assert.deepEqual([...second.link.events.keys()], [second.link.statesOf])
   assert.equal(second.socket.sent.filter((message) => message.type === "unsubscribe_events").length, 0)
   second.link.stop()
 
@@ -1667,7 +1707,7 @@ test("the hook reads the devices, the entities and the areas of Home Assistant",
   const ended = partial.socket.sent.filter((message) => message.type === "unsubscribe_events")
   assert.deepEqual(ended.map((message) => message.subscription), [subscribed[0].id, subscribed[2].id])
   assert.equal(partial.link.watching, false)
-  assert.equal(partial.link.events.size, 0)
+  assert.deepEqual([...partial.link.events.keys()], [partial.link.statesOf])
   partial.link.stop()
 
   // A command that Home Assistant refuses, and no socket.
@@ -1693,3 +1733,333 @@ test("the hook reads the devices, the entities and the areas of Home Assistant",
   self.destroyed()
 })
 
+
+// The sign-in of a new socket after a drop: the wait, then the steps of
+// the sign-in of the socket.
+async function reconnect(page) {
+  tick(page)
+  await settle()
+  const socket = FakeSocket.all.at(-1)
+  socket.receive({type: "auth_required", ha_version: "2026.10.0"})
+  await settle()
+  socket.receive({type: "auth_ok", ha_version: "2026.10.0"})
+  socket.receive({id: 1, type: "result", success: true, result: {location_name: "Test house"}})
+  await settle()
+  return socket
+}
+
+// The last states that the hook sent to the LiveView.
+const lastStates = (page) => page.pushes.findLast(([event]) => event === "ha:states")?.[1].states
+
+test("the entities that the app turns on and off, and the state of each device", () => {
+  assert.deepEqual(CONTROLS, ["fan", "light", "switch"])
+  const devices = [
+    haDevice("lamp", {area_id: "living"}), haDevice("plug", {area_id: "living"}),
+    haDevice("tv", {area_id: "living"}), haDevice("fan", {area_id: "porch"}), haDevice("far"),
+  ]
+  const entities = [
+    haEntity("light.lamp", "lamp"), haEntity("sensor.lamp_power", "lamp"),
+    haEntity("light.lamp_night", "lamp", {hidden_by: "user"}),
+    haEntity("switch.plug_usb", "plug"), haEntity("switch.plug", "plug"),
+    haEntity("switch.plug_led", "plug", {entity_category: "config"}),
+    haEntity("media_player.tv", "tv"), haEntity("fan.fan", "fan"), haEntity("light.far", "far"),
+  ]
+  // Only the main entities of a device of the list (deviceList), of a
+  // domain in CONTROLS, in order. A TV has none.
+  const controls = controlList(deviceList(devices, entities), entities)
+  assert.deepEqual([...controls], [
+    ["lamp", ["light.lamp"]], ["plug", ["switch.plug", "switch.plug_usb"]], ["fan", ["fan.fan"]],
+  ])
+  assert.deepEqual(deviceStates(controls, new Map([["light.lamp", "on"], ["switch.plug", "off"]])), {
+    lamp: "on", plug: "off", fan: "unavailable",
+  })
+  // One entity on: the device is on. Unknown or unavailable: not on or off.
+  assert.deepEqual(deviceStates(controls, new Map([
+    ["light.lamp", "unknown"], ["switch.plug", "off"], ["switch.plug_usb", "on"], ["fan.fan", "unavailable"],
+  ])), {lamp: "unavailable", plug: "on", fan: "unavailable"})
+})
+
+test("the state of a device comes from the states of its entities", () => {
+  const ids = ["e1", "e2", "e3", "e4"]
+  const controls = fc.array(fc.tuple(fc.constantFrom("a", "b", "c"), fc.uniqueArray(fc.constantFrom(...ids), {minLength: 1})))
+    .map((pairs) => new Map(pairs))
+  const states = fc.dictionary(fc.constantFrom(...ids), fc.constantFrom("on", "off", "unavailable", "unknown"))
+  fc.assert(fc.property(controls, states, (controls, states) => {
+    const result = deviceStates(controls, new Map(Object.entries(states)))
+    assert.deepEqual(Object.keys(result).sort(), [...controls.keys()].sort())
+    for (const [device, own] of controls) {
+      const values = own.map((id) => states[id])
+      if (values.includes("on")) assert.equal(result[device], "on")
+      else if (values.includes("off")) assert.equal(result[device], "off")
+      else assert.equal(result[device], "unavailable")
+    }
+  }))
+})
+
+// A Home Assistant with a lamp, a plug and a fan in the living room, and a
+// TV. The lamp is on, the plug is off, and the fan has no state.
+const home = (extra = {}) => registry({
+  areas: [{area_id: "living", name: "Living Room"}],
+  devices: [
+    haDevice("lamp", {area_id: "living"}), haDevice("plug", {area_id: "living"}),
+    haDevice("fan", {area_id: "living"}), haDevice("tv", {area_id: "living"}),
+  ],
+  entities: [
+    haEntity("light.lamp", "lamp"), haEntity("switch.plug", "plug"), haEntity("fan.fan", "fan"),
+    haEntity("media_player.tv", "tv"),
+  ],
+  states: {"light.lamp": "on", "switch.plug": "off", "media_player.tv": "playing"},
+  ...extra,
+})
+
+test("the hook watches the states of the lights, the switches and the fans", async () => {
+  const page = parts()
+  const {link, socket} = await connected(page)
+  const ha = home()
+  const read = link.devices()
+  await serve(ha, [socket])
+  await read
+
+  // One watch, of the entities that the app turns on and off. One message
+  // for many states, after a short wait.
+  const watch = socket.sent.find((message) => message.type === "subscribe_entities")
+  assert.deepEqual(watch.entity_ids, ["fan.fan", "light.lamp", "switch.plug"])
+  assert.deepEqual([...page.timers.values()].map((timer) => timer.ms), [STATE_WAIT])
+  assert.equal(lastStates(page), undefined)
+  tick(page)
+  assert.deepEqual(lastStates(page), {lamp: "on", plug: "off", fan: "unavailable"})
+
+  // A person turns the lamp off, then the fan on: one message.
+  ha.set("light.lamp", "off")
+  ha.set("fan.fan", "on")
+  assert.equal(page.timers.size, 1)
+  tick(page)
+  assert.deepEqual(lastStates(page), {lamp: "off", plug: "off", fan: "on"})
+
+  // A change of the attributes only, and an entity that goes and comes
+  // back.
+  socket.receive({id: watch.id, type: "event", event: {c: {"light.lamp": {"+": {a: {brightness: 3}}}}}})
+  socket.receive({id: watch.id, type: "event", event: {r: ["switch.plug"]}})
+  tick(page)
+  assert.deepEqual(lastStates(page), {lamp: "off", plug: "unavailable", fan: "on"})
+  socket.receive({id: watch.id, type: "event", event: {a: {"switch.plug": {s: "on", a: {}}}}})
+  tick(page)
+  assert.deepEqual(lastStates(page), {lamp: "off", plug: "on", fan: "on"})
+
+  // A new read with the same entities: no new watch, and the states again
+  // at once (a new LiveView has none).
+  const count = page.pushes.length
+  const again = link.devices()
+  await serve(ha, [socket])
+  await again
+  assert.equal(socket.sent.filter((message) => message.type === "subscribe_entities").length, 1)
+  assert.deepEqual(page.pushes.slice(count).map(([event]) => event), ["ha:devices", "ha:states"])
+
+  // A new light: the hook ends the old watch, and starts a new one. A late
+  // event of the old watch changes nothing.
+  ha.devices.push(haDevice("hall", {area_id: "living"}))
+  ha.entities.push(haEntity("light.hall", "hall"))
+  ha.states["light.hall"] = "on"
+  const third = link.devices()
+  await serve(ha, [socket])
+  await third
+  assert.deepEqual(socket.sent.filter((message) => message.type === "unsubscribe_events").at(-1).subscription, watch.id)
+  const watch2 = socket.sent.findLast((message) => message.type === "subscribe_entities")
+  assert.deepEqual(watch2.entity_ids, ["fan.fan", "light.hall", "light.lamp", "switch.plug"])
+  socket.receive({id: watch.id, type: "event", event: {c: {"light.lamp": {"+": {s: "on"}}}}})
+  tick(page)
+  // The new watch gives all the states again.
+  assert.deepEqual(lastStates(page), {lamp: "off", plug: "off", fan: "on", hall: "on"})
+
+  // The socket closes: the hook forgets the states, and sends none.
+  ha.set("light.lamp", "on")
+  assert.equal(page.timers.size, 1)
+  socket.drop()
+  assert.equal(link.states.size, 0)
+  assert.equal(link.statesTimer, null)
+  assert.equal(link.statesOf, null)
+  link.stop()
+})
+
+test("a watch of the states that Home Assistant refuses, and a Home Assistant with no light", async () => {
+  // No entity to turn on or off: no watch (Home Assistant sends all the
+  // states then), and no states.
+  const page = parts()
+  const {link, socket} = await connected(page)
+  const bare = registry({
+    devices: [haDevice("tv", {area_id: "living"})], entities: [haEntity("media_player.tv", "tv")],
+  })
+  const read = link.devices()
+  await serve(bare, [socket])
+  await read
+  assert.equal(socket.sent.filter((message) => message.type === "subscribe_entities").length, 0)
+  assert.deepEqual(lastStates(page), {})
+  link.stop()
+
+  // Home Assistant refuses the watch: the next read tries again.
+  const other = parts()
+  const second = await connected(other)
+  let refuse = true
+  const ha = home({fail: (message) => refuse && message.type === "subscribe_entities" ? {code: "unauthorized"} : null})
+  const first = second.link.devices()
+  await serve(ha, [second.socket])
+  await first
+  assert.equal(second.link.statesOf, null)
+  assert.equal(second.link.watched, null)
+  assert.equal(second.link.events.size, 3)
+  refuse = false
+  const next = second.link.devices()
+  await serve(ha, [second.socket])
+  await next
+  assert.equal(second.socket.sent.filter((message) => message.type === "subscribe_entities").length, 2)
+  tick(other)
+  assert.deepEqual(lastStates(other), {lamp: "on", plug: "off", fan: "unavailable"})
+  second.link.stop()
+})
+
+test("the switch of an item turns its device on and off", async () => {
+  const page = parts()
+  const {link, socket} = await connected(page)
+  const ha = home({
+    devices: [haDevice("lamp", {area_id: "living"}), haDevice("combo", {area_id: "living"})],
+    entities: [haEntity("light.lamp", "lamp"), haEntity("light.combo", "combo"), haEntity("switch.combo", "combo")],
+  })
+  const read = link.devices()
+  await serve(ha, [socket])
+  await read
+  tick(page)
+
+  // One call for each domain of the device. The new state comes with the
+  // watch, before the end.
+  const done = link.control("lamp", false)
+  await serve(ha, [socket])
+  await done
+  assert.deepEqual(ha.calls, [{domain: "light", service: "turn_off", ids: ["light.lamp"]}])
+  assert.deepEqual(page.pushes.at(-1), ["ha:control_done", {device: "lamp", error: null}])
+  tick(page)
+  assert.equal(lastStates(page).lamp, "off")
+
+  ha.calls = []
+  const both = link.control("combo", true)
+  await serve(ha, [socket])
+  await both
+  assert.deepEqual(ha.calls, [
+    {domain: "light", service: "turn_on", ids: ["light.combo"]},
+    {domain: "switch", service: "turn_on", ids: ["switch.combo"]},
+  ])
+  assert.deepEqual(page.pushes.at(-1), ["ha:control_done", {device: "combo", error: null}])
+
+  // A device that the app does not turn on or off, and a call that Home
+  // Assistant refuses.
+  await link.control("tv", true)
+  assert.deepEqual(page.pushes.at(-1), ["ha:control_done", {device: "tv", error: "failed"}])
+  ha.fail = (message) => message.type === "call_service" ? {code: "home_assistant_error", message: "No"} : null
+  const refused = link.control("lamp", true)
+  await serve(ha, [socket])
+  await refused
+  assert.deepEqual(page.pushes.at(-1), ["ha:control_done", {device: "lamp", error: "failed"}])
+
+  // The socket closes while the call waits: offline.
+  const waiting = link.control("lamp", true)
+  socket.drop()
+  await waiting
+  assert.deepEqual(page.pushes.at(-1), ["ha:control_done", {device: "lamp", error: "offline"}])
+  link.stop()
+
+  // The LiveView asks for a control.
+  const other = parts()
+  const handlers = {}
+  const hook = homeAssistantHook(() => other.deps)
+  const self = {...hook, pushEvent: (event, payload) => other.pushes.push([event, payload]), handleEvent: (event, f) => { handlers[event] = f }}
+  self.mounted()
+  await handlers["ha:control"]({device: "lamp", on: true})
+  assert.deepEqual(other.pushes.at(-1), ["ha:control_done", {device: "lamp", error: "failed"}])
+  self.destroyed()
+})
+
+test("after any steps, the LiveView gets the states of Home Assistant, and none while the socket is closed", async () => {
+  const entity = fc.constantFrom("light.lamp", "switch.plug", "fan.fan", "light.hall")
+  const step = fc.oneof(
+    fc.record({kind: fc.constant("set"), entity, state: fc.constantFrom("on", "off", "unavailable")}),
+    fc.record({kind: fc.constant("gone"), entity}),
+    fc.record({kind: fc.constant("control"), device: fc.constantFrom("lamp", "plug", "fan", "hall"), on: fc.boolean()}),
+    fc.record({kind: fc.constant("hall"), add: fc.boolean()}),
+    fc.constant({kind: "drop"}),
+    fc.constant({kind: "reconnect"}),
+    fc.constant({kind: "tick"}),
+  )
+  await fc.assert(fc.asyncProperty(fc.array(step, {maxLength: 14}), fc.array(fc.nat(5), {maxLength: 30}), async (steps, picks) => {
+    const page = parts()
+    let {link, socket} = await connected(page)
+    let open = true
+    const ha = home()
+    let pick = 0
+    const order = () => picks[pick++ % Math.max(picks.length, 1)] ?? 0
+    // The LiveView reads the devices when the link is connected, and after
+    // a change of a registry.
+    const read = async () => {
+      const done = link.devices()
+      await serve(ha, [socket], order)
+      await done
+    }
+    await read()
+    const pending = []
+    for (const one of steps) {
+      if (one.kind === "set") {
+        ha.set(one.entity, one.state)
+      } else if (one.kind === "gone") {
+        // Home Assistant has no state of the entity now.
+        delete ha.states[one.entity]
+        for (const watch of ha.watches.filter((watch) => watch.ids.includes(one.entity))) {
+          watch.socket.receive({id: watch.id, type: "event", event: {r: [one.entity]}})
+        }
+      } else if (one.kind === "control") {
+        pending.push(link.control(one.device, one.on))
+        if (open) await serve(ha, [socket], order)
+      } else if (one.kind === "hall") {
+        const has = ha.devices.some((device) => device.id === "hall")
+        if (one.add && !has) {
+          ha.devices.push(haDevice("hall", {area_id: "living"}))
+          ha.entities.push(haEntity("light.hall", "hall"))
+        } else if (!one.add && has) {
+          ha.devices = ha.devices.filter((device) => device.id !== "hall")
+          ha.entities = ha.entities.filter((entity) => entity.device_id !== "hall")
+        }
+        if (open) await read()
+      } else if (one.kind === "drop" && open) {
+        // Home Assistant ends the watches of a closed socket.
+        socket.drop()
+        ha.watches = ha.watches.filter((watch) => watch.socket !== socket)
+        open = false
+      } else if (one.kind === "reconnect" && !open) {
+        socket = await reconnect(page)
+        open = true
+        await read()
+      } else if (one.kind === "tick" && open) {
+        tick(page)
+      }
+    }
+    if (!open) {
+      socket = await reconnect(page)
+      await read()
+    }
+    await serve(ha, [socket], order)
+    await Promise.all(pending)
+    tick(page)
+
+    // Quiet now: the last states are the states of Home Assistant, and
+    // Home Assistant has one watch of the states at most.
+    const controls = controlList(deviceList(ha.devices, ha.entities), ha.entities)
+    assert.deepEqual(lastStates(page), deviceStates(controls, new Map(Object.entries(ha.states))))
+    assert.ok(ha.watches.length <= 1)
+
+    // Between a status that is not connected and the next connected one,
+    // no states.
+    let connectedNow = true
+    for (const [event, payload] of page.pushes) {
+      if (event === "ha:status") connectedNow = payload.state === "connected"
+      if (event === "ha:states") assert.ok(connectedNow)
+    }
+    link.stop()
+  }), {numRuns: 80})
+})
