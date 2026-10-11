@@ -41,7 +41,7 @@ defmodule DIYWeb.Inside do
 
   attr :item_frames, :map,
     default: nil,
-    doc: "the frames of the open item (`DIYWeb.Stage.frames/1`)"
+    doc: "the frames of the open item (`DIYWeb.Stage.frames/2`)"
 
   attr :status, :string, default: nil, doc: "a text for a screen reader after a move"
   attr :away, :list, default: [], doc: "the stations of the house in a van: {item, van}"
@@ -155,11 +155,11 @@ defmodule DIYWeb.Inside do
       </div>
 
       <.item_stage
-        :if={@item && @item_frames && match?({:ok, _}, Build.item(@build, @item))}
+        :if={@item && @item_frames && match?({:ok, _}, house_item(@build, @item))}
         frames={@item_frames}
         close={if @chosen, do: ~p"/inside?#{[room: @chosen.id]}", else: ~p"/inside"}
         build={@build}
-        item={elem(Build.item(@build, @item), 1)}
+        item={elem(house_item(@build, @item), 1)}
         estimate={@estimate}
         price={@price}
         error={@item_error}
@@ -544,18 +544,49 @@ defmodule DIYWeb.Inside do
   attr :outage, :string, default: nil
   attr :close, :string, default: "/inside", doc: "the page of the close link"
   attr :ha, :map, required: true
-  attr :frames, :map, required: true, doc: "the frames of its kind (`DIYWeb.Stage.frames/1`)"
+  attr :frames, :map, required: true, doc: "the frames of its kind (`DIYWeb.Stage.frames/2`)"
 
-  # An item in front of the person (DIYWeb.Stage). Its panel is the same
-  # for each item. Its parts are in this order: what it costs, the link of
-  # a hub to Home Assistant, its use, its place, and more.
-  # Each part has a heading, and the panel scrolls: no part is out of sight.
-  defp item_stage(assigns) do
+  attr :van, :map,
+    default: nil,
+    doc: "on the page Van: the van of the item, or the van itself (`DIYWeb.VanPage`)"
+
+  attr :numbers, :list,
+    default: [],
+    doc: "for an item in a van: its weight and its energy in a day, in words"
+
+  @doc """
+  An item in front of the person (`DIYWeb.Stage`). Its panel is the same
+  for each item, on the page Rooms and on the page Van. Its parts are in
+  this order: what it costs, the link of a hub to Home Assistant, its use,
+  its place, and more. For an item in a van, the first part has its
+  weight and its energy. Each part has a heading, and the panel scrolls: no part is out of
+  sight.
+  """
+  def item_stage(assigns) do
     kind = Catalog.kind(assigns.item.type)
     {:ok, room} = Build.room(assigns.build, assigns.item.room)
-    rooms = Enum.filter(assigns.build.rooms, &(&1.place in kind.places))
+    in_van = Build.van_level?(room.level)
+
+    # The rooms (or the zones of its van) where the item can go. An item
+    # does not go from the house to a van (`DIY.Build.move_item/3`).
+    rooms =
+      if in_van,
+        do: Enum.filter(Build.zones(assigns.build, assigns.van.id), &(&1.place in kind.places)),
+        else:
+          Enum.filter(
+            assigns.build.rooms,
+            &(&1.place in kind.places and not Build.van_level?(&1.level))
+          )
+
     van = Enum.any?(assigns.build.items, &(&1.type == "camper_van"))
-    features = if van, do: kind.features, else: kind.features -- @van_features
+
+    features =
+      cond do
+        in_van -> Enum.filter(kind.features, &(&1 in @van_features))
+        van -> kind.features
+        true -> kind.features -- @van_features
+      end
+
     features = if gas_item?(assigns.item), do: features ++ [:gas], else: features
 
     solar =
@@ -569,9 +600,10 @@ defmodule DIYWeb.Inside do
         kind: kind,
         room: room,
         rooms: rooms,
-        van: van,
+        in_van: in_van,
+        on_van_page: assigns.van != nil,
         features: features,
-        fields: Enum.filter(kind.params, &shown?(&1, assigns.item, van)),
+        fields: Enum.filter(kind.params, &shown?(&1, assigns.item, van or in_van)),
         spots: MapSet.new(assigns.frames.spots, & &1.key),
         gas: Prices.gas(assigns.build),
         solar: solar,
@@ -584,7 +616,11 @@ defmodule DIYWeb.Inside do
       frames={@frames}
       item={@item.id}
       title={@name}
-      note={"In #{@room.name}#{level_note(@room.level)}"}
+      note={
+        if @in_van,
+          do: "In #{@room.name}, in the van",
+          else: "In #{@room.name}#{level_note(@room.level)}"
+      }
       close={@close}
     >
       <:screen :if={@item.type == "home_assistant"}>
@@ -592,7 +628,18 @@ defmodule DIYWeb.Inside do
       </:screen>
 
       <section
-        :if={@estimate.ready}
+        :if={@in_van and @numbers != []}
+        id="part-cost"
+        class="stage-cost"
+        aria-labelledby="part-cost-title"
+      >
+        <h3 id="part-cost-title" class="sr-only">Its weight and its energy</h3>
+        <p class="stage-month">{hd(@numbers)}</p>
+        <p :for={line <- tl(@numbers)} class="stage-year">{line}</p>
+      </section>
+
+      <section
+        :if={@estimate.ready and not @in_van}
         id="part-cost"
         class="stage-cost"
         aria-labelledby="part-cost-title"
@@ -601,7 +648,10 @@ defmodule DIYWeb.Inside do
           {if @item.type in @no_use, do: "Its energy", else: "What it costs"}
         </h3>
         <p :if={@item.type in @no_use} id="item-math" class="stage-help">
-          {hd(Estimate.explain(@item, 7, @estimate))}
+          {if @on_van_page and @item.type == "camper_van",
+            do:
+              "A camper van has its own build, with its own batteries and power: this page. Its charge at home is not in this estimate.",
+            else: hd(Estimate.explain(@item, 7, @estimate))}
         </p>
         <%= if @item.type not in @no_use do %>
           <p class="stage-month">
@@ -622,9 +672,16 @@ defmodule DIYWeb.Inside do
 
       <div :if={@item.typical} id="part-guess" class="stage-guess">
         <p>
-          {if @item.type == "camper_van",
-            do: "These numbers are typical of the model. Check them on the label in the door frame.",
-            else: "These numbers are a guess for a house like yours. Check them on the item."}
+          {cond do
+            @item.type == "camper_van" ->
+              "These numbers are typical of the model. Check them on the label in the door frame."
+
+            @in_van ->
+              "These numbers are a guess. Check them on the label."
+
+            true ->
+              "These numbers are a guess for a house like yours. Check them on the item."
+          end}
         </p>
         <button type="button" phx-click="check_item" phx-value-id={@item.id} class="stage-btn">
           They are right
@@ -653,7 +710,11 @@ defmodule DIYWeb.Inside do
         <.link patch={~p"/power"} class="link">Open the page Power</.link>
       </p>
 
-      <details :if={@estimate.ready and @item.type not in @no_use} id="part-how" class="stage-how">
+      <details
+        :if={@estimate.ready and @item.type not in @no_use and not @in_van}
+        id="part-how"
+        class="stage-how"
+      >
         <summary>How the app gets this number</summary>
         <p>For one month: {month_name(math_month(@item))}{season(math_month(@item))}.</p>
         <ul class="stage-list">
@@ -684,7 +745,7 @@ defmodule DIYWeb.Inside do
       >
         <h3 id="part-use-title" class="stage-sec-title">How you use it</h3>
         <.link
-          :if={:van in @kind.features}
+          :if={:van in @kind.features and not @on_van_page}
           patch={~p"/van?#{[id: @item.id]}"}
           id="open-van"
           class="stage-btn stage-primary"
@@ -708,27 +769,38 @@ defmodule DIYWeb.Inside do
             spot={MapSet.member?(@spots, param.key)}
           />
         </form>
-        <p :if={@fields != []} id="item-said" class="sr-only" role="status">{@said}</p>
+        <button
+          :if={@item.type == "camper_van" and @item.params["model"] != "other"}
+          type="button"
+          id="van-model"
+          phx-click="van_model"
+          phx-value-id={@item.id}
+          class="stage-btn"
+        >
+          Use the numbers of the model
+        </button>
         <.usage :if={:usage in @kind.features} usage={@build.usage} />
       </section>
+
+      <p id="item-said" class="sr-only" role="status">{@said}</p>
 
       <section id="part-where" class="stage-sec" aria-labelledby="part-where-title">
         <h3 id="part-where-title" class="stage-sec-title">Where it is</h3>
         <form :if={length(@rooms) > 1} id="move-form" phx-change="move_item" class="stage-field">
           <input type="hidden" name="item_id" value={@item.id} />
-          <label for="item-room" class="stage-label">Room</label>
+          <label for="item-room" class="stage-label">{if @in_van, do: "Zone", else: "Room"}</label>
           <select id="item-room" name="room" class="stage-input">
             <option :for={room <- @rooms} value={room.id} selected={room.id == @item.room}>
               {room.name}
             </option>
           </select>
         </form>
-        <.place :if={@item.at} item={@item} room={@room} />
+        <.place :if={@item.at} item={@item} room={@room} bad={bad_sides(@error)} />
       </section>
 
       <section id="part-more" class="stage-sec" aria-labelledby="part-more-title">
         <h3 id="part-more-title" class="stage-sec-title">More</h3>
-        <form id="flags-form" phx-change="flag" class="stage-fields">
+        <form :if={not @in_van} id="flags-form" phx-change="flag" class="stage-fields">
           <input type="hidden" name="item_id" value={@item.id} />
           <.switch name="planned" checked={@item.planned}>I do not have it yet: it is a plan</.switch>
           <.switch :if={station?(@build) and loads_power?(@item)} name="backup" checked={@item.backup}>
@@ -738,7 +810,17 @@ defmodule DIYWeb.Inside do
         <p class="stage-help">
           <span class="font-semibold">The app uses it for:</span> {features(@features)}.
         </p>
-        <div id="item-remove" class="stage-remove">
+        <button
+          :if={@in_van and @item.type == "power_station" and @item.home}
+          type="button"
+          id="bring-home"
+          phx-click="bring_home"
+          phx-value-item={@item.id}
+          class="stage-btn"
+        >
+          Bring it home
+        </button>
+        <div :if={not (@on_van_page and @item.id == @van.id)} id="item-remove" class="stage-remove">
           <button
             type="button"
             id="ask-remove"
@@ -758,9 +840,16 @@ defmodule DIYWeb.Inside do
             aria-labelledby="remove-text"
           >
             <p id="remove-text">
-              {if @item.type == "smart_meter" and @build.usage,
-                do: "Remove this item? With no smart meter, the real usage goes too.",
-                else: "Remove this item from the house?"}
+              {cond do
+                @item.type == "smart_meter" and @build.usage ->
+                  "Remove this item? With no smart meter, the real usage goes too."
+
+                @in_van ->
+                  "Remove this item from the van?"
+
+                true ->
+                  "Remove this item from the house?"
+              end}
             </p>
             <button
               type="button"
@@ -971,18 +1060,30 @@ defmodule DIYWeb.Inside do
   attr :item, :map, required: true
   attr :room, :map, required: true, doc: "the room or the zone of the item"
 
+  attr :bad, :list,
+    default: [],
+    doc: "the sides of the size that are not valid (\"w\", \"d\", \"h\")"
+
   @doc """
   The place of an item on the plan: buttons that move it, its place in
-  words, its size and its turn. It is on the panel of an item of the house
-  (`DIYWeb.Stage`), and in the sheet of an item of a van.
+  words, its size and its turn. It is in the panel of each item
+  (`item_stage/1`). Each side of the size has the control of a number:
+  − and +, a field and its unit (`DIY.Catalog.stepped/3`). A change of a
+  field applies at once.
   """
   def place(assigns) do
     {pw, pd} = Layout.panel()
-    assigns = assign(assigns, :panel, "#{pw} by #{pd}")
+
+    assigns =
+      assign(assigns,
+        panel: "#{pw} by #{pd}",
+        sides: size_fields(assigns.item),
+        max: Layout.max_size()
+      )
 
     ~H"""
-    <div id="item-place" class="space-y-2 rounded-box bg-base-200 p-3">
-      <p class="text-sm font-semibold">Its place, its size and its turn</p>
+    <div id="item-place" class="stage-fields">
+      <p class="stage-label">Its place, its size and its turn</p>
       <.moves
         id="move-item"
         event="nudge_item"
@@ -991,49 +1092,83 @@ defmodule DIYWeb.Inside do
         what="the item"
         van={Build.van_level?(@room.level)}
       />
-      <p id="item-where" class="text-sm" aria-live="polite">{where(@item, @room)}</p>
-      <p :if={@item.type == "solar_panels"} class="text-xs opacity-70">
+      <p id="item-where" class="stage-help" aria-live="polite">{where(@item, @room)}</p>
+      <p :if={@item.type == "solar_panels"} class="stage-help">
         The watts give the size of the panels on the roof: {@panel} inches for each panel of 400 W.
       </p>
-      <p :if={@item.type == "camper_van"} class="text-xs opacity-70">
+      <p :if={@item.type == "camper_van"} class="stage-help">
         The model of the van gives its size, with its mirrors.
       </p>
       <form
         :if={@item.type not in ["solar_panels", "camper_van"]}
         id="size-form"
+        phx-change="item_size"
         phx-submit="item_size"
-        class="flex flex-wrap items-end gap-2"
+        class="stage-fields"
       >
         <input type="hidden" name="item_id" value={@item.id} />
-        <label :for={{key, label, value} <- size_fields(@item)}>
-          <span class="block text-xs">{label}</span>
-          <input
-            name={key}
-            type="number"
-            min="1"
-            max={Layout.max_size()}
-            step="1"
-            inputmode="numeric"
-            value={value}
-            class="input input-sm w-20"
-          />
-        </label>
-        <button class="btn btn-sm">Set the size</button>
+        <div :for={{key, label, value} <- @sides} id={"size-#{key}-field"} class="stage-field">
+          <label for={"size-#{key}"} class="stage-label">{label}</label>
+          <div class="stage-stepper">
+            <button
+              type="button"
+              class="stage-step"
+              phx-click="step_size"
+              phx-value-id={@item.id}
+              phx-value-side={key}
+              phx-value-by="-1"
+              aria-label={"Less: #{label}"}
+              aria-disabled={value <= 1 && "true"}
+            >
+              −
+            </button>
+            <input
+              id={"size-#{key}"}
+              name={key}
+              type="number"
+              min="1"
+              max={@max}
+              step="1"
+              inputmode="numeric"
+              value={value}
+              phx-debounce="400"
+              aria-invalid={key in @bad && "true"}
+              aria-describedby={"size-#{key}-unit#{if key in @bad, do: " size-error"}"}
+              class="stage-input"
+            />
+            <span id={"size-#{key}-unit"} class="stage-unit">in</span>
+            <button
+              type="button"
+              class="stage-step"
+              phx-click="step_size"
+              phx-value-id={@item.id}
+              phx-value-side={key}
+              phx-value-by="1"
+              aria-label={"More: #{label}"}
+              aria-disabled={value >= @max && "true"}
+            >
+              +
+            </button>
+          </div>
+        </div>
+        <p :if={@bad != []} id="size-error" class="stage-error">
+          Give each side in inches, from 1 to {@max}.
+        </p>
       </form>
-      <p :if={@item.type not in ["solar_panels", "camper_van"]} class="text-xs opacity-70">
-        In inches.{if @item.size,
-          do: " You gave this size.",
-          else: " These are the typical sizes of this kind of item. Give the sizes of your item."}
+      <p :if={@item.type not in ["solar_panels", "camper_van"]} class="stage-help">
+        {if @item.size,
+          do: "You gave this size.",
+          else: "These are the typical sizes of this kind of item. Give the sizes of your item."}
       </p>
-      <div class="flex gap-2">
+      <div class="flex flex-wrap gap-2">
         <button
           type="button"
           id="turn-item"
           phx-click="turn_item"
           phx-value-id={@item.id}
-          class="btn btn-sm"
+          class="stage-btn"
         >
-          <.icon name="hero-arrow-path" class="size-4" /> Turn it
+          <.icon name="hero-arrow-path" class="size-5" /> Turn it
         </button>
         <button
           :if={@item.size}
@@ -1042,7 +1177,7 @@ defmodule DIYWeb.Inside do
           phx-click="item_size"
           phx-value-item_id={@item.id}
           phx-value-typical="true"
-          class="btn btn-sm btn-ghost"
+          class="stage-btn"
         >
           The typical size
         </button>
@@ -1157,6 +1292,20 @@ defmodule DIYWeb.Inside do
     [{"w", "Width", w}, {"d", "Depth", d}, {"h", "Height", h}]
   end
 
+  # The sides of the size that are not valid, from the error of the item
+  # ("size:w,h").
+  defp bad_sides("size:" <> sides), do: String.split(sides, ",", trim: true)
+  defp bad_sides(_error), do: []
+
+  # An item of the house (not of a van): its panel is on the page Rooms.
+  defp house_item(build, id) do
+    with {:ok, item} <- Build.item(build, id),
+         {:ok, room} <- Build.room(build, item.room),
+         false <- Build.van_level?(room.level),
+         do: {:ok, item},
+         else: (_other -> {:error, :item})
+  end
+
   # True when the house has a power station (a planned one too).
   defp station?(build), do: Enum.any?(build.items, &(&1.type == "power_station"))
 
@@ -1246,66 +1395,6 @@ defmodule DIYWeb.Inside do
     """
   end
 
-  attr :param, :map, required: true
-  attr :value, :any, required: true
-  attr :error, :boolean, default: false
-
-  @doc "The input of a parameter of an item (`DIY.Catalog`)."
-  def param(%{param: %{type: :bool}} = assigns) do
-    ~H"""
-    <label class="flex items-center gap-2">
-      <input type="hidden" name={"item[#{@param.key}]"} value="false" />
-      <input
-        type="checkbox"
-        name={"item[#{@param.key}]"}
-        value="true"
-        checked={@value}
-        class="checkbox checkbox-sm"
-      />
-      <span>{@param.label}</span>
-    </label>
-    """
-  end
-
-  def param(%{param: %{type: {:choice, values}}} = assigns) do
-    assigns = assign(assigns, :values, values)
-
-    ~H"""
-    <label class="block">
-      <span class="text-sm font-semibold">{@param.label}</span>
-      <select name={"item[#{@param.key}]"} class="select select-sm w-full">
-        <option :for={{key, label} <- @values} value={key} selected={key == @value}>{label}</option>
-      </select>
-      <span :if={@param.note} class="block text-xs opacity-70">{@param.note}</span>
-    </label>
-    """
-  end
-
-  def param(assigns) do
-    ~H"""
-    <label class="block">
-      <span class="text-sm font-semibold">{@param.label}{if @param.unit, do: " (#{@param.unit})"}</span>
-      <input
-        name={"item[#{@param.key}]"}
-        value={Format.value(@value)}
-        type={if @param.type == :text, do: "text", else: "number"}
-        step={if @param.type == :float, do: "any", else: "1"}
-        min={@param[:min]}
-        max={@param[:max]}
-        inputmode={if @param.type == :text, do: "text", else: "decimal"}
-        phx-debounce="400"
-        class={["input input-sm w-full", @error && "input-error"]}
-      />
-      <span :if={@error} class="text-xs text-error">
-        {if @param.type == :text,
-          do: "Give a name.",
-          else: "Give a number from #{Format.value(@param.min)} to #{Format.value(@param.max)}."}
-      </span>
-      <span :if={@param.note} class="block text-xs opacity-70">{@param.note}</span>
-    </label>
-    """
-  end
-
   attr :room, :map, required: true
 
   # The kinds of items that can go in a room.
@@ -1334,7 +1423,6 @@ defmodule DIYWeb.Inside do
 
   attr :id, :string, required: true
   attr :title, :string, required: true
-  attr :icon, :string, default: nil, doc: "the kind of an item, for its icon"
   attr :close, :string, default: "/inside", doc: "the page of the close link"
   slot :inner_block, required: true
 
@@ -1358,9 +1446,7 @@ defmodule DIYWeb.Inside do
         phx-mounted={JS.focus_first()}
       >
         <div class="flex items-center justify-between">
-          <h2 id={"#{@id}-title"} class="flex items-center gap-2 text-lg font-bold">
-            <Icon.item :if={@icon} type={@icon} class="size-8" />{@title}
-          </h2>
+          <h2 id={"#{@id}-title"} class="text-lg font-bold">{@title}</h2>
           <.link patch={@close} class="btn btn-sm btn-ghost" aria-label="Close" data-close>
             <.icon name="hero-x-mark" class="size-5" />
           </.link>

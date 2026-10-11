@@ -24,6 +24,9 @@ defmodule DIYWeb.HomeLive do
 
   @power_types ~w(power_station solar_panels transfer_switch ev)
 
+  # The sides of the size of an item, for − and +.
+  @sides %{"w" => {:w, "Width"}, "d" => {:d, "Depth"}, "h" => {:h, "Height"}}
+
   # The time in ms that the status of − and + stays empty after a tap at an
   # end of the range. Some screen readers do not hear two changes that come
   # one immediately after the other.
@@ -101,6 +104,8 @@ defmodule DIYWeb.HomeLive do
      |> assign(:item_error, if(item == socket.assigns[:item], do: socket.assigns[:item_error]))
      |> assign(:item_said, if(item == socket.assigns[:item], do: socket.assigns[:item_said]))
      |> assign(:item, item)
+     # The error of a ZIP code is for the page that showed it.
+     |> assign(zip_error: nil, zip_text: nil)
      |> item_frames()
      |> assign(:add, if(sheets?, do: params["add"]))
      |> assign(:room, params["room"])
@@ -113,21 +118,27 @@ defmodule DIYWeb.HomeLive do
      |> assign(:hint, false)}
   end
 
-  # The frames of the model of the open item (DIYWeb.Stage). The LiveView
-  # keeps them while the item is open: a render does not send them again.
-  # An item of a van opens in a sheet, with no frames.
+  # The frames of the model of the open item (DIYWeb.Stage), on the page
+  # Rooms and on the page Van. The LiveView keeps them while the item is
+  # open: a render does not send them again. The first frame of an item in
+  # a van is from the camera of the van plan.
   defp item_frames(socket) do
-    type =
-      with :inside <- socket.assigns.live_action,
+    shown =
+      with action when action in [:inside, :van] <- socket.assigns.live_action,
            id when is_binary(id) <- socket.assigns[:item],
            %Build{} = build <- socket.assigns[:build],
            {:ok, item} <- Build.item(build, id),
-           do: item.type,
+           {:ok, room} <- Build.room(build, item.room),
+           do: {item.type, if(Build.van_level?(room.level), do: :van, else: :house)},
            else: (_none -> nil)
 
     case socket.assigns[:item_frames] do
-      %{type: ^type} -> socket
-      _other -> assign(socket, :item_frames, type && Map.put(Stage.frames(type), :type, type))
+      %{shown: ^shown} ->
+        socket
+
+      _other ->
+        frames = with {type, plan} <- shown, do: Map.put(Stage.frames(type, plan), :shown, shown)
+        assign(socket, :item_frames, frames)
     end
   end
 
@@ -155,17 +166,19 @@ defmodule DIYWeb.HomeLive do
     end
   end
 
+  # A ZIP code, on the start page or in Settings. After an error, the field
+  # keeps the text that the person typed (`zip_text`), so the person can
+  # correct it.
   def handle_event("zip", %{"zip" => zip}, socket) when is_binary(zip) do
     case Build.set_zip(socket.assigns.build, zip) do
       {:ok, build} ->
-        {:noreply, socket |> assign(:zip_error, nil) |> put(build)}
+        {:noreply, socket |> assign(zip_error: nil, zip_text: nil) |> put(build)}
 
       {:error, :zip} ->
         {:noreply,
-         assign(
-           socket,
-           :zip_error,
-           "The app does not know this ZIP code. Give 5 digits, for example 75070."
+         assign(socket,
+           zip_error: "The app does not know this ZIP code. Give 5 digits, for example 75070.",
+           zip_text: String.slice(zip, 0, 10)
          )}
     end
   end
@@ -247,9 +260,7 @@ defmodule DIYWeb.HomeLive do
 
   # A tap on − or + of a number of an item (DIYWeb.Inside): the next round
   # value, in the range of the number (`DIY.Catalog.stepped/3`). The panel
-  # tells the new value to a screen reader (`item_said`), and an end of the
-  # range. A tap at an end does not change the value, so the status is
-  # empty for @said_again ms: then a screen reader reads it again.
+  # tells the new value to a screen reader (`say_step/6`).
   def handle_event("step_param", %{"id" => id, "key" => key, "by" => by}, socket) do
     with true <- by in ["-1", "1"],
          {:ok, item} <- Build.item(socket.assigns.build, id),
@@ -258,26 +269,38 @@ defmodule DIYWeb.HomeLive do
              Catalog.kind(item.type).params,
              &(&1.key == key and &1.type in [:int, :float])
            ) do
-      value = Catalog.stepped(param, item.params[key], String.to_integer(by))
-      unit = if param.unit, do: " #{param.unit}", else: ""
-
-      done =
-        cond do
-          value == param.max -> ", the most"
-          value == param.min -> ", the least"
-          true -> ""
-        end
+      before = item.params[key]
+      value = Catalog.stepped(param, before, String.to_integer(by))
 
       {:noreply, socket} =
         handle_event("item", %{"item_id" => id, "item" => %{key => value}}, socket)
 
-      said = "#{param.label}: #{Format.value(value)}#{unit}#{done}"
+      {:noreply, say_step(socket, id, {:param, key}, param, before, value)}
+    else
+      _other -> {:noreply, socket}
+    end
+  end
 
-      if value == item.params[key] do
-        Process.send_after(self(), {:item_said, id, key, value, said}, @said_again)
-        {:noreply, assign(socket, :item_said, nil)}
-      else
-        {:noreply, assign(socket, :item_said, said)}
+  # A tap on − or + of a side of the size of an item (`DIYWeb.Inside.place/1`).
+  # The side gets the next round number of inches, from 1 to the largest
+  # size. The status
+  # tells it, as for a number of the item.
+  def handle_event("step_size", %{"id" => id, "side" => side, "by" => by}, socket)
+      when is_map_key(@sides, side) and by in ["-1", "1"] do
+    with {:ok, item} <- Build.item(socket.assigns.build, id) do
+      {w, d, h} = Layout.size(item)
+      size = %{w: w, d: d, h: h}
+      {key, label} = @sides[side]
+      param = %{label: label, unit: "in", type: :int, min: 1, max: Layout.max_size()}
+      value = Catalog.stepped(param, size[key], String.to_integer(by))
+
+      case Build.size_item(socket.assigns.build, id, %{size | key => value}) do
+        {:ok, build} ->
+          socket = socket |> assign(:item_error, nil) |> put(build)
+          {:noreply, say_step(socket, id, {:size, key}, param, size[key], value)}
+
+        {:error, _reason} ->
+          {:noreply, socket}
       end
     else
       _other -> {:noreply, socket}
@@ -306,8 +329,28 @@ defmodule DIYWeb.HomeLive do
   def handle_event("take_to_van", %{"item" => id, "van" => van}, socket),
     do: with_build(socket, Build.take_to_van(socket.assigns.build, id, van))
 
-  def handle_event("bring_home", %{"item" => id}, socket),
-    do: with_build(socket, Build.bring_home(socket.assigns.build, id))
+  # A station of the house goes home from the van. When its panel is open on
+  # the page of its van, the panel closes: the station is not in the van now.
+  def handle_event("bring_home", %{"item" => id}, socket) do
+    open? =
+      socket.assigns.item == id and is_binary(socket.assigns[:shown_van]) and
+        Enum.any?(
+          Van.items(socket.assigns.build, socket.assigns.shown_van),
+          &(elem(&1, 1).id == id)
+        )
+
+    case Build.bring_home(socket.assigns.build, id) do
+      {:ok, build} when open? ->
+        {:noreply,
+         socket
+         |> put(build)
+         |> put_flash(:info, "The power station is at home now.")
+         |> push_patch(to: plan_path(socket, []))}
+
+      result ->
+        with_build(socket, result)
+    end
+  end
 
   def handle_event("van_model", %{"id" => id}, socket),
     do: with_build(socket, Build.van_model(socket.assigns.build, id))
@@ -424,18 +467,21 @@ defmodule DIYWeb.HomeLive do
     do: plan_result(socket, Build.turn_item(socket.assigns.build, id), &turn_status(&1, id))
 
   def handle_event("item_size", %{"item_id" => id, "typical" => "true"}, socket),
-    do: with_build(socket, Build.size_item(socket.assigns.build, id, nil))
+    do:
+      with_build(assign(socket, :item_error, nil), Build.size_item(socket.assigns.build, id, nil))
 
   def handle_event("item_size", %{"item_id" => id} = params, socket) do
     size = Map.new(~w(w d h)a, &{&1, parse_int(params[Atom.to_string(&1)])})
 
+    # The sides that are not valid: the panel tells it under the size, and
+    # marks them (the item_error "size:w,h").
     case Build.size_item(socket.assigns.build, id, size) do
       {:ok, build} ->
-        {:noreply, put(socket, build)}
+        {:noreply, socket |> assign(item_error: nil, item_said: nil) |> put(build)}
 
       {:error, _reason} ->
-        {:noreply,
-         put_flash(socket, :error, "Give each side in inches, from 1 to #{Layout.max_size()}.")}
+        bad = for {side, {key, _label}} <- @sides, not Layout.valid_side?(size[key]), do: side
+        {:noreply, assign(socket, :item_error, "size:" <> Enum.join(Enum.sort(bad), ","))}
     end
   end
 
@@ -1099,18 +1145,56 @@ defmodule DIYWeb.HomeLive do
   # the number did not change.
   @impl true
   def handle_info(
-        {:item_said, id, key, value, said},
+        {:item_said, id, what, value, said},
         %{assigns: %{item: id, item_said: nil}} = socket
       ) do
     case Build.item(socket.assigns.build, id) do
-      {:ok, %{params: %{^key => ^value}}} -> {:noreply, assign(socket, :item_said, said)}
-      _other -> {:noreply, socket}
+      {:ok, item} ->
+        if stepped_value(item, what) === value,
+          do: {:noreply, assign(socket, :item_said, said)},
+          else: {:noreply, socket}
+
+      _other ->
+        {:noreply, socket}
     end
   end
 
   # A message that the page does not know (or a status of a different
   # item): nothing changes.
   def handle_info(_message, socket), do: {:noreply, socket}
+
+  # The status after a tap on − or + (the assign `item_said`): the new
+  # value and its unit, and an end of the range. A tap at an end does not
+  # change the value. So the status is empty for @said_again ms, and then a
+  # screen reader reads it again (`handle_info/2`).
+  defp say_step(socket, id, what, param, before, value) do
+    unit = if param.unit, do: " #{param.unit}", else: ""
+
+    done =
+      cond do
+        value == param.max -> ", the most"
+        value == param.min -> ", the least"
+        true -> ""
+      end
+
+    said = "#{param.label}: #{Format.value(value)}#{unit}#{done}"
+
+    if value == before do
+      Process.send_after(self(), {:item_said, id, what, value, said}, @said_again)
+      assign(socket, :item_said, nil)
+    else
+      assign(socket, :item_said, said)
+    end
+  end
+
+  # The value that a status tells: a number of the item, or a side of its
+  # size.
+  defp stepped_value(item, {:param, key}), do: item.params[key]
+
+  defp stepped_value(item, {:size, side}) do
+    {w, d, h} = Layout.size(item)
+    Map.fetch!(%{w: w, d: d, h: h}, side)
+  end
 
   @impl true
   def handle_async({:weather, zip}, result, socket) do
@@ -1191,7 +1275,7 @@ defmodule DIYWeb.HomeLive do
           <% is_nil(@build.door) -> %>
             <DIYWeb.Start.doors />
           <% is_nil(@build.zip) -> %>
-            <DIYWeb.Start.zip build={@build} error={assigns[:zip_error]} />
+            <DIYWeb.Start.zip build={@build} error={@zip_error} typed={@zip_text} />
           <% is_nil(@build.house) -> %>
             <DIYWeb.Start.preset build={@build} />
           <% @live_action == :inside -> %>
@@ -1259,6 +1343,11 @@ defmodule DIYWeb.HomeLive do
               add={@add}
               climate={@weather.climate}
               item_error={assigns[:item_error]}
+              item_said={assigns[:item_said]}
+              item_frames={@item_frames}
+              estimate={@full}
+              price={@price}
+              ha={@ha}
               scene={@van_scene}
               view={@van_view}
               room={@room}
@@ -1272,6 +1361,8 @@ defmodule DIYWeb.HomeLive do
               market={@market}
               uploads={@uploads}
               ha={@ha}
+              zip_error={@zip_error}
+              zip_text={@zip_text}
             />
           <% true -> %>
             <DIYWeb.Front.front

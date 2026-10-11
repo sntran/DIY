@@ -102,8 +102,8 @@ defmodule DIYWeb.VanLiveTest do
     view |> element("#add-stove") |> render_click()
     [{_zone, stove}] = DIY.Van.items(build(view), van)
     assert_patch(view, ~p"/van?#{[id: van, item: stove.id]}")
-    assert has_element?(view, "#item-sheet", "Stove")
-    assert has_element?(view, "#item-sheet", "the safety notes of the van")
+    assert has_element?(view, "#item-stage", "Stove")
+    assert has_element?(view, "#item-stage", "the safety notes of the van")
     assert has_element?(view, "#van-notes", "carbon monoxide")
     assert has_element?(view, "#van-notes", "heavier than air")
 
@@ -120,7 +120,7 @@ defmodule DIYWeb.VanLiveTest do
     |> form("#item-form", %{"item_id" => stove.id, "item" => %{"watts" => "-1"}})
     |> render_change()
 
-    assert has_element?(view, "#item-sheet", "Give a number from 0 to 5000.")
+    assert has_element?(view, "#item-stage", "Give a number from 0 to 5000.")
 
     # A battery with no fuse.
     bay = Build.zone(build(view), van, :bay)
@@ -136,7 +136,7 @@ defmodule DIYWeb.VanLiveTest do
 
     # An item that is not in the van, and a zone of no van: no sheet.
     render_patch(view, ~p"/van?#{[id: van, item: "i999", add: "r999"]}")
-    refute has_element?(view, "#item-sheet")
+    refute has_element?(view, "#item-stage")
     refute has_element?(view, "#add-sheet")
   end
 
@@ -144,7 +144,7 @@ defmodule DIYWeb.VanLiveTest do
     {build, van} = with_van()
     view = open(conn, ~p"/van?#{[id: van]}", build)
     view |> element("#van-numbers") |> render_click()
-    assert has_element?(view, "#item-sheet", "Camper van")
+    assert has_element?(view, "#item-stage", "Camper van")
 
     view
     |> form("#item-form", %{"item_id" => van, "item" => %{"model" => "transit_148"}})
@@ -153,7 +153,7 @@ defmodule DIYWeb.VanLiveTest do
     view |> element("#van-model") |> render_click()
     assert render(view) =~ "Ford Transit 250"
     assert render(view) =~ "The app does not know the rating of an axle of this model"
-    view |> element("#item-sheet button", "They are right") |> render_click()
+    view |> element("#item-stage button", "They are right") |> render_click()
     refute render(view) =~ "These numbers are typical of the model"
   end
 
@@ -177,11 +177,8 @@ defmodule DIYWeb.VanLiveTest do
     view = open(conn, ~p"/van?#{[id: van, item: fridge.id]}", build)
     settle(view)
 
-    assert has_element?(
-             view,
-             "#item-sheet",
-             "499 Wh in a day of July (86 °F) · 400 Wh in a day of January (42 °F)"
-           )
+    assert has_element?(view, "#part-cost .stage-year", "499 Wh in a day of July (86 °F)")
+    assert has_element?(view, "#part-cost .stage-year", "400 Wh in a day of January (42 °F)")
 
     assert has_element?(view, "#van-list", "499 Wh in a day of July")
 
@@ -249,7 +246,7 @@ defmodule DIYWeb.VanLiveTest do
     view |> element("#power-away a", "Open the van") |> render_click()
     assert_patch(view, ~p"/van?#{[id: van]}")
     render_patch(view, ~p"/van?#{[id: van, item: station]}")
-    view |> element("#item-sheet button", "Bring it home") |> render_click()
+    view |> element("#item-stage button", "Bring it home") |> render_click()
     assert has_element?(view, "#van-stations", "at home")
 
     # Two vans: each has its link, and a station in the other van.
@@ -298,7 +295,7 @@ defmodule DIYWeb.VanLiveTest do
     {build, van} = with_van()
     view = open(conn, ~p"/van?#{[id: van, item: van]}", build)
     assert has_element?(view, "#van-source", "Autopadre")
-    assert has_element?(view, "#item-sheet", "typical of the model")
+    assert has_element?(view, "#item-stage", "typical of the model")
 
     view
     |> form("#item-form", %{"item_id" => van, "item" => %{"model" => "other"}})

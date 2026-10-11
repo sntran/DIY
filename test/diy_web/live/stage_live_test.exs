@@ -240,7 +240,7 @@ defmodule DIYWeb.StageLiveTest do
     end
 
     # A screen reader hears the new value: the panel has a status for it.
-    assert has_element?(view, "#part-use #item-said[role=status]", "")
+    assert has_element?(view, "#item-stage #item-said[role=status]", "")
     view |> element("#param-watts-field button[phx-value-by='1']") |> render_click()
     assert param.("watts") == 105
     assert has_element?(view, "input#param-watts[value='105']")
@@ -285,13 +285,13 @@ defmodule DIYWeb.StageLiveTest do
 
     # A status that comes late for a different item does not show, and a
     # message that the page does not know changes nothing.
-    send(view.pid, {:item_said, "i999", "watts", 1, "Power: 1 W"})
+    send(view.pid, {:item_said, "i999", {:param, "watts"}, 1, "Power: 1 W"})
     send(view.pid, :unknown)
     refute has_element?(view, "#item-said", "Power: 1 W")
     assert has_element?(view, "#item-said", "Hours in one day: 24 h, the most")
 
     # A status that comes late after a newer tap does not come back.
-    late = {:item_said, tv.id, "hours", 24.0, "Hours in one day: 24 h, the most"}
+    late = {:item_said, tv.id, {:param, "hours"}, 24.0, "Hours in one day: 24 h, the most"}
     view |> element("#param-hours-field button[phx-value-by='-1']") |> render_click()
     send(view.pid, late)
     assert has_element?(view, "#item-said", "Hours in one day: 23.5 h")
@@ -302,7 +302,7 @@ defmodule DIYWeb.StageLiveTest do
     refute has_element?(view, "#item-said", "Hours")
 
     # Nor after a newer status of a different number of the item.
-    late = {:item_said, tv.id, "hours", 20.0, "Hours in one day: 20 h"}
+    late = {:item_said, tv.id, {:param, "hours"}, 20.0, "Hours in one day: 20 h"}
     view |> element("#param-watts-field button[phx-value-by='1']") |> render_click()
     send(view.pid, late)
     refute has_element?(view, "#item-said", "Hours")

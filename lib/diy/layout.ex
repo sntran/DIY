@@ -188,10 +188,12 @@ defmodule DIY.Layout do
   def valid_plan?(_plan), do: false
 
   @doc "True for a valid size of an item: integers from 1 to `max_size/0`."
-  def valid_size?(%{w: w, d: d, h: h}),
-    do: Enum.all?([w, d, h], &(is_integer(&1) and &1 in 1..@max_size))
+  def valid_size?(%{w: w, d: d, h: h}), do: Enum.all?([w, d, h], &valid_side?/1)
 
   def valid_size?(_size), do: false
+
+  @doc "True when one side of a size is whole inches, from 1 to `max_size/0`."
+  def valid_side?(inches), do: is_integer(inches) and inches in 1..@max_size
 
   @doc "True when a plan of a room does not overlap a different room of its layer."
   def free?(build, room, plan) do

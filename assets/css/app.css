@@ -699,15 +699,14 @@
 .stage-remove { display: flex; flex-direction: column; align-items: flex-start; gap: 0.5rem }
 .stage-confirm { flex-wrap: wrap; align-items: center; gap: 0.5rem }
 .stage-confirm p { flex-basis: 100% }
-/* The parts that the panel shares with the sheet of a van item (the place
-   of the item, and the card of Home Assistant): the same sizes as the
+/* The parts of the panel that use the classes of daisyUI (the keys that
+   move an item, and the card of Home Assistant): the same sizes as the
    controls and the text of the panel. */
 .stage-panel :is(.btn, .input) { min-height: 2.75rem; height: auto }
 .stage-panel .btn-square { width: 2.75rem }
 .stage-panel .bg-base-200 { color: inherit }
 .stage-panel .link { color: var(--stage-link) }
 .stage-panel :is(.text-xs, .text-sm, .btn, .input) { font-size: 0.95rem; line-height: 1.45 }
-.stage-panel #item-place { padding: 0; background: none }
 /* The keys that show a tag or the screen show only when the model is in front. */
 .stage:not([data-stage=landed]) [data-show] { display: none }
 

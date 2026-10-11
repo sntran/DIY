@@ -11,9 +11,13 @@ defmodule DIYWeb.VanPage do
   zones and their items gives the same facts to a screen reader and to a
   keyboard.
 
-  `?id=ID` chooses a van. `?item=ID` opens an item of the van (or the van
-  itself, for its numbers), and `?add=ZONE` the list of the items for a
-  zone. `?room=ZONE` chooses a zone (with `&sheet=zone`, its sheet).
+  `?id=ID` chooses a van. `?item=ID` brings an item of the van (or the van
+  itself, for its numbers) to the front, with its panel. It is the same
+  stage and panel as for an item of the house
+  (`DIYWeb.Inside.item_stage/1`). The
+  first frame of an item of the van is from the camera of the van plan.
+  `?add=ZONE` opens the list of the items for a zone. `?room=ZONE` chooses
+  a zone (with `&sheet=zone`, its sheet).
   """
   use DIYWeb, :html
 
@@ -26,6 +30,11 @@ defmodule DIYWeb.VanPage do
   attr :add, :string, default: nil
   attr :climate, :map, default: nil
   attr :item_error, :string, default: nil
+  attr :item_said, :string, default: nil, doc: "the new value after − or +, for a screen reader"
+  attr :item_frames, :map, default: nil, doc: "the frames of the open item (`DIYWeb.Stage`)"
+  attr :estimate, :map, required: true
+  attr :price, :map, required: true
+  attr :ha, :map, required: true
   attr :scene, :map, required: true, doc: "the parts of the picture (`DIYWeb.Scene.van_parts/2`)"
   attr :view, :map, default: nil, doc: "the van cut open (`DIYWeb.VanCutaway.view/2`)"
   attr :room, :string, default: nil, doc: "the zone that the person chose"
@@ -112,13 +121,19 @@ defmodule DIYWeb.VanPage do
         <.notes warnings={Van.warnings(@build, @van)} />
         <.stations build={@build} van={@van} />
 
-        <.item_sheet
-          :if={@item && match?({:ok, _}, van_item(@build, @van, @item))}
+        <Inside.item_stage
+          :if={@item && @item_frames && match?({:ok, _}, van_item(@build, @van, @item))}
+          frames={@item_frames}
+          close={~p"/van?#{[id: @van.id]}"}
           build={@build}
           van={@van}
           item={elem(van_item(@build, @van, @item), 1)}
+          numbers={numbers(elem(van_item(@build, @van, @item), 1), @van, @temps)}
+          estimate={@estimate}
+          price={@price}
           error={@item_error}
-          temps={@temps}
+          said={@item_said}
+          ha={@ha}
         />
         <.add_sheet
           :if={@add && match?(%{}, Enum.find(Build.zones(@build, @van.id), &(&1.id == @add)))}
@@ -290,16 +305,16 @@ defmodule DIYWeb.VanPage do
   defp temp(nil, _month), do: nil
   defp temp(climate, month), do: climate.months[month].t
 
-  # The Wh of an item in a day of a month, or nothing for an item with no
-  # use.
-  defp day_text(item, month, t) do
-    case Van.wh_day(item, month, t) do
-      wh when wh > 0 ->
-        " · #{Format.int(wh)} Wh in a day of #{Enum.at(DIY.Estimate.month_names(), month - 1)}#{if t, do: " (#{round(t)} °F)"}"
+  # The numbers of an item of the van on its panel: its weight, and its Wh
+  # in a day of July and of January. An item with no use has no Wh. The van itself has
+  # the part of an item of the house.
+  defp numbers(%{id: id}, %{id: id}, _temps), do: []
 
-      _none ->
-        nil
-    end
+  defp numbers(item, _van, temps) do
+    [lb(Van.weight(item))] ++
+      for month <- [7, 1], wh = Van.wh_day(item, month, temps[month]), wh > 0 do
+        "#{Format.int(wh)} Wh in a day of #{Enum.at(DIY.Estimate.month_names(), month - 1)}#{if temps[month], do: " (#{round(temps[month])} °F)"}"
+      end
   end
 
   defp days(nil), do: "–"
@@ -652,100 +667,6 @@ defmodule DIYWeb.VanPage do
         </li>
       </ul>
     </div>
-    """
-  end
-
-  attr :build, :map, required: true
-  attr :van, :map, required: true
-  attr :item, :map, required: true
-  attr :error, :string, default: nil
-  attr :temps, :map, default: %{}
-
-  # The numbers of an item of the van (or of the van itself).
-  defp item_sheet(assigns) do
-    kind = Catalog.kind(assigns.item.type)
-    assigns = assign(assigns, kind: kind, van?: assigns.item.id == assigns.van.id)
-
-    ~H"""
-    <Inside.sheet
-      id="item-sheet"
-      title={Catalog.name(@item)}
-      icon={@item.type}
-      close={~p"/van?#{[id: @van.id]}"}
-    >
-      <div :if={@item.typical} class="alert alert-warning text-sm">
-        <span>
-          {if @van?,
-            do: "These numbers are typical of the model. Check them on the label in the door frame.",
-            else: "These numbers are a guess. Check them on the label."}
-        </span>
-        <button
-          type="button"
-          phx-click="check_item"
-          phx-value-id={@item.id}
-          class="btn btn-xs shrink-0 whitespace-nowrap"
-        >They are right</button>
-      </div>
-
-      <form id="item-form" phx-change="item" phx-submit="item" class="space-y-3">
-        <input type="hidden" name="item_id" value={@item.id} />
-        <Inside.param
-          :for={param <- @kind.params}
-          param={param}
-          value={@item.params[param.key]}
-          error={@error == param.key}
-        />
-      </form>
-
-      <button
-        :if={@van? and @item.params["model"] != "other"}
-        type="button"
-        id="van-model"
-        phx-click="van_model"
-        phx-value-id={@item.id}
-        class="btn btn-sm"
-      >
-        Use the numbers of the model
-      </button>
-
-      <p :if={not @van?} class="text-sm">
-        {lb(Van.weight(@item))}{day_text(@item, 7, @temps[7])}{day_text(@item, 1, @temps[1])}
-      </p>
-
-      <Inside.place
-        :if={not @van? and @item.at}
-        item={@item}
-        room={elem(Build.room(@build, @item.room), 1)}
-      />
-
-      <p :if={not @van?} class="text-sm">
-        <span class="font-semibold">It counts in:</span> {Inside.features(
-          Enum.filter(@kind.features, &(&1 in [:weight, :van_power, :safety]))
-        )}.
-      </p>
-
-      <button
-        :if={@item.type == "power_station" and @item.home}
-        type="button"
-        phx-click="bring_home"
-        phx-value-item={@item.id}
-        class="btn btn-sm"
-      >
-        Bring it home
-      </button>
-
-      <button
-        :if={not @van?}
-        type="button"
-        id="delete-item"
-        phx-click="delete_item"
-        phx-value-id={@item.id}
-        data-confirm="Remove this item?"
-        class="btn btn-sm btn-error btn-outline"
-      >
-        Remove the item
-      </button>
-    </Inside.sheet>
     """
   end
 

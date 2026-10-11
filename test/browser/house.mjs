@@ -191,11 +191,14 @@ async function van(page, name) {
   await follow(page, 'a[id^="add-"][aria-label="Add an item to Galley"]')
   await page.waitForSelector("#add-sheet")
   await check(page, `${name} van add`)
+  // A new item of the van comes forward with the same panel as an item of
+  // the house. Its first part has its weight and its energy.
   await page.click("#add-van_fridge")
-  await page.waitForSelector("#item-sheet:has-text('12 V fridge')")
+  await page.waitForSelector("#item-stage:has-text('12 V fridge') [data-stage=landed]")
+  await page.waitForSelector("#part-cost:has-text('Wh in a day of July')")
   await check(page, `${name} van item`)
-  await page.click("#item-sheet .btn-ghost[aria-label=Close]")
-  await page.waitForSelector("#item-sheet", { state: "detached" })
+  await page.click("#item-stage .stage-back")
+  await page.waitForSelector("#item-stage", { state: "detached" })
   await page.waitForSelector("#van-notes:has-text('no power station')")
 
   // The van cut open: the person zooms to its floor, and drags the fridge.
@@ -232,9 +235,9 @@ async function van(page, name) {
   await page.click("#shell-add")
   await page.waitForSelector("#add-sheet")
   await page.click("#add-insulation")
-  await page.waitForSelector("#item-sheet:has-text('Insulation')")
-  await page.click("#item-sheet .btn-ghost[aria-label=Close]")
-  await page.waitForSelector("#item-sheet", { state: "detached" })
+  await page.waitForSelector("#item-stage:has-text('Insulation') [data-stage=landed]")
+  await page.click("#item-stage .stage-back")
+  await page.waitForSelector("#item-stage", { state: "detached" })
   await page.waitForSelector('#van-shell a[id^="shell-item-"]')
 
   await page.click('#van-stations button:has-text("Take it in this van")')
@@ -400,9 +403,14 @@ async function build(context, name) {
   await page.keyboard.press("Enter")
   await page.waitForSelector("#item-stage [data-stage=landed]")
   await check(page, `${name} item`)
-  // The panel scrolls to its place, its size and its turn.
+  // The panel scrolls to its place, its size and its turn. The width has
+  // − and +, as a number of the item.
   await page.locator("#item-place").scrollIntoViewIfNeeded()
   await check(page, `${name} item place`)
+  const width = Number(await page.inputValue("#size-w"))
+  await page.click("#size-w-field button[phx-value-by='1']")
+  await page.waitForFunction((w) => Number(document.querySelector("#size-w").value) > w, width)
+  await page.waitForSelector("#item-said:has-text('Width:')", { state: "attached" })
   await page.click("#turn-item")
 
   // The stage keeps the focus, and the Escape key puts the item back. The
