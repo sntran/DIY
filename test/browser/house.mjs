@@ -27,7 +27,7 @@ let faults = 0
 // A fake Home Assistant on this computer (test/browser/fake_ha.mjs), with
 // a floor, three areas and devices. Two devices are in the living room,
 // and one is on the patio. The sun is a service, not a device of the
-// house.
+// house. The ceiling lights are on.
 const device = (id, name, area_id, entity, extra = {}) => ({
   device: { id, name, name_by_user: null, area_id, entry_type: null, disabled_by: null, model: null, ...extra },
   entity: { entity_id: entity, device_id: id, area_id: null, entity_category: null, hidden_by: null, disabled_by: null },
@@ -47,6 +47,7 @@ const homeAssistant = await fakeHomeAssistant({
   ],
   devices: devices.map((one) => one.device),
   entities: devices.map((one) => one.entity),
+  states: { "light.ceiling": "on", "media_player.tv": "playing" },
 })
 
 // axe on the page as it is now.
@@ -627,10 +628,32 @@ async function build(context, name) {
   })
   assert.deepEqual(hidden, { before: true, after: false })
   await check(page, `${name} ghosts`)
+  // Each run of the walk starts with the lights on.
+  homeAssistant.set("light.ceiling", "on")
   await follow(page, "#plan-list button:has-text('Add Ceiling Lights from Home Assistant')")
   await page.waitForSelector("#item-stage #ha-device:has-text('This is Ceiling Lights in Home Assistant.')")
   await page.waitForSelector("#item-stage [data-stage=landed]")
+  // The lights are on: the switch, the words, and the plan tell it.
+  await page.waitForSelector("#ha-switch[role=switch][aria-checked=true]")
+  await page.waitForSelector("#ha-power-state:has-text('It is on.')")
+  await page.waitForSelector("#plan-svg g.p-item[data-ha=on]")
   await check(page, `${name} ghost item`)
+  // The switch turns the lights off in Home Assistant.
+  await page.click("#ha-switch")
+  await page.waitForSelector("#ha-switch[aria-checked=false]")
+  await page.waitForSelector("#ha-power-state:has-text('It is off.')")
+  await page.waitForSelector("#plan-svg g.p-item[data-ha=off]")
+  await page.waitForSelector("#item-stage .stage[data-ha=off]")
+  assert.deepEqual(homeAssistant.calls.at(-1), { domain: "light", service: "turn_off", ids: ["light.ceiling"] })
+  // A person turns them on in Home Assistant: the page follows.
+  homeAssistant.set("light.ceiling", "on")
+  await page.waitForSelector("#ha-switch[aria-checked=true]")
+  // The keyboard: the switch keeps the focus.
+  await page.focus("#ha-switch")
+  await page.keyboard.press("Space")
+  await page.waitForSelector("#ha-switch[aria-checked=false][aria-disabled=false]")
+  assert.equal(await page.evaluate(() => document.activeElement?.id), "ha-switch")
+  await check(page, `${name} switch`)
   await page.click("#item-stage .stage-back")
   await page.waitForSelector("#item-stage", { state: "detached" })
   await page.waitForSelector('#plan-svg g.p-ghost[data-ghost="lights"]', { state: "detached" })

@@ -2,7 +2,9 @@
 // the tokens, the revoke and the WebSocket API: only the parts that the
 // app uses. The registry of the floors and of the areas refuses a second
 // floor or area with the same name, as Home Assistant does. It has the
-// registries of the devices and of their entities. The sign-in
+// registries of the devices and of their entities, and the states of the
+// entities. A watch of the states (subscribe_entities) gets all the states
+// first, then each change. A service turns an entity on or off. The sign-in
 // page has a link "Log in" that sends the tab back with a code. The token
 // endpoint checks the client, the way back and the PKCE verifier, as Home
 // Assistant does.
@@ -30,12 +32,24 @@ export async function fakeHomeAssistant({
   admin = true,
   devices = [],
   entities = [],
+  states = {},
 } = {}) {
   const registry = { floors: structuredClone(floors), areas: structuredClone(areas), devices, entities }
   const codes = new Map()
   const sessions = new Map()
   const accesses = new Map()
   const revoked = []
+  const state = { ...states }
+  const watches = new Set()
+  const calls = []
+
+  // A new state of an entity: an event for each watch of it.
+  const set = (id, value) => {
+    state[id] = value
+    for (const watch of watches) {
+      if (watch.ids.includes(id)) watch.send({ id: watch.id, type: "event", event: { c: { [id]: { "+": { s: value } } } } })
+    }
+  }
 
   const json = (response, status, body) => {
     response.writeHead(status, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" })
@@ -149,6 +163,9 @@ export async function fakeHomeAssistant({
     sockets.handleUpgrade(request, socket, head, (ws) => {
       const send = (message) => ws.send(JSON.stringify(message))
       send({ type: "auth_required", ha_version: version })
+      ws.on("close", () => {
+        for (const watch of watches) if (watch.ws === ws) watches.delete(watch)
+      })
       ws.on("message", (data) => {
         const message = JSON.parse(data)
         if (message.type === "auth") {
@@ -160,6 +177,18 @@ export async function fakeHomeAssistant({
           }
         } else if (message.type === "get_config") {
           send({ id: message.id, type: "result", success: true, result: { location_name: name, version } })
+        } else if (message.type === "subscribe_entities") {
+          watches.add({ ws, send, id: message.id, ids: message.entity_ids })
+          send({ id: message.id, type: "result", success: true, result: null })
+          const all = message.entity_ids.filter((id) => id in state).map((id) => [id, { s: state[id], a: {} }])
+          send({ id: message.id, type: "event", event: { a: Object.fromEntries(all) } })
+        } else if (message.type === "unsubscribe_events") {
+          for (const watch of watches) if (watch.ws === ws && watch.id === message.subscription) watches.delete(watch)
+          send({ id: message.id, type: "result", success: true, result: null })
+        } else if (message.type === "call_service") {
+          calls.push({ domain: message.domain, service: message.service, ids: message.target.entity_id })
+          for (const id of message.target.entity_id) set(id, message.service === "turn_on" ? "on" : "off")
+          send({ id: message.id, type: "result", success: true, result: { context: { id: random() } } })
         } else {
           send({ id: message.id, type: "result", ...command(message) })
         }
@@ -173,6 +202,8 @@ export async function fakeHomeAssistant({
     revoked,
     sessions,
     registry,
+    calls,
+    set,
     close: () => {
       for (const ws of sockets.clients) ws.terminate()
       server.close()

@@ -591,6 +591,17 @@
 }
 @keyframes p-ghost-in { from { opacity: 0 } to { opacity: 1 } }
 @keyframes p-ghost-pulse { 50% { opacity: 0.6 } }
+/* The state of the device of an item on the plan and on its stage
+   (data-ha, from DIYWeb.Cutaway.cutaway/1 and DIYWeb.Stage.stage/1): the
+   shade and the bulb of a lamp glow when the device is on, and they are
+   gray when the device is off. When Home Assistant cannot reach the
+   device, they are pale and gray. A screen is light when its device is on.
+   The panel and the list of the rooms tell the state in words. */
+:is(.cutaway-house .p-item, .stage)[data-ha=on] :is(.i-bulb, [class*=i-shade]) { filter: drop-shadow(0 0 3px #facc15) }
+:is(.cutaway-house .p-item, .stage)[data-ha=on] .i-bulb { fill: #fef08a }
+:is(.cutaway-house .p-item, .stage)[data-ha=off] :is(.i-bulb, [class*=i-shade]) { filter: grayscale(1) brightness(0.7) }
+:is(.cutaway-house .p-item, .stage)[data-ha=unavailable] :is(.i-bulb, [class*=i-shade]) { filter: grayscale(1) opacity(0.45) }
+:is(.cutaway-house .p-item, .stage)[data-ha=on] .i-screen { fill: #93c5fd }
 /* The tab of a layer (assets/js/plan.js): in the van, the other layers are
    pale. In the house, they hide, and a tap goes through them. The ids of
    the layers come from DIYWeb.Cutaway.view/1 (the house) and
@@ -727,6 +738,20 @@
   background: var(--stage-muted); transition: transform 150ms, background-color 150ms }
 .stage-switch:checked { background: var(--stage-on); box-shadow: none }
 .stage-switch:checked::after { background: #fff; transform: translateX(1.25rem) }
+/* The switch of the item of a device of Home Assistant (DIYWeb.Inside): a
+   button with the role switch, with the look of the other switches. While
+   its control waits, or with no state, its track and its knob are pale.
+   It keeps the focus, and its focus ring keeps its contrast. */
+button.stage-switch { padding: 0; border: 0 }
+.stage-switch[aria-checked=true] { background: var(--stage-on); box-shadow: none }
+.stage-switch[aria-checked=true]::after { background: #fff; transform: translateX(1.25rem) }
+.stage-switch[aria-disabled=true] { cursor: default; box-shadow: inset 0 0 0 2px color-mix(in oklab, var(--stage-muted) 50%, transparent) }
+.stage-switch[aria-disabled=true]::after { opacity: 0.5 }
+.stage-switch[aria-disabled=true][aria-checked=true] { background: color-mix(in oklab, var(--stage-on) 50%, transparent); box-shadow: none }
+/* The row of this switch is not a label: only the word and the switch
+   take a tap. */
+.stage-row-plain { cursor: default }
+.stage-row-plain label { cursor: pointer }
 .stage-link { min-height: 1.5rem; padding: 0; border: 0; background: none; color: var(--stage-link); font-weight: 600;
   text-decoration: underline; cursor: pointer }
 .stage-remove { display: flex; flex-direction: column; align-items: flex-start; gap: 0.5rem }

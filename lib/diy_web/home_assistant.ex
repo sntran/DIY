@@ -39,6 +39,19 @@ defmodule DIYWeb.HomeAssistant do
   sends the message `:ha_devices` to the LiveView, so that it draws the
   ghosts again.
 
+  The states of the lights, the switches and the fans use two more
+  assigns (`power/2`):
+
+  - `:ha_states`: the state of each device that the app turns on and off,
+    from the hook (`ha:states`): `on`, `off` or `unavailable`. The hook
+    watches the states while the link is connected. The page forgets them
+    when the link is not connected.
+  - `:ha_control`: for each device, a control that waits for its end
+    (`{:pending, on}`), or the error of the last control
+    (`{:error, error}`). The switch of an item sends the control to the
+    hook (`control/3`, `ha:control`), and the hook tells its end
+    (`ha:control_done`).
+
   The sign-in page uses `on_mount {DIYWeb.HomeAssistant, :sign_in}`: it
   takes only the states of the sign-in (`none`, `signing_in` and `done`),
   and no other event.
@@ -76,12 +89,17 @@ defmodule DIYWeb.HomeAssistant do
   @max_devices 1000
   @max_domains 30
 
+  # The domains of the entities that the app turns on and off, and the
+  # states of a device.
+  @controls ~w(fan light switch)
+  @power_states ~w(on off unavailable)
+
   @doc false
   def on_mount(:default, _params, _session, socket) do
     socket =
       socket
       |> assign(:ha, %{state: "loading", url: nil, name: nil, version: nil, error: nil})
-      |> assign(ha_rooms: nil, ha_sync: nil, ha_devices: nil)
+      |> assign(ha_rooms: nil, ha_sync: nil, ha_devices: nil, ha_states: %{}, ha_control: %{})
 
     {:cont, LiveView.attach_hook(socket, :home_assistant, :handle_event, &handle_event/3)}
   end
@@ -104,6 +122,64 @@ defmodule DIYWeb.HomeAssistant do
   answer is the event `ha:devices`.
   """
   def fetch_devices(socket), do: LiveView.push_event(socket, "ha:devices_fetch", %{})
+
+  @doc """
+  Asks the hook to turn a device on or off (`ha:control`). The control
+  waits for its end (`ha:control_done`).
+  """
+  def control(socket, device, on) when is_boolean(on) do
+    socket
+    |> assign(:ha_control, Map.put(socket.assigns.ha_control, device, {:pending, on}))
+    |> LiveView.push_event("ha:control", %{device: device, on: on})
+  end
+
+  @doc "True for a device that the app turns on and off: a light, a switch or a fan."
+  def controls?(device), do: Enum.any?(device.domains, &(&1 in @controls))
+
+  @doc """
+  The switch of an item, or `nil`. It is for the item of a device that
+  the app turns on and off, while the page has the devices. It has the
+  device and its state (`nil` before the hook tells it). It also has the
+  control that waits (`pending`: `true` for on, `false` for off), and the
+  error of the last control. When the link is not connected (`online`:
+  false), the switch stays, so that it keeps the focus, but it has no
+  state.
+  """
+  def power(%{ha: ha, build: build, ha_devices: ha_devices} = assigns, item_id) do
+    with id when is_binary(id) <- build.devices[item_id],
+         %{devices: devices} <- ha_devices,
+         %{} = device <- Enum.find(devices, &(&1.id == id)),
+         true <- controls?(device) do
+      {pending, error} =
+        case assigns.ha_control[id] do
+          {:pending, on} -> {on, nil}
+          {:error, error} -> {nil, error}
+          nil -> {nil, nil}
+        end
+
+      %{
+        device: id,
+        online: ha.state == "connected",
+        state: assigns.ha_states[id],
+        pending: pending,
+        error: error
+      }
+    else
+      _ -> nil
+    end
+  end
+
+  @doc """
+  The state of each item of a device, for the plan: `%{item => state}`.
+  Only while the link is connected.
+  """
+  def item_states(%{ha: %{state: "connected"}, build: build, ha_states: states}) do
+    for {item, device} <- build.devices, Map.has_key?(states, device), into: %{} do
+      {item, states[device]}
+    end
+  end
+
+  def item_states(_assigns), do: %{}
 
   @doc """
   Asks the hook for the floors and the areas of Home Assistant. The answer
@@ -131,6 +207,50 @@ defmodule DIYWeb.HomeAssistant do
   end
 
   def handle_event("ha:devices", _params, socket), do: {:halt, socket}
+
+  # The states count only while the link is connected. A payload that the
+  # page cannot read changes nothing.
+  def handle_event(
+        "ha:states",
+        %{"states" => states},
+        %{assigns: %{ha: %{state: "connected"}}} = socket
+      )
+      when is_map(states) and map_size(states) <= @max_devices do
+    if Enum.all?(states, fn {id, state} -> text(id, @max_id) && state in @power_states end) do
+      # A new state of a device ends the error of its last control.
+      old = socket.assigns.ha_states
+
+      control =
+        Map.reject(socket.assigns.ha_control, fn {device, value} ->
+          match?({:error, _}, value) and states[device] != old[device]
+        end)
+
+      {:halt, assign(socket, ha_states: states, ha_control: control)}
+    else
+      {:halt, socket}
+    end
+  end
+
+  def handle_event("ha:states", _params, socket), do: {:halt, socket}
+
+  # The end of a control: only for a control that waits.
+  def handle_event("ha:control_done", %{"device" => device, "error" => error}, socket)
+      when error in [nil, "offline", "failed", "timeout"] do
+    case socket.assigns.ha_control do
+      %{^device => {:pending, _on}} = control ->
+        control =
+          if error,
+            do: Map.put(control, device, {:error, error}),
+            else: Map.delete(control, device)
+
+        {:halt, assign(socket, :ha_control, control)}
+
+      _control ->
+        {:halt, socket}
+    end
+  end
+
+  def handle_event("ha:control_done", _params, socket), do: {:halt, socket}
 
   def handle_event("ha:rooms", %{"error" => error}, socket) when error in ~w(offline failed),
     do: {:halt, assign(socket, :ha_rooms, %{error: error})}
@@ -170,6 +290,12 @@ defmodule DIYWeb.HomeAssistant do
   defp status(socket, state, params) do
     before = socket.assigns.ha.state
     socket = assign(socket, :ha, read_status(state, params))
+
+    # The states and the controls are only for a connected link.
+    socket =
+      if state == "connected",
+        do: socket,
+        else: assign(socket, ha_states: %{}, ha_control: %{})
 
     # The link becomes connected: the page reads the devices. After a
     # disconnect, it forgets them.
@@ -303,6 +429,31 @@ defmodule DIYWeb.HomeAssistant do
     do: "The address of Home Assistant is not correct. Connect again on the page of the app."
 
   def tab_message(error), do: message(error)
+
+  @doc "The state of the switch of an item (`power/2`), in words."
+  def power_text(%{online: false}), do: "The app has no link to Home Assistant now."
+  def power_text(%{pending: true}), do: "Home Assistant turns it on."
+  def power_text(%{pending: false}), do: "Home Assistant turns it off."
+
+  def power_text(power) do
+    error =
+      case power.error do
+        "failed" -> "Home Assistant did not do it. Try again."
+        "offline" -> "The link to Home Assistant closed before the end. Try again."
+        "timeout" -> "Home Assistant does not answer now. Try again later."
+        nil -> nil
+      end
+
+    state =
+      case power.state do
+        "on" -> "It is on."
+        "off" -> "It is off."
+        "unavailable" -> "Home Assistant cannot reach it now."
+        nil -> "The app waits for its state."
+      end
+
+    Enum.join(List.wrap(error) ++ [state], " ")
+  end
 
   @doc "Why the last step did not work, in words."
   def message("url"),

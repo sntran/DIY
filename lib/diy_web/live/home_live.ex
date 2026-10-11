@@ -237,6 +237,19 @@ defmodule DIYWeb.HomeLive do
     end
   end
 
+  # The switch of the item of a device: only when its state is known and
+  # no control waits.
+  def handle_event("ha_switch", %{"item" => item, "on" => on}, socket)
+      when on in ~w(true false) do
+    case DIYWeb.HomeAssistant.power(socket.assigns, item) do
+      %{device: device, state: state, pending: nil} when state in ~w(on off) ->
+        {:noreply, DIYWeb.HomeAssistant.control(socket, device, on == "true")}
+
+      _power ->
+        {:noreply, socket}
+    end
+  end
+
   def handle_event("item", %{"item_id" => id, "item" => values}, socket) when is_map(values) do
     case Build.update_item(socket.assigns.build, id, values) do
       {:ok, build} -> {:noreply, socket |> assign(item_error: nil, item_said: nil) |> put(build)}
@@ -1351,6 +1364,8 @@ defmodule DIYWeb.HomeLive do
               ha_rooms={@ha_rooms}
               ha_sync={@ha_sync}
               ha_devices={@ha_devices}
+              ha_states={@ha_states}
+              ha_control={@ha_control}
               ghosts={@ghosts}
               ha_count={@ha_count}
               ha_away={@ha_away}

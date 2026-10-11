@@ -41,7 +41,9 @@ defmodule DIYWeb.Cutaway do
     on the surface of the room. A roof also has `data-rise`: the height of
     its ridge over its eaves, in inches;
   - each item: `data-item`, `data-in` (its room) and `data-at` (the
-    center of the item on the plan, in inches);
+    center of the item on the plan, in inches). The item of a device of
+    Home Assistant also has `data-ha`: the state of the device (`on`,
+    `off` or `unavailable`);
   - each wall of a room of the house, and the edge of the slab under it:
     `data-of` (its room). A tap on it chooses the room, and the zoom to a
     room shows its walls;
@@ -1107,6 +1109,10 @@ defmodule DIYWeb.Cutaway do
   attr :selected, :string, default: nil, doc: "the id of the room that the user chose"
   attr :open, :string, default: nil, doc: "the id of the item with an open sheet"
 
+  attr :states, :map,
+    default: %{},
+    doc: "the state of each item of a device of Home Assistant (`DIYWeb.HomeAssistant`)"
+
   @doc """
   The SVG of the cut-open house. The hook Plan moves, zooms, and sends the
   changes to the page. The SVG is for the eyes: the list of the rooms on
@@ -1161,6 +1167,7 @@ defmodule DIYWeb.Cutaway do
           data-of={object.kind == :wall && Map.get(object, :room)}
           data-with={object.kind == :fixture && Map.get(object, :room)}
           data-ghost={object.kind == :ghost && object.device}
+          data-ha={object.kind == :item && @states[object.id]}
         >
           <title :if={object.kind in [:item, :ghost]}>{object.name}</title>
           <polygon :for={{points, class} <- object.polys} points={points} class={class} />

@@ -246,6 +246,12 @@ defmodule DIYWeb.Stage do
   attr :title, :string, required: true
   attr :close, :string, required: true, doc: "the page of the close link"
   attr :note, :string, default: nil, doc: "a short line under the title"
+
+  attr :state, :string,
+    default: nil,
+    doc:
+      "the state of the device of the item in Home Assistant (`on`, `off` or `unavailable`), for its model"
+
   slot :screen, doc: "the LED screen of a hub: on the top of its model"
   slot :inner_block, required: true, doc: "the panel"
 
@@ -276,6 +282,7 @@ defmodule DIYWeb.Stage do
         data-start={numbers(@frames.start)}
         data-region={numbers(@frames.region)}
         data-screen={@screen != [] && "true"}
+        data-ha={@state}
         role="dialog"
         aria-modal="true"
         aria-labelledby={"#{@id}-title"}

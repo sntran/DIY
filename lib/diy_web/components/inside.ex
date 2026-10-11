@@ -53,6 +53,14 @@ defmodule DIYWeb.Inside do
     default: nil,
     doc: "the devices and the areas of Home Assistant (`DIYWeb.HomeAssistant`)"
 
+  attr :ha_states, :map,
+    default: %{},
+    doc: "the state of each device that the app turns on and off (`DIYWeb.HomeAssistant`)"
+
+  attr :ha_control, :map,
+    default: %{},
+    doc: "the controls of the devices that wait, and their errors (`DIYWeb.HomeAssistant`)"
+
   attr :ghosts, :list,
     default: [],
     doc: "the ghosts of the devices of Home Assistant (`DIY.HomeAssistant.ghosts/4`)"
@@ -96,7 +104,9 @@ defmodule DIYWeb.Inside do
         devices_error:
           if(assigns.ha.state == "connected" and match?(%{error: _}, assigns.ha_devices),
             do: assigns.ha_devices.error
-          )
+          ),
+        item_states: HomeAssistant.item_states(assigns),
+        power: HomeAssistant.power(assigns, assigns.item)
       )
 
     ~H"""
@@ -171,6 +181,7 @@ defmodule DIYWeb.Inside do
             view={@view}
             selected={@chosen && @chosen.id}
             open={if match?({:ok, _}, Build.item(@build, @item)), do: @item}
+            states={@item_states}
           />
           <.zoom all="Show all the house" />
         </div>
@@ -194,6 +205,7 @@ defmodule DIYWeb.Inside do
           away={@away}
           chosen={@chosen && @chosen.id}
           ghosts={@ghosts}
+          states={@item_states}
         />
         <p id="plan-status" class="sr-only" aria-live="polite">{@status}</p>
       </div>
@@ -211,6 +223,7 @@ defmodule DIYWeb.Inside do
         outage={@outage}
         ha={@ha}
         ha_devices={@ha_devices}
+        power={@power}
       />
       <.add_sheet
         :if={@add && match?({:ok, _}, Build.room(@build, @add))}
@@ -381,6 +394,10 @@ defmodule DIYWeb.Inside do
   attr :chosen, :string, default: nil, doc: "the chosen room: it stays when an item opens"
   attr :ghosts, :list, default: [], doc: "the ghosts of the devices of Home Assistant"
 
+  attr :states, :map,
+    default: %{},
+    doc: "the state of each item of a device (`on`, `off` or `unavailable`)"
+
   # The rooms and their items, as a list: for a screen reader, and for a
   # keyboard (it shows when it has the focus). The arrow keys move an item
   # or a room (the hook Plan).
@@ -421,7 +438,9 @@ defmodule DIYWeb.Inside do
                   data-nudge={item.id}
                   class="link"
                 >
-                  {Catalog.name(item)}{item_note(item, @estimate, @price, @gas)}
+                  {Catalog.name(item)}{item_note(item, @estimate, @price, @gas)}{state_note(
+                    @states[item.id]
+                  )}
                 </.link>
               </li>
               <li :for={{ghost, i} <- Enum.with_index(@ghosts, 1)} :if={ghost.room == room.id}>
@@ -543,6 +562,12 @@ defmodule DIYWeb.Inside do
 
     usage <> flags
   end
+
+  # The state of the device of an item, in the list of the rooms.
+  defp state_note("on"), do: ", on now"
+  defp state_note("off"), do: ", off now"
+  defp state_note("unavailable"), do: ", Home Assistant cannot reach it now"
+  defp state_note(nil), do: ""
 
   attr :room, :map, required: true
 
@@ -675,6 +700,10 @@ defmodule DIYWeb.Inside do
     default: nil,
     doc: "on the page Van: the van of the item, or the van itself (`DIYWeb.VanPage`)"
 
+  attr :power, :map,
+    default: nil,
+    doc: "the switch of the item of a device (`DIYWeb.HomeAssistant.power/2`), or `nil`"
+
   attr :numbers, :list,
     default: [],
     doc: "for an item in a van: its weight and its energy in a day, in words"
@@ -749,6 +778,7 @@ defmodule DIYWeb.Inside do
           else: "In #{@room.name}#{level_note(@room.level)}"
       }
       close={@close}
+      state={@power && @power.state}
     >
       <:screen :if={@item.type == "home_assistant"}>
         <HomeAssistant.screen ha={@ha} />
@@ -867,6 +897,27 @@ defmodule DIYWeb.Inside do
       >
         <h3 id="part-link-title" class="stage-sec-title">Home Assistant</h3>
         <p id="ha-device" class="text-sm">{device_text(@device)}</p>
+        <div :if={@power} id="ha-power" class="stage-switch-row stage-row-plain">
+          <label for="ha-switch" id="ha-power-label">Power</label>
+          <%!-- aria-disabled, not disabled: the switch keeps the focus while
+            a control waits. --%>
+          <button
+            type="button"
+            id="ha-switch"
+            role="switch"
+            class="stage-switch"
+            aria-labelledby="ha-power-label"
+            aria-describedby="ha-power-state"
+            aria-checked={to_string(@power.state == "on")}
+            aria-disabled={to_string(@power.state not in ~w(on off) or @power.pending != nil)}
+            phx-click="ha_switch"
+            phx-value-item={@item.id}
+            phx-value-on={to_string(@power.state != "on")}
+          ></button>
+        </div>
+        <p :if={@power} id="ha-power-state" role="status" class="text-sm">
+          {HomeAssistant.power_text(@power)}
+        </p>
         <p :if={@twin} id="ha-twin" class="text-sm">
           The house also has {@twin.name} in {@twin.room}, with no link to Home Assistant. If it is the same {@twin.kind}, remove one of them.
         </p>

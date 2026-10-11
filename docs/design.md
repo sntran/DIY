@@ -1823,8 +1823,8 @@ Many people keep their rooms, their devices and their meters in Home
 Assistant. The app links to it, so that the person does not type them
 again. The parts that are done: the link (the sign-in and the socket),
 the match of the rooms, and the devices as ghosts in their rooms. The
-next parts show the state of the devices, turn them on and off, and read
-the use of power.
+page also shows the states of the lights, the switches and the fans, and
+it has a switch for each. The next part reads the use of power.
 
 ### The sign-in stays on the device
 
@@ -2247,6 +2247,138 @@ The tests:
   color and the dashes of the edge of a ghost, and that a pill on a
   hidden layer takes no tap. Axe checks the page with the ghosts, and
   the panel of the new item.
+
+### The states of the lights, the switches and the fans
+
+The item of a device of Home Assistant shows the state of the device: on,
+off, or not known. The person can turn a light, a switch or a fan on and
+off from the panel of its item.
+
+1. Each read of the devices also gives the entities that the app turns on
+   and off (`controlList` in `assets/js/home_assistant.js`). These are
+   the main entities of a device of the list, of the domains `light`,
+   `switch` and `fan`. A media player or a climate entity does not count:
+   its service is not on and off only. One switch turns all these
+   entities of a device on or off: for example, the light and the fan of
+   a ceiling fan.
+2. The hook watches the states of these entities (`subscribe_entities`
+   with their ids). Home Assistant sends all their states first (`a`),
+   then each change (`c`) and each entity that goes (`r`). A change of
+   the attributes only has no state: the hook sends nothing for it. A
+   watch with no entity gets the states of all the entities. So with no
+   entity, the hook starts no watch.
+3. The state of a device (`deviceStates`) is `on` when one of its
+   entities is on. It is `off` when one is off and none is on. Else it is
+   `unavailable`: Home Assistant cannot reach it, or has no state of it.
+4. After a change, the hook waits 150 ms (`STATE_WAIT`). Then it sends
+   the state of each device to the LiveView (`ha:states`): one message
+   for many changes.
+5. A new read with the same entities keeps the watch, and sends the
+   states again at once: a new LiveView has none. Before the first states
+   of the watch, it sends nothing. The order of the registry does not
+   count. When the entities change, the hook ends the old watch
+   (`unsubscribe_events`), clears its states, and starts a new watch. A
+   late event of the old watch changes nothing. When Home Assistant
+   refuses a watch, the next read tries again.
+6. When the socket closes, the hook clears the states, and stops the wait
+   of step 4. The ids of the commands start again on each socket, so the
+   hook takes only the messages of its open socket.
+
+The LiveView (`DIYWeb.HomeAssistant`):
+
+- It takes the states only while the link is connected. It takes 1000
+  devices at most, with ids of 255 bytes at most, and only the states
+  `on`, `off` and `unavailable`. Else the payload changes nothing. When
+  the link is not connected, it forgets the states and the controls.
+- On the plan and on its stage, the item of a device has its state
+  (`data-ha`). The shade and the bulb of a lamp glow when the device is
+  on, and they are gray when the device is off. When Home Assistant
+  cannot reach the device, they are pale and gray. A screen is light when
+  its device is on. The list of the rooms tells the state in words:
+  "Lights, on now".
+- The panel of the item has the switch Power: a button with the role
+  `switch` and `aria-checked`, in the part Home Assistant. The word Power
+  is its label: a tap on the word is a tap on the switch. A status under
+  it tells the state in words, for example "It is on." or "Home Assistant
+  cannot reach it now."
+- A tap on the switch (`ha_switch`) sends the control to the hook
+  (`ha:control`). It does this only when the state is on or off, and no
+  control of the device waits. The hook asks Home Assistant to turn on or
+  off each entity of the device (`call_service`, `turn_on` or `turn_off`,
+  one call for each domain). It tells the end (`ha:control_done`), with
+  no error, or with `offline` or `failed`. With no end after 10 seconds
+  (`CONTROL_WAIT`), it tells `timeout`, and the status tells that Home
+  Assistant does not answer now. Home Assistant can still do the control
+  later: then the watch tells the new state, and the error goes.
+- While a control waits, the status tells it ("Home Assistant turns it
+  off."), and the track and the knob of the switch are pale. The switch
+  is `aria-disabled`, not `disabled`, so it keeps the focus of the
+  keyboard, and its focus ring keeps its contrast. When Home Assistant
+  refuses, the status tells it: "Home Assistant did not do it. Try
+  again." A new state of the device ends this error.
+- The new state comes with the watch of the states, not with the end of
+  the control. Home Assistant sends the change before the end. The hook
+  then sends the states at once, before the end (`flushStates`). So the
+  switch never shows the old state after the end. It shows what Home
+  Assistant has, not what the person asked for.
+- When the link closes while the panel is open, the switch stays, so that
+  it keeps the focus. It has no state. The status tells that the app has
+  no link to Home Assistant now. After a disconnect, the page forgets the
+  devices, and the switch goes.
+
+The TLA+ model `specs/HomeAssistantStates.tla` checks the watch with two
+devices, in any order of the steps. A person changes a state or the
+registry, the socket closes, and the page sends a control. The late
+messages of an old socket can come after the messages of the new socket.
+When all is quiet, the page shows the states of Home Assistant, no
+control waits, and Home Assistant has one watch for the hook. With no
+link, the page shows no state. Each rule has a configuration with the
+fault, and TLC finds the fault:
+
+- **The socket** (`HomeAssistantStates.noepoch.cfg`). The hook takes the
+  messages of its open socket only. Without this rule, the late first
+  states of an old socket replace a new state.
+- **The watch** (`HomeAssistantStates.noid.cfg`). The hook takes the
+  events of its watch only. Without this rule, the first states of the
+  old watch can come after the start of the new watch. Then a state that
+  Home Assistant removes stays.
+- **The old states** (`HomeAssistantStates.noclear.cfg`). A new watch and
+  a closed socket clear the states of the hook. Without this rule, a
+  state that Home Assistant removed while the socket was closed stays.
+- **The end** (`HomeAssistantStates.nounsub.cfg`). A new watch ends the
+  old watch. Without this rule, Home Assistant keeps two watches.
+- **The LiveView** (`HomeAssistantStates.nolvclear.cfg`). The LiveView
+  forgets the states when the link is not connected. Without this rule,
+  the page shows the states of a link that is gone.
+
+The model does not have the order of the end and the states, a refused
+watch, or a LiveView that mounts again. The tests of the hook check them.
+
+The tests:
+
+- `test/js/home_assistant.test.js`: the entities that the app turns on
+  and off, and the state of a device, with a property test. The watch:
+  the first states, the changes, and a change of the attributes only. It
+  also checks an entity that goes, the same entities in a different
+  order, and new entities. Then a refused watch, two reads at the same
+  time, and a socket that closes. The control: the states before the
+  end, one call for each domain, a refusal, no answer, and a socket that
+  closes. A property test does many steps, with the answers of each step
+  in any order. The steps are changes of a person, states that go,
+  controls, changes of the registry, and a socket that closes and opens
+  again. When all is quiet, the last states are the states of Home
+  Assistant, and Home Assistant has one watch at most. While the socket
+  is closed, the hook sends no states.
+- `test/diy_web/live/ha_control_live_test.exs`: the states on the plan,
+  on the stage, in the list and in the panel, and the switch with the end
+  of a control. It also checks a refusal, an error that a new state ends,
+  a device with no switch, and a link that closes. A property test checks
+  that the page takes only the states that it knows.
+- The browser test: the fake Home Assistant has the states and the
+  services. The lights come in from their ghost. They are on, and the
+  switch turns them off. A person turns them on in Home Assistant, and
+  the page follows. The keyboard turns them off again, and the switch
+  keeps the focus. Axe checks the panel with the switch.
 
 ## In a car
 
