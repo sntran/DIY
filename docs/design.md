@@ -2142,11 +2142,13 @@ prototype "Hub in Hand" showed this way: things in the house, not cards.
    its model: "Kitchen fridge" is a fridge. Of two words, the last in the
    name wins: "TV room lights" are lights. When two words end at one
    place, the longer one wins. For example, a water heater is not a
-   space heater, and a microwave oven is not a range. A word can have an "s" at its end,
-   and two words can be one word ("HeatPump"). With no word, the domains
-   give the kind: a light, a fan or a water heater. A thermostat, a
-   speaker or a plug can be many things: with no word, it gets no kind.
-5. `DIY.HomeAssistant.ghosts/3` gives the ghosts, and the count of all
+   space heater, and a microwave oven is not a range. A word can have an
+   "s" at its end, and two words can be one word ("HeatPump"). With no
+   word, the domains give the kind: a light, a fan or a water heater. A
+   thermostat, a speaker or a plug can be many things: with no word, it
+   gets no kind. The search starts at the last word and looks one time
+   at each word, so a long name costs little.
+5. `DIY.HomeAssistant.ghosts/4` gives the ghosts, and the count of all
    of them. A ghost is a device with a kind and with no item, in the area
    of a room. The match of the rooms gives the room of an area: the
    links, then the names. The kind must go in the room: a pool pump is
@@ -2160,13 +2162,16 @@ prototype "Hub in Hand" showed this way: things in the house, not cards.
    cover each other. The places are on a grid of about 30 steps on each
    side, with steps of 12 inches at least. An item that hangs on a wall
    (a mini split) goes on the back wall. A ceiling fan is on the ceiling:
-   it can be anywhere.
+   it can be anywhere. A ghost keeps its place while that place is free.
+   So when the person adds one ghost, the other ghosts do not move.
 7. The LiveView keeps the ghosts. It finds them again only when the
-   rooms, the items, the areas, the links or the devices change.
+   rooms, the items, the areas, the links or the devices change. The
+   plan with 60 ghosts takes about 100 ms more for each change of the
+   build, as a plan with 60 more items does.
 
 On the plan (`DIYWeb.Cutaway.ghost_view/5`), a ghost is the model of its
 kind, pale and blue, with a dashed edge and no shadow. The edge has a
-contrast of 3:1 at least on each floor: #0d47a1 in the light mode and
+contrast of 3:1 at least on each floor: #0b3375 in the light mode and
 #bbdefb in the dark mode. A pill over it has the name of the device. The
 pill shows over the name of a room, and under the pill of a hub. With
 motion, a ghost comes in, and its opacity goes down and up one time. A

@@ -570,10 +570,10 @@
    model of its kind, pale and blue, with a dashed edge and no shadow. The
    id of the plan gives the rule more weight than the colors of the items
    of the house. The edge has a contrast of 3:1 at least on each floor
-   (#0d47a1 in the light mode, #bbdefb in the dark mode). Its pill has a
+   (#0b3375 in the light mode, #bbdefb in the dark mode). Its pill has a
    dashed edge too. A tap on the ghost or on its pill adds its item. With
    motion, the ghost comes in, and its opacity goes down and up one time. */
-.p-ghost { cursor: pointer; --p-ghost: #0d47a1; --p-ghost-fill: #1e88e5 }
+.p-ghost { cursor: pointer; --p-ghost: #0b3375; --p-ghost-fill: #1e88e5 }
 #plan-svg .p-ghost polygon { fill: color-mix(in oklab, var(--p-ghost-fill) 22%, transparent); stroke: var(--p-ghost);
   stroke-width: 1.5; stroke-dasharray: 3 2; vector-effect: non-scaling-stroke }
 #plan-svg .p-ghost .p-shadow { display: none }

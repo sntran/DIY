@@ -55,11 +55,11 @@ defmodule DIYWeb.Inside do
 
   attr :ghosts, :list,
     default: [],
-    doc: "the ghosts of the devices of Home Assistant (`DIY.HomeAssistant.ghosts/3`)"
+    doc: "the ghosts of the devices of Home Assistant (`DIY.HomeAssistant.ghosts/4`)"
 
   attr :ha_count, :integer,
     default: 0,
-    doc: "the count of all the ghosts: the plan shows some of them (`DIY.HomeAssistant.ghosts/3`)"
+    doc: "the count of all the ghosts: the plan shows some of them (`DIY.HomeAssistant.ghosts/4`)"
 
   attr :ha_away, :integer,
     default: 0,
@@ -94,9 +94,9 @@ defmodule DIYWeb.Inside do
         ha_alert:
           assigns.ha.error in ~w(state denied token unreachable signed_out) and not hub_open,
         devices_error:
-          assigns.ha.state == "connected" &&
-            match?(%{error: _}, assigns.ha_devices) &&
-            assigns.ha_devices.error
+          if(assigns.ha.state == "connected" and match?(%{error: _}, assigns.ha_devices),
+            do: assigns.ha_devices.error
+          )
       )
 
     ~H"""

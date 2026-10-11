@@ -401,15 +401,25 @@ export class Link {
   }
 
   // Starts a subscription on the socket: onEvent gets each of its events.
-  // It gives the result of the command.
+  // It gives the id of the subscription, and the result of the command
+  // (done).
   subscribe(type, fields, onEvent) {
     const id = this.next
     const done = this.command(type, fields)
     this.events.set(id, onEvent)
-    return done.catch((error) => {
-      this.events.delete(id)
-      throw error
-    })
+    return {
+      id,
+      done: done.catch((error) => {
+        this.events.delete(id)
+        throw error
+      }),
+    }
+  }
+
+  // Ends a subscription: its late events change nothing.
+  unsubscribe(id) {
+    this.events.delete(id)
+    this.command("unsubscribe_events", {subscription: id}).catch(() => {})
   }
 
   async message(socket, epoch, message) {
@@ -573,7 +583,8 @@ export class Link {
   }
 
   // A watch that Home Assistant refuses (or a socket that closes) is not
-  // a watch: the next read tries again.
+  // a watch: the next read tries again. When Home Assistant refuses one of
+  // the three subscriptions, the hook ends the others.
   async watchRegistries() {
     if (this.watching) return
     this.watching = true
@@ -584,11 +595,13 @@ export class Link {
         this.devices()
       }, REGISTRY_WAIT)
     }
+    const subscriptions = ["device_registry_updated", "entity_registry_updated", "area_registry_updated"]
+      .map((event) => this.subscribe("subscribe_events", {event_type: event}, changed))
     try {
-      await Promise.all(["device_registry_updated", "entity_registry_updated", "area_registry_updated"]
-        .map((event) => this.subscribe("subscribe_events", {event_type: event}, changed)))
+      await Promise.all(subscriptions.map(({done}) => done))
     } catch {
       this.watching = false
+      for (const {id, done} of subscriptions) done.then(() => this.unsubscribe(id), () => {})
     }
   }
 

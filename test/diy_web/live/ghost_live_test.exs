@@ -65,12 +65,15 @@ defmodule DIYWeb.GhostLiveTest do
     conn: conn
   } do
     view = page(conn, ~p"/inside")
+    # With no link, the status is empty: no box.
+    assert has_element?(view, "#ha-ghosts[role=status]")
+    refute has_element?(view, "#ha-ghosts div")
     connected(view)
     assert_push_event(view, "ha:devices_fetch", %{})
     # The status is on the page before its text: a screen reader reads the
     # text when it comes.
     assert has_element?(view, "#ha-ghosts[role=status]")
-    refute has_element?(view, "#ha-ghosts p")
+    refute has_element?(view, "#ha-ghosts div")
 
     devices(view)
 
@@ -126,7 +129,7 @@ defmodule DIYWeb.GhostLiveTest do
     assert_push_event(view, "ha:devices_fetch", %{})
     render_hook(view, "ha:status", %{"state" => "none"})
     refute has_element?(view, "#plan-svg [data-ghost]")
-    refute has_element?(view, "#ha-ghosts p")
+    refute has_element?(view, "#ha-ghosts div")
     # A late answer after the disconnect changes nothing.
     devices(view)
     refute has_element?(view, "#plan-svg [data-ghost]")
@@ -187,6 +190,34 @@ defmodule DIYWeb.GhostLiveTest do
     assert has_element?(view, "#ha-device", "This is Living Room TV in Home Assistant.")
     devices(view, Enum.drop(@devices, 2))
     assert has_element?(view, "#ha-device", "Its device is not in Home Assistant now.")
+  end
+
+  test "after a tap on a ghost, the other ghosts of its room stay at their places", %{
+    conn: conn
+  } do
+    view = page(conn, ~p"/inside")
+    connected(view)
+
+    devices(view, [
+      device("k1", "Lamp", "kitchen", ["light"]),
+      device("k2", "TV", "kitchen", ["media_player"]),
+      device("k3", "Fridge", "kitchen", ["sensor"]),
+      device("k4", "Microwave", "kitchen", ["switch"])
+    ])
+
+    ghosts = :sys.get_state(view.pid).socket.assigns.ghosts
+    assert length(ghosts) == 4
+    places = Map.new(ghosts, &{&1.device, &1.at})
+
+    # A tap on the last ghost: its item comes at its place, and the ghosts
+    # before it do not move.
+    render_hook(view, "ha_add_device", %{"id" => "k4"})
+    build = build_of(view)
+    {:ok, item} = Build.item(build, Build.device_item(build, "k4"))
+    assert item.at == places["k4"]
+
+    after_tap = :sys.get_state(view.pid).socket.assigns.ghosts
+    assert Map.new(after_tap, &{&1.device, &1.at}) == Map.delete(places, "k4")
   end
 
   test "an item with a device and no devices on the page", %{conn: conn} do

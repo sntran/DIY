@@ -1095,7 +1095,9 @@ defmodule DIYWeb.HomeLive do
     if socket.assigns.ghost_key == key do
       socket
     else
-      {ghosts, count} = DIY.HomeAssistant.ghosts(build, devices, areas)
+      # A ghost keeps its place while it is free.
+      kept = Map.new(socket.assigns.ghosts, &{&1.device, Map.take(&1, [:room, :at])})
+      {ghosts, count} = DIY.HomeAssistant.ghosts(build, devices, areas, kept)
 
       assign(socket,
         ghosts: ghosts,

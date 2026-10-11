@@ -14,7 +14,7 @@ defmodule DIY.HomeAssistant do
   have none either.
 
   The devices of Home Assistant come into the house as ghosts
-  (`ghosts/3`). A ghost is a device in an area of a room, with a kind of
+  (`ghosts/4`). A ghost is a device in an area of a room, with a kind of
   the catalog (`kind_of/1`). It has no item. A tap on a ghost adds its item
   (`DIY.Build.add_device/5`).
   """
@@ -74,6 +74,22 @@ defmodule DIY.HomeAssistant do
     {~w(lamp), "lights"},
     {~w(bulb), "lights"}
   ]
+
+  # The phrases by their last word, from the end: [{phrase, size, type}],
+  # in the order of @phrases. And the phrases of two words or more as one
+  # word ("heatpump"). The stem of a word is as in stem/1.
+  stem = fn word -> if byte_size(word) > 2, do: String.trim_trailing(word, "s"), else: word end
+
+  @by_last Enum.reduce(Enum.reverse(@phrases), %{}, fn {phrase, type}, index ->
+             stems = Enum.map(phrase, stem)
+             entry = {Enum.reverse(stems), length(stems), type}
+             Map.update(index, List.last(stems), [entry], &[entry | &1])
+           end)
+
+  @joined for {phrase, type} <- Enum.reverse(@phrases),
+              length(phrase) > 1,
+              into: %{},
+              do: {phrase |> Enum.map(stem) |> Enum.join(), {length(phrase), type}}
 
   # The domains of the entities of a device with no word of a kind. A
   # thermostat, a speaker or a plug can be many things: no kind.
@@ -225,33 +241,33 @@ defmodule DIY.HomeAssistant do
   defp by_words(nil), do: nil
 
   defp by_words(text) do
-    words = text |> String.downcase() |> String.split(~r/[^a-z0-9]+/u, trim: true)
-    stems = Enum.map(words, &stem/1)
-
-    matches =
-      for {phrase, type} <- @phrases,
-          {last, size} <- ends(stems, Enum.map(phrase, &stem/1)),
-          do: {last, size, type}
-
-    case Enum.max_by(matches, fn {last, size, _type} -> {last, size} end, fn -> nil end) do
-      nil -> nil
-      {_last, _size, type} -> type
-    end
+    text
+    |> String.downcase()
+    |> String.split(~r/[^a-z0-9]+/u, trim: true)
+    |> Enum.map(&stem/1)
+    |> Enum.reverse()
+    |> last_phrase()
   end
 
   # A word with no "s" at its end ("lights" is "light").
   defp stem(word) when byte_size(word) > 2, do: String.trim_trailing(word, "s")
   defp stem(word), do: word
 
-  # Where a phrase ends in the words, and its size: the words in a row, or
-  # the phrase as one word ("heatpump").
-  defp ends(words, phrase) do
-    n = length(phrase)
-    joined = Enum.join(phrase)
+  # The kind of the last phrase in the words (from the end). Of two phrases
+  # that end at one word, the longer one wins. One look for each word, so
+  # a long name costs little.
+  defp last_phrase([]), do: nil
 
-    for {_word, i} <- Enum.with_index(words),
-        Enum.slice(words, i, n) == phrase or (n > 1 and Enum.at(words, i) == joined),
-        do: {if(Enum.at(words, i) == joined, do: i, else: i + n - 1), n}
+  defp last_phrase([word | before] = words) do
+    in_row =
+      for {phrase, size, type} <- Map.get(@by_last, word, []),
+          Enum.take(words, size) == phrase,
+          do: {size, type}
+
+    case in_row ++ List.wrap(@joined[word]) do
+      [] -> last_phrase(before)
+      matches -> matches |> Enum.max_by(&elem(&1, 0)) |> elem(1)
+    end
   end
 
   @doc """
@@ -265,8 +281,12 @@ defmodule DIY.HomeAssistant do
 
   A device can have its kind already (`kind`): then the app does not read
   its name again.
+
+  `kept` has the places of the ghosts before: `%{device => %{room: room,
+  at: at}}`. A ghost keeps its place while that place is free. So when
+  the person adds one ghost, the others do not move.
   """
-  def ghosts(build, devices, areas) do
+  def ghosts(build, devices, areas, kept \\ %{}) do
     rooms = for {room, area} <- match(build, areas).both, into: %{}, do: {area.id, room}
     linked = MapSet.new(Map.values(build.devices))
 
@@ -286,7 +306,7 @@ defmodule DIY.HomeAssistant do
       |> MapSet.new(& &1.device)
 
     ghosts = all |> Enum.filter(&MapSet.member?(shown, &1.device)) |> Enum.take(@in_house)
-    {place(build, ghosts), length(all)}
+    {place(build, ghosts, kept), length(all)}
   end
 
   # A device with no name has the name of its kind.
@@ -295,26 +315,44 @@ defmodule DIY.HomeAssistant do
   end
 
   # A free place for each ghost in its room, where no item and no ghost
-  # before it is. It is the place that is the farthest from them
-  # (`spread/3`). So the ghosts and their names do not cover each other.
-  defp place(build, ghosts) do
+  # before it is. It is its place before (`kept`) when that place is still
+  # free. Else it is the place that is the farthest from them (`spread/3`).
+  # So the ghosts and their names do not cover each other.
+  defp place(build, ghosts, kept) do
     plans = Map.new(build.rooms, &{&1.id, &1.plan})
 
     {placed, _boxes} =
       Enum.map_reduce(ghosts, %{}, fn ghost, boxes ->
         item = %{type: ghost.type, size: nil, turn: 0, params: Catalog.defaults(ghost.type)}
+        room = plans[ghost.room]
 
         others =
           Map.get_lazy(boxes, ghost.room, fn ->
             for i <- build.items, i.room == ghost.room, i.at != nil, do: Layout.item_box(i)
           end)
 
-        at = spread(item, plans[ghost.room], others)
+        at =
+          case kept[ghost.device] do
+            %{room: room_id, at: at} when room_id == ghost.room ->
+              if free?(Layout.item_box(Map.put(item, :at, at)), room, others),
+                do: at,
+                else: spread(item, room, others)
+
+            _ ->
+              spread(item, room, others)
+          end
+
         box = Layout.item_box(Map.put(item, :at, at))
         {Map.put(ghost, :at, at), Map.put(boxes, ghost.room, [box | others])}
       end)
 
     placed
+  end
+
+  # A box in its room, on no other box.
+  defp free?(box, room, others) do
+    box.x >= 0 and box.y >= 0 and box.x + box.w <= room.w and box.y + box.d <= room.d and
+      not Enum.any?(others, &Layout.overlap?(&1, box))
   end
 
   @doc """

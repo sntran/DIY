@@ -611,7 +611,7 @@ async function build(context, name) {
     const style = getComputedStyle(polygon)
     return { stroke: style.stroke, dash: style.strokeDasharray }
   })
-  assert.ok(["rgb(13, 71, 161)", "rgb(187, 222, 251)"].includes(look.stroke), `the edge of a ghost is ${look.stroke}`)
+  assert.ok(["rgb(11, 51, 117)", "rgb(187, 222, 251)"].includes(look.stroke), `the edge of a ghost is ${look.stroke}`)
   assert.equal(look.dash, "3px, 2px")
   // On a hidden layer, the pill of a ghost takes no tap.
   const hidden = await page.evaluate(() => {

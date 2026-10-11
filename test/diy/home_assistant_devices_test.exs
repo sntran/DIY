@@ -68,6 +68,58 @@ defmodule DIY.HomeAssistantDevicesTest do
     assert kind("Speaker", ["media_player"]) == nil
     assert kind("Plug 3", ["switch", "sensor"]) == nil
     assert kind("", []) == nil
+    # A long name: the last phrase wins, at its place in the words.
+    many = String.duplicate("a ", 126)
+    assert kind(many <> "TV") == "tv"
+    assert kind("TV " <> many) == "tv"
+    assert kind("Water " <> many <> "heater") == "space_heater"
+    assert kind(many) == nil
+  end
+
+  test "a ghost keeps its place while that place is free" do
+    build = preset()
+    kitchen = room_named(build, "Kitchen")
+    living = room_named(build, "Living room")
+    areas = [%{id: "a-k", name: "Kitchen", floor: nil}]
+    lamp = device("k1", "Lamp", "a-k", ["light"])
+
+    {[ghost], 1} = HomeAssistant.ghosts(build, [lamp], areas)
+    assert ghost.room == kitchen.id
+
+    # A free place in its room stays.
+    item = %{type: "lights", size: nil, turn: 0, params: Catalog.defaults("lights")}
+    {w, d} = Layout.extent(item)
+
+    others =
+      for i <- build.items, i.room == kitchen.id, i.at != nil, do: Layout.item_box(i)
+
+    free =
+      for(
+        y <- 0..(kitchen.plan.d - d)//6,
+        x <- 0..(kitchen.plan.w - w)//6,
+        box = %{x: x, y: y, w: w, d: d},
+        not Enum.any?(others, &Layout.overlap?(&1, box)),
+        do: %{x: x, y: y}
+      )
+      |> Enum.reject(&(&1 == ghost.at))
+      |> hd()
+
+    kept = %{"k1" => %{room: kitchen.id, at: free}}
+    assert {[%{at: ^free}], 1} = HomeAssistant.ghosts(build, [lamp], areas, kept)
+
+    # A place on an item, out of the room, or in a different room does not
+    # stay.
+    [taken | _] = others
+
+    for at <- [%{x: taken.x, y: taken.y}, %{x: kitchen.plan.w, y: 0}] do
+      kept = %{"k1" => %{room: kitchen.id, at: at}}
+      assert {[%{at: at_now}], 1} = HomeAssistant.ghosts(build, [lamp], areas, kept)
+      assert at_now == ghost.at
+    end
+
+    kept = %{"k1" => %{room: living.id, at: free}}
+    assert {[%{at: at_now}], 1} = HomeAssistant.ghosts(build, [lamp], areas, kept)
+    assert at_now == ghost.at
   end
 
   property "the kind of a device is a kind of the catalog, or nil" do
@@ -235,12 +287,27 @@ defmodule DIY.HomeAssistantDevicesTest do
       {w, d} = Layout.extent(item)
       box = %{x: at.x, y: at.y, w: w, d: d}
 
-      if at == %{x: 0, y: 0} do
-        :ok
+      free? = fn box ->
+        box.x >= 0 and box.y >= 0 and box.x + w <= rw and box.y + d <= rd and
+          not Enum.any?(boxes, &Layout.overlap?(&1, box))
+      end
+
+      # The place is free. Else it is the back corner, and the room has no
+      # free place on the grid. The grid has about 30 steps on each side,
+      # with steps of 12 inches at least.
+      step = max(12, round(max(rw, rd) / 30))
+      wall? = Catalog.lift(type) > 0 and type != "ceiling_fan"
+
+      grid =
+        for y <- 0..if(wall?, do: 0, else: max(rd - d, 0))//step,
+            x <- 0..max(rw - w, 0)//step,
+            do: %{x: x, y: y, w: w, d: d}
+
+      if free?.(box) do
+        if wall?, do: assert(at.y == 0)
       else
-        assert at.x >= 0 and at.y >= 0 and at.x + w <= rw and at.y + d <= rd
-        refute Enum.any?(boxes, &Layout.overlap?(&1, box))
-        if Catalog.lift(type) > 0 and type != "ceiling_fan", do: assert(at.y == 0)
+        assert at == %{x: 0, y: 0}
+        refute Enum.any?(grid, free?)
       end
     end
   end
@@ -295,7 +362,9 @@ defmodule DIY.HomeAssistantDevicesTest do
         end)
 
       {ghosts, count} = HomeAssistant.ghosts(build, devices, areas)
-      assert count == length(ghosts)
+      # The plan shows 8 ghosts in a room at most.
+      assert count >= length(ghosts)
+      assert ghosts |> Enum.frequencies_by(& &1.room) |> Map.values() |> Enum.all?(&(&1 <= 8))
       items = MapSet.new(Map.values(build.devices))
 
       for ghost <- ghosts do
@@ -333,7 +402,7 @@ defmodule DIY.HomeAssistantDevicesTest do
               not MapSet.member?(items, &1.id))
         )
 
-      assert length(ghosts) + HomeAssistant.away(build, devices, areas) + wrong_place + no_area ==
+      assert count + HomeAssistant.away(build, devices, areas) + wrong_place + no_area ==
                with_kind
     end
   end

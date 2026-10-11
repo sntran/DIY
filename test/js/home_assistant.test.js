@@ -1238,6 +1238,7 @@ function registry({floors = [], areas = [], admin = true, fail = () => null, dev
       case "config/area_registry/list": return ok(ha.areas)
       case "auth/current_user": return ok({id: "u1", name: "Owner", is_admin: ha.admin})
       case "subscribe_events": return ok(null)
+      case "unsubscribe_events": return ok(null)
       case "config/device_registry/list": return ok(ha.devices)
       case "config/entity_registry/list": return ok(ha.entities)
       case "config/floor_registry/create": {
@@ -1646,7 +1647,28 @@ test("the hook reads the devices, the entities and the areas of Home Assistant",
   assert.equal(other.pushes.at(-1)[1].devices.length, 1)
   assert.equal(second.link.watching, false)
   assert.equal(second.link.events.size, 0)
+  assert.equal(second.socket.sent.filter((message) => message.type === "unsubscribe_events").length, 0)
   second.link.stop()
+
+  // Home Assistant refuses one of the three: the hook ends the other two.
+  // An end that Home Assistant refuses changes nothing more.
+  const fifth = parts()
+  const partial = await connected(fifth)
+  const half = registry({
+    devices: [haDevice("lamp", {name: "Lamp", area_id: "living"})], entities: [haEntity("light.lamp", "lamp")],
+    fail: (message) => message.event_type === "entity_registry_updated" || message.type === "unsubscribe_events"
+      ? {code: "unauthorized", message: "Unauthorized"} : null,
+  })
+  const halfRead = partial.link.devices()
+  await serve(half, [partial.socket])
+  await halfRead
+  await serve(half, [partial.socket])
+  const subscribed = partial.socket.sent.filter((message) => message.type === "subscribe_events")
+  const ended = partial.socket.sent.filter((message) => message.type === "unsubscribe_events")
+  assert.deepEqual(ended.map((message) => message.subscription), [subscribed[0].id, subscribed[2].id])
+  assert.equal(partial.link.watching, false)
+  assert.equal(partial.link.events.size, 0)
+  partial.link.stop()
 
   // A command that Home Assistant refuses, and no socket.
   const third = parts()

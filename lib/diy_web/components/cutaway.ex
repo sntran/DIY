@@ -792,7 +792,7 @@ defmodule DIYWeb.Cutaway do
   end
 
   @doc """
-  A ghost of a device of Home Assistant (`DIY.HomeAssistant.ghosts/3`).
+  A ghost of a device of Home Assistant (`DIY.HomeAssistant.ghosts/4`).
   It is the model of its kind at its free place in its room, with the
   number of the ghost (`i`). It is not an item yet: it has the id of its
   device, and the name of the device.

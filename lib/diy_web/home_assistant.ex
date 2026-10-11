@@ -31,7 +31,7 @@ defmodule DIYWeb.HomeAssistant do
     cannot read them (`rooms_message/1`).
   - `:ha_sync`: what the last match did, or `nil`.
 
-  The ghosts of the devices (`DIY.HomeAssistant.ghosts/3`) use the assign
+  The ghosts of the devices (`DIY.HomeAssistant.ghosts/4`) use the assign
   `:ha_devices`: the devices and the areas of Home Assistant. It is `nil`
   before the hook reads them, and `%{error: error}` when the hook cannot
   read them. The page asks for them when the link becomes connected
