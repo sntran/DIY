@@ -8,14 +8,6 @@ defmodule DIYWeb.StageTest do
 
   @types Enum.map(Catalog.kinds(), & &1.type)
 
-  test "the style of a panel" do
-    assert Stage.style("home_assistant") == :led
-    assert Stage.style("tv") == :screen
-    assert Stage.style("computer") == :screen
-    assert Stage.style("fridge") == :label
-    assert Stage.style("water_heater") == :label
-  end
-
   test "the cameras go from the camera of the house to the front, or over a hub" do
     house = Camera.house()
 
@@ -38,39 +30,38 @@ defmodule DIYWeb.StageTest do
             List.last(Stage.cameras("home_assistant")).pitch} == {88.0, 58.0}
   end
 
-  test "the place of the panel: the screen of an item, or a label on its front" do
+  test "the face of an item: its screen, or the middle of its front" do
     assert Stage.region("tv") == {:front, {0.015, 0.137, 0.135}, {1.09, 0.57}}
     assert {:top, _corner, _size} = Stage.region("home_assistant")
 
-    # A label: 3/4 of the width of the front, a little over the middle of
-    # the height, in front of the model.
+    # No screen: 3/4 of the width of the front, all its height, in front of
+    # the model.
     {{x0, _y0, z0}, {x1, y1, z1}} = Shapes.bounds(Shapes.model("fridge"))
     {:front, {x, y, z}, {w, h}} = Stage.region("fridge")
     assert_in_delta w, (x1 - x0) * 0.75, 1.0e-9
     assert_in_delta x - x0, (x1 - x0 - w) / 2, 1.0e-9
     assert y > y1
-    assert z > z0 and z + h < z1
-    assert h <= w * 1.3 + 1.0e-9
-
-    # A label on a front that is not high is 0.6 of its width. It hangs
-    # from the top of the front, as a tag.
-    {{_x0, _y0, _z0}, {_x1, _y1, z1}} = Shapes.bounds(Shapes.model("ceiling_fan"))
-    {:front, {_x, _y, z}, {w, h}} = Stage.region("ceiling_fan")
-    assert_in_delta h, w * 0.6, 1.0e-9
-    assert_in_delta z + h, z1, 1.0e-9
+    assert z == z0 and h == z1 - z0
   end
 
-  test "the panel of each kind can be 260 by 150 px on a page of 360 px" do
-    # The panel is 336 px wide at most on a page of 360 px (12 px on each
-    # side). So each panel is 150 / 336 of its width high, at least.
-    for type <- @types do
+  test "the tags: each is a number of its kind, on the face of the item" do
+    for type <- @types, spot <- Stage.frames(type).spots do
+      param = Enum.find(Catalog.kind(type).params, &(&1.key == spot.key))
+      assert param.type in [:int, :float], "#{type} #{spot.key}"
+      assert spot.tag != "" and spot.where != ""
+
+      # The point is in the face: its parts along the two sides of the face
+      # are from 0 to 1.
       {ax, ay, bx, by, cx, cy} = Stage.frames(type).region
-
-      ratio =
-        :math.sqrt((cx - ax) ** 2 + (cy - ay) ** 2) / :math.sqrt((bx - ax) ** 2 + (by - ay) ** 2)
-
-      assert ratio >= 150 / 336, "#{type}: #{ratio}"
+      {x, y} = spot.at
+      det = (bx - ax) * (cy - ay) - (cx - ax) * (by - ay)
+      u = ((x - ax) * (cy - ay) - (cx - ax) * (y - ay)) / det
+      v = ((bx - ax) * (y - ay) - (x - ax) * (by - ay)) / det
+      assert u >= -1.0e-6 and u <= 1 + 1.0e-6 and v >= -1.0e-6 and v <= 1 + 1.0e-6, type
     end
+
+    assert Enum.map(Stage.frames("tv").spots, & &1.key) == ["hours", "watts"]
+    assert Stage.frames("ac").spots == []
   end
 
   # The x and y of the points of a frame.

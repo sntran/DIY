@@ -126,6 +126,8 @@ defmodule DIYWeb.HomeAssistantTest do
     view |> form("#ha-form", %{"url" => "home.example.com"}) |> render_submit()
     assert has_element?(view, "#ha-error", "Give the address")
     refute_push_event(view, "ha:connect", %{})
+    # The field keeps the address, so the person can correct it.
+    assert has_element?(view, "#ha-form input[name=url][value='home.example.com']")
 
     view |> form("#ha-form", %{"url" => "https://HA.example.com/"}) |> render_submit()
     assert_push_event(view, "ha:connect", %{url: "https://ha.example.com", back: "/settings"})

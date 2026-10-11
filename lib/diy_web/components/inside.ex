@@ -37,7 +37,7 @@ defmodule DIYWeb.Inside do
     doc: "\"room\" (change the room), \"new_room\" or \"ha_rooms\" (`DIYWeb.HomeAssistant`)"
 
   attr :item_error, :string, default: nil
-  attr :item_page, :string, default: nil, doc: "the page of the panel of the open item"
+  attr :item_said, :string, default: nil, doc: "the new value after − or +, for a screen reader"
 
   attr :item_frames, :map,
     default: nil,
@@ -156,7 +156,6 @@ defmodule DIYWeb.Inside do
 
       <.item_stage
         :if={@item && @item_frames && match?({:ok, _}, Build.item(@build, @item))}
-        page={@item_page}
         frames={@item_frames}
         close={if @chosen, do: ~p"/inside?#{[room: @chosen.id]}", else: ~p"/inside"}
         build={@build}
@@ -164,6 +163,7 @@ defmodule DIYWeb.Inside do
         estimate={@estimate}
         price={@price}
         error={@item_error}
+        said={@item_said}
         outage={@outage}
         ha={@ha}
       />
@@ -540,15 +540,16 @@ defmodule DIYWeb.Inside do
   attr :estimate, :map, required: true
   attr :price, :map, required: true
   attr :error, :string, default: nil
+  attr :said, :string, default: nil, doc: "the new value after − or +, for a screen reader"
   attr :outage, :string, default: nil
   attr :close, :string, default: "/inside", doc: "the page of the close link"
   attr :ha, :map, required: true
-  attr :page, :string, default: nil, doc: "the page of the panel (`pages/1`)"
   attr :frames, :map, required: true, doc: "the frames of its kind (`DIYWeb.Stage.frames/1`)"
 
-  # An item in front of the person (DIYWeb.Stage). Its panel has pages:
-  # the link of a Home Assistant hub, its use (the math of its kWh), its
-  # numbers, its place, and its remove.
+  # An item in front of the person (DIYWeb.Stage). Its panel is the same
+  # for each item. Its parts are in this order: what it costs, the link of
+  # a hub to Home Assistant, its use, its place, and more.
+  # Each part has a heading, and the panel scrolls: no part is out of sight.
   defp item_stage(assigns) do
     kind = Catalog.kind(assigns.item.type)
     {:ok, room} = Build.room(assigns.build, assigns.item.room)
@@ -556,7 +557,6 @@ defmodule DIYWeb.Inside do
     van = Enum.any?(assigns.build.items, &(&1.type == "camper_van"))
     features = if van, do: kind.features, else: kind.features -- @van_features
     features = if gas_item?(assigns.item), do: features ++ [:gas], else: features
-    pages = pages(assigns.item)
 
     solar =
       if assigns.item.type == "solar_panels",
@@ -571,14 +571,11 @@ defmodule DIYWeb.Inside do
         rooms: rooms,
         van: van,
         features: features,
+        fields: Enum.filter(kind.params, &shown?(&1, assigns.item, van)),
+        spots: MapSet.new(assigns.frames.spots, & &1.key),
         gas: Prices.gas(assigns.build),
         solar: solar,
-        pages: pages,
-        page:
-          if(assigns.page in Enum.map(pages, &elem(&1, 0)),
-            do: assigns.page,
-            else: hd(pages) |> elem(0)
-          )
+        name: Catalog.name(assigns.item)
       )
 
     ~H"""
@@ -586,245 +583,378 @@ defmodule DIYWeb.Inside do
       type={@item.type}
       frames={@frames}
       item={@item.id}
-      title={Catalog.name(@item)}
+      title={@name}
       note={"In #{@room.name}#{level_note(@room.level)}"}
       close={@close}
     >
-      <div role="tablist" aria-label="The pages of the panel" class="stage-keys">
-        <button
-          :for={{page, label} <- @pages}
-          type="button"
-          role="tab"
-          id={"key-#{page}"}
-          aria-selected={to_string(page == @page)}
-          aria-controls={"page-#{page}"}
-          phx-click="item_page"
-          phx-value-page={page}
-          class={["stage-key", page == "remove" && "stage-key-remove"]}
-        >
-          {label}
+      <:screen :if={@item.type == "home_assistant"}>
+        <HomeAssistant.screen ha={@ha} back={~p"/inside?#{[item: @item.id]}"} />
+      </:screen>
+
+      <section
+        :if={@estimate.ready}
+        id="part-cost"
+        class="stage-cost"
+        aria-labelledby="part-cost-title"
+      >
+        <h3 id="part-cost-title" class="sr-only">
+          {if @item.type in @no_use, do: "Its energy", else: "What it costs"}
+        </h3>
+        <p :if={@item.type in @no_use} id="item-math" class="stage-help">
+          {hd(Estimate.explain(@item, 7, @estimate))}
+        </p>
+        <%= if @item.type not in @no_use do %>
+          <p class="stage-month">
+            {Format.dollars(Format.cost(@estimate.items[@item.id].year / 12, @price.cents))} a month
+          </p>
+          <p id="item-year" class="stage-year">
+            {Format.kwh(@estimate.items[@item.id].year)} and {Format.money(
+              Format.cost(@estimate.items[@item.id].year, @price.cents)
+            )} in one year
+          </p>
+          <p :if={@estimate.items[@item.id].therms > 0} id="item-gas" class="stage-year">
+            Gas: {Format.therms(@estimate.items[@item.id].therms)} and {Format.money(
+              @estimate.items[@item.id].therms * @gas.dollars
+            )} in one year
+          </p>
+        <% end %>
+      </section>
+
+      <div :if={@item.typical} id="part-guess" class="stage-guess">
+        <p>
+          {if @item.type == "camper_van",
+            do: "These numbers are typical of the model. Check them on the label in the door frame.",
+            else: "These numbers are a guess for a house like yours. Check them on the item."}
+        </p>
+        <button type="button" phx-click="check_item" phx-value-id={@item.id} class="stage-btn">
+          They are right
         </button>
       </div>
 
-      <div
-        :if={@item.type == "home_assistant"}
-        id="page-link"
-        role="tabpanel"
-        aria-labelledby="key-link"
-        hidden={@page != "link"}
-        class="stage-page"
+      <p :if={@item.type == "cpap"} id="item-medical" class="stage-help">
+        A power station can run it for some hours: the page Power gives them. Ask the maker which
+        batteries it can use. On a battery, turn off the humidifier: then it uses near 10 W. Also tell
+        the company that sells your power. Many keep a list of homes with a medical need, but the list
+        does not keep the power on.
+      </p>
+
+      <ul :if={@solar != []} id="item-solar" class="stage-list">
+        <li :for={note <- @solar}>{note}</li>
+      </ul>
+
+      <p
+        :if={@item.type in ~w(power_station solar_panels) or (@outage && @item.backup)}
+        id="item-power"
+        class="stage-help"
       >
-        <HomeAssistant.card ha={@ha} back={~p"/inside?#{[item: @item.id]}"} title={false} />
-      </div>
+        <span :if={@outage && (@item.type == "power_station" or @item.backup)} class="font-semibold">
+          {@outage}
+        </span>
+        <.link patch={~p"/power"} class="link">Open the page Power</.link>
+      </p>
 
-      <div
-        id="page-use"
-        role="tabpanel"
-        aria-labelledby="key-use"
-        hidden={@page != "use"}
-        class="stage-page"
-      >
-        <p :if={@item.type == "cpap"} id="item-medical" class="text-sm">
-          A power station can run it for some hours: the page Power gives them. Ask the maker which
-          batteries it can use. On a battery, turn off the humidifier: then it uses near 10 W. Also tell
-          the company that sells your power. Many keep a list of homes with a medical need, but the list
-          does not keep the power on.
-        </p>
-
-        <p :if={@estimate.ready and @item.type in @no_use} id="item-math" class="text-sm">
-          {hd(Estimate.explain(@item, 7, @estimate))}
-        </p>
-
-        <div
-          :if={@estimate.ready and @item.type not in @no_use}
-          id="item-math"
-          class="space-y-1 text-sm"
-        >
-          <p class="stage-year">
-            In one year: {Format.kwh(@estimate.items[@item.id].year)} · {Format.money(
-              Format.cost(@estimate.items[@item.id].year, @price.cents)
-            )}
-          </p>
-          <p :if={@estimate.items[@item.id].therms > 0} id="item-gas" class="font-semibold">
-            Gas in one year: {Format.therms(@estimate.items[@item.id].therms)} · {Format.money(
-              @estimate.items[@item.id].therms * @gas.dollars
-            )}
-          </p>
-          <p class="opacity-80">
-            How the app gets this number, for one month: {month_name(math_month(@item))}{season(
-              math_month(@item)
-            )}.
-          </p>
-          <ul class="list-disc pl-5 opacity-80">
-            <li :for={line <- Estimate.explain(@item, math_month(@item), @estimate)}>{line}</li>
-          </ul>
-        </div>
-
-        <ul :if={@solar != []} id="item-solar" class="text-sm list-disc pl-5 space-y-1">
-          <li :for={note <- @solar}>{note}</li>
+      <details :if={@estimate.ready and @item.type not in @no_use} id="part-how" class="stage-how">
+        <summary>How the app gets this number</summary>
+        <p>For one month: {month_name(math_month(@item))}{season(math_month(@item))}.</p>
+        <ul class="stage-list">
+          <li :for={line <- Estimate.explain(@item, math_month(@item), @estimate)}>{line}</li>
         </ul>
+      </details>
 
-        <p
-          :if={@item.type in ~w(power_station solar_panels) or (@outage && @item.backup)}
-          id="item-power"
-          class="text-sm"
-        >
-          <span :if={@outage && (@item.type == "power_station" or @item.backup)} class="font-semibold">
-            {@outage}
-          </span>
-          <.link patch={~p"/power"} class="link">Open the page Power</.link>
-        </p>
+      <section
+        :if={@item.type == "home_assistant"}
+        id="part-link"
+        class="stage-sec"
+        aria-labelledby="part-link-title"
+      >
+        <h3 id="part-link-title" class="stage-sec-title">Home Assistant</h3>
+        <HomeAssistant.card
+          ha={@ha}
+          back={~p"/inside?#{[item: @item.id]}"}
+          title={false}
+          form={false}
+        />
+      </section>
 
-        <p class="text-sm">
-          <span class="font-semibold">The app uses it for:</span> {features(@features)}.
-        </p>
-
-        <.usage :if={:usage in @kind.features} usage={@build.usage} />
-
+      <section
+        :if={@fields != [] or :usage in @kind.features or :van in @kind.features}
+        id="part-use"
+        class="stage-sec"
+        aria-labelledby="part-use-title"
+      >
+        <h3 id="part-use-title" class="stage-sec-title">How you use it</h3>
         <.link
           :if={:van in @kind.features}
           patch={~p"/van?#{[id: @item.id]}"}
           id="open-van"
-          class="stage-key"
+          class="stage-btn stage-primary"
         >
           Open the build of the van
         </.link>
-      </div>
-
-      <div
-        id="page-numbers"
-        role="tabpanel"
-        aria-labelledby="key-numbers"
-        hidden={@page != "numbers"}
-        class="stage-page"
-      >
-        <p :if={@estimate.ready and @item.type not in @no_use} id="numbers-year" class="stage-year">
-          In one year: {Format.kwh(@estimate.items[@item.id].year)} · {Format.money(
-            Format.cost(@estimate.items[@item.id].year, @price.cents)
-          )}
-        </p>
-        <div :if={@item.typical} class="stage-warn text-sm">
-          <span>
-            {if @item.type == "camper_van",
-              do:
-                "These numbers are typical of the model. Check them on the label in the door frame.",
-              else:
-                "These numbers are a guess for a house like yours. Check them on the label of the item."}
-          </span>
-          <button
-            type="button"
-            phx-click="check_item"
-            phx-value-id={@item.id}
-            class="stage-key shrink-0 whitespace-nowrap"
-          >They are right</button>
-        </div>
-
-        <form id="flags-form" phx-change="flag" class="space-y-1">
+        <form
+          :if={@fields != []}
+          id="item-form"
+          phx-change="item"
+          phx-submit="item"
+          class="stage-fields"
+        >
           <input type="hidden" name="item_id" value={@item.id} />
-          <label class="flex items-center gap-2 text-sm">
-            <input type="hidden" name="planned" value="false" />
-            <input
-              type="checkbox"
-              name="planned"
-              value="true"
-              checked={@item.planned}
-              class="checkbox checkbox-sm"
-            /> I do not have it yet: it is a plan
-          </label>
-          <label
-            :if={station?(@build) and loads_power?(@item)}
-            class="flex items-center gap-2 text-sm"
-          >
-            <input type="hidden" name="backup" value="false" />
-            <input
-              type="checkbox"
-              name="backup"
-              value="true"
-              checked={@item.backup}
-              class="checkbox checkbox-sm"
-            /> A power station runs it (in an outage too)
-          </label>
-        </form>
-
-        <form id="item-form" phx-change="item" phx-submit="item" class="space-y-3">
-          <input type="hidden" name="item_id" value={@item.id} />
-          <.param
-            :for={param <- @kind.params}
-            :if={shown?(param, @item, @van)}
+          <.field
+            :for={param <- @fields}
+            item={@item}
             param={param}
             value={@item.params[param.key]}
             error={@error == param.key}
+            spot={MapSet.member?(@spots, param.key)}
           />
         </form>
-      </div>
+        <p :if={@fields != []} id="item-said" class="sr-only" role="status">{@said}</p>
+        <.usage :if={:usage in @kind.features} usage={@build.usage} />
+      </section>
 
-      <div
-        id="page-place"
-        role="tabpanel"
-        aria-labelledby="key-place"
-        hidden={@page != "place"}
-        class="stage-page"
-      >
-        <form :if={length(@rooms) > 1} id="move-form" phx-change="move_item">
+      <section id="part-where" class="stage-sec" aria-labelledby="part-where-title">
+        <h3 id="part-where-title" class="stage-sec-title">Where it is</h3>
+        <form :if={length(@rooms) > 1} id="move-form" phx-change="move_item" class="stage-field">
           <input type="hidden" name="item_id" value={@item.id} />
-          <label class="text-sm">
-            Move it to
-            <select name="room" class="select select-sm">
-              <option :for={room <- @rooms} value={room.id} selected={room.id == @item.room}>
-                {room.name}
-              </option>
-            </select>
-          </label>
+          <label for="item-room" class="stage-label">Room</label>
+          <select id="item-room" name="room" class="stage-input">
+            <option :for={room <- @rooms} value={room.id} selected={room.id == @item.room}>
+              {room.name}
+            </option>
+          </select>
         </form>
-
         <.place :if={@item.at} item={@item} room={@room} />
-      </div>
+      </section>
 
-      <div
-        id="page-remove"
-        role="tabpanel"
-        aria-labelledby="key-remove"
-        hidden={@page != "remove"}
-        class="stage-page"
-      >
-        <p class="text-sm">
-          {if @item.type == "smart_meter" and @build.usage,
-            do: "Remove this item? With no smart meter, the real usage goes too.",
-            else: "Remove this item from the house?"}
+      <section id="part-more" class="stage-sec" aria-labelledby="part-more-title">
+        <h3 id="part-more-title" class="stage-sec-title">More</h3>
+        <form id="flags-form" phx-change="flag" class="stage-fields">
+          <input type="hidden" name="item_id" value={@item.id} />
+          <.switch name="planned" checked={@item.planned}>I do not have it yet: it is a plan</.switch>
+          <.switch :if={station?(@build) and loads_power?(@item)} name="backup" checked={@item.backup}>
+            A power station runs it (in an outage too)
+          </.switch>
+        </form>
+        <p class="stage-help">
+          <span class="font-semibold">The app uses it for:</span> {features(@features)}.
         </p>
-        <div class="flex gap-2">
+        <div id="item-remove" class="stage-remove">
           <button
             type="button"
-            id="delete-item"
-            phx-click="delete_item"
-            phx-value-id={@item.id}
-            class="stage-key stage-key-remove"
+            id="ask-remove"
+            phx-click={
+              JS.hide()
+              |> JS.show(to: "#remove-confirm", display: "flex")
+              |> JS.focus(to: "#keep-item")
+            }
+            class="stage-btn stage-danger"
           >
             Remove the item
           </button>
-          <button
-            type="button"
-            phx-click={
-              JS.push("item_page", value: %{page: first_page(@pages)})
-              |> JS.focus(to: "#key-#{first_page(@pages)}")
-            }
-            class="stage-key"
+          <div
+            id="remove-confirm"
+            class="stage-confirm hidden"
+            role="group"
+            aria-labelledby="remove-text"
           >
-            Keep it
-          </button>
+            <p id="remove-text">
+              {if @item.type == "smart_meter" and @build.usage,
+                do: "Remove this item? With no smart meter, the real usage goes too.",
+                else: "Remove this item from the house?"}
+            </p>
+            <button
+              type="button"
+              id="delete-item"
+              phx-click="delete_item"
+              phx-value-id={@item.id}
+              class="stage-btn stage-danger"
+            >
+              Remove
+            </button>
+            <button
+              type="button"
+              id="keep-item"
+              phx-click={
+                JS.hide(to: "#remove-confirm")
+                |> JS.show(to: "#ask-remove")
+                |> JS.focus(to: "#ask-remove")
+              }
+              class="stage-btn"
+            >
+              Keep it
+            </button>
+          </div>
         </div>
-      </div>
+      </section>
     </Stage.stage>
     """
   end
 
-  defp first_page([{page, _label} | _pages]), do: page
+  attr :item, :map, required: true
+  attr :param, :map, required: true
+  attr :value, :any, required: true
+  attr :error, :boolean, default: false
+  attr :spot, :boolean, default: false, doc: "true when a tag on the model shows the number"
 
-  # The pages of the panel of an item, with the names of their keys. A hub
-  # first shows its link.
-  defp pages(item) do
-    if(item.type == "home_assistant", do: [{"link", "Link"}], else: []) ++
-      [{"use", "Use"}, {"numbers", "Numbers"}, {"place", "Place"}, {"remove", "Remove"}]
+  # A parameter of an item in its panel. Each kind of value has the same
+  # control on each item. A number has − and +, a field and its unit. A
+  # choice is a row of buttons. Yes or no is a switch. A name is a field.
+  # The ids start with "param-". A screen reader reads the unit, the help
+  # and the error of the field with it (aria-describedby).
+  defp field(%{param: %{type: :bool}} = assigns) do
+    ~H"""
+    <div id={"param-#{@param.key}-field"} class="stage-field">
+      <.switch
+        name={"item[#{@param.key}]"}
+        checked={@value}
+        describedby={@param.note && "param-#{@param.key}-help"}
+      >
+        {@param.label}
+      </.switch>
+      <p :if={@param.note} id={"param-#{@param.key}-help"} class="stage-help">{@param.note}</p>
+    </div>
+    """
+  end
+
+  defp field(%{param: %{type: {:choice, values}}} = assigns) do
+    assigns = assign(assigns, :values, values)
+
+    ~H"""
+    <fieldset
+      id={"param-#{@param.key}-field"}
+      class="stage-field"
+      aria-describedby={@param.note && "param-#{@param.key}-help"}
+    >
+      <legend class="stage-label">{@param.label}</legend>
+      <div class="stage-choices">
+        <label :for={{key, label} <- @values} class="stage-choice">
+          <input type="radio" name={"item[#{@param.key}]"} value={key} checked={key == @value} />
+          <span>{label}</span>
+        </label>
+      </div>
+      <p :if={@param.note} id={"param-#{@param.key}-help"} class="stage-help">{@param.note}</p>
+    </fieldset>
+    """
+  end
+
+  defp field(%{param: %{type: :text}} = assigns) do
+    ~H"""
+    <div id={"param-#{@param.key}-field"} class="stage-field">
+      <label for={"param-#{@param.key}"} class="stage-label">{@param.label}</label>
+      <input
+        id={"param-#{@param.key}"}
+        name={"item[#{@param.key}]"}
+        value={Format.value(@value)}
+        type="text"
+        phx-debounce="400"
+        aria-invalid={@error && "true"}
+        aria-describedby={@error && "param-#{@param.key}-error"}
+        class="stage-input"
+      />
+      <p :if={@error} id={"param-#{@param.key}-error"} class="stage-error">Give a name.</p>
+    </div>
+    """
+  end
+
+  defp field(assigns) do
+    key = assigns.param.key
+
+    described =
+      Enum.filter(
+        [
+          assigns.param.unit && "param-#{key}-unit",
+          assigns.param.note && "param-#{key}-help",
+          assigns.error && "param-#{key}-error"
+        ],
+        & &1
+      )
+
+    assigns = assign(assigns, :described, described != [] && Enum.join(described, " "))
+
+    ~H"""
+    <div id={"param-#{@param.key}-field"} class="stage-field">
+      <label for={"param-#{@param.key}"} class="stage-label">{@param.label}</label>
+      <div class="stage-stepper">
+        <button
+          type="button"
+          class="stage-step"
+          phx-click="step_param"
+          phx-value-id={@item.id}
+          phx-value-key={@param.key}
+          phx-value-by="-1"
+          aria-label={"Less: #{@param.label}"}
+        >
+          −
+        </button>
+        <input
+          id={"param-#{@param.key}"}
+          name={"item[#{@param.key}]"}
+          value={Format.value(@value)}
+          type="number"
+          step={if @param.type == :float, do: "any", else: "1"}
+          min={@param.min}
+          max={@param.max}
+          inputmode="decimal"
+          phx-debounce="400"
+          aria-invalid={@error && "true"}
+          aria-describedby={@described}
+          class="stage-input"
+        />
+        <span id={@param.unit && "param-#{@param.key}-unit"} class="stage-unit">{@param.unit}</span>
+        <button
+          type="button"
+          class="stage-step"
+          phx-click="step_param"
+          phx-value-id={@item.id}
+          phx-value-key={@param.key}
+          phx-value-by="1"
+          aria-label={"More: #{@param.label}"}
+        >
+          +
+        </button>
+      </div>
+      <p :if={@error} id={"param-#{@param.key}-error"} class="stage-error">
+        Give a number from {Format.value(@param.min)} to {Format.value(@param.max)}.
+      </p>
+      <p :if={@param.note || @spot} class="stage-help">
+        <span :if={@param.note} id={"param-#{@param.key}-help"}>{@param.note}</span>
+        <button
+          :if={@spot}
+          type="button"
+          class="stage-link"
+          data-show={@param.key}
+          aria-label={"Show me where: #{@param.label}"}
+        >
+          Show me where
+        </button>
+      </p>
+    </div>
+    """
+  end
+
+  attr :name, :string, required: true
+  attr :checked, :boolean, default: false
+  attr :describedby, :string, default: nil, doc: "the id of a help for the switch"
+  slot :inner_block, required: true
+
+  # Yes or no, as a switch: a checkbox with the role switch. The hidden
+  # field sends false when the switch is off.
+  defp switch(assigns) do
+    ~H"""
+    <label class="stage-switch-row">
+      <span>{render_slot(@inner_block)}</span>
+      <input type="hidden" name={@name} value="false" />
+      <input
+        type="checkbox"
+        role="switch"
+        name={@name}
+        value="true"
+        checked={@checked}
+        aria-describedby={@describedby}
+        class="stage-switch"
+      />
+    </label>
+    """
   end
 
   attr :item, :map, required: true

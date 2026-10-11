@@ -94,8 +94,7 @@ defmodule DIYWeb.HomeLive do
      socket
      # The error of a field is for the item that the sheet showed.
      |> assign(:item_error, if(item == socket.assigns[:item], do: socket.assigns[:item_error]))
-     # The panel of a different item starts at its first page.
-     |> assign(:item_page, if(item == socket.assigns[:item], do: socket.assigns[:item_page]))
+     |> assign(:item_said, if(item == socket.assigns[:item], do: socket.assigns[:item_said]))
      |> assign(:item, item)
      |> item_frames()
      |> assign(:add, if(sheets?, do: params["add"]))
@@ -209,7 +208,7 @@ defmodule DIYWeb.HomeLive do
 
   def handle_event("item", %{"item_id" => id, "item" => values}, socket) when is_map(values) do
     case Build.update_item(socket.assigns.build, id, values) do
-      {:ok, build} -> {:noreply, socket |> assign(:item_error, nil) |> put(build)}
+      {:ok, build} -> {:noreply, socket |> assign(item_error: nil, item_said: nil) |> put(build)}
       {:error, {:param, key}} -> {:noreply, assign(socket, :item_error, key)}
       {:error, _reason} -> {:noreply, socket}
     end
@@ -241,10 +240,37 @@ defmodule DIYWeb.HomeLive do
     {:noreply, put(socket, Build.set_usage(socket.assigns.build, nil))}
   end
 
-  # A page of the panel of the open item (DIYWeb.Stage): the panel keeps
-  # only the pages that it has.
-  def handle_event("item_page", %{"page" => page}, socket) when is_binary(page),
-    do: {:noreply, assign(socket, :item_page, page)}
+  # A tap on − or + of a number of an item (DIYWeb.Inside): the next round
+  # value, in the range of the number (`DIY.Catalog.stepped/3`). The panel
+  # tells the new value to a screen reader (`item_said`), and an end of the
+  # range.
+  def handle_event("step_param", %{"id" => id, "key" => key, "by" => by}, socket) do
+    with true <- by in ["-1", "1"],
+         {:ok, item} <- Build.item(socket.assigns.build, id),
+         %{} = param <-
+           Enum.find(
+             Catalog.kind(item.type).params,
+             &(&1.key == key and &1.type in [:int, :float])
+           ) do
+      value = Catalog.stepped(param, item.params[key], String.to_integer(by))
+      unit = if param.unit, do: " #{param.unit}", else: ""
+
+      done =
+        cond do
+          value == param.max -> ", the most"
+          value == param.min -> ", the least"
+          true -> ""
+        end
+
+      {:noreply, socket} =
+        handle_event("item", %{"item_id" => id, "item" => %{key => value}}, socket)
+
+      said = "#{param.label}: #{Format.value(value)}#{unit}#{done}"
+      {:noreply, assign(socket, :item_said, said)}
+    else
+      _other -> {:noreply, socket}
+    end
+  end
 
   def handle_event("check_item", %{"id" => id}, socket) do
     with_build(socket, Build.check_item(socket.assigns.build, id))
@@ -1146,9 +1172,9 @@ defmodule DIYWeb.HomeLive do
               sheet={@sheet}
               status={@status}
               item_error={assigns[:item_error]}
+              item_said={assigns[:item_said]}
               outage={DIYWeb.PowerPage.outage_text(@power, @whatif)}
               ha={@ha}
-              item_page={@item_page}
               item_frames={@item_frames}
               ha_rooms={@ha_rooms}
               ha_sync={@ha_sync}

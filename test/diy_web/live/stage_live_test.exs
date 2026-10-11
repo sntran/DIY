@@ -31,24 +31,35 @@ defmodule DIYWeb.StageLiveTest do
   defp build(view), do: :sys.get_state(view.pid).socket.assigns.build
   defp item(build, type), do: Enum.find(build.items, &(&1.type == type))
 
-  # The page of the panel that shows, and the key of the page.
-  defp shown?(view, page) do
-    has_element?(view, "#page-#{page}:not([hidden])") and
-      has_element?(view, "#key-#{page}[aria-selected=true]")
+  defp add(build, room, type) do
+    room = Enum.find(build.rooms, &(&1.name == room))
+    {:ok, build, id} = Build.add_item(build, room.id, type)
+    {:ok, item} = Build.item(build, id)
+    {build, item}
   end
 
-  test "an item comes forward: the frames of its model, and its panel", %{conn: conn} do
+  # The place of each part in the page: the parts are in this order.
+  defp order(html, ids), do: Enum.map(ids, &(:binary.match(html, ~s(id="#{&1}")) |> elem(0)))
+
+  test "an item comes forward: the frames of its model, its tags, and its panel", %{conn: conn} do
     build = house()
     fridge = item(build, "fridge")
     view = open(conn, ~p"/inside?#{[item: fridge.id]}", build)
 
-    # The hook is on an element of the item: a different item has a new one.
+    # The hook is on an element of the item: a different item has a new
+    # one. It is the dialog, so the tags are in the dialog too.
     stage = "#item-stage #item-stage-#{fridge.id}[phx-hook=Stage][data-item=#{fridge.id}]"
     assert has_element?(view, stage <> "[data-start][data-region]")
-    assert has_element?(view, "#item-stage [role=dialog][aria-labelledby=item-stage-title]")
-    assert has_element?(view, "#item-stage-title", "Fridge")
+
+    assert has_element?(
+             view,
+             stage <> "[role=dialog][aria-modal=true][aria-labelledby=item-stage-title]"
+           )
+
+    refute has_element?(view, stage <> "[data-screen]")
+    assert has_element?(view, "#item-stage-title[tabindex='-1']", "Fridge")
     assert has_element?(view, "#item-stage .stage-note", "In Kitchen (Floor 1)")
-    assert has_element?(view, "#item-stage .stage-panel.panel-label")
+    refute has_element?(view, "#item-stage .stage-screen")
 
     # The frames of the flipbook: only the last (the front) shows before
     # the hook runs.
@@ -58,6 +69,17 @@ defmodule DIYWeb.StageLiveTest do
     assert has_element?(view, ".stage-frame[data-frame='#{frames - 1}']:not([hidden])")
     assert has_element?(view, ".stage-frame[data-frame='0'][hidden]")
     assert has_element?(view, "#item-stage-model-#{fridge.id}[phx-update=ignore][data-view]")
+
+    # The tag of the number of the fridge: on its EnergyGuide label. Its
+    # name starts with its text.
+    assert has_element?(
+             view,
+             "#item-stage-spot-kwh_year[data-spot=kwh_year][data-at]" <>
+               "[aria-label='kWh label: Energy in one year, on the yellow EnergyGuide label']",
+             "kWh label"
+           )
+
+    assert has_element?(view, "#param-kwh_year-field button[data-show=kwh_year]", "Show me where")
 
     # The two close links put the item back: the scrim, and the key.
     assert has_element?(view, "#item-stage a.stage-scrim[data-close][href='/inside']")
@@ -69,41 +91,183 @@ defmodule DIYWeb.StageLiveTest do
            )
   end
 
-  test "the pages of the panel, and the keys", %{conn: conn} do
+  test "the panel has the same parts in the same order for each item", %{conn: conn} do
     build = house()
-    fridge = item(build, "fridge")
+    {build, hub} = add(build, "Living room", "home_assistant")
+
+    for type <- ["fridge", "tv", "home_assistant"] do
+      item = if type == "home_assistant", do: hub, else: item(build, type)
+      view = open(conn, ~p"/inside?#{[item: item.id]}", build)
+      html = render(view)
+      use = if type == "home_assistant", do: "part-link", else: "part-use"
+      parts = ["part-cost", "part-how", use, "part-where", "part-more"]
+      positions = order(html, parts)
+      assert positions == Enum.sort(positions), type
+
+      # Each part has a heading that names it.
+      for {part, title} <- [{use, nil}, {"part-where", "Where it is"}, {"part-more", "More"}] do
+        assert has_element?(view, "##{part}[aria-labelledby='#{part}-title']"), type
+        if title, do: assert(has_element?(view, "##{part}-title", title), type)
+      end
+
+      assert has_element?(view, "#part-cost[aria-labelledby=part-cost-title]"), type
+      assert has_element?(view, "#part-cost-title.sr-only", "What it costs"), type
+      assert has_element?(view, "#part-cost .stage-month", "a month"), type
+      assert has_element?(view, "#item-year", "in one year"), type
+      assert has_element?(view, "#part-how summary", "How the app gets this number"), type
+      assert has_element?(view, "#part-more #flags-form input[name=planned][role=switch]"), type
+      assert has_element?(view, "#part-where #move-form label[for=item-room]", "Room"), type
+      assert has_element?(view, "#part-where #item-place"), type
+    end
+  end
+
+  test "each kind of value has the same control", %{conn: conn} do
+    build = house()
     tv = item(build, "tv")
-    view = open(conn, ~p"/inside?#{[item: fridge.id]}", build)
+    view = open(conn, ~p"/inside?#{[item: tv.id]}", build)
 
-    assert has_element?(view, "[role=tablist] [role=tab]", "Use")
-    refute has_element?(view, "#key-link")
-    assert shown?(view, "use")
-    assert has_element?(view, "#page-use #item-math", "In one year")
-    assert has_element?(view, "#page-numbers[hidden] #item-form")
+    # A number: − and +, a field and its unit, and the tag on the item. A
+    # screen reader reads the unit with the field.
+    field = "#param-watts-field"
+    assert has_element?(view, "#{field} label[for=param-watts]", "Power")
 
-    view |> element("#key-numbers") |> render_click()
-    assert shown?(view, "numbers")
-    assert has_element?(view, "#page-use[hidden]")
-    assert has_element?(view, "#page-numbers #flags-form")
-    # The page of the numbers also shows the year: its change shows at once.
-    assert has_element?(view, "#page-numbers #numbers-year", "In one year")
+    assert has_element?(
+             view,
+             "#{field} input#param-watts[type=number][min='5'][max='1000'][value='100']" <>
+               "[aria-describedby=param-watts-unit]"
+           )
 
-    view |> element("#key-place") |> render_click()
-    assert shown?(view, "place")
-    assert has_element?(view, "#page-place #move-form")
-    assert has_element?(view, "#page-place #item-place")
+    assert has_element?(view, "#{field} #param-watts-unit.stage-unit", "W")
+    assert has_element?(view, "#{field} button[phx-value-by='-1'][aria-label='Less: Power']")
+    assert has_element?(view, "#{field} button[phx-value-by='1'][aria-label='More: Power']")
 
-    # A page that the panel does not have shows the first page.
-    render_click(view, "item_page", %{"page" => "link"})
-    assert shown?(view, "use")
+    # The name of Show me where starts with its text, and names the number.
+    assert has_element?(
+             view,
+             "#{field} button[data-show=watts][aria-label='Show me where: Power']",
+             "Show me where"
+           )
 
-    # The same item keeps its page; a different item starts at its first.
-    view |> element("#key-place") |> render_click()
-    render_patch(view, ~p"/inside?#{[item: fridge.id]}")
-    assert shown?(view, "place")
+    assert has_element?(view, "#param-hours-field input[step=any]")
+
+    # A choice is a row of buttons, with its name for the group.
+    heater = item(build, "water_heater")
+    render_patch(view, ~p"/inside?#{[item: heater.id]}")
+    assert has_element?(view, "fieldset#param-fuel-field legend", "Fuel")
+    assert has_element?(view, "#param-fuel-field input[type=radio][value=gas][checked]")
+    refute has_element?(view, "#param-fuel-field select")
+    refute has_element?(view, "#param-fuel-field button[data-show]")
+
+    # A number with no unit has an empty unit, so + stays at its place. It
+    # has no id: a screen reader reads nothing more.
+    assert has_element?(view, "#param-people-field span.stage-unit:not([id])")
+    assert has_element?(view, "input#param-people:not([aria-describedby])")
+
+    view |> form("#item-form", %{"item" => %{"fuel" => "electric"}}) |> render_change()
+
+    assert Build.item(build(view), heater.id) |> elem(1) |> Map.get(:params) |> Map.get("fuel") ==
+             "electric"
+
+    # Yes or no is a switch.
+    ac = item(build, "ac")
+    render_patch(view, ~p"/inside?#{[item: ac.id]}")
+
+    assert has_element?(
+             view,
+             "#param-heat_pump-field input[type=checkbox][role=switch][name='item[heat_pump]']"
+           )
+
+    assert has_element?(view, "#param-heat_pump-field input[type=hidden][value=false]")
+
+    # The note of a number or of a choice is read with it.
+    {build, station} = add(build(view), "Living room", "power_station")
+    view = open(conn, ~p"/inside?#{[item: station.id]}", build)
+
+    assert has_element?(
+             view,
+             "input#param-solar_w[aria-describedby='param-solar_w-unit param-solar_w-help']"
+           )
+
+    assert has_element?(view, "#param-solar_w-help", "The most solar power that it takes.")
+    assert has_element?(view, "fieldset#param-feeds-field[aria-describedby=param-feeds-help]")
+    assert has_element?(view, "#param-feeds-help", "An inlet is a connector")
+
+    # A name is a field, and a missing name is an error.
+    {build, other} = add(build(view), "Kitchen", "other")
+    view = open(conn, ~p"/inside?#{[item: other.id]}", build)
+    assert has_element?(view, "#param-name-field input#param-name[type=text]")
+    view |> form("#item-form", %{"item" => %{"name" => " "}}) |> render_change()
+
+    assert has_element?(
+             view,
+             "input#param-name[aria-invalid=true][aria-describedby=param-name-error]"
+           )
+
+    assert has_element?(view, "#param-name-error.stage-error", "Give a name.")
+    view |> form("#item-form", %{"item" => %{"watts" => "-1"}}) |> render_change()
+
+    assert has_element?(
+             view,
+             "input#param-watts" <>
+               "[aria-describedby='param-watts-unit param-watts-help param-watts-error']"
+           )
+
+    assert has_element?(view, "#param-watts-error.stage-error", "Give a number from 0 to")
+  end
+
+  test "− and + go to the next round value, in the range of the number", %{conn: conn} do
+    build = house()
+    tv = item(build, "tv")
+    view = open(conn, ~p"/inside?#{[item: tv.id]}", build)
+
+    param = fn key ->
+      build(view) |> Build.item(tv.id) |> elem(1) |> Map.get(:params) |> Map.get(key)
+    end
+
+    # A screen reader hears the new value: the panel has a status for it.
+    assert has_element?(view, "#part-use #item-said[role=status]", "")
+    view |> element("#param-watts-field button[phx-value-by='1']") |> render_click()
+    assert param.("watts") == 105
+    assert has_element?(view, "input#param-watts[value='105']")
+    assert has_element?(view, "#item-said", "Power: 105 W")
+    view |> element("#param-watts-field button[phx-value-by='-1']") |> render_click()
+    view |> element("#param-watts-field button[phx-value-by='-1']") |> render_click()
+    assert param.("watts") == 95
+    assert has_element?(view, "#item-said", "Power: 95 W")
+    refute has_element?(view, "#item-said", "the")
+
+    # At the start of the range: the least.
+    view |> form("#item-form", %{"item" => %{"watts" => "6"}}) |> render_change()
+    view |> element("#param-watts-field button[phx-value-by='-1']") |> render_click()
+    assert param.("watts") == 5
+    assert has_element?(view, "#item-said", "Power: 5 W, the least")
+
+    # Hours go by half an hour, and stop at 24.
+    view |> element("#param-hours-field button[phx-value-by='1']") |> render_click()
+    assert param.("hours") == 5.5
+    view |> form("#item-form", %{"item" => %{"hours" => "24"}}) |> render_change()
+    # A value that the person types: the status says nothing.
+    refute has_element?(view, "#item-said", "Hours")
+    refute has_element?(view, "#item-said", "Power")
+    view |> element("#param-hours-field button[phx-value-by='1']") |> render_click()
+    assert param.("hours") == 24.0
+    assert has_element?(view, "#item-said", "Hours in one day: 24 h, the most")
+
+    # The status is for its item only: it goes when a different item opens.
+    render_patch(view, ~p"/inside?#{[item: item(build, "fridge").id]}")
     render_patch(view, ~p"/inside?#{[item: tv.id]}")
-    assert shown?(view, "use")
-    assert has_element?(view, "#item-stage .stage-panel.panel-screen")
+    refute has_element?(view, "#item-said", "Hours")
+
+    # The change is a change of the person: the numbers are not a guess now.
+    refute Build.item(build(view), tv.id) |> elem(1) |> Map.get(:typical)
+
+    # A step that is not − or +, a number that the item does not have, or an
+    # item that is not there: no change.
+    before = build(view)
+    render_click(view, "step_param", %{"id" => tv.id, "key" => "watts", "by" => "5"})
+    render_click(view, "step_param", %{"id" => tv.id, "key" => "fuel", "by" => "1"})
+    render_click(view, "step_param", %{"id" => "i999", "key" => "watts", "by" => "1"})
+    assert build(view) == before
   end
 
   test "the remove asks on the panel, and the item can stay", %{conn: conn} do
@@ -111,34 +275,69 @@ defmodule DIYWeb.StageLiveTest do
     fridge = item(build, "fridge")
     view = open(conn, ~p"/inside?#{[item: fridge.id]}", build)
 
-    view |> element("#key-remove") |> render_click()
-    assert shown?(view, "remove")
-    assert has_element?(view, "#page-remove", "Remove this item from the house?")
-    # Keep it goes to the first page, and its key takes the focus.
-    assert has_element?(view, "#page-remove button[phx-click*='key-use']", "Keep it")
-    view |> element("#page-remove button", "Keep it") |> render_click()
-    assert shown?(view, "use")
+    # The question is on the panel: the browser shows it, and Keep it hides
+    # it. Each moves the focus.
+    assert has_element?(
+             view,
+             "#ask-remove[phx-click*='remove-confirm'][phx-click*='keep-item']",
+             "Remove the item"
+           )
+
+    assert has_element?(view, "#remove-confirm.hidden[role=group][aria-labelledby=remove-text]")
+    assert has_element?(view, "#remove-text", "Remove this item from the house?")
+    assert has_element?(view, "#keep-item[phx-click*='ask-remove']", "Keep it")
     assert Build.item(build(view), fridge.id) == {:ok, fridge}
 
-    view |> element("#key-remove") |> render_click()
     view |> element("#delete-item") |> render_click()
     assert_patch(view, ~p"/inside")
     assert Build.item(build(view), fridge.id) == {:error, :item}
     refute has_element?(view, "#item-stage")
   end
 
-  test "a Home Assistant hub shows its link first, on its LED screen", %{conn: conn} do
+  test "a Home Assistant hub has its address on its LED screen", %{conn: conn} do
     build = house()
-    room = Enum.find(build.rooms, &(&1.name == "Living room"))
-    {:ok, build, hub} = Build.add_item(build, room.id, "home_assistant")
-    view = open(conn, ~p"/inside?#{[item: hub]}", build)
+    {build, hub} = add(build, "Living room", "home_assistant")
+    view = open(conn, ~p"/inside?#{[item: hub.id]}", build)
 
-    assert has_element?(view, "#item-stage .stage-panel.panel-led")
-    assert shown?(view, "link")
-    assert has_element?(view, "#page-remove button[phx-click*='key-link']", "Keep it")
-    assert has_element?(view, "#page-link #home-assistant-card #ha-form")
-    view |> element("#key-use") |> render_click()
-    assert shown?(view, "use")
-    assert has_element?(view, "#page-link[hidden]")
+    # The screen of the hub has only the address and Connect. The panel has
+    # the rest of the link, and a way to the screen.
+    assert has_element?(view, "#item-stage-#{hub.id}[data-screen]")
+
+    assert has_element?(
+             view,
+             "#item-stage-screen[phx-mounted] #ha-form label[for=ha-url]",
+             "Address of your Home Assistant"
+           )
+
+    assert has_element?(view, "#item-stage-screen #ha-form input#ha-url[name=url][type=url]")
+
+    assert has_element?(
+             view,
+             "#item-stage-screen #ha-form input[name=back][value='/inside?item=#{hub.id}']"
+           )
+
+    assert has_element?(view, "#part-link #home-assistant-card #ha-status")
+    refute has_element?(view, "#part-link #ha-form")
+    assert has_element?(view, "#part-link #ha-show-screen.stage-link[data-show=screen]")
+
+    # A bad address: the screen tells it next to the field, and a screen
+    # reader reads the error of the panel with the field.
+    refute has_element?(view, "#ha-url[aria-invalid]")
+    view |> form("#ha-form", %{"url" => "home.example.com"}) |> render_submit()
+
+    assert has_element?(
+             view,
+             "#ha-url[aria-invalid=true][aria-describedby='ha-screen-error ha-error']"
+           )
+
+    assert has_element?(view, "#item-stage-screen #ha-screen-error", "Check the address.")
+    assert has_element?(view, "#part-link #ha-error", "Give the address")
+
+    # When the link is open, the screen shows its state.
+    render_hook(view, "ha:status", %{"state" => "connected", "url" => "https://home.example.com"})
+    refute has_element?(view, "#ha-form")
+    assert has_element?(view, "#item-stage-screen #ha-screen-state")
+    refute has_element?(view, "#ha-show-screen")
+    assert has_element?(view, "#part-link #ha-disconnect")
   end
 end

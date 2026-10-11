@@ -1322,13 +1322,13 @@ its turn. A length is in inches.
   tries its own room first, then the rooms of the layer under the pointer,
   then the rooms of its own layer. The pointer does not choose the room:
   it is on the body of the item, above its space.
-- With no drag. The page Place of the panel of an item has buttons that
-  move it (6 inches for each tap). Other buttons turn it a quarter turn,
-  and give it a size. The panel tells the new place of the item in words. The bar of a room has buttons
-  that move it (2 feet for each tap): the plan over the bar shows the
-  move. The sheet of a room gives its size in feet. So a person with one
-  finger and no drag can do each change (WCAG 2.2, 2.5.7). A handle is 24
-  pixels wide (2.5.8).
+- With no drag. The part "Where it is" of the panel of an item has
+  buttons that move it (6 inches for each tap). Other buttons turn it a
+  quarter turn, and give it a size. The panel tells the new place of the
+  item in words. The bar of a room has buttons that move it (2 feet for
+  each tap): the plan over the bar shows the move. The sheet of a room
+  gives its size in feet. So a person with one finger and no drag can do
+  each change (WCAG 2.2, 2.5.7). A handle is 24 pixels wide (2.5.8).
 - The rules (`DIY.Layout.fill/1`, after each change; `specs/Plan.tla`).
   No two rooms of a layer overlap, and each item is in its room. A room
   does not move over a different room: the page tells why. When a wall
@@ -1504,11 +1504,11 @@ its turn. A length is in inches.
 
 ## The stage of an item
 
-A tap on an item of the plan does not open a card. The item comes out of
-the house and turns to the person, as an item that a person takes in the
-hand. Its numbers then show on the item itself: on its screen, or on a
-label on its front (`DIYWeb.Stage`, and the hook `Stage` in
-`assets/js/stage.js`).
+A tap on an item of the plan brings the item out of the house. It turns
+to the person, as an item that a person takes in the hand. Next to it,
+its panel opens (`DIYWeb.Stage`, `DIYWeb.Inside`, and the hook `Stage` in
+`assets/js/stage.js`). The panel is the same for each item: a person
+learns it one time, and then knows each item.
 
 - The flipbook. The server draws the model of the item from 12 cameras.
   The first camera is the camera of the house. The last camera looks at
@@ -1528,56 +1528,111 @@ label on its front (`DIYWeb.Stage`, and the hook `Stage` in
   that is not in the view of the plan comes from the middle of the stage.
   An item of a plan that is not on the page does the same. For example,
   the page is down at the list of the rooms.
-- The panel is on the item (`DIYWeb.Stage.region/1`):
-  - A TV, a computer, a microwave, a power station, a smart meter and a
-    CPAP show the panel on their screen. A hub has an LED screen on its
-    top.
-  - The other items have a printed label on the front: 3/4 of the width,
-    a little over the middle of the height. A label is paper, so it has
-    the same colors in the light and the dark mode. Its height is 0.6 of
-    its width at least. A front that is not high (a ceiling fan, for
-    example) has a tag: the label hangs from the top of the front.
-  - The server gives three corners of the panel on the last frame. The
-    hook puts the panel on them with a CSS matrix, so the panel follows
-    the slant of the face.
-- The size. The panel must be large enough to read: 260 by 150 pixels at
-  least, and 440 pixels wide at most. These sizes are for a font of 16
-  pixels: a larger font in the browser makes them larger. When the whole
-  model fits on the page with such a panel, the whole model shows. Else
-  the model comes nearer, as an item in front of the eyes. Then a part of
-  a fridge, for example, is out of the page. The panel is not wider or
-  higher than the page, with 12 pixels on each side. It is at the middle
-  of the width and at 45% of the height, but it moves into the page when
-  a side is out. On a page of 360 pixels or more, each panel can be 260
-  by 150 pixels. A test checks the shape of the panel of each kind. On a
-  very small page (a zoom of 400%), the panel is smaller and its text
-  scrolls. The panel shows when the model lands, as a screen that turns
-  on. Then its key takes the focus.
+- The place of the panel. On a page of 48rem (768 pixels) or more, the
+  panel is at the right of the page, and it is 26rem wide. On a narrower
+  page, it is at the bottom, and it has 58% of the height (44% for a hub).
+  The model goes in the rest of the page: the whole model, at the middle.
+  A notch of the panel points at the model. The panel shows when the
+  model lands. Then its title takes the focus, so a screen reader reads
+  the name of the item.
+- The same parts, in the same order, for each item:
+  1. What it costs: the dollars of an average month, and the kWh and the
+     dollars of a year. A gas item also has its gas. An item that uses no
+     power of the house by itself has its energy in words. When the
+     numbers are a guess, a note asks the person to check them on the
+     item, with the key They are right. "How the app gets this number"
+     opens the math of one month.
+  2. Home Assistant, only for a hub: the state of the link, Disconnect,
+     and the match of the rooms.
+  3. How you use it: the numbers of the item.
+  4. Where it is: its room, its place, its size and its turn.
+  5. More: the flags (a plan, a power station runs it), what the app
+     uses it for, and Remove.
+
+  Each part has a heading, and the panel scrolls: no key hides a part.
+  The heading of the cost is only for a screen reader: the dollars of a
+  month are the large text at the top.
+  The live controls of Home Assistant come as a part after the cost, in a
+  later change.
+- The same controls for each kind of value (`DIY.Catalog`):
+  - a number has − and +, a field and its unit. A tap on − or + gives
+    the next round number (`DIY.Catalog.stepped/3`). The step is near 5%
+    of the number, as 1, 2 or 5 times a power of ten. Hours go by half
+    an hour. The range of the number stops it. A screen reader hears the
+    new value (a status in the panel), and an end of the range ("the
+    most", "the least");
+  - a choice is a row of buttons (radio buttons);
+  - yes or no is a switch (a checkbox with the role switch);
+  - a name is a field.
+
+  The ids of a number start with `param-`: `param-watts` is the field,
+  and `param-watts-field` has its label and its help. A screen reader
+  reads the unit, the help and the error with the field
+  (`aria-describedby`).
+
+  Each control is 44 pixels (2.75rem) high at least. A link in a text
+  ("Show me where") is 24 pixels high at least (WCAG 2.5.8). The text is
+  16 pixels. The help, the notes, the year, the place and its keys are
+  15 pixels. The headings of the parts and the tags are 14 pixels, in
+  capitals for the headings. The label on the screen of a hub is 13.6
+  pixels, in capitals. The panel has the colors of the app (daisyUI), in
+  the light and the dark mode. An error is red with a contrast of 4.5 at
+  least (`--stage-danger`).
+
+  Two parts are not the same yet. The room is a list (a select): a house
+  can have many rooms. The place of an item has smaller fields for its
+  size, with the key "Set the size". The reason is that the sheet of a
+  van item has the same place. When the van items come to the stage, the
+  size gets − and + too.
+- The tags. A tag on the model shows where a number is on the real item:
+  - the EnergyGuide label of a fridge and of a freezer;
+  - the watts on the back of a TV and of a computer, and their hours on
+    their screen;
+  - the watts inside the door of a microwave.
+
+  A tap on a tag goes to its number in the panel. The field comes to the
+  middle of the panel, shows a flash, and takes the focus. "Show me
+  where" under a number puts a ring on its tag three times. With less
+  motion, the ring does not move. It goes after 2 seconds. A tag is a
+  point of the face of the item (`DIYWeb.Stage.region/1`): its screen,
+  or the middle of its front. The name of a tag starts with its text
+  (WCAG 2.5.3): "Watts: Power, on the label on the back". The keys that
+  show a tag or the screen show only when the model is in front.
+- The hub. A Home Assistant hub is the only item with its own screen.
+  Its LED screen on its top has the address of Home Assistant and the
+  key Connect (`DIYWeb.HomeAssistant.screen/1`). The hook puts the
+  screen on the top of the last frame with a CSS matrix, so the screen
+  follows the slant of the top. The model comes near enough: the screen
+  is 300 pixels wide (for a font of 16 pixels). On a small area, the
+  screen is as wide or as high as the area. A zoom of 400%, or a phone
+  on its side, can make that screen less than 220 pixels wide. Then it
+  is too small to read on the model. So it covers the whole area, with
+  no slant, and its text scrolls. The padding of the screen is in rem,
+  not in percent: a padding in percent is a part of the width of the
+  page. The rest of the hub is in the same panel as each item. Its part
+  Home Assistant has a link to its screen. A bad address shows "Check
+  the address." on the screen, and the field keeps the address. A screen
+  reader reads the error of the panel with the field.
 - The state of the stage. It is the attribute `data-stage`: placed,
   landed or closing. The CSS has a rule for each. The hook sets it with
   the command of the LiveView (`setAttribute`). The LiveView sets an
-  attribute at once, so the panel shows before its key takes the focus.
-  And a patch (after a key of the panel, or a new number) keeps it. A
-  class does not do this: the LiveView adds it only at the next frame.
-  And when the hook adds the class first, a patch removes it.
-- The pages. The keys of the panel show its pages:
-  - Use: the kWh and the money of a year, with the math;
-  - Numbers: the numbers of the item, and its flags, with the year at the
-    top, so a change shows at once;
-  - Place: its room, its place, its size and its turn;
-  - Remove.
-
-  A hub first shows Link (the card of the link to Home Assistant). The
-  remove asks on the panel: Remove the item, or Keep it. A different item
-  starts at its first page. A panel that is too small for its page
-  scrolls. Then a shade on its bottom edge shows that more text is below.
-  A field is not wider than its panel.
-- The keyboard and the screen reader. The stage is a modal dialog. The
-  keys are tabs, and each page is a tab panel. The arrow keys, Home and
-  End go from key to key. The Tab key keeps the focus on the stage. The
-  Escape key, the key Put it back, or a tap next to the panel puts the
-  item back. Then the focus goes back to where it was, for example the
-  item in the list.
+  attribute at once, so the panel shows before its title takes the focus.
+  And a patch (after a change of a number) keeps it. A class does not do
+  this: the LiveView adds it only at the next frame. And when the hook
+  adds the class first, a patch removes it.
+- The remove asks on the panel: Remove, or Keep it. The browser shows the
+  question with the commands of the LiveView (`JS.show` and `JS.hide`),
+  and the focus goes to Keep it.
+- The keyboard and the screen reader. The stage is a modal dialog, with
+  the tags and the screen in it, after the panel: a screen reader reads
+  the title first. The Tab key keeps the focus on the stage. The Escape
+  key, the key Put it back, or a tap next to the panel puts the item
+  back. Then the focus goes back to where it was, for example the item in
+  the list. A screen reader does not see the area next to the panel: it
+  has the key Put it back. The head of the panel stays on its top, and a
+  scroll padding keeps the control with the focus under it (WCAG
+  2.4.11). On a page that is less than 30rem high (a zoom of 400%), the
+  head scrolls with the text.
 - Less motion. With `prefers-reduced-motion`, the model is at once in
   front, and a close is at once.
 - The cost. The frames of a water heater have about 100 KB, and take 37
@@ -1589,25 +1644,38 @@ label on its front (`DIYWeb.Stage`, and the hook `Stage` in
   of the model.
 - The van. The items of a van still open in a sheet, with no frames. They
   come to the stage in a later change.
-- The look of the panel. A checkbox is 24 pixels. A field and its button
-  have the colors of the panel. The icon of the item is not on a dark
-  screen: it is a dark drawing.
 
 The tests:
 
 - `test/diy_web/components/stage_test.exs`: the frames of each kind. The
   first frame has the polygons of the plan. Each point and each corner of
-  the panel is in the view. A property test checks that the center of the
-  model stays in each frame.
-- `test/diy_web/live/stage_live_test.exs`: the stage, the pages, the
-  keys, the year on the page Numbers, and the remove.
-- `test/js/stage.test.js`: the math of the rest pose (a property test with
-  fast-check) and of the place of the panel. The flight runs with a fake
-  clock, and the hook runs on a fake page. As with the LiveView, an
-  attribute of a command is on the element at once, and a patch keeps it.
-  The fakes keep the attribute `hidden` of each frame, as a browser does.
-  The tests also close in the flight out, and before it starts. They remove the stage before the
-  flight starts, and in a flight.
+  the face is in the view. Each tag is a number of its kind, on the face.
+  A property test checks that the center of the model stays in each
+  frame.
+- `test/diy_web/live/stage_live_test.exs`:
+  - the stage and its tags;
+  - the same parts in the same order for a fridge, a TV and a hub;
+  - the same control for each kind of value, with the texts that a
+    screen reader reads with it;
+  - − and +, and the status of the new value;
+  - the remove;
+  - the screen of a hub, with a bad address.
+- `test/diy/catalog_test.exs`: the steps of − and +. A property test
+  checks each number of each kind. The new value is valid and in the
+  range. It goes in the right direction, one step at most. It is a
+  multiple of its step (or an end of the range). A step is 1, 2 or 5
+  times a power of ten, from 3% to 8% of the value.
+- `test/js/stage.test.js`: the math of the rest pose (a property test
+  with fast-check). Also the math of the area, of the place of the
+  model, and of the screen of a hub. The flight runs with a fake clock,
+  and the hook runs on a fake page. As with the LiveView, an attribute
+  of a command is on the element at once, and a patch keeps it. The
+  fakes keep the attribute `hidden` of each frame, as a browser does.
+  The tests close in the flight out, and before it starts. They remove
+  the stage before the flight starts, and in a flight. They tap a tag
+  and "Show me where", and the ring goes after its time. A hub on a
+  short page shows its whole screen, and on a very small page its screen
+  covers the area.
 - `specs/Stage.tla` is the model of the flights. Three things occur in
   any order: the frames of the page, a close by the person, and the
   patches and the removal by the LiveView. The model has them with and
@@ -1615,7 +1683,8 @@ The tests:
   one time at most. No call changes the stage after its removal. The
   panel shows only when the model is in front. The stage keeps its state
   through a patch. Also, a close ends with its patch, and the model lands
-  unless the stage closes first. Each fault has a configuration, and TLC finds it:
+  unless the stage closes first. Each fault has a configuration, and TLC
+  finds it:
   - a step that does not check its flight (`Stage.noalive.cfg`): the
     flight out lands while the model flies back;
   - a second close that does not stop (`Stage.noclosing.cfg`): two
@@ -1623,15 +1692,17 @@ The tests:
   - a removal that does not stop the start (`Stage.nogone.cfg`): the
     start flies a stage that is not on the page. The model found this
     fault in the hook, and the hook now has the fix;
-  - a state that the LiveView does not keep (`Stage.nokeep.cfg`): after
-    a patch, the stage has no state, and the panel is not on the item.
+  - a state that the LiveView does not keep (`Stage.nokeep.cfg`). After
+    a patch, the stage has no state. The panel and the model are not at
+    their place.
 - The browser test taps the fridge on the plan: the frames change in the
-  flight. Then the key of the first page has the focus. After a key of
-  the panel, the stage keeps its state, and the panel stays on the page.
-  The walk also opens items in the list, changes their numbers, and turns
-  an item on the page Place. Axe checks the stage after it lands. On a
-  desktop, the walk asks for less motion: so it checks the two ways, and
-  the flights do not make it too long.
+  flight. Then the title of the panel has the focus. A tap on the tag of
+  the EnergyGuide label gives the focus to its number, and + gives the
+  next round number. After this change, the stage keeps its state, and
+  the panel stays on the page. The walk also opens items in the list,
+  changes their numbers, and turns an item. Axe checks the stage after it
+  lands. On a desktop, the walk asks for less motion: so it checks the
+  two ways, and the flights do not make it too long.
 
 ## The house from the outside
 
@@ -1720,8 +1791,11 @@ its WebSocket API takes each origin.
 `assets/js/home_assistant.js` (the hook `HomeAssistant`) and
 `DIYWeb.HomeAssistant` (the LiveView part, the assign `:ha`) do the
 link. A card (`DIYWeb.HomeAssistant.card/1`) shows it, in two places:
-the panel of a Home Assistant hub (its LED screen, on the page Link), and
-Settings. Settings has a link to the hub, or a hint to add one.
+the panel of a Home Assistant hub, and Settings. On the hub, the address
+and the key Connect are on its LED screen
+(`DIYWeb.HomeAssistant.screen/1`),
+and the panel has the rest of the card. Settings has the whole card, with
+a link to the hub, or a hint to add one.
 
 The hub is an item of a room, as the other items are:
 

@@ -115,6 +115,13 @@ defmodule DIYWeb.VanLiveTest do
     assert has_element?(view, "#van-notes", "needs an inverter or a power station")
     refute has_element?(view, "#van-notes", "carbon monoxide")
 
+    # A number out of its range: the sheet tells the range.
+    view
+    |> form("#item-form", %{"item_id" => stove.id, "item" => %{"watts" => "-1"}})
+    |> render_change()
+
+    assert has_element?(view, "#item-sheet", "Give a number from 0 to 5000.")
+
     # A battery with no fuse.
     bay = Build.zone(build(view), van, :bay)
     render_click(view, "add_item", %{"room" => bay.id, "type" => "van_battery"})

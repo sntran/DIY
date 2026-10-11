@@ -263,7 +263,7 @@ defmodule DIYWeb.HomeLiveTest do
     furnace = item(view, "furnace")
 
     assert render_patch(view, ~p"/inside?item=#{furnace.id}") =~
-             "for one month: January, a cold month."
+             "For one month: January, a cold month."
 
     assert render_patch(view, ~p"/inside?item=i999") =~ "Kitchen"
     refute has_element?(view, "#item-stage")
@@ -364,7 +364,7 @@ defmodule DIYWeb.HomeLiveTest do
 
     render_patch(view, ~p"/inside?item=#{meter.id}")
     assert render(view) =~ "Smart Meter Texas: 12 months, from January 2025 to December 2025"
-    assert has_element?(view, "#page-remove", "With no smart meter, the real usage goes too.")
+    assert has_element?(view, "#remove-text", "With no smart meter, the real usage goes too.")
     view |> element("#usage-months button", "Remove the real usage") |> render_click()
     assert build(view).usage == nil
 
@@ -676,11 +676,11 @@ defmodule DIYWeb.HomeLiveTest do
     {:ok, build, fridge} = Build.add_item(build, garage.id, "fridge")
     view = open(conn, ~p"/inside?#{[item: fridge]}", build)
     settle(view)
-    assert has_element?(view, "#item-math", "the label, for a kitchen near 72 °F")
+    assert has_element?(view, "#part-how", "the label, for a kitchen near 72 °F")
 
     assert has_element?(
              view,
-             "#item-math",
+             "#part-how",
              "Around the house, the app uses the mean air outside: 85.9 °F in July."
            )
   end
@@ -804,7 +804,7 @@ defmodule DIYWeb.HomeLiveTest do
     assert has_element?(
              view,
              "#item-gas",
-             "Gas in one year: #{DIYWeb.Format.therms(estimate.items[furnace.id].therms)}"
+             "Gas: #{DIYWeb.Format.therms(estimate.items[furnace.id].therms)} and"
            )
 
     assert has_element?(view, "#item-stage", "the estimate of your gas bill")
@@ -897,7 +897,8 @@ defmodule DIYWeb.HomeLiveTest do
     for {id, type, note} <- ids do
       render_patch(view, ~p"/inside?#{[item: id]}")
       assert has_element?(view, "#item-math", note), type
-      refute has_element?(view, "#item-math", "In one year"), type
+      assert has_element?(view, "#part-cost-title", "Its energy"), type
+      refute has_element?(view, "#part-cost", "in one year"), type
       refute has_element?(view, "#item-math", " kWh"), type
 
       # The list for a screen reader, and the page Bill: no kWh either.
@@ -913,7 +914,8 @@ defmodule DIYWeb.HomeLiveTest do
     # A fridge has its kWh and its math.
     fridge = Enum.find(build.items, &(&1.type == "fridge"))
     render_patch(view, ~p"/inside?#{[item: fridge.id]}")
-    assert has_element?(view, "#item-math", "In one year")
+    assert has_element?(view, "#item-year", "in one year")
+    assert has_element?(view, "#part-how", "For one month: July")
   end
 
   test "a house with a van: the front gives a link to the build of each van", %{conn: conn} do

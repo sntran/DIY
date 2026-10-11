@@ -1,33 +1,41 @@
 defmodule DIYWeb.Stage do
   @moduledoc """
   An item in front of the person: the stage. A tap on an item of the plan
-  does not open a card. The item comes out of the house, turns to the
-  person, and shows its panel: its use, and the numbers that the person can
-  change.
+  brings the item out of the house. It turns to the person, and its panel
+  opens next to it. The panel has its cost, its use, its place, and the
+  numbers that the person can change. The panel is the same for each item
+  (`DIYWeb.Inside`): the same parts in the same order, and the same
+  controls.
 
-  The server draws the model of the item (`DIYWeb.Icon.Shapes`) from
-  #{12} cameras, as the frames of a flipbook. The first camera is the
-  camera of the house (`DIYWeb.Camera.house/0`), so the first frame looks
-  as the item on the plan. The last camera looks at the front of the item, or
-  down at its top for a panel on the top. Each frame has the center of the
-  model at the same point, so the model turns in place.
+  The server draws the model of the item (`DIYWeb.Icon.Shapes`) from #{12}
+  cameras, as the frames of a flipbook. The first camera is the camera of
+  the house (`DIYWeb.Camera.house/0`), so the first frame looks as the item
+  on the plan. The last camera looks at the front of the item, or down at
+  its top for a screen on the top. Each frame has the center of the model at
+  the same point, so the model turns in place.
 
   The hook `Stage` (`assets/js/stage.js`) puts the first frame on the item
-  of the plan. The first frame is the model of the kind, at its own size
-  and with no turn. So an item with a turn, or with a size of its own,
-  changes a little at the start. Then the hook moves the model to the
-  front of the page, and shows the frames one after the other while it
-  moves. A close does the same in the other direction.
+  of the plan. The first frame is the model of the kind, at its own size and
+  with no turn. So an item with a turn, or with a size of its own, changes a
+  little at the start. Then the hook moves the model to the front of the
+  page, and shows the frames one after the other while it moves. A close
+  does the same in the other direction.
 
-  The panel is on the item: on its screen, or on a label on its front
-  (`region/1`). It is in the style of the item (`style/1`). It is the LED
-  screen of a hub, the screen of a TV or of a computer, or a printed label. The
-  hook puts the panel on its place on the last frame. The model comes as
-  near as necessary to make the panel large enough to read.
+  The panel is next to the model on a wide page, and under it on a narrow
+  page. The item helps the person. A tag on the model (the `spots` of
+  `frames/1`) shows where a number is on the real item. An example is the
+  label on the back of a TV. A tap on the tag goes to the number in the
+  panel.
+
+  A Home Assistant hub is the only item with its own screen. The LED screen
+  on its top asks for the address of Home Assistant (the slot `screen`). The
+  hook puts it on the top of the last frame (`region/1`). The model comes
+  near enough to read it.
   """
   use DIYWeb, :html
 
-  alias DIYWeb.{Camera, Icon}
+  alias DIY.Catalog
+  alias DIYWeb.Camera
   alias DIYWeb.Icon.Shapes
 
   # The frames of the flipbook, and the units of the largest side of the
@@ -37,7 +45,8 @@ defmodule DIYWeb.Stage do
 
   # The items with a screen: the place of the screen on the model, in
   # meters. A screen on the front is in the plane y, from x, z. A screen on
-  # the top is in the plane z, from x, y.
+  # the top is in the plane z, from x, y. The tags of a TV are on its
+  # screen, and the LED screen of a hub is on its top.
   @screens %{
     "tv" => {:front, {0.015, 0.137, 0.135}, {1.09, 0.57}},
     "computer" => {:front, {0.015, 0.107, 0.135}, {0.58, 0.358}},
@@ -48,26 +57,31 @@ defmodule DIYWeb.Stage do
     "home_assistant" => {:top, {0.0078, 0.0078, 0.0256}, {0.086, 0.086}}
   }
 
+  # The places on an item where the person finds a number: a label, or a
+  # screen. Each has the key of the number, the text of its tag, and the
+  # place in words. It also has a point of the face of the item
+  # (`region/1`): u goes to the right, and v goes down, from 0 to 1.
+  @spots %{
+    "fridge" => [{"kwh_year", "kWh label", "the yellow EnergyGuide label", {0.5, 0.55}}],
+    "freezer" => [{"kwh_year", "kWh label", "the yellow EnergyGuide label", {0.5, 0.55}}],
+    "tv" => [
+      {"hours", "Hours on", "the screen", {0.38, 0.4}},
+      {"watts", "Watts", "the label on the back", {0.72, 0.84}}
+    ],
+    "computer" => [
+      {"hours", "Hours on", "the screen", {0.38, 0.4}},
+      {"watts", "Watts", "the label on the back", {0.72, 0.84}}
+    ],
+    "microwave" => [{"watts", "Watts", "the label inside the door", {0.5, 0.5}}]
+  }
+
   @doc "The number of frames of the flipbook."
   def frame_count, do: @count
 
   @doc """
-  The style of the panel of a kind of item:
-
-  - `:led`: the LED screen of a Home Assistant hub;
-  - `:screen`: the screen of an item with a screen;
-  - `:label`: a printed label, as on the other items.
-  """
-  def style("home_assistant"), do: :led
-  def style(type) when is_map_key(@screens, type), do: :screen
-  def style(_type), do: :label
-
-  @doc """
-  The place of the panel on the model of a kind: its screen, or a label on
-  its front. A label is at the middle of the width (3/4 of it), and a
-  little over the middle of the height. Its height is 0.6 of its width at
-  least, so that the panel is large enough to read. A label that is too
-  high for the front hangs from the top of the front, as a tag.
+  The face of the model of a kind: its screen, or else the middle of its
+  front (3/4 of its width, and all its height). The tags are on it. The
+  LED screen of a hub is on its face, on its top.
   """
   def region(type) do
     case @screens do
@@ -77,9 +91,7 @@ defmodule DIYWeb.Stage do
       _none ->
         {{x0, _y0, z0}, {x1, y1, z1}} = Shapes.bounds(Shapes.model(type))
         w = (x1 - x0) * 0.75
-        h = max(min((z1 - z0) * 0.6, w * 1.3), w * 0.6)
-        z = min(z0 + (z1 - z0) * 0.58 - h / 2, z1 - h)
-        {:front, {x0 + (x1 - x0 - w) / 2, y1 + 0.003, z}, {w, h}}
+        {:front, {x0 + (x1 - x0 - w) / 2, y1 + 0.003, z0}, {w, z1 - z0}}
     end
   end
 
@@ -89,10 +101,10 @@ defmodule DIYWeb.Stage do
   defp corners({:top, {x, y, z}, {w, d}}), do: [{x, y, z}, {x + w, y, z}, {x, y + d, z}]
 
   @doc """
-  The cameras of the frames: from the camera of the house to the panel.
-  The last camera looks at the panel, a little from the side and from over
-  it, so the item keeps its depth. For a panel on the top (a hub), it looks
-  down at the top, and the front shows too.
+  The cameras of the frames: from the camera of the house to the face of
+  the item. The last camera looks at the face, a little from the side and
+  from over it, so the item keeps its depth. For a face on the top (a hub),
+  it looks down at the top, and the front shows too.
   """
   def cameras(type) do
     house = Camera.house()
@@ -116,9 +128,11 @@ defmodule DIYWeb.Stage do
   - `frames`: the polygons of each frame (`{points, class}`);
   - `start`: the box of the first frame (`{x, y, w, h}`), the drawing that
     is on the plan;
-  - `region`: the place of the panel on the last frame (`region/1`), in
-    units of the view (`{x0, y0, x1, y1, x2, y2}`). It is three corners:
-    at the top left, at the top right and at the bottom left.
+  - `region`: the face on the last frame (`region/1`), in units of the
+    view (`{x0, y0, x1, y1, x2, y2}`). It is three corners: at the top
+    left, at the top right and at the bottom left;
+  - `spots`: the tags on the last frame (`@spots`), each with its point
+    `at` in units of the view.
 
   The center of the model is at 0, 0 in each frame. The largest side of all
   the frames is #{@size} units. The frames of a kind do not change: the app
@@ -154,8 +168,7 @@ defmodule DIYWeb.Stage do
             do: {Enum.map(corners, at), class}
       end
 
-    # The corners of the panel on the last frame. A tag can go past the
-    # model: the view has the whole panel too.
+    # The corners of the face on the last frame. The view has the whole face.
     last = List.last(cameras)
     {lx, ly} = Camera.at(last, {0, 0}, center)
     region = Enum.map(corners(region(type)), &Camera.at(last, {-lx, -ly}, &1))
@@ -175,11 +188,18 @@ defmodule DIYWeb.Stage do
 
     {sx0, sy0, sx1, sy1} = hd(boxes)
 
+    spots =
+      for {key, tag, where, {u, v}} <- Map.get(@spots, type, []) do
+        at = {ax + u * (bx - ax) + v * (cx - ax), ay + u * (by - ay) + v * (cy - ay)}
+        %{key: key, tag: tag, where: where, at: {elem(at, 0) * k, elem(at, 1) * k}}
+      end
+
     %{
       view: view,
       frames: frames,
       start: {sx0 * k, sy0 * k, (sx1 - sx0) * k, (sy1 - sy0) * k},
-      region: region |> Enum.flat_map(fn {x, y} -> [x * k, y * k] end) |> List.to_tuple()
+      region: region |> Enum.flat_map(fn {x, y} -> [x * k, y * k] end) |> List.to_tuple(),
+      spots: spots
     }
   end
 
@@ -221,17 +241,27 @@ defmodule DIYWeb.Stage do
   attr :title, :string, required: true
   attr :close, :string, required: true, doc: "the page of the close link"
   attr :note, :string, default: nil, doc: "a short line under the title"
+  slot :screen, doc: "the LED screen of a hub: on the top of its model"
   slot :inner_block, required: true, doc: "the panel"
 
   @doc """
-  The stage of an item: the frames of its model, and its panel. It is a
-  modal dialog. The Escape key and the close link put the item back.
+  The stage of an item: the frames of its model, its tags, and its panel.
+  It is a modal dialog. The Escape key, a tap next to the panel and the
+  key Put it back put the item back.
   """
   def stage(assigns) do
-    assigns = assign(assigns, style: style(assigns.type), frame_count: @count)
+    params = Map.new(Catalog.kind(assigns.type).params, &{&1.key, &1.label})
+
+    assigns =
+      assign(assigns,
+        frame_count: @count,
+        spots: for(spot <- assigns.frames.spots, do: Map.put(spot, :label, params[spot.key]))
+      )
 
     # The hook is on an element of each item: a different item has a new
-    # hook, with a new flight.
+    # hook, with a new flight. The tags and the screen are in the dialog,
+    # after the panel: a screen reader reads the title first. The name of a
+    # tag starts with its text (WCAG 2.5.3).
     ~H"""
     <div id={@id} class="fixed inset-0 z-50">
       <div
@@ -240,56 +270,67 @@ defmodule DIYWeb.Stage do
         data-item={@item}
         data-start={numbers(@frames.start)}
         data-region={numbers(@frames.region)}
-        class="stage absolute inset-0 overflow-y-auto"
+        data-screen={@screen != [] && "true"}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={"#{@id}-title"}
+        class="stage absolute inset-0"
       >
         <.link
           patch={@close}
           class="stage-scrim fixed inset-0"
-          aria-label="Close"
+          aria-hidden="true"
           tabindex="-1"
           data-close
         ></.link>
         <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby={"#{@id}-title"}
-          class="stage-body"
+          id={"#{@id}-model-#{@item}"}
+          phx-update="ignore"
+          class="stage-model"
+          data-view={numbers(@frames.view)}
+          aria-hidden="true"
         >
-          <div
-            id={"#{@id}-model-#{@item}"}
-            phx-update="ignore"
-            class="stage-model"
-            data-view={numbers(@frames.view)}
-            aria-hidden="true"
+          <svg
+            :for={{polys, i} <- Enum.with_index(@frames.frames)}
+            viewBox={numbers(@frames.view)}
+            class="stage-frame"
+            data-frame={i}
+            hidden={i != @frame_count - 1}
           >
-            <svg
-              :for={{polys, i} <- Enum.with_index(@frames.frames)}
-              viewBox={numbers(@frames.view)}
-              class="stage-frame"
-              data-frame={i}
-              hidden={i != @frame_count - 1}
-            >
-              <polygon :for={{points, class} <- polys} points={points} class={class} />
-            </svg>
-          </div>
-          <section
-            class={["stage-panel", "panel-#{@style}"]}
-            data-style={@style}
-            phx-mounted={JS.ignore_attributes(["style"])}
-          >
+            <polygon :for={{points, class} <- polys} points={points} class={class} />
+          </svg>
+        </div>
+        <section class="stage-panel" phx-mounted={JS.ignore_attributes(["style"])}>
+          <div class="stage-scroll">
             <header class="stage-head">
               <div class="min-w-0">
-                <h2 id={"#{@id}-title"} class="stage-title">
-                  <Icon.item type={@type} class="size-6" />{@title}
-                </h2>
+                <h2 id={"#{@id}-title"} class="stage-title" tabindex="-1">{@title}</h2>
                 <p :if={@note} class="stage-note">{@note}</p>
               </div>
-              <.link patch={@close} class="stage-key stage-back" data-close>
-                Put it back
-              </.link>
+              <.link patch={@close} class="stage-btn stage-back" data-close>Put it back</.link>
             </header>
             {render_slot(@inner_block)}
-          </section>
+          </div>
+        </section>
+        <button
+          :for={spot <- @spots}
+          type="button"
+          id={"#{@id}-spot-#{spot.key}"}
+          class="stage-spot"
+          data-spot={spot.key}
+          data-at={numbers(spot.at)}
+          aria-label={"#{spot.tag}: #{spot.label}, on #{spot.where}"}
+          phx-mounted={JS.ignore_attributes(["style"])}
+        >
+          <span class="stage-spot-mark" aria-hidden="true">+</span>{spot.tag}
+        </button>
+        <div
+          :if={@screen != []}
+          id={"#{@id}-screen"}
+          class="stage-screen"
+          phx-mounted={JS.ignore_attributes(["style"])}
+        >
+          {render_slot(@screen)}
         </div>
       </div>
     </div>
