@@ -38,6 +38,21 @@ defmodule DIYWeb.StageLiveTest do
     {build, item}
   end
 
+  # Waits until the view has the element with the text: 1 second at most.
+  defp eventually(view, selector, text, tries \\ 50) do
+    cond do
+      has_element?(view, selector, text) ->
+        true
+
+      tries == 0 ->
+        false
+
+      true ->
+        Process.sleep(20)
+        eventually(view, selector, text, tries - 1)
+    end
+  end
+
   # The place of each part in the page: the parts are in this order.
   defp order(html, ids), do: Enum.map(ids, &(:binary.match(html, ~s(id="#{&1}")) |> elem(0)))
 
@@ -236,11 +251,18 @@ defmodule DIYWeb.StageLiveTest do
     assert has_element?(view, "#item-said", "Power: 95 W")
     refute has_element?(view, "#item-said", "the")
 
-    # At the start of the range: the least.
+    # In the range, − and + are not dimmed.
+    refute has_element?(view, "#param-watts-field button[aria-disabled]")
+
+    # At the start of the range: the least. − is dimmed for a screen reader,
+    # but it is not disabled: it keeps the focus.
     view |> form("#item-form", %{"item" => %{"watts" => "6"}}) |> render_change()
     view |> element("#param-watts-field button[phx-value-by='-1']") |> render_click()
     assert param.("watts") == 5
     assert has_element?(view, "#item-said", "Power: 5 W, the least")
+    assert has_element?(view, "#param-watts-field button[phx-value-by='-1'][aria-disabled=true]")
+    refute has_element?(view, "#param-watts-field button[disabled]")
+    refute has_element?(view, "#param-watts-field button[phx-value-by='1'][aria-disabled]")
 
     # Hours go by half an hour, and stop at 24.
     view |> element("#param-hours-field button[phx-value-by='1']") |> render_click()
@@ -251,10 +273,45 @@ defmodule DIYWeb.StageLiveTest do
     refute has_element?(view, "#item-said", "Power")
     view |> element("#param-hours-field button[phx-value-by='1']") |> render_click()
     assert param.("hours") == 24.0
+    assert eventually(view, "#item-said", "Hours in one day: 24 h, the most")
+    assert has_element?(view, "#param-hours-field button[phx-value-by='1'][aria-disabled=true]")
+
+    # A second tap at the end: the status is empty for a moment, and then
+    # says the end again. So a screen reader reads it again.
+    html = view |> element("#param-hours-field button[phx-value-by='1']") |> render_click()
+    refute html =~ "the most"
+    assert param.("hours") == 24.0
+    assert eventually(view, "#item-said", "Hours in one day: 24 h, the most")
+
+    # A status that comes late for a different item does not show, and a
+    # message that the page does not know changes nothing.
+    send(view.pid, {:item_said, "i999", "watts", 1, "Power: 1 W"})
+    send(view.pid, :unknown)
+    refute has_element?(view, "#item-said", "Power: 1 W")
     assert has_element?(view, "#item-said", "Hours in one day: 24 h, the most")
+
+    # A status that comes late after a newer tap does not come back.
+    late = {:item_said, tv.id, "hours", 24.0, "Hours in one day: 24 h, the most"}
+    view |> element("#param-hours-field button[phx-value-by='-1']") |> render_click()
+    send(view.pid, late)
+    assert has_element?(view, "#item-said", "Hours in one day: 23.5 h")
+
+    # Nor after a value that the person types.
+    view |> form("#item-form", %{"item" => %{"hours" => "20"}}) |> render_change()
+    send(view.pid, late)
+    refute has_element?(view, "#item-said", "Hours")
+
+    # Nor after a newer status of a different number of the item.
+    late = {:item_said, tv.id, "hours", 20.0, "Hours in one day: 20 h"}
+    view |> element("#param-watts-field button[phx-value-by='1']") |> render_click()
+    send(view.pid, late)
+    refute has_element?(view, "#item-said", "Hours")
 
     # The status is for its item only: it goes when a different item opens.
     render_patch(view, ~p"/inside?#{[item: item(build, "fridge").id]}")
+    # Nor in the panel of a different item.
+    send(view.pid, late)
+    refute has_element?(view, "#item-said", "Hours")
     render_patch(view, ~p"/inside?#{[item: tv.id]}")
     refute has_element?(view, "#item-said", "Hours")
 

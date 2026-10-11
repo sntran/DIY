@@ -5,8 +5,8 @@ defmodule DIY.WeatherTest do
 
   @today ~D[2026-10-08]
 
-  # Each test uses its own point, so that the cache of one test does not
-  # answer for a different test.
+  # The tests keep nothing in the cache (config/test.exs). The test of the
+  # cache of the weather is in test/diy/cache_test.exs.
   test "the weather of a point, by month, in °F" do
     Stubs.weather()
     assert {:ok, climate} = Weather.climate(10.1, -10.1, @today)
@@ -18,13 +18,6 @@ defmodule DIY.WeatherTest do
     assert july.sun > 5
     assert climate.t_year > 60 and climate.t_year < 75
     assert map_size(climate.series) == 120
-  end
-
-  test "the cache answers the second time" do
-    Stubs.weather()
-    assert {:ok, climate} = Weather.climate(11.0, -11.0, @today)
-    Stubs.weather(500)
-    assert Weather.climate(11.0, -11.0, @today) == {:ok, climate}
   end
 
   test "the errors of the service" do

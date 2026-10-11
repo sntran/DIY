@@ -34,7 +34,7 @@ defmodule DIYWeb.CoreComponents do
         <.icon :if={@kind == :error} name="hero-exclamation-circle" class="size-5 shrink-0" />
         <p>{msg}</p>
         <button type="button" class="self-start cursor-pointer" aria-label="Close">
-          <.icon name="hero-x-mark" class="size-5 opacity-50" />
+          <.icon name="hero-x-mark" class="size-5" />
         </button>
       </div>
     </div>

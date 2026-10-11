@@ -24,6 +24,11 @@ defmodule DIYWeb.HomeLive do
 
   @power_types ~w(power_station solar_panels transfer_switch ev)
 
+  # The time in ms that the status of − and + stays empty after a tap at an
+  # end of the range. Some screen readers do not hear two changes that come
+  # one immediately after the other.
+  @said_again 100
+
   alias DIY.{
     Bill,
     Build,
@@ -243,7 +248,8 @@ defmodule DIYWeb.HomeLive do
   # A tap on − or + of a number of an item (DIYWeb.Inside): the next round
   # value, in the range of the number (`DIY.Catalog.stepped/3`). The panel
   # tells the new value to a screen reader (`item_said`), and an end of the
-  # range.
+  # range. A tap at an end does not change the value, so the status is
+  # empty for @said_again ms: then a screen reader reads it again.
   def handle_event("step_param", %{"id" => id, "key" => key, "by" => by}, socket) do
     with true <- by in ["-1", "1"],
          {:ok, item} <- Build.item(socket.assigns.build, id),
@@ -266,7 +272,13 @@ defmodule DIYWeb.HomeLive do
         handle_event("item", %{"item_id" => id, "item" => %{key => value}}, socket)
 
       said = "#{param.label}: #{Format.value(value)}#{unit}#{done}"
-      {:noreply, assign(socket, :item_said, said)}
+
+      if value == item.params[key] do
+        Process.send_after(self(), {:item_said, id, key, value, said}, @said_again)
+        {:noreply, assign(socket, :item_said, nil)}
+      else
+        {:noreply, assign(socket, :item_said, said)}
+      end
     else
       _other -> {:noreply, socket}
     end
@@ -1016,10 +1028,16 @@ defmodule DIYWeb.HomeLive do
     |> start_async({:weather, zip}, fn -> Weather.climate(place.lat, place.lon) end)
   end
 
+  # The page asks for the market of a Texas ZIP code when the build has
+  # none. It does not ask again while it waits for an answer. It also does
+  # not ask again after an error for the same ZIP code: the key Try again
+  # asks again. A market that came for this ZIP code before can be gone:
+  # the build left the ZIP code and came back. Then the page asks again.
   defp load_market(
-         %{assigns: %{build: %{zip: zip, market: nil}, market: %{zip: loaded}}} = socket
+         %{assigns: %{build: %{zip: zip, market: nil}, market: %{zip: loaded, status: status}}} =
+           socket
        )
-       when is_binary(zip) and zip != loaded do
+       when is_binary(zip) and (zip != loaded or status == :ok) do
     case DIY.Zip.lookup(zip) do
       {:ok, %{state: "TX"}} ->
         socket
@@ -1075,6 +1093,24 @@ defmodule DIYWeb.HomeLive do
       {{plan.id, m.month}, if(m.grid > 0, do: m.night / m.grid, else: night.share)}
     end
   end
+
+  # The status of − and + again, after a tap at an end of the range. It is
+  # only for the item that is open now, when no newer status came, and when
+  # the number did not change.
+  @impl true
+  def handle_info(
+        {:item_said, id, key, value, said},
+        %{assigns: %{item: id, item_said: nil}} = socket
+      ) do
+    case Build.item(socket.assigns.build, id) do
+      {:ok, %{params: %{^key => ^value}}} -> {:noreply, assign(socket, :item_said, said)}
+      _other -> {:noreply, socket}
+    end
+  end
+
+  # A message that the page does not know (or a status of a different
+  # item): nothing changes.
+  def handle_info(_message, socket), do: {:noreply, socket}
 
   @impl true
   def handle_async({:weather, zip}, result, socket) do
