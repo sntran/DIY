@@ -2020,13 +2020,13 @@ test("the switch of an item turns its device on and off", async () => {
   await refused
   assert.deepEqual(page.pushes.at(-1), ["ha:control_done", {device: "lamp", error: "failed"}])
 
-  // Home Assistant does not answer: after a wait, the control failed. A
-  // late answer then changes nothing.
+  // Home Assistant does not answer: after a wait, the hook stops the wait
+  // (timeout). A late answer then changes nothing.
   ha.fail = () => null
   const late = link.control("lamp", false)
   const [timer] = [...page.timers.values()].filter((one) => one.ms === CONTROL_WAIT)
   timer.f()
-  assert.deepEqual(page.pushes.at(-1), ["ha:control_done", {device: "lamp", error: "failed"}])
+  assert.deepEqual(page.pushes.at(-1), ["ha:control_done", {device: "lamp", error: "timeout"}])
   const count = page.pushes.filter(([event]) => event === "ha:control_done").length
   await serve(ha, [socket])
   await late

@@ -235,7 +235,7 @@ defmodule DIYWeb.HomeAssistant do
 
   # The end of a control: only for a control that waits.
   def handle_event("ha:control_done", %{"device" => device, "error" => error}, socket)
-      when error in [nil, "offline", "failed"] do
+      when error in [nil, "offline", "failed", "timeout"] do
     case socket.assigns.ha_control do
       %{^device => {:pending, _on}} = control ->
         control =
@@ -440,6 +440,7 @@ defmodule DIYWeb.HomeAssistant do
       case power.error do
         "failed" -> "Home Assistant did not do it. Try again."
         "offline" -> "The link to Home Assistant closed before the end. Try again."
+        "timeout" -> "Home Assistant does not answer now. Try again later."
         nil -> nil
       end
 

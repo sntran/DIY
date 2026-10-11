@@ -143,6 +143,17 @@ defmodule DIYWeb.HaControlLiveTest do
              "The link to Home Assistant closed before the end. Try again."
            )
 
+    # Home Assistant does not answer.
+    view |> element("#ha-switch") |> render_click()
+    assert_push_event(view, "ha:control", %{device: "d1", on: true})
+    render_hook(view, "ha:control_done", %{"device" => "d1", "error" => "timeout"})
+
+    assert has_element?(
+             view,
+             "#ha-power-state",
+             "Home Assistant does not answer now. Try again later."
+           )
+
     # A switch value that the page does not know, and an item with no
     # device.
     render_click(view, "ha_switch", %{"item" => item, "on" => "maybe"})

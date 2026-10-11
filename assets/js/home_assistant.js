@@ -71,8 +71,8 @@ export const CONTROLS = ["fan", "light", "switch"]
 // The wait after a change of a state before the hook sends the states to
 // the LiveView: one message for many changes.
 export const STATE_WAIT = 150
-// The longest wait for the end of a control. After it, the control did
-// not work.
+// The longest wait for the end of a control. After it, the hook stops the
+// wait: Home Assistant does not answer now.
 export const CONTROL_WAIT = 10_000
 // The first and the longest wait before the hook opens the socket again.
 export const FIRST_WAIT = 1_000
@@ -718,7 +718,8 @@ export class Link {
   // Turns the entities of a device on or off (call_service), for the
   // switch of its item. It tells the end to the LiveView
   // (ha:control_done): with no error, or with "offline" or "failed". With
-  // no end after CONTROL_WAIT, the control failed. The new state comes
+  // no end after CONTROL_WAIT, it tells "timeout": Home Assistant can still
+  // do the control later, and the watch then tells it. The new state comes
   // with the watch of the states, and Home Assistant sends it before the
   // end. So the hook sends the states before the end. Then the LiveView
   // never shows the old state after the end.
@@ -731,7 +732,7 @@ export class Link {
       this.flushStates()
       this.push("ha:control_done", {device, error})
     }
-    const timer = this.setTimer(() => end("failed"), CONTROL_WAIT)
+    const timer = this.setTimer(() => end("timeout"), CONTROL_WAIT)
     try {
       const ids = this.controls.get(device)
       if (!ids) throw new CommandError("unknown", "The app does not turn this device on or off")

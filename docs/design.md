@@ -2307,7 +2307,9 @@ The LiveView (`DIYWeb.HomeAssistant`):
   off each entity of the device (`call_service`, `turn_on` or `turn_off`,
   one call for each domain). It tells the end (`ha:control_done`), with
   no error, or with `offline` or `failed`. With no end after 10 seconds
-  (`CONTROL_WAIT`), the control failed.
+  (`CONTROL_WAIT`), it tells `timeout`, and the status tells that Home
+  Assistant does not answer now. Home Assistant can still do the control
+  later: then the watch tells the new state, and the error goes.
 - While a control waits, the status tells it ("Home Assistant turns it
   off."), and the track and the knob of the switch are pale. The switch
   is `aria-disabled`, not `disabled`, so it keeps the focus of the
@@ -2361,12 +2363,12 @@ The tests:
   order, and new entities. Then a refused watch, two reads at the same
   time, and a socket that closes. The control: the states before the
   end, one call for each domain, a refusal, no answer, and a socket that
-  closes. A property test
-  does many steps in any order of the answers. The steps are changes of a
-  person, states that go, controls, changes of the registry, and a socket
-  that closes and opens again. When all is quiet, the last states are the
-  states of Home Assistant, and Home Assistant has one watch at most.
-  While the socket is closed, the hook sends no states.
+  closes. A property test does many steps, with the answers of each step
+  in any order. The steps are changes of a person, states that go,
+  controls, changes of the registry, and a socket that closes and opens
+  again. When all is quiet, the last states are the states of Home
+  Assistant, and Home Assistant has one watch at most. While the socket
+  is closed, the hook sends no states.
 - `test/diy_web/live/ha_control_live_test.exs`: the states on the plan,
   on the stage, in the list and in the panel, and the switch with the end
   of a control. It also checks a refusal, an error that a new state ends,
