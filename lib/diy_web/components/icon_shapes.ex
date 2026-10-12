@@ -1452,9 +1452,10 @@ defmodule DIYWeb.Icon.Shapes do
   # the orange line of Victron, and a row of lights. Each position has a
   # gray light, and the green light of the power is in the middle. The white
   # lines of its label are under the lights. A hood for the cables of two
-  # positions is at the bottom, with a small block between the two hoods
-  # in the middle. The black base shows at the right side. The positions share the width of the case, so each number
-  # of positions has the same size.
+  # positions is at the bottom, with a dark port for the cable of each
+  # position. A small block is between the two hoods in the middle. The
+  # black base shows at the right side. The positions share the width of
+  # the case, so each number of positions has the same size.
   def model("dc_bus"), do: model({"dc_bus", 4})
 
   def model({"dc_bus", ports}) do
@@ -1503,6 +1504,7 @@ defmodule DIYWeb.Icon.Shapes do
         rslab(:y, {0, x}, {0.045, span * 0.8}, min(0.012, span * 0.25), y, d - y, "victron")
       end) ++
       block ++
+      ports(ports, hoods, x0 - 0.005 + span * 0.1, span, d) ++
       [
         front({0.074, y, 0.136}, {0.042, 0.005}, "i-white-t", 0.002),
         front({0.07, y, 0.112}, {0.174, 0.008}, "i-stripe", 0.002),
@@ -1612,6 +1614,20 @@ defmodule DIYWeb.Icon.Shapes do
         front({w / 2 - 0.04, d, h - 0.12}, {0.08, 0.12}, "i-light-wood-r"),
         front({0.08, d, 0.08}, {0.16, 0.1}, "i-white-t")
       ]
+  end
+
+  # The ports of a busbar: a dark opening for the cable of each position,
+  # on the front of its hood. A hood has the cables of two positions (the
+  # last hood has one when the count is odd).
+  defp ports(ports, hoods, x0, span, d) do
+    for k <- 0..(hoods - 1),
+        count = min(2, ports - 2 * k),
+        j <- 0..(count - 1) do
+      width = span * 0.8 / count
+      {cx, w} = {x0 + k * span + width * (j + 0.5), width * 0.55}
+      loop = rounded({cx - w / 2, 0.006}, {w, 0.022}, w / 3)
+      face(for({u, v} <- loop, do: {u, d + 0.001, v}), {0, 1, 0}, "i-black")
+    end
   end
 
   # A washer or a dryer with a door in front: a white body with round

@@ -1297,7 +1297,8 @@ on a light page.
     red and black caps of its busbars. Its front has the orange line of
     Victron and a gray light for each position. It also has the green
     light of the power, the white lines of the label, and the hoods for
-    the cables. A small block is between the two hoods in the middle.
+    the cables. Each hood has a dark port for the cable of each of its
+    positions. A small block is between the two hoods in the middle.
     The material `victron` has the blue of the case.
 
 On the plan of the house, a small face keeps two decimals in its points,

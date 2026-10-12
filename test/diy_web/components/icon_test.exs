@@ -118,6 +118,16 @@ defmodule DIYWeb.IconTest do
       hoods = div(ports + 1, 2)
       assert Enum.count(fronts, &(abs(&1 - 0.045) < 1.0e-9)) == hoods
 
+      # A dark port for the cable of each position, on the hoods.
+      low = fn corners -> corners |> Enum.map(&elem(&1, 2)) |> Enum.max() < 0.04 end
+
+      assert Enum.count(model, &match?({:face, c, {0, 1, 0}, "i-black"} when is_list(c), &1)) - 2 ==
+               ports
+
+      assert Enum.count(model, fn f ->
+               match?({:face, _, {0, 1, 0}, "i-black"}, f) and low.(elem(f, 1))
+             end) == ports
+
       assert Enum.count(fronts, &(abs(&1 - 0.02) < 1.0e-9)) ==
                if(rem(hoods, 2) == 0, do: 1, else: 0)
     end
