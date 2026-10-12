@@ -931,11 +931,11 @@ defmodule DIYWeb.Icon.Shapes do
         top({w - 0.065, 0.08, h}, {0.035, d - 0.16}, "i-dark-r", 0.002),
         front({0.045, y, 0.262}, {0.461, 0.145}, "i-black", 0.002),
         # The DC input and the AC input.
-        front({0.056, y, 0.352}, {0.078, 0.045}, "i-flame", 0.004),
+        front({0.056, y, 0.352}, {0.078, 0.045}, "i-orange-l", 0.004),
         front({0.059, y, 0.355}, {0.072, 0.035}, "i-dark-l", 0.006),
         front({0.072, y, 0.366}, {0.012, 0.014}, "i-black", 0.008),
         front({0.106, y, 0.366}, {0.012, 0.014}, "i-black", 0.008),
-        front({0.056, y, 0.272}, {0.078, 0.072}, "i-flame", 0.004),
+        front({0.056, y, 0.272}, {0.078, 0.072}, "i-orange-l", 0.004),
         front({0.059, y, 0.275}, {0.072, 0.062}, "i-dark-l", 0.006),
         disc({0.095, y + 0.008, 0.306}, :front, 0.016, "i-black"),
         # The screen and its buttons.
@@ -948,24 +948,24 @@ defmodule DIYWeb.Icon.Shapes do
         disc({0.256, y + 0.006, 0.378}, :front, 0.009, "i-led"),
         disc({0.256, y + 0.006, 0.35}, :front, 0.009, "i-led"),
         # The DC outputs.
-        front({0.146, y, 0.272}, {0.126, 0.048}, "i-flame", 0.004),
+        front({0.146, y, 0.272}, {0.126, 0.048}, "i-orange-l", 0.004),
         front({0.149, y, 0.275}, {0.12, 0.036}, "i-black", 0.006)
       ] ++
       for(k <- 0..4, do: front({0.158 + k * 0.021, y, 0.288}, {0.012, 0.008}, "i-steel-t", 0.008)) ++
       [
         # The AC outputs: four outlets, the TT-30 and the L14-30.
-        front({0.284, y, 0.272}, {0.216, 0.126}, "i-flame", 0.004),
+        front({0.284, y, 0.272}, {0.216, 0.126}, "i-orange-l", 0.004),
         front({0.287, y, 0.275}, {0.21, 0.114}, "i-black", 0.006)
       ] ++
       Enum.flat_map(0..3, &outlet.(0.296 + &1 * 0.051)) ++
       [
         disc({0.33, y + 0.008, 0.302}, :front, 0.024, "i-dark-t"),
-        disc({0.45, y + 0.008, 0.302}, :front, 0.026, "i-flame"),
+        disc({0.45, y + 0.008, 0.302}, :front, 0.026, "i-orange-l"),
         disc({0.45, y + 0.01, 0.302}, :front, 0.021, "i-dark-t"),
         # The name plate, and the name of the model in orange.
         front({0.2, y, 0.19}, {0.15, 0.04}, "i-dark-r", 0.002),
         front({0.215, y, 0.203}, {0.12, 0.014}, "i-white-t", 0.004),
-        front({0.235, y, 0.17}, {0.08, 0.011}, "i-flame", 0.002),
+        front({0.235, y, 0.17}, {0.08, 0.011}, "i-orange-l", 0.002),
         # The dust screen and the ports for more batteries, on the side.
         side({w - 0.006, 0.06, 0.25}, {0.24, 0.15}, "i-black", 0.002)
       ] ++
@@ -1645,7 +1645,7 @@ defmodule DIYWeb.Icon.Shapes do
         j <- 0..(count - 1) do
       width = span * 0.8 / count
       {cx, w} = {x0 + k * span + width * (j + 0.5), width * 0.55}
-      loop = rounded({cx - w / 2, 0.0}, {w, 0.026}, w / 3)
+      loop = rounded({cx - w / 2, 0.0}, {w, 0.012}, 0.004)
       face(for({u, v} <- loop, do: {u, d + 0.001, v}), {0, 1, 0}, "i-black")
     end
   end

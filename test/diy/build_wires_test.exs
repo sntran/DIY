@@ -200,6 +200,39 @@ defmodule DIY.BuildWiresTest do
     assert loaded.wires == []
   end
 
+  test "a wire between two batteries, or a battery on three busbars, makes one node" do
+    build = preset()
+    {:ok, build, van} = Build.add_item(build, room(build, "Driveway"), "camper_van")
+    bay = Build.zone(build, van, :bay).id
+    {build, low} = add(build, bay, "van_battery")
+    {build, high} = add(build, bay, "van_battery")
+    {:ok, build} = Build.update_item(build, high, %{"volts" => "24"})
+    {build, bus_a} = add(build, bay, "dc_bus")
+    {build, bus_b} = add(build, bay, "dc_bus")
+    {:ok, build, to_a} = Build.add_wire(build, low, bus_a)
+    {:ok, build, _id} = Build.add_wire(build, high, bus_b)
+    assert Build.bus_systems(build) == %{bus_a => "12", bus_b => "24"}
+
+    # A wire from the battery of 12 V to the battery of 24 V: one node
+    # with a fault. The busbars and the wires get 24 V.
+    {:ok, build, between} = Build.add_wire(build, low, high)
+    assert Build.bus_voltages(build)[bus_a] == MapSet.new(["12", "24"])
+    assert Build.bus_systems(build) == %{bus_a => "24", bus_b => "24"}
+    assert {:ok, %{system: "24"}} = Build.wire(build, between)
+    assert {:ok, %{system: "24"}} = Build.wire(build, to_a)
+
+    # A battery with wires to three busbars joins the three.
+    {three, bus_c} = add(build, bay, "dc_bus")
+    {three, bus_d} = add(three, bay, "dc_bus")
+    {three, other} = add(three, bay, "van_battery")
+    {:ok, three, _id} = Build.add_wire(three, other, bus_c)
+    {:ok, three, _id} = Build.add_wire(three, other, bus_d)
+    {:ok, three, _id} = Build.add_wire(three, other, bus_a)
+    voltages = Build.bus_voltages(three)
+    assert voltages[bus_c] == voltages[bus_d] and voltages[bus_d] == voltages[bus_a]
+    assert Build.bus_systems(three)[bus_c] == "24"
+  end
+
   test "the system of a wire is the voltage of a battery at its end" do
     build = preset()
     {:ok, build, van} = Build.add_item(build, room(build, "Driveway"), "camper_van")

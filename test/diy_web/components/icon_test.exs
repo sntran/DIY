@@ -52,9 +52,18 @@ defmodule DIYWeb.IconTest do
 
     assert Enum.all?(~w(victron orange titanium), &(&1 in materials))
 
+    # Each shade has a rule, also in the house plan, and each light has its
+    # house color in the three blocks.
     for name <- materials do
-      assert length(Regex.scan(~r/--c-#{name}-t:/, css)) == 3, "no house colors for #{name}"
-      assert css =~ ".cutaway-house .i-#{name}-m2 {", "no house steps for #{name}"
+      for shade <- ~w(t l r m1 m2 m3) do
+        assert css =~ ~r/(?:^|\}\s*)\.i-#{name}-#{shade} \{/m, "no rule for i-#{name}-#{shade}"
+        assert css =~ ".cutaway-house .i-#{name}-#{shade} {", "no house rule for #{name}-#{shade}"
+      end
+
+      for light <- ~w(t l r) do
+        assert length(Regex.scan(~r/--c-#{name}-#{light}:/, css)) == 3,
+               "no house colors for #{name}-#{light}"
+      end
     end
   end
 
@@ -152,14 +161,18 @@ defmodule DIYWeb.IconTest do
       hoods = div(ports + 1, 2)
       assert Enum.count(fronts, &(abs(&1 - 0.045) < 1.0e-9)) == hoods
 
-      # A dark port for the cable of each position, on the hoods.
-      low = fn corners -> corners |> Enum.map(&elem(&1, 2)) |> Enum.max() < 0.04 end
+      # A dark port for the cable of each position, at the foot of the
+      # front of the hoods: from z = 0, and 12 mm high.
+      at_foot = fn corners ->
+        {z0, z1} = corners |> Enum.map(&elem(&1, 2)) |> Enum.min_max()
+        abs(z0) < 1.0e-9 and abs(z1 - 0.012) < 1.0e-9
+      end
 
       assert Enum.count(model, &match?({:face, c, {0, 1, 0}, "i-black"} when is_list(c), &1)) - 2 ==
                ports
 
       assert Enum.count(model, fn f ->
-               match?({:face, _, {0, 1, 0}, "i-black"}, f) and low.(elem(f, 1))
+               match?({:face, _, {0, 1, 0}, "i-black"}, f) and at_foot.(elem(f, 1))
              end) == ports
 
       assert Enum.count(fronts, &(abs(&1 - 0.02) < 1.0e-9)) ==

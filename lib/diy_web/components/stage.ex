@@ -37,7 +37,7 @@ defmodule DIYWeb.Stage do
 
   alias DIY.Catalog
   alias DIYWeb.Camera
-  alias DIYWeb.Icon.Shapes
+  alias DIYWeb.Icon.{Shapes, StationShapes, VanShapes}
 
   # The frames of the flipbook, and the units of the largest side of the
   # drawing.
@@ -85,7 +85,7 @@ defmodule DIYWeb.Stage do
   LED screen of a hub is on its face, on its top. The face of a model of
   power station is its panel (`DIYWeb.Icon.StationShapes.screen/1`).
   """
-  def region({"power_station", model}), do: DIYWeb.Icon.StationShapes.screen(model)
+  def region({"power_station", model}), do: StationShapes.screen(model)
 
   def region(type) do
     case @screens do
@@ -147,7 +147,12 @@ defmodule DIYWeb.Stage do
   """
   def frames(type, plan \\ :house) when plan in [:house, :van] do
     # A new version of the code that draws the frames has new frames.
-    modules = Enum.map([__MODULE__, Shapes, Camera], & &1.module_info(:md5))
+    modules =
+      Enum.map(
+        [__MODULE__, Shapes, StationShapes, VanShapes, Camera],
+        & &1.module_info(:md5)
+      )
+
     key = {__MODULE__, type, plan, modules}
 
     case :persistent_term.get(key, nil) do

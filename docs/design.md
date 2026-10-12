@@ -1305,79 +1305,9 @@ on a light page.
 
 On the plan of the house, a small face of an item keeps two decimals in
 its points (`DIYWeb.Camera.plan_points/3`). Thus its shape stays at the
-highest zoom. A larger face, and each face of the walls and of the
-furniture, has one decimal: the plan stays small.
-
-### The models of power stations
-
-The owner asked for the stations that the DIY world knows. The person
-chooses the model of a station in its panel (the choice "Model",
-`DIY.Catalog.station_models/0`):
-
-Each model has its battery, its output, its AC charge, its solar input,
-its weight and its size (in inches):
-
-- Pecron F5000LFP: 5.12 kWh, 7,200 W, 3,600 W, 5,800 W, 124 lb, 22 × 15
-  × 17.
-- Pecron E3800LFP: 3.84 kWh, 4,200 W, 3,200 W, 3,000 W, 87 lb, 18 × 12 ×
-  15.
-- EcoFlow DELTA Pro: 3.6 kWh, 3,600 W, 3,000 W, 1,600 W, 99 lb, 11 × 25 ×
-  16.
-- EcoFlow DELTA Pro 3: 4.096 kWh, 4,000 W, 3,600 W, 2,600 W, 114 lb, 13 ×
-  27 × 16.
-- EcoFlow DELTA Pro Ultra: 6.144 kWh, 7,200 W, 3,000 W, 5,600 W, 182 lb,
-  27 × 19 × 16.
-- Anker SOLIX F3800: 3.84 kWh, 6,000 W, 1,800 W, 2,400 W, 132 lb, 15 × 16
-  × 28.
-- Anker SOLIX F3800 Plus: 3.84 kWh, 6,000 W, 1,800 W, 3,200 W, 137 lb, 15
-  × 16 × 28.
-
-The rules:
-
-- The numbers come from the page of each model of its maker. The panel
-  shows the source under the numbers. Where the maker gives only a
-  current, the numbers come from Adorama, and the source tells it. The
-  AC charge is the most of the AC input of the station: some need a
-  cable of 30 A or 240 V for it. The source tells the AC charge on an
-  outlet of 120 V too.
-- The size is the width of the front, the depth and the height, in
-  whole inches. The front of a DELTA Pro and of a DELTA Pro 3 is the
-  short end. The F3800 stands up, on its wheels. The DELTA Pro Ultra is
-  the inverter on one battery: the app adds their sizes and their
-  weights. The E3800LFP and the DELTA Pro Ultra have no wheels: their
-  cart and their stand are different items.
-- A new model gives its numbers and its size (`DIY.Build.update_item/3`).
-  The price, the extra batteries and "It powers" stay. A size that the
-  person gives goes away, and a later size of the person wins
-  (`DIY.Layout.size/1`). "Another station" keeps the numbers and the
-  size. After a change of a number, the key "Use the numbers of the
-  model" gives the numbers of the model again (`DIY.Build.use_model/2`).
-- A station from a build from before the models is "Another station".
-- Each model with a look of its own has a model of its parts
-  (`DIYWeb.Icon.StationShapes`), from the photos and the drawings of its
-  maker. The F5000LFP and "Another station" have the look of the kind.
-  - The E3800LFP: a dark box with an orange cap on each corner (the
-    material `orange`). The top half of its front has the groups of
-    ports in orange frames. The bottom half has ribs and the badge of
-    the name.
-  - The DELTA Pro: a black body with a gray cap, and a handle at each
-    end of the cap. Its front has the screen, the gold button and the
-    AC outlets. The right side has two fans and two doors. Two wheels
-    are at the back.
-  - The DELTA Pro 3: a silver body with a dark hood at each end. The
-    black frame of its front has the screen and the tray of the AC
-    outlets. The right side has a long slot and a door. Two wheels are
-    at the back.
-  - The DELTA Pro Ultra: the black inverter on the battery. The screen
-    is at the front of the top, and each end of the front has a silver
-    loop. The battery has a silver plate on its front.
-  - The F3800 and the F3800 Plus: a tall box of warm gray (the material
-    `titanium`) on wheels. The handle, the blue light (`i-cyan`) and the
-    black panel are at the top of its front. The right side has the
-    AC outlets and a tall vent. The Plus has a light top, a badge, and
-    the TT-30 in place of the 14-50.
-- The stage aims at the panel of each model
-  (`DIYWeb.Icon.StationShapes.screen/1`).
+highest zoom. A larger face has one decimal. Each face of the walls, of
+the furniture and of the ghosts of Home Assistant also has one decimal:
+the plan stays small.
 
 The icon is next to the name of the item in these places:
 
@@ -1398,6 +1328,107 @@ The icon is next to the name of the item in these places:
 The bar of the pages uses the icons of Heroicons (MIT), which Phoenix
 gives. The other small signs use them too: the arrows, the close buttons,
 and the checks of the lesson.
+
+### The models of power stations
+
+The owner asked for the stations that the DIY world knows. The request
+was: "Pecron E3800LFP, EcoFlow Delta Pro, EcoFlow DELTA Pro 3, and EcoFlow
+DU (whole house), or the Anker Solix". The app reads "EcoFlow DU (whole house)" as
+the DELTA Pro Ultra (DPU), the whole-home station of EcoFlow. It reads
+"the Anker Solix" as the SOLIX F3800 and the F3800 Plus. The Pecron
+F5000LFP, the look of the kind, is a model too. The person chooses the
+model of a station in its panel (the choice "Model",
+`DIY.Catalog.station_models/0`).
+
+Each model has its battery, its output, its charge from the wall, its
+solar input, its weight and its size (in inches):
+
+- Pecron F5000LFP: 5.12 kWh, 7,200 W, 1,800 W, 5,800 W, 124 lb, 22 × 15
+  × 17.
+- Pecron E3800LFP: 3.84 kWh, 4,200 W, 1,800 W, 3,000 W, 87 lb, 18 × 12 ×
+  15.
+- EcoFlow DELTA Pro: 3.6 kWh, 3,600 W, 1,800 W, 1,600 W, 99 lb, 11 × 25 ×
+  16.
+- EcoFlow DELTA Pro 3: 4.096 kWh, 4,000 W, 1,800 W, 2,600 W, 114 lb, 13 ×
+  27 × 16.
+- EcoFlow DELTA Pro Ultra: 6.144 kWh, 7,200 W, 1,800 W, 5,600 W, 182 lb,
+  27 × 19 × 16.
+- Anker SOLIX F3800: 3.84 kWh, 6,000 W, 1,800 W, 2,400 W, 132 lb, 15 × 16
+  × 28.
+- Anker SOLIX F3800 Plus: 3.84 kWh, 6,000 W, 1,800 W, 3,200 W, 137 lb, 15
+  × 16 × 28.
+
+The rules:
+
+- The numbers come from the page of each model of its maker. The panel
+  shows the source under the numbers. Where the maker gives only a
+  current, the numbers come from Adorama, and the source tells it.
+- The charge from the wall is the AC charge from an outlet of 120 V and
+  15 A: 1,800 W for each model. The page Power uses it as the limit of
+  the charge from the grid in one hour (`DIY.Power`). Many stations take
+  more with a cable of 30 A or on 240 V. The source tells that number,
+  and the person can give it.
+- The size is the width of the front, the depth and the height, in
+  whole inches. The front of a DELTA Pro and of a DELTA Pro 3 is the
+  short end. The F3800 stands up, on its wheels. The DELTA Pro Ultra is
+  the inverter on one battery: the app adds their sizes and their
+  weights. The F5000LFP is on its trolley in all the photos of Pecron, so
+  its size has the trolley (an estimate). The E3800LFP and the DELTA Pro
+  Ultra have no wheels. Their cart and their stand are accessories that
+  the app does not show, so their sizes do not have them.
+- A new model gives its numbers when the numbers of the station are not
+  the numbers of the person (`DIY.Build.update_item/3`,
+  `DIY.Build.own_numbers?/1`). A guess of the app, the numbers of a new
+  station and the numbers of a model are not the numbers of the person.
+  So a pass through the list of models (with the arrow keys, for
+  example) never deletes the numbers that the person gave. The key "Use
+  the numbers of the model" gives the numbers of the model
+  (`DIY.Build.use_model/2`). The price, the extra batteries and "It
+  powers" always stay.
+- A size that the person gives stays with a new model. With no such size,
+  a station has the size of its model, and "Another station" has the size
+  and the look of the kind (`DIY.Layout.size/1`). The key "The size of
+  the model" gives the size of the model again, and the focus goes to
+  the first side of the size.
+- A status tells a screen reader the new numbers and the size, or that
+  the numbers stay. It comes after a new model, and after "Use the
+  numbers of the model". A new model of a van gets a status too.
+- A station of a model has the name of the model (`DIY.Catalog.name/1`).
+  The title of its panel and the page of a van show it.
+- A station from a build from before the models is "Another station".
+- Each model with a look of its own has a model of its parts
+  (`DIYWeb.Icon.StationShapes`), from the photos and the drawings of its
+  maker. The front, the right side, the top, the back and the left side
+  each have their parts. The F5000LFP and "Another station" have the
+  look of the kind.
+  - The E3800LFP: a dark box with an orange cap on each corner (the
+    material `orange`). The top half of its front has the groups of
+    ports in orange frames (`i-orange-l`). The F5000LFP has this orange
+    too: it has a color in the house plan. The bottom half has ribs and
+    the badge of the name. The left side has the AC input and a vent.
+  - The DELTA Pro: a black body with a gray cap, and a handle at each
+    end of the cap. Its front has the screen, the gold button and the
+    AC outlets. The right side has two fans and two doors. The back has
+    the inputs, the ports for more batteries and a vent. Two wheels are
+    at the back.
+  - The DELTA Pro 3: a silver body with a dark hood at each end. The
+    black frame of its front has the screen and the tray of the AC
+    outlets. The right side has a long slot and a door. The back has
+    four doors of ports and a vent. Two wheels are at the back.
+  - The DELTA Pro Ultra: the black inverter on the battery. The screen
+    is at the front of the top, and each end of the front and of the
+    back has a silver loop. The battery has a silver plate on its front
+    and on its back.
+  - The F3800 and the F3800 Plus: a tall box of warm gray (the material
+    `titanium`) on wheels. The handle, the blue light (`i-cyan`) and the
+    black panel are at the top of its front. The right side has the AC
+    outlets and a tall vent. The left side has the inputs and a tall
+    vent. The back has the pull handle. The Plus has a light top, blue
+    solar inputs, a cover for a generator, a badge, and the TT-30 in
+    place of the 14-50.
+- The stage aims at the panel of each model
+  (`DIYWeb.Icon.StationShapes.screen/1`). The frames of the stage change
+  with the code of the models (`DIYWeb.Stage.frames/2`).
 
 ## The plan at scale
 
@@ -2627,7 +2658,8 @@ the wires (`DIY.Build`, `wires`).
   12 V DC.
   On DC, a wire to a battery or to a busbar has two ways.
 - When a battery is at an end, the system of the wire is the voltage of
-  the battery. A battery on a busbar with a higher voltage is a fault.
+  the battery. A battery joined to a battery of a higher voltage (through
+  a busbar or a wire) is a fault.
   Then each wire of the battery gets the higher voltage, and the card
   tells why. A change of the battery changes its wires
   (`DIY.Build.change/2`), and the card shows the system as a text. So
@@ -2635,9 +2667,10 @@ the wires (`DIY.Build`, `wires`).
 - A busbar is on DC. A wire at a busbar gets the voltage of the
   batteries on the busbar (`DIY.Wire.end_system/4`). An example is the
   wire from the busbar to the inverter of a van of 48 V. A battery is on
-  a busbar when a wire joins them. It is also on each busbar with a wire
-  to that busbar, and so on (`DIY.Build.bus_voltages/1`). A battery with
-  wires to two busbars joins them too: its terminal is a node of both.
+  a busbar when a wire joins them. A wire between two busbars, between a
+  battery and a busbar, or between two batteries joins their terminals
+  in one node. The busbars of a node have the voltages of all its
+  batteries (`DIY.Build.bus_voltages/1`).
   With no battery on the busbar, the card gives only the DC systems.
 - The batteries on one busbar must have one voltage. When they do not,
   the panel of the busbar shows a fault. The wires then get the highest

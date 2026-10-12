@@ -209,15 +209,19 @@ defmodule DIY.Build do
     %__MODULE__{changed | revision: revision + 1, stamp: new_stamp(), devices: devices}
   end
 
+  # The items of a node of DC: a battery and a busbar.
+  @dc_ends ~w(van_battery dc_bus)
+
   # Only the wires with an item at each end stay. A wire with a battery at
   # an end gets the voltage of the battery as its system: a change of the
   # battery changes its wires. A wire at a busbar gets the voltage of the
-  # batteries on the busbar.
+  # batteries on the busbar. A battery on a node with a higher voltage (a
+  # fault) gives its wires that voltage.
   defp fit_wires(build) do
     by_id = Map.new(build.items, &{&1.id, &1})
     wires = Enum.filter(build.wires, &(by_id[&1.from] && by_id[&1.to]))
-    buses = wires |> bus_voltages(by_id) |> systems()
-    highs = Map.merge(buses, battery_highs(wires, by_id, buses))
+    nodes = dc_nodes(wires, by_id)
+    highs = Map.merge(nodes |> bus_voltages(by_id) |> systems(), battery_highs(nodes, by_id))
 
     fitted =
       for wire <- wires,
@@ -237,25 +241,15 @@ defmodule DIY.Build do
   @spec bus_systems(t()) :: %{String.t() => String.t()}
   def bus_systems(build), do: build |> bus_voltages() |> systems()
 
-  # The batteries on a busbar with a higher voltage (a fault): each gets
-  # the highest voltage of its busbars.
-  defp battery_highs(wires, by_id, buses) do
-    for wire <- wires,
-        from = by_id[wire.from],
-        to = by_id[wire.to],
-        battery <- [from, to],
-        battery.type == "van_battery",
-        bus <- [from, to],
-        system = bus.type == "dc_bus" && buses[bus.id],
-        Wire.volts(system) > Wire.volts(battery.params["volts"]),
-        reduce: %{},
-        do: (highs ->
-               Map.update(
-                 highs,
-                 battery.id,
-                 system,
-                 &Enum.max_by([&1, system], fn s -> Wire.volts(s) end)
-               ))
+  # The batteries on a node with a higher voltage (a fault): each gets the
+  # highest voltage of its node.
+  defp battery_highs(nodes, by_id) do
+    for {id, node} <- nodes,
+        by_id[id].type == "van_battery",
+        high = node_voltages(node, by_id) |> Enum.max_by(&String.to_integer/1),
+        Wire.volts(high) > Wire.volts(by_id[id].params["volts"]),
+        into: %{},
+        do: {id, high}
   end
 
   defp systems(voltages),
@@ -263,60 +257,48 @@ defmodule DIY.Build do
 
   @doc """
   The voltages of the batteries on each busbar, by the id of the busbar.
-  A battery is on a busbar when a wire joins them. It is also on each
-  busbar with a wire to that busbar, and so on. A battery with wires to
-  two busbars joins them too: its terminal is a node of both.
+  A wire between two busbars, between a battery and a busbar, or between
+  two batteries joins their terminals in one node (`dc_nodes/2`). The
+  busbars of a node have the voltages of all the batteries of the node.
   """
   @spec bus_voltages(t()) :: %{String.t() => MapSet.t(String.t())}
-  def bus_voltages(build), do: bus_voltages(build.wires, Map.new(build.items, &{&1.id, &1}))
-
-  defp bus_voltages(wires, by_id) do
-    direct =
-      for wire <- wires,
-          from = by_id[wire.from],
-          to = by_id[wire.to],
-          system = Wire.battery_system(from, to),
-          bus <- [from, to],
-          bus.type == "dc_bus",
-          reduce: %{},
-          do: (buses -> Map.update(buses, bus.id, MapSet.new([system]), &MapSet.put(&1, system)))
-
-    # The page of the house shows a build with no items of a van
-    # (`house_view/1`). So a wire to a van has no item at that end here.
-    links =
-      for wire <- wires,
-          from = by_id[wire.from],
-          to = by_id[wire.to],
-          from.type == "dc_bus" and to.type == "dc_bus",
-          do: {from.id, to.id}
-
-    buses_of_battery =
-      for wire <- wires,
-          from = by_id[wire.from],
-          to = by_id[wire.to],
-          battery <- [from, to],
-          battery.type == "van_battery",
-          bus <- [from, to],
-          bus.type == "dc_bus",
-          reduce: %{},
-          do: (acc -> Map.update(acc, battery.id, [bus.id], &[bus.id | &1]))
-
-    shared =
-      for {_battery, buses} <- buses_of_battery, a <- buses, b <- buses, a < b, do: {a, b}
-
-    spread(direct, links ++ shared)
+  def bus_voltages(build) do
+    by_id = Map.new(build.items, &{&1.id, &1})
+    build.wires |> dc_nodes(by_id) |> bus_voltages(by_id)
   end
 
-  # The busbars of a wire between two busbars share their voltages, until
-  # no busbar changes. Each loop adds a voltage, so the loops stop.
-  defp spread(voltages, links) do
-    next =
-      Enum.reduce(links, voltages, fn {a, b}, acc ->
-        set = MapSet.union(Map.get(acc, a, MapSet.new()), Map.get(acc, b, MapSet.new()))
-        if MapSet.size(set) == 0, do: acc, else: acc |> Map.put(a, set) |> Map.put(b, set)
-      end)
+  defp bus_voltages(nodes, by_id) do
+    for {id, node} <- nodes,
+        by_id[id].type == "dc_bus",
+        voltages = node_voltages(node, by_id),
+        MapSet.size(voltages) > 0,
+        into: %{},
+        do: {id, voltages}
+  end
 
-    if next == voltages, do: voltages, else: spread(next, links)
+  defp node_voltages(node, by_id) do
+    for id <- node,
+        by_id[id].type == "van_battery",
+        into: MapSet.new(),
+        do: by_id[id].params["volts"]
+  end
+
+  # The nodes of DC: the node of each busbar and of each battery with a
+  # wire, by its id. A wire between two of them puts them in one node.
+  # The page of the house shows a build with no items of a van
+  # (`house_view/1`). So a wire to a van has no item at that end here.
+  defp dc_nodes(wires, by_id) do
+    for wire <- wires,
+        from = by_id[wire.from],
+        to = by_id[wire.to],
+        from.type in @dc_ends and to.type in @dc_ends,
+        reduce: %{} do
+      nodes ->
+        a = Map.get(nodes, from.id, MapSet.new([from.id]))
+        b = Map.get(nodes, to.id, MapSet.new([to.id]))
+        node = MapSet.union(a, b)
+        Enum.reduce(node, nodes, &Map.put(&2, &1, node))
+    end
   end
 
   # 96 random bits: two changes never get the same stamp.
@@ -704,6 +686,22 @@ defmodule DIY.Build do
     %{station | params: Map.merge(station.params, numbers), typical: false}
   end
 
+  @station_numbers ~w(kwh output_w charge_w solar_w weight)
+
+  @doc """
+  True when the numbers of a power station are the numbers of the person.
+  A guess of the app, the numbers of a new station and the numbers of a
+  model are not. A new model does not replace the numbers of the person:
+  a pass through the list of models keeps them.
+  """
+  @spec own_numbers?(map()) :: boolean()
+  def own_numbers?(%{type: "power_station", typical: typical, params: params}) do
+    numbers = Map.take(params, @station_numbers)
+    defaults = Map.take(Catalog.defaults("power_station"), @station_numbers)
+    known = [defaults | for({_key, _name, n, _size, _source} <- Catalog.station_models(), do: n)]
+    not typical and numbers not in known
+  end
+
   # The numbers of a van that come from its label (or from a scale).
   @label ~w(gvwr front_gawr rear_gawr front_empty rear_empty)
 
@@ -711,9 +709,14 @@ defmodule DIY.Build do
   Changes the numbers of an item. The item is not typical after this: the
   user checked it. A camper van with a new model gets the numbers of the
   model (typical). A camper van is not typical only after a change of a
-  number of its label. A power station with a new model gets the numbers
-  and the size of the model (another station keeps its numbers and its
-  size).
+  number of its label.
+
+  A power station with a new model gets the numbers of the model, when
+  its numbers are not the numbers of the person (`own_numbers?/1`). Else
+  its numbers stay, and `use_model/2` gives the numbers of the model. A
+  size that the person gave stays. With no such size, the station has the
+  size of its model, or the size of the kind for another station
+  (`DIY.Layout.size/1`).
   """
   @spec update_item(t(), String.t(), map()) :: {:ok, t()} | {:error, term()}
   def update_item(build, id, values) when is_map(values) do
@@ -732,9 +735,11 @@ defmodule DIY.Build do
   end
 
   defp checked(%{type: "power_station", params: old} = station, params) do
-    if params["model"] not in [old["model"], "other"],
-      do: %{model_numbers(%{station | params: params}) | size: nil},
-      else: %{station | params: params, typical: false}
+    cond do
+      params["model"] == old["model"] -> %{station | params: params, typical: false}
+      params["model"] == "other" or own_numbers?(station) -> %{station | params: params}
+      true -> model_numbers(%{station | params: params})
+    end
   end
 
   defp checked(item, params), do: %{item | params: params, typical: false}

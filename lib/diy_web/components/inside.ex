@@ -1406,9 +1406,14 @@ defmodule DIYWeb.Inside do
       </form>
       <p :if={@item.type not in ["solar_panels", "camper_van"]} class="stage-help">
         {cond do
-          @item.size -> "You gave this size."
-          station_source(@item) -> "These are the sizes of the model. Give the sizes of your item."
-          true -> "These are the typical sizes of this kind of item. Give the sizes of your item."
+          @item.size ->
+            "You gave this size."
+
+          station_source(@item) ->
+            "These are the sizes of the model. Change them only when your station has a different size, for example on a cart."
+
+          true ->
+            "These are the typical sizes of this kind of item. Give the sizes of your item."
         end}
       </p>
       <div class="flex flex-wrap gap-2">
@@ -1425,9 +1430,10 @@ defmodule DIYWeb.Inside do
           :if={@item.size}
           type="button"
           id="typical-size"
-          phx-click="item_size"
-          phx-value-item_id={@item.id}
-          phx-value-typical="true"
+          phx-click={
+            JS.push("item_size", value: %{item_id: @item.id, typical: "true"})
+            |> JS.focus(to: "#size-w")
+          }
           class="stage-btn"
         >
           {if station_source(@item), do: "The size of the model", else: "The typical size"}
@@ -1555,6 +1561,37 @@ defmodule DIYWeb.Inside do
          false <- Build.van_level?(room.level),
          do: {:ok, item},
          else: (_other -> {:error, :item})
+  end
+
+  @doc """
+  The status after a new model of a van or of a station, or after "Use
+  the numbers of the model". It tells the new numbers, or that the
+  numbers stay.
+  """
+  def model_said(%{type: "camper_van", params: %{"model" => "other"}}),
+    do: "Another van. The numbers stay."
+
+  def model_said(%{type: "camper_van", params: %{"model" => model}}) do
+    {_key, name, _numbers, _source} = List.keyfind(Catalog.van_models(), model, 0)
+    "#{name}: the numbers of the model are in the fields."
+  end
+
+  def model_said(%{type: "power_station", params: %{"model" => "other"}}),
+    do: "Another station. The numbers stay."
+
+  def model_said(%{type: "power_station", params: params} = station) do
+    {_key, name, numbers, {w, d, h}, _source} =
+      List.keyfind(Catalog.station_models(), params["model"], 0)
+
+    if Map.take(params, Map.keys(numbers)) == numbers do
+      size = if station.size, do: "", else: " Its size: #{w} by #{d} by #{h} in."
+
+      "#{name}: #{Format.value(numbers["kwh"])} kWh, #{Format.int(numbers["output_w"])} W, " <>
+        "a charge of #{Format.int(numbers["charge_w"])} W, " <>
+        "#{Format.int(numbers["solar_w"])} W of solar input, #{numbers["weight"]} lb.#{size}"
+    else
+      "#{name}. Your numbers stay. The key Use the numbers of the model gives its numbers."
+    end
   end
 
   # The source of the numbers of a model of power station, or nil for a

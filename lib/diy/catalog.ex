@@ -191,28 +191,31 @@ defmodule DIY.Catalog do
   ]
 
   # The models of power stations, with the numbers of their makers, their
-  # size and their sources (the panel shows them). The size is in inches:
-  # the width of the front, the depth and the height. "other" is a station
+  # size and their sources (the panel shows them). The charge from the wall
+  # is the AC charge from an outlet of 120 V and 15 A: 1,800 W for each
+  # model. The source tells the AC charge with a better cable or outlet.
+  # The size is in inches: the width of the front, the depth and the
+  # height. "other" is a station
   # that the app does not know. It keeps its numbers, and it has the look
   # and the size of the kind (the F5000LFP).
   @station_models [
     {"pecron_f5000lfp", "Pecron F5000LFP",
-     %{"kwh" => 5.12, "output_w" => 7200, "charge_w" => 3600, "solar_w" => 5800, "weight" => 124},
+     %{"kwh" => 5.12, "output_w" => 7200, "charge_w" => 1800, "solar_w" => 5800, "weight" => 124},
      {22, 15, 17},
      "Pecron, the page of the F5000LFP: 5,120 Wh, 7,200 W at 240 V, an AC charge of 3,600 W with the 30 A cable (1,800 W with the 15 A cable), 5,800 W of solar input for one unit (6,400 W with an extra battery), and 123.9 lb. The station is 21.7 by 15 by 13.1 in. The data of Pecron does not give the trolley: on it, the station is near 17 in high (an estimate from the photos of Pecron)."},
     {"pecron_e3800lfp", "Pecron E3800LFP",
-     %{"kwh" => 3.84, "output_w" => 4200, "charge_w" => 3200, "solar_w" => 3000, "weight" => 87},
+     %{"kwh" => 3.84, "output_w" => 4200, "charge_w" => 1800, "solar_w" => 3000, "weight" => 87},
      {18, 12, 15},
-     "Pecron, the page of the E3800LFP: 3,840 Wh, 4,200 W at 120 V, an AC charge of 3,200 W with the 30 A cable (1,800 W with the 15 A cable), 3,000 W of solar input, 87.3 lb, and 17.5 by 12.1 by 14.7 in. The front is 17.5 in wide. It has no wheels: its cart is a different item."},
+     "Pecron, the page of the E3800LFP: 3,840 Wh, 4,200 W at 120 V, an AC charge of 3,200 W with the 30 A cable (1,800 W with the 15 A cable), 3,000 W of solar input, 87.3 lb, and 17.5 by 12.1 by 14.7 in. The front is 17.5 in wide. It has no wheels: its cart is an accessory that the app does not show."},
     {"ecoflow_delta_pro", "EcoFlow DELTA Pro",
-     %{"kwh" => 3.6, "output_w" => 3600, "charge_w" => 3000, "solar_w" => 1600, "weight" => 99},
+     %{"kwh" => 3.6, "output_w" => 3600, "charge_w" => 1800, "solar_w" => 1600, "weight" => 99},
      {11, 25, 16},
      "EcoFlow, the page of the DELTA Pro: 3,600 Wh, 3,600 W, an AC charge of 3,000 W at 240 V (1,800 W at 120 V), 1,600 W of solar input, 99 lb, and 25 by 11.2 by 16.4 in. The front is the short end: it is 11.2 in wide, and the station is 25 in deep."},
     {"ecoflow_delta_pro_3", "EcoFlow DELTA Pro 3",
      %{
        "kwh" => 4.096,
        "output_w" => 4000,
-       "charge_w" => 3600,
+       "charge_w" => 1800,
        "solar_w" => 2600,
        "weight" => 114
      }, {13, 27, 16},
@@ -221,11 +224,11 @@ defmodule DIY.Catalog do
      %{
        "kwh" => 6.144,
        "output_w" => 7200,
-       "charge_w" => 3000,
+       "charge_w" => 1800,
        "solar_w" => 5600,
        "weight" => 182
      }, {27, 19, 16},
-     "EcoFlow, the page of the DELTA Pro Ultra: the inverter on one battery, with 6,144 Wh, 7,200 W and 5,600 W of solar input. The inverter is 690 by 481 by 214 mm (70 lb), and the battery is 660 by 455 by 204 mm (111.8 lb). The app adds them: 27.2 by 18.9 by 16.5 in, and 181.8 lb. EcoFlow gives its AC charge as 12.5 A at 240 V. Adorama gives 3,000 W at 240 V (1,800 W at 120 V). Its port Power In/Out takes more. It has no wheels: its stand is a different item."},
+     "EcoFlow, the page of the DELTA Pro Ultra: the inverter on one battery, with 6,144 Wh, 7,200 W and 5,600 W of solar input. The inverter is 690 by 481 by 214 mm (70 lb), and the battery is 660 by 455 by 204 mm (111.8 lb). The app adds them: 27.2 by 18.9 by 16.5 in, and 181.8 lb. EcoFlow gives its AC charge as 12.5 A at 240 V. Adorama gives 3,000 W at 240 V (1,800 W at 120 V). Its port Power In/Out takes more. It has no wheels: its stand is an accessory that the app does not show."},
     {"anker_solix_f3800", "Anker SOLIX F3800",
      %{"kwh" => 3.84, "output_w" => 6000, "charge_w" => 1800, "solar_w" => 2400, "weight" => 132},
      {15, 16, 28},
@@ -746,7 +749,7 @@ defmodule DIY.Catalog do
           1800,
           50,
           20000,
-          "The most power of its AC charge."
+          "The most power of its AC charge from a wall outlet. An outlet of 120 V and 15 A gives 1,800 W at most. Some stations take more with a cable of 30 A or on 240 V."
         ),
         int("solar_w", "Solar input", "W", 1000, 0, 20000, "The most solar power that it takes."),
         choice(
@@ -1554,10 +1557,17 @@ defmodule DIY.Catalog do
   def defaults(type), do: Map.new(kind(type).params, &{&1.key, &1.default})
 
   @doc """
-  The name of an item: the name of its kind, or the name that the user gave
-  to an item of the kind "Other".
+  The name of an item: the name of its kind, or the name that the user
+  gave to an item of the kind "Other". A power station of a model has the
+  name of its model.
   """
   def name(%{type: "other", params: %{"name" => name}}), do: name
+
+  def name(%{type: "power_station", params: %{"model" => model}}) when model != "other" do
+    {_key, name, _numbers, _size, _source} = List.keyfind(@station_models, model, 0)
+    name
+  end
+
   def name(%{type: type}), do: kind(type).name
 
   @doc """

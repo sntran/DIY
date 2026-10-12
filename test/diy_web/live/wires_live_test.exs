@@ -344,7 +344,7 @@ defmodule DIYWeb.WiresLiveTest do
     Process.sleep(150)
     assert has_element?(view, "#item-said", "The wire is removed.")
     # A late status of a different item changes nothing.
-    send(view.pid, {:wire_said, "i0", "A late status."})
+    send(view.pid, {:said, "i0", "A late status."})
     refute render(view) =~ "A late status."
 
     # A busbar with 1 position, and 2 wires: a fault. The model of the
@@ -488,7 +488,7 @@ defmodule DIYWeb.WiresLiveTest do
     assert has_element?(
              view,
              "#part-wires p[id$=-system]",
-             "System: 48 V DC. Battery bank is on a busbar with a battery of a higher voltage (a fault), so the app checks this wire for 48 V DC."
+             "System: 48 V DC. Battery bank is joined to a battery of a higher voltage (a fault), so the app checks this wire for 48 V DC."
            )
   end
 
