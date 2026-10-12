@@ -217,6 +217,9 @@ defmodule DIY.WireTest do
     bus = Map.put(bus, :id, "i9")
     assert Wire.end_system("120", station, battery, %{}) == "24"
     assert Wire.end_system("12", bus, inverter, %{"i9" => "48"}) == "48"
+    # A battery of 24 V on a busbar of 48 V: the higher voltage.
+    assert Wire.end_system("24", battery, bus, %{"i9" => "48"}) == "48"
+    assert Wire.end_system("24", battery, bus, %{"i9" => "12"}) == "24"
     assert Wire.end_system("120", shore, bus, %{}) == "12"
     assert Wire.end_system("24", shore, bus, %{"i8" => "48"}) == "24"
     assert Wire.end_system("240", station, switch, %{"i9" => "48"}) == "240"

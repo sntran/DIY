@@ -244,6 +244,17 @@ defmodule DIY.BuildWiresTest do
     {:ok, chain} = Build.update_wire(chain, link, %{"system" => "12"})
     assert {:ok, %{system: "24"}} = Build.wire(chain, link)
 
+    # A chain of three busbars, with the wires in the other order: the
+    # voltage goes through all of them.
+    {long, bus_b} = add(chain, bay, "dc_bus")
+    {long, bus_c} = add(long, bay, "dc_bus")
+    {long, far} = add(long, bay, "inverter")
+    {:ok, long, _id} = Build.add_wire(long, bus_c, bus_b)
+    {:ok, long, _id} = Build.add_wire(long, bus_b, bus2)
+    {:ok, long, last} = Build.add_wire(long, bus_c, far)
+    assert {:ok, %{system: "24"}} = Build.wire(long, last)
+    assert Map.take(Build.bus_systems(long), [bus_b, bus_c]) == %{bus_b => "24", bus_c => "24"}
+
     # Two batteries of different voltages on one busbar: the busbar has
     # the highest voltage.
     {two, other_battery} = add(chain, bay, "van_battery")
@@ -252,6 +263,11 @@ defmodule DIY.BuildWiresTest do
     assert Build.bus_systems(two)[bus2] == "24"
     {:ok, two} = Build.update_item(two, other_battery, %{"volts" => "48"})
     assert Build.bus_systems(two) == %{bus => "48", bus2 => "48"}
+    # Each wire at the busbars gets 48 V, also the wire of the battery of
+    # 24 V. The wire of that battery to the inverter keeps 24 V.
+    at_bus = Enum.filter(two.wires, &(&1.from in [bus, bus2] or &1.to in [bus, bus2]))
+    assert length(at_bus) == 5 and Enum.all?(at_bus, &(&1.system == "48"))
+    assert {:ok, %{system: "24"}} = Build.wire(two, id)
 
     # A stored wire with a different system gets the system of its battery.
     map = Jason.decode!(Build.to_json(changed))

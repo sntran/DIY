@@ -2555,7 +2555,8 @@ the wires (`DIY.Build`, `wires`).
   battery on the busbar, the card gives only the DC systems.
 - The batteries on one busbar must have one voltage. When they do not,
   the panel of the busbar shows a fault. The wires then get the highest
-  voltage, because the DC ratings must be for it.
+  voltage, because the DC ratings must be for it. This is also true for
+  the wire of a battery with a lower voltage.
 - When the ends of a wire change places and the new far end is a battery
   or a busbar, the wire has two ways.
 - What the person has: the wire size, and the breaker or the fuse at

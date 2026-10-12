@@ -216,7 +216,9 @@ defmodule DIY.Wire do
   @doc """
   The system of a wire from its ends:
 
-  - the voltage of a battery at an end;
+  - the voltage of a battery at an end. A busbar with a higher voltage
+    at the other end is a fault of the busbar. Then it is the higher
+    voltage, because the DC ratings must be for it;
   - else the voltage of the battery of a busbar at an end (`buses`: the
     system of each busbar with a battery, by its id);
   - else 12 V DC at a busbar that has no battery, when the system was AC:
@@ -228,7 +230,7 @@ defmodule DIY.Wire do
     bus = Enum.find_value([from, to], &(&1.type == "dc_bus" and buses[&1.id]))
 
     cond do
-      battery = battery_system(from, to) -> battery
+      battery = battery_system(from, to) -> Enum.max_by([battery, bus || battery], &volts/1)
       bus -> bus
       Enum.any?([from, to], &(&1.type == "dc_bus")) and not dc?(system) -> "12"
       true -> system
