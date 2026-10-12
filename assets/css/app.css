@@ -232,6 +232,8 @@
 .i-cloth-t { fill: #a5b4fc } .i-cloth-l { fill: #818cf8 } .i-cloth-r { fill: #6366f1 }
 .i-copper-t { fill: #e6a06a } .i-copper-l { fill: #c97b43 } .i-copper-r { fill: #a55f2c }
 .i-pink-t { fill: #fbcfe8 } .i-pink-l { fill: #f9a8d4 } .i-pink-r { fill: #ec4899 }
+/* The blue of the cases of Victron Energy (the Lynx Distributor). */
+.i-victron-t { fill: #5fb0ea } .i-victron-l { fill: #2b8bd3 } .i-victron-r { fill: #1d69a8 }
 /* The steps between the face in the light and the face in the shade, for
    the parts of a round shape (DIYWeb.Camera.light/2). */
 .i-white-m1 { fill: color-mix(in oklab, #e9ecf0 75%, #c9ced6) } .i-white-m2 { fill: color-mix(in oklab, #e9ecf0 50%, #c9ced6) } .i-white-m3 { fill: color-mix(in oklab, #e9ecf0 25%, #c9ced6) }
@@ -246,6 +248,7 @@
 .i-cloth-m1 { fill: color-mix(in oklab, #818cf8 75%, #6366f1) } .i-cloth-m2 { fill: color-mix(in oklab, #818cf8 50%, #6366f1) } .i-cloth-m3 { fill: color-mix(in oklab, #818cf8 25%, #6366f1) }
 .i-copper-m1 { fill: color-mix(in oklab, #c97b43 75%, #a55f2c) } .i-copper-m2 { fill: color-mix(in oklab, #c97b43 50%, #a55f2c) } .i-copper-m3 { fill: color-mix(in oklab, #c97b43 25%, #a55f2c) }
 .i-pink-m1 { fill: color-mix(in oklab, #f9a8d4 75%, #ec4899) } .i-pink-m2 { fill: color-mix(in oklab, #f9a8d4 50%, #ec4899) } .i-pink-m3 { fill: color-mix(in oklab, #f9a8d4 25%, #ec4899) }
+.i-victron-m1 { fill: color-mix(in oklab, #2b8bd3 75%, #1d69a8) } .i-victron-m2 { fill: color-mix(in oklab, #2b8bd3 50%, #1d69a8) } .i-victron-m3 { fill: color-mix(in oklab, #2b8bd3 25%, #1d69a8) }
 .i-line { fill: #6b7280 } .i-black { fill: #1f2328 }
 /* At night (the dark mode), a white item in a picture of a house is dim,
    as the walls of the house are: for example, the van in the drive. */
@@ -273,6 +276,8 @@
 [data-ha=signing_in] .i-ha-light, [data-ha=connecting] .i-ha-light, [data-ha=offline] .i-ha-light { fill: #f59e0b }
 [data-ha=connected] .i-ha-light { fill: #22c55e }
 .i-led { fill: #34d399 } .i-hot { fill: #ef4444 } .i-flame { fill: #f59e0b } .i-bulb { fill: #fcd34d }
+/* A light that is off, and the orange line of the label of Victron. */
+.i-off { fill: #8b929c } .i-stripe { fill: #e8562a }
 .i-pv { fill: #1e3a8a; stroke: #6d8fd6; stroke-width: 1; vector-effect: non-scaling-stroke }
 .i-pv-line { fill: #6d8fd6 }
 
@@ -395,6 +400,7 @@
   --c-cloth-t: #b9b2cf; --c-cloth-l: #a199bd; --c-cloth-r: #867ea3;
   --c-copper-t: #e3a46f; --c-copper-l: #c98250; --c-copper-r: #a6653a;
   --c-pink-t: #efc4c8; --c-pink-l: #e0a7ad; --c-pink-r: #c48890;
+  --c-victron-t: #8fc2e6; --c-victron-l: #5d9fd0; --c-victron-r: #457fae;
   --c-sage-t: #b4c2a6; --c-sage-l: #9aab8c; --c-sage-r: #7f9073;
   --c-linen-t: #f6efe2; --c-linen-l: #e9dfcd; --c-linen-r: #d1c4ac;
   --c-rug-t: #9aa0c9; --c-rug-l: #8389b6; --c-rug-r: #6c719c;
@@ -417,6 +423,7 @@
     --c-cloth-t: #898090; --c-cloth-l: #796f84; --c-cloth-r: #675d73;
     --c-copper-t: #a47650; --c-copper-l: #93603c; --c-copper-r: #7c4d2d;
     --c-pink-t: #ac8c8b; --c-pink-l: #a27879; --c-pink-r: #906466;
+    --c-victron-t: #5f84a0; --c-victron-l: #4d7290; --c-victron-r: #3e5f7a;
     --c-sage-t: #858a75; --c-sage-l: #747b64; --c-sage-r: #626953;
     --c-linen-t: #b1a89c; --c-linen-l: #a89d8e; --c-linen-r: #998c79;
     --c-rug-t: #74748c; --c-rug-l: #65657f; --c-rug-r: #56556e;
@@ -439,6 +446,7 @@
   --c-cloth-t: #898090; --c-cloth-l: #796f84; --c-cloth-r: #675d73;
   --c-copper-t: #a47650; --c-copper-l: #93603c; --c-copper-r: #7c4d2d;
   --c-pink-t: #ac8c8b; --c-pink-l: #a27879; --c-pink-r: #906466;
+  --c-victron-t: #5f84a0; --c-victron-l: #4d7290; --c-victron-r: #3e5f7a;
   --c-sage-t: #858a75; --c-sage-l: #747b64; --c-sage-r: #626953;
   --c-linen-t: #b1a89c; --c-linen-l: #a89d8e; --c-linen-r: #998c79;
   --c-rug-t: #74748c; --c-rug-l: #65657f; --c-rug-r: #56556e;
@@ -470,6 +478,8 @@
 .cutaway-house .i-copper-m1 { fill: color-mix(in oklab, var(--c-copper-l) 75%, var(--c-copper-r)) } .cutaway-house .i-copper-m2 { fill: color-mix(in oklab, var(--c-copper-l) 50%, var(--c-copper-r)) } .cutaway-house .i-copper-m3 { fill: color-mix(in oklab, var(--c-copper-l) 25%, var(--c-copper-r)) }
 .cutaway-house .i-pink-t { fill: var(--c-pink-t) } .cutaway-house .i-pink-l { fill: var(--c-pink-l) } .cutaway-house .i-pink-r { fill: var(--c-pink-r) }
 .cutaway-house .i-pink-m1 { fill: color-mix(in oklab, var(--c-pink-l) 75%, var(--c-pink-r)) } .cutaway-house .i-pink-m2 { fill: color-mix(in oklab, var(--c-pink-l) 50%, var(--c-pink-r)) } .cutaway-house .i-pink-m3 { fill: color-mix(in oklab, var(--c-pink-l) 25%, var(--c-pink-r)) }
+.cutaway-house .i-victron-t { fill: var(--c-victron-t) } .cutaway-house .i-victron-l { fill: var(--c-victron-l) } .cutaway-house .i-victron-r { fill: var(--c-victron-r) }
+.cutaway-house .i-victron-m1 { fill: color-mix(in oklab, var(--c-victron-l) 75%, var(--c-victron-r)) } .cutaway-house .i-victron-m2 { fill: color-mix(in oklab, var(--c-victron-l) 50%, var(--c-victron-r)) } .cutaway-house .i-victron-m3 { fill: color-mix(in oklab, var(--c-victron-l) 25%, var(--c-victron-r)) }
 .cutaway-house .i-shade-t { fill: var(--c-shade-t) } .cutaway-house .i-shade-l { fill: var(--c-shade-l) } .cutaway-house .i-shade-r { fill: var(--c-shade-r) }
 .cutaway-house .i-shade-m1 { fill: color-mix(in oklab, var(--c-shade-l) 75%, var(--c-shade-r)) } .cutaway-house .i-shade-m2 { fill: color-mix(in oklab, var(--c-shade-l) 50%, var(--c-shade-r)) } .cutaway-house .i-shade-m3 { fill: color-mix(in oklab, var(--c-shade-l) 25%, var(--c-shade-r)) }
 .cutaway-house .i-sage-t { fill: var(--c-sage-t) } .cutaway-house .i-sage-l { fill: var(--c-sage-l) } .cutaway-house .i-sage-r { fill: var(--c-sage-r) }

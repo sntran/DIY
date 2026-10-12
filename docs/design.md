@@ -1282,7 +1282,20 @@ on a light page.
     hose;
   - a sink has its cabinet, its basin and its faucet;
   - a bed has its drawers, its mattress, a duvet and two pillows;
-  - a battery has its label, its handle and its terminals.
+  - a battery has its label, its handle and its terminals;
+  - a power station has the look of the Pecron F5000LFP, which the owner
+    chose: a dark body on a trolley with four wheels. Its front has the
+    inputs, the screen with two green buttons, and the DC and AC
+    outputs, each group in an orange frame. Its side has the dust
+    screen. The station is 21.7 by 15 by 13.1 in (Pecron). The data of
+    Pecron does not give the trolley. So the height on the trolley (near
+    17 in) is an estimate from the photos of Pecron;
+  - a busbar has the look of the Victron Lynx Distributor, which many
+    people know. It has a blue case with an end cap at each side, and the
+    red and black caps of its busbars. Its front has the orange line of
+    Victron and a gray light for each position. It also has the green
+    light of the power, the white lines of the label, and the hoods for
+    the cables. The material `victron` has the blue of the case.
 
 The icon is next to the name of the item in these places:
 
@@ -2567,9 +2580,10 @@ CIP138040020, in the listings of retailers). The manual of the Lynx
 Distributor gives its size and its weight: 290 by 170 by 80 mm, and
 2.2 kg. A busbar uses no power: the estimate does not count it.
 
-The model of a busbar shows a fuse window and a light for each position
-(`DIYWeb.Icon.Shapes.look/1`). The positions share the width of the
-cover, so each number of positions has the same size on the plan. The
+The model of a busbar has the look of the Lynx Distributor. It shows a
+gray light for each position, and a hood for the cables of each two
+positions (`DIYWeb.Icon.Shapes.look/1`). The positions share the width
+of the case, so each number of positions has the same size on the plan. The
 panel tells how many positions have a wire. When more wires connect to
 the busbar than it has positions, the panel shows a fault.
 

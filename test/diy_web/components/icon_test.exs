@@ -77,8 +77,12 @@ defmodule DIYWeb.IconTest do
     for ports <- [1, 2, 7, 24] do
       model = Shapes.model({"dc_bus", ports})
       assert Shapes.bounds(model) == default
-      # A fuse window and a light for each position.
-      assert Enum.count(model, &match?({:face, _, _, "i-led"}, &1)) == ports
+      # A gray light for each position, the green light of the power, and
+      # a hood for the cables of two positions.
+      assert Enum.count(model, &match?({:face, _, _, "i-off"}, &1)) == ports
+      assert Enum.count(model, &match?({:face, _, _, "i-led"}, &1)) == 1
+      hoods = Enum.count(model, &match?({:prism, :y, _loop, 0.062, _length, "victron"}, &1))
+      assert hoods == div(ports + 1, 2)
     end
 
     assert Shapes.look(%{type: "dc_bus", params: %{"ports" => 7}}) == {"dc_bus", 7}
