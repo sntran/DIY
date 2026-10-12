@@ -1289,21 +1289,95 @@ on a light page.
     outputs, each group in an orange frame. Its side has the dust
     screen. The station is 21.7 by 15 by 13.1 in (Pecron). The data of
     Pecron does not give the trolley. So the height on the trolley (near
-    17 in) is an estimate from the photos of Pecron. The look and the size
-    are those of the F5000LFP, but the numbers of a new station are
-    typical numbers (2 kWh, 2,400 W);
+    17 in) is an estimate from the photos of Pecron. A new station is
+    "Another station": it has this look and this size, with typical
+    numbers (2 kWh, 2,400 W). The person can choose its model (see
+    "The models of power stations");
   - a busbar has the look of the Victron Lynx Distributor, which many
     people know. It has a blue case with an end cap at each side, and the
     red and black caps of its busbars. Its front has the orange line of
     Victron and a gray light for each position. It also has the green
     light of the power, the white lines of the label, and the hoods for
     the cables. Each hood has a dark port for the cable of each of its
-    positions. A small block is between the two hoods in the middle.
-    The material `victron` has the blue of the case.
+    positions, at its foot: the cables come in from under the hood. A
+    small block is between the two hoods in the middle. The material
+    `victron` has the blue of the case.
 
-On the plan of the house, a small face keeps two decimals in its points,
-so that its shape stays at the highest zoom
-(`DIYWeb.Camera.plan_points/3`). A larger face has one decimal.
+On the plan of the house, a small face of an item keeps two decimals in
+its points (`DIYWeb.Camera.plan_points/3`). Thus its shape stays at the
+highest zoom. A larger face, and each face of the walls and of the
+furniture, has one decimal: the plan stays small.
+
+### The models of power stations
+
+The owner asked for the stations that the DIY world knows. The person
+chooses the model of a station in its panel (the choice "Model",
+`DIY.Catalog.station_models/0`):
+
+Each model has its battery, its output, its AC charge, its solar input,
+its weight and its size (in inches):
+
+- Pecron F5000LFP: 5.12 kWh, 7,200 W, 3,600 W, 5,800 W, 124 lb, 22 × 15
+  × 17.
+- Pecron E3800LFP: 3.84 kWh, 4,200 W, 3,200 W, 3,000 W, 87 lb, 18 × 12 ×
+  15.
+- EcoFlow DELTA Pro: 3.6 kWh, 3,600 W, 3,000 W, 1,600 W, 99 lb, 11 × 25 ×
+  16.
+- EcoFlow DELTA Pro 3: 4.096 kWh, 4,000 W, 3,600 W, 2,600 W, 114 lb, 13 ×
+  27 × 16.
+- EcoFlow DELTA Pro Ultra: 6.144 kWh, 7,200 W, 3,000 W, 5,600 W, 182 lb,
+  27 × 19 × 16.
+- Anker SOLIX F3800: 3.84 kWh, 6,000 W, 1,800 W, 2,400 W, 132 lb, 15 × 16
+  × 28.
+- Anker SOLIX F3800 Plus: 3.84 kWh, 6,000 W, 1,800 W, 3,200 W, 137 lb, 15
+  × 16 × 28.
+
+The rules:
+
+- The numbers come from the page of each model of its maker. The panel
+  shows the source under the numbers. Where the maker gives only a
+  current, the numbers come from Adorama, and the source tells it. The
+  AC charge is the most of the AC input of the station: some need a
+  cable of 30 A or 240 V for it. The source tells the AC charge on an
+  outlet of 120 V too.
+- The size is the width of the front, the depth and the height, in
+  whole inches. The front of a DELTA Pro and of a DELTA Pro 3 is the
+  short end. The F3800 stands up, on its wheels. The DELTA Pro Ultra is
+  the inverter on one battery: the app adds their sizes and their
+  weights. The E3800LFP and the DELTA Pro Ultra have no wheels: their
+  cart and their stand are different items.
+- A new model gives its numbers and its size (`DIY.Build.update_item/3`).
+  The price, the extra batteries and "It powers" stay. A size that the
+  person gives goes away, and a later size of the person wins
+  (`DIY.Layout.size/1`). "Another station" keeps the numbers and the
+  size. After a change of a number, the key "Use the numbers of the
+  model" gives the numbers of the model again (`DIY.Build.use_model/2`).
+- A station from a build from before the models is "Another station".
+- Each model with a look of its own has a model of its parts
+  (`DIYWeb.Icon.StationShapes`), from the photos and the drawings of its
+  maker. The F5000LFP and "Another station" have the look of the kind.
+  - The E3800LFP: a dark box with an orange cap on each corner (the
+    material `orange`). The top half of its front has the groups of
+    ports in orange frames. The bottom half has ribs and the badge of
+    the name.
+  - The DELTA Pro: a black body with a gray cap, and a handle at each
+    end of the cap. Its front has the screen, the gold button and the
+    AC outlets. The right side has two fans and two doors. Two wheels
+    are at the back.
+  - The DELTA Pro 3: a silver body with a dark hood at each end. The
+    black frame of its front has the screen and the tray of the AC
+    outlets. The right side has a long slot and a door. Two wheels are
+    at the back.
+  - The DELTA Pro Ultra: the black inverter on the battery. The screen
+    is at the front of the top, and each end of the front has a silver
+    loop. The battery has a silver plate on its front.
+  - The F3800 and the F3800 Plus: a tall box of warm gray (the material
+    `titanium`) on wheels. The handle, the blue light (`i-cyan`) and the
+    black panel are at the top of its front. The right side has the
+    AC outlets and a tall vent. The Plus has a light top, a badge, and
+    the TT-30 in place of the 14-50.
+- The stage aims at the panel of each model
+  (`DIYWeb.Icon.StationShapes.screen/1`).
 
 The icon is next to the name of the item in these places:
 
@@ -1591,8 +1665,9 @@ learns it one time, and then knows each item.
      opens the math of one month.
   2. Home Assistant, only for a hub: the state of the link, Disconnect,
      and the match of the rooms.
-  3. How you use it: the numbers of the item. For a camper van, also the
-     key "Use the numbers of the model".
+  3. How you use it: the numbers of the item. For a camper van and for a
+     power station of a model, also the key "Use the numbers of the
+     model". A station of a model also shows the source of its numbers.
   4. Where it is: its room, its place, its size and its turn. The list of
      the rooms has only the rooms where the item can go. An item does not
      go from the house to a van with this list.
@@ -2561,8 +2636,9 @@ the wires (`DIY.Build`, `wires`).
   batteries on the busbar (`DIY.Wire.end_system/4`). An example is the
   wire from the busbar to the inverter of a van of 48 V. A battery is on
   a busbar when a wire joins them. It is also on each busbar with a wire
-  to that busbar, and so on (`DIY.Build.bus_voltages/1`). With no
-  battery on the busbar, the card gives only the DC systems.
+  to that busbar, and so on (`DIY.Build.bus_voltages/1`). A battery with
+  wires to two busbars joins them too: its terminal is a node of both.
+  With no battery on the busbar, the card gives only the DC systems.
 - The batteries on one busbar must have one voltage. When they do not,
   the panel of the busbar shows a fault. The wires then get the highest
   voltage, because the DC ratings must be for it. This is also true for

@@ -264,7 +264,8 @@ defmodule DIY.Build do
   @doc """
   The voltages of the batteries on each busbar, by the id of the busbar.
   A battery is on a busbar when a wire joins them. It is also on each
-  busbar with a wire to that busbar, and so on.
+  busbar with a wire to that busbar, and so on. A battery with wires to
+  two busbars joins them too: its terminal is a node of both.
   """
   @spec bus_voltages(t()) :: %{String.t() => MapSet.t(String.t())}
   def bus_voltages(build), do: bus_voltages(build.wires, Map.new(build.items, &{&1.id, &1}))
@@ -289,7 +290,21 @@ defmodule DIY.Build do
           from.type == "dc_bus" and to.type == "dc_bus",
           do: {from.id, to.id}
 
-    spread(direct, links)
+    buses_of_battery =
+      for wire <- wires,
+          from = by_id[wire.from],
+          to = by_id[wire.to],
+          battery <- [from, to],
+          battery.type == "van_battery",
+          bus <- [from, to],
+          bus.type == "dc_bus",
+          reduce: %{},
+          do: (acc -> Map.update(acc, battery.id, [bus.id], &[bus.id | &1]))
+
+    shared =
+      for {_battery, buses} <- buses_of_battery, a <- buses, b <- buses, a < b, do: {a, b}
+
+    spread(direct, links ++ shared)
   end
 
   # The busbars of a wire between two busbars share their voltages, until
@@ -659,19 +674,34 @@ defmodule DIY.Build do
   defp replace(build, item),
     do: %{build | items: Enum.map(build.items, &if(&1.id == item.id, do: item, else: &1))}
 
-  @doc "Gives a camper van the numbers of its model (`DIY.Catalog.van_models/0`)."
-  @spec van_model(t(), String.t()) :: {:ok, t()} | {:error, atom()}
-  def van_model(build, id) do
-    with {:ok, %{type: "camper_van"} = van} <- item(build, id) do
-      {:ok, replace_item(build, model_numbers(van))}
-    else
-      _ -> {:error, :item}
+  @doc """
+  Gives a camper van the numbers of its model (`DIY.Catalog.van_models/0`),
+  or a power station the numbers of its model
+  (`DIY.Catalog.station_models/0`).
+  """
+  @spec use_model(t(), String.t()) :: {:ok, t()} | {:error, atom()}
+  def use_model(build, id) do
+    case item(build, id) do
+      {:ok, %{type: type} = item} when type in ["camper_van", "power_station"] ->
+        {:ok, replace_item(build, model_numbers(item))}
+
+      _other ->
+        {:error, :item}
     end
   end
 
-  defp model_numbers(van) do
+  # The numbers of a van are typical of its model: the label of the van
+  # gives the true numbers. The numbers of a station come from its maker.
+  defp model_numbers(%{type: "camper_van"} = van) do
     {_key, _name, numbers, _source} = List.keyfind(Catalog.van_models(), van.params["model"], 0)
     %{van | params: Map.merge(van.params, numbers), typical: true}
+  end
+
+  defp model_numbers(%{type: "power_station"} = station) do
+    {_key, _name, numbers, _size, _source} =
+      List.keyfind(Catalog.station_models(), station.params["model"], 0)
+
+    %{station | params: Map.merge(station.params, numbers), typical: false}
   end
 
   # The numbers of a van that come from its label (or from a scale).
@@ -681,7 +711,9 @@ defmodule DIY.Build do
   Changes the numbers of an item. The item is not typical after this: the
   user checked it. A camper van with a new model gets the numbers of the
   model (typical). A camper van is not typical only after a change of a
-  number of its label.
+  number of its label. A power station with a new model gets the numbers
+  and the size of the model (another station keeps its numbers and its
+  size).
   """
   @spec update_item(t(), String.t(), map()) :: {:ok, t()} | {:error, term()}
   def update_item(build, id, values) when is_map(values) do
@@ -697,6 +729,12 @@ defmodule DIY.Build do
       Enum.any?(@label, &(params[&1] != old[&1])) -> %{van | params: params, typical: false}
       true -> %{van | params: params}
     end
+  end
+
+  defp checked(%{type: "power_station", params: old} = station, params) do
+    if params["model"] not in [old["model"], "other"],
+      do: %{model_numbers(%{station | params: params}) | size: nil},
+      else: %{station | params: params, typical: false}
   end
 
   defp checked(item, params), do: %{item | params: params, typical: false}

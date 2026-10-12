@@ -181,14 +181,14 @@ defmodule DIY.VanTest do
       refute van(build, id).typical
 
       # The numbers of the model again.
-      {:ok, build} = Build.van_model(build, id)
+      {:ok, build} = Build.use_model(build, id)
       assert van(build, id).params["gvwr"] == 9070 and van(build, id).typical
 
       # Another van: the app has no numbers, and the numbers stay.
       {:ok, other} = Build.update_item(build, id, %{"model" => "other"})
       assert van(other, id).params["gvwr"] == 9070
       fridge = Enum.find(build.items, &(&1.type == "fridge")).id
-      assert Build.van_model(build, fridge) == {:error, :item}
+      assert Build.use_model(build, fridge) == {:error, :item}
     end
 
     # A house with a van, items in its zones, and a station of the house in

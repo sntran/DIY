@@ -82,8 +82,11 @@ defmodule DIYWeb.Stage do
   @doc """
   The face of the model of a kind: its screen, or else the middle of its
   front (3/4 of its width, and all its height). The tags are on it. The
-  LED screen of a hub is on its face, on its top.
+  LED screen of a hub is on its face, on its top. The face of a model of
+  power station is its panel (`DIYWeb.Icon.StationShapes.screen/1`).
   """
+  def region({"power_station", model}), do: DIYWeb.Icon.StationShapes.screen(model)
+
   def region(type) do
     case @screens do
       %{^type => region} ->

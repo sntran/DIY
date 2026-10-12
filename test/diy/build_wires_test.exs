@@ -273,6 +273,18 @@ defmodule DIY.BuildWiresTest do
     {:ok, one} = Build.update_item(two, other_battery, %{"volts" => "24"})
     assert {:ok, %{system: "24"}} = Build.wire(one, id)
 
+    # The battery of 24 V is also on a busbar B with no other battery. The
+    # terminal of the battery joins B to the busbar of 48 V: B and its
+    # wires get 48 V too.
+    {far, bus_b} = add(two, bay, "dc_bus")
+    {far, load} = add(far, bay, "inverter")
+    {:ok, far, _id} = Build.add_wire(far, battery, bus_b)
+    {:ok, far, from_b} = Build.add_wire(far, bus_b, load)
+    assert Build.bus_voltages(far)[bus_b] == MapSet.new(["24", "48"])
+    assert {:ok, %{system: "48"}} = Build.wire(far, from_b)
+    {:ok, far} = Build.update_item(far, other_battery, %{"volts" => "24"})
+    assert {:ok, %{system: "24"}} = Build.wire(far, from_b)
+
     # A stored wire with a different system gets the system of its battery.
     map = Jason.decode!(Build.to_json(changed))
 

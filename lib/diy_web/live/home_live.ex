@@ -452,8 +452,8 @@ defmodule DIYWeb.HomeLive do
     end
   end
 
-  def handle_event("van_model", %{"id" => id}, socket),
-    do: with_build(socket, Build.van_model(socket.assigns.build, id))
+  def handle_event("use_model", %{"id" => id}, socket),
+    do: with_build(socket, Build.use_model(socket.assigns.build, id))
 
   def handle_event(
         "add_room",

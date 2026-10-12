@@ -116,9 +116,9 @@ defmodule DIY.Layout do
     do: a.x < b.x + b.w and b.x < a.x + a.w and a.y < b.y + b.d and b.y < a.y + a.d
 
   @doc """
-  The size of an item in inches, `{w, d, h}`: the size that the user gave,
-  else the typical size of its kind. Solar panels are an array: about 400 W
-  for each panel.
+  The size of an item in inches, `{w, d, h}`. It is the size that the
+  user gave, else the typical size of its kind or of its model. Solar
+  panels are an array: about 400 W for each panel.
   """
   # The watts of solar panels give their size, also when a stored build
   # gives them a size.
@@ -135,6 +135,10 @@ defmodule DIY.Layout do
   end
 
   def size(%{size: %{w: w, d: d, h: h}}), do: {w, d, h}
+
+  # A power station has the size of its model, when the user gave no size.
+  def size(%{type: "power_station", params: %{"model" => model}}),
+    do: Catalog.station_size(model)
 
   def size(%{type: type}), do: Catalog.size(type)
 

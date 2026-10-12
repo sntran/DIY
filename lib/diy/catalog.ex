@@ -190,6 +190,53 @@ defmodule DIY.Catalog do
     {"other", "Another van", %{}, nil}
   ]
 
+  # The models of power stations, with the numbers of their makers, their
+  # size and their sources (the panel shows them). The size is in inches:
+  # the width of the front, the depth and the height. "other" is a station
+  # that the app does not know. It keeps its numbers, and it has the look
+  # and the size of the kind (the F5000LFP).
+  @station_models [
+    {"pecron_f5000lfp", "Pecron F5000LFP",
+     %{"kwh" => 5.12, "output_w" => 7200, "charge_w" => 3600, "solar_w" => 5800, "weight" => 124},
+     {22, 15, 17},
+     "Pecron, the page of the F5000LFP: 5,120 Wh, 7,200 W at 240 V, an AC charge of 3,600 W with the 30 A cable (1,800 W with the 15 A cable), 5,800 W of solar input for one unit (6,400 W with an extra battery), and 123.9 lb. The station is 21.7 by 15 by 13.1 in. The data of Pecron does not give the trolley: on it, the station is near 17 in high (an estimate from the photos of Pecron)."},
+    {"pecron_e3800lfp", "Pecron E3800LFP",
+     %{"kwh" => 3.84, "output_w" => 4200, "charge_w" => 3200, "solar_w" => 3000, "weight" => 87},
+     {18, 12, 15},
+     "Pecron, the page of the E3800LFP: 3,840 Wh, 4,200 W at 120 V, an AC charge of 3,200 W with the 30 A cable (1,800 W with the 15 A cable), 3,000 W of solar input, 87.3 lb, and 17.5 by 12.1 by 14.7 in. The front is 17.5 in wide. It has no wheels: its cart is a different item."},
+    {"ecoflow_delta_pro", "EcoFlow DELTA Pro",
+     %{"kwh" => 3.6, "output_w" => 3600, "charge_w" => 3000, "solar_w" => 1600, "weight" => 99},
+     {11, 25, 16},
+     "EcoFlow, the page of the DELTA Pro: 3,600 Wh, 3,600 W, an AC charge of 3,000 W at 240 V (1,800 W at 120 V), 1,600 W of solar input, 99 lb, and 25 by 11.2 by 16.4 in. The front is the short end: it is 11.2 in wide, and the station is 25 in deep."},
+    {"ecoflow_delta_pro_3", "EcoFlow DELTA Pro 3",
+     %{
+       "kwh" => 4.096,
+       "output_w" => 4000,
+       "charge_w" => 3600,
+       "solar_w" => 2600,
+       "weight" => 114
+     }, {13, 27, 16},
+     "EcoFlow, the page of the DELTA Pro 3: 4,096 Wh, 4,000 W, 2,600 W of solar input, 113.5 lb, and 410.4 by 341 by 693 mm. The front is the short end: it is 13.4 in wide, and the station is 27.3 in deep and 16.2 in high. EcoFlow gives its AC charge as 15 A. Adorama gives 3,600 W at 240 V (1,800 W at 120 V)."},
+    {"ecoflow_delta_pro_ultra", "EcoFlow DELTA Pro Ultra",
+     %{
+       "kwh" => 6.144,
+       "output_w" => 7200,
+       "charge_w" => 3000,
+       "solar_w" => 5600,
+       "weight" => 182
+     }, {27, 19, 16},
+     "EcoFlow, the page of the DELTA Pro Ultra: the inverter on one battery, with 6,144 Wh, 7,200 W and 5,600 W of solar input. The inverter is 690 by 481 by 214 mm (70 lb), and the battery is 660 by 455 by 204 mm (111.8 lb). The app adds them: 27.2 by 18.9 by 16.5 in, and 181.8 lb. EcoFlow gives its AC charge as 12.5 A at 240 V. Adorama gives 3,000 W at 240 V (1,800 W at 120 V). Its port Power In/Out takes more. It has no wheels: its stand is a different item."},
+    {"anker_solix_f3800", "Anker SOLIX F3800",
+     %{"kwh" => 3.84, "output_w" => 6000, "charge_w" => 1800, "solar_w" => 2400, "weight" => 132},
+     {15, 16, 28},
+     "Anker, the page of the SOLIX F3800: 3,840 Wh, 6,000 W at 120 V and 240 V, an AC charge of 1,800 W, 2,400 W of solar input, 132.3 lb, and 27.6 by 15.3 by 15.6 in with its wheels. Its user guide shows that it stands up: it is 27.6 in high, 15.3 in wide at the front, and 15.6 in deep."},
+    {"anker_solix_f3800_plus", "Anker SOLIX F3800 Plus",
+     %{"kwh" => 3.84, "output_w" => 6000, "charge_w" => 1800, "solar_w" => 3200, "weight" => 137},
+     {15, 16, 28},
+     "Anker, the page of the SOLIX F3800 Plus: 3,840 Wh, 6,000 W at 120 V and 240 V, an AC charge of 1,800 W from an outlet of 120 V, 3,200 W of solar input, 136.7 lb, and the size of the F3800. Its port for a home panel or a generator takes up to 3,300 W (6,000 W with an extra battery)."},
+    {"other", "Another station", %{}, nil, nil}
+  ]
+
   # The size of each model, in inches:
   # - outside: the length, the width with no mirrors, and the height;
   # - the wheelbase, and the front overhang (from the front of the van to
@@ -658,6 +705,13 @@ defmodule DIY.Catalog do
       places: [:indoor, :outdoor, :bay, :bed],
       features: [:backup, :shift, :power_view, :weight, :van_power, :wires],
       params: [
+        choice(
+          "model",
+          "Model",
+          Enum.map(@station_models, &{elem(&1, 0), elem(&1, 1)}),
+          "other",
+          "A model gives its numbers, its size and its look. Another station keeps the numbers that you give."
+        ),
         float(
           "kwh",
           "Battery",
@@ -1404,6 +1458,23 @@ defmodule DIY.Catalog do
 
   @doc "The models of camper vans: `{key, name, numbers, source}`."
   def van_models, do: @van_models
+
+  @doc """
+  The models of power stations: `{key, name, numbers, size, source}`. The
+  size is in inches, `{w, d, h}`.
+  """
+  def station_models, do: @station_models
+
+  @doc """
+  The size of a model of power station, in inches. A station that the app
+  does not know (\"other\") has the size of the kind.
+  """
+  def station_size(model) do
+    case List.keyfind(@station_models, model, 0) do
+      {_key, _name, _numbers, {_w, _d, _h} = size, _source} -> size
+      _other -> size("power_station")
+    end
+  end
 
   @doc """
   The size of a model of camper van, in inches (`@van_sizes`), with its

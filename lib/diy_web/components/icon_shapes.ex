@@ -34,7 +34,7 @@ defmodule DIYWeb.Icon.Shapes do
   """
 
   alias DIYWeb.{Camera, Geometry}
-  alias DIYWeb.Icon.VanShapes
+  alias DIYWeb.Icon.{StationShapes, VanShapes}
 
   @doc """
   The shapes of the icon of a kind for a camera (the camera of the house
@@ -54,10 +54,16 @@ defmodule DIYWeb.Icon.Shapes do
 
   @doc """
   The look of an item: the kind of its model. A busbar shows its number of
-  positions for wires (`{"dc_bus", ports}`). Each other item has the model
-  of its kind.
+  positions for wires (`{"dc_bus", ports}`). A power station of a model
+  with a look of its own shows that model (`{"power_station", model}`,
+  `DIYWeb.Icon.StationShapes`). Each other item has the model of its kind.
   """
   def look(%{type: "dc_bus", params: %{"ports" => ports}}), do: {"dc_bus", ports}
+
+  def look(%{type: "power_station", params: %{"model" => model}}) do
+    if model in StationShapes.models(), do: {"power_station", model}, else: "power_station"
+  end
+
   def look(%{type: type}), do: type
 
   @doc """
@@ -371,40 +377,48 @@ defmodule DIYWeb.Icon.Shapes do
   defp light(class, nil, _camera), do: class
   defp light(class, n, camera), do: String.replace(class, "~", Camera.light(camera, n))
 
-  # A box of a material.
-  defp box(corner, size, material), do: [{:box, corner, size, material}]
+  # The parts of a model. They are public for the models in the modules
+  # of the vans and of the stations.
 
-  # A rectangle on the front face (y = y) of a box, from x, z. It is a
-  # little out of the face (1 cm, or less on a small item).
-  defp front({x, y, z}, {w, h}, class, out \\ 0.01),
+  @doc "A box of a material."
+  def box(corner, size, material), do: [{:box, corner, size, material}]
+
+  @doc """
+  A rectangle on the front face (y = y) of a box, from x, z. It is a
+  little out of the face (1 cm, or less on a small item).
+  """
+  def front({x, y, z}, {w, h}, class, out \\ 0.01),
     do:
       {:face, Geometry.on_plane({x, y + out, z}, {1, 0, 0}, {0, 0, 1}, {0, 0}, {w, h}), {0, 1, 0},
        class}
 
-  # A rectangle on the side face (x = x) of a box, from y, z.
-  defp side({x, y, z}, {d, h}, class, out \\ 0.01),
+  @doc "A rectangle on the side face (x = x) of a box, from y, z."
+  def side({x, y, z}, {d, h}, class, out \\ 0.01),
     do:
       {:face, Geometry.on_plane({x + out, y, z}, {0, 1, 0}, {0, 0, 1}, {0, 0}, {d, h}), {1, 0, 0},
        class}
 
-  # A rectangle on a top (z = z), from x, y.
-  defp top({x, y, z}, {w, d}, class, out \\ 0.01),
+  @doc "A rectangle on a top (z = z), from x, y."
+  def top({x, y, z}, {w, d}, class, out \\ 0.01),
     do:
       {:face, Geometry.on_plane({x, y, z + out}, {1, 0, 0}, {0, 1, 0}, {0, 0}, {w, d}), {0, 0, 1},
        class}
 
-  # A disc on the top or on the front.
-  defp disc(center, :top, r, class),
+  @doc "A disc on the top, on the front or on the side (x)."
+  def disc(center, :top, r, class),
     do: {:face, Geometry.circle(center, {1, 0, 0}, {0, 1, 0}, r), {0, 0, 1}, class}
 
-  defp disc(center, :front, r, class),
+  def disc(center, :front, r, class),
     do: {:face, Geometry.circle(center, {1, 0, 0}, {0, 0, 1}, r), {0, 1, 0}, class}
+
+  def disc(center, :side, r, class),
+    do: {:face, Geometry.circle(center, {0, 1, 0}, {0, 0, 1}, r), {1, 0, 0}, class}
 
   # A cylinder that stands at a center.
   defp cylinder(center, r, h, material), do: [{:cyl, center, r, h, material}]
 
-  # A tube of 24 sides along x or y, from the center of its end near 0.
-  defp tube({x, y, z}, r, length, axis, material) do
+  @doc "A tube of 24 sides along x or y, from the center of its end near 0."
+  def tube({x, y, z}, r, length, axis, material) do
     {from, center} = if axis == :x, do: {x, {y, z}}, else: {y, {z, x}}
     {cu, cv} = center
 
@@ -443,14 +457,16 @@ defmodule DIYWeb.Icon.Shapes do
     if key.(hd(loop)) == key.(List.last(loop)), do: Enum.drop(loop, -1), else: loop
   end
 
-  # A box with round corners (a radius r), from a corner and a size.
-  defp rbox({x, y, z}, {w, d, h}, r, material),
+  @doc "A box with round corners (a radius r), from a corner and a size."
+  def rbox({x, y, z}, {w, d, h}, r, material),
     do: [{:prism, rounded({x, y}, {w, d}, r), z, h, material}]
 
-  # A slab with round corners along an axis, from `from` to `from + length`.
-  # Its corner and its size are in the plane of the two other axes
-  # (`lift/3`).
-  defp rslab(axis, corner, size, r, from, length, material),
+  @doc """
+  A slab with round corners along an axis, from `from` to `from + length`.
+  Its corner and its size are in the plane of the two other axes: `{z, x}`
+  along y, and `{y, z}` along x.
+  """
+  def rslab(axis, corner, size, r, from, length, material),
     do: [{:prism, axis, rounded(corner, size, r), from, length, material}]
 
   # The wheels of a car on a side, as points `{y, z}`: the dark arch over
@@ -473,8 +489,8 @@ defmodule DIYWeb.Icon.Shapes do
         do: part
   end
 
-  # A polygon with its normal (nil: it always shows).
-  defp face(corners, normal, class), do: {:face, corners, normal, class}
+  @doc "A polygon with its normal (nil: it always shows)."
+  def face(corners, normal, class), do: {:face, corners, normal, class}
 
   @doc """
   The model of a kind: boxes, cylinders and faces, in the order of the
@@ -962,6 +978,9 @@ defmodule DIYWeb.Icon.Shapes do
         side({w - 0.006, 0.195, 0.135}, {0.04, 0.06}, "i-dark-t", 0.002)
       ]
   end
+
+  # A power station of a model with a look of its own.
+  def model({"power_station", model}), do: StationShapes.model(model)
 
   # Solar panels on a post: the frame, the cells in rows of 6, and the lines
   # between the cells. The panel and its post are one group: when the panel
@@ -1617,15 +1636,16 @@ defmodule DIYWeb.Icon.Shapes do
   end
 
   # The ports of a busbar: a dark opening for the cable of each position,
-  # on the front of its hood. A hood has the cables of two positions (the
-  # last hood has one when the count is odd).
+  # at the foot of the front of its hood. The cables come in from under
+  # the hood. A hood has the cables of two positions (the last hood has
+  # one when the count is odd).
   defp ports(ports, hoods, x0, span, d) do
     for k <- 0..(hoods - 1),
         count = min(2, ports - 2 * k),
         j <- 0..(count - 1) do
       width = span * 0.8 / count
       {cx, w} = {x0 + k * span + width * (j + 0.5), width * 0.55}
-      loop = rounded({cx - w / 2, 0.006}, {w, 0.022}, w / 3)
+      loop = rounded({cx - w / 2, 0.0}, {w, 0.026}, w / 3)
       face(for({u, v} <- loop, do: {u, d + 0.001, v}), {0, 1, 0}, "i-black")
     end
   end

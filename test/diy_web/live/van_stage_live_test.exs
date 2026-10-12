@@ -143,7 +143,7 @@ defmodule DIYWeb.VanStageLiveTest do
     # to it.
     assert has_element?(view, "#item-math", "its own batteries and power: this page.")
     refute has_element?(view, "#item-math", "Open the build of the van")
-    assert has_element?(view, "#item-stage #van-model", "Use the numbers of the model")
+    assert has_element?(view, "#item-stage #use-model", "Use the numbers of the model")
     # On its own page: no key to its page, and no remove.
     refute has_element?(view, "#open-van")
     refute has_element?(view, "#item-remove")
@@ -154,7 +154,7 @@ defmodule DIYWeb.VanStageLiveTest do
     assert has_element?(view, "#item-math", "Open the build of the van")
     assert has_element?(view, "#open-van")
     assert has_element?(view, "#item-remove")
-    assert has_element?(view, "#van-model")
+    assert has_element?(view, "#use-model")
   end
 
   test "a station in the van goes home from its panel", %{conn: conn} do
