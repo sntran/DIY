@@ -186,7 +186,8 @@ defmodule DIYWeb.HomeLive do
       {:error, :zip} ->
         {:noreply,
          assign(socket,
-           zip_error: "The app does not know this ZIP code. Give 5 digits, for example 75070.",
+           zip_error:
+             gettext("The app does not know this ZIP code. Give 5 digits, for example 75070."),
            zip_text: String.slice(zip, 0, 10)
          )}
     end
@@ -1460,7 +1461,7 @@ defmodule DIYWeb.HomeLive do
       <%= if @build do %>
         <%= cond do %>
           <% is_nil(@build.door) -> %>
-            <DIYWeb.Start.doors />
+            <DIYWeb.Start.doors locale={@locale} />
           <% is_nil(@build.zip) -> %>
             <DIYWeb.Start.zip build={@build} error={@zip_error} typed={@zip_text} />
           <% is_nil(@build.house) -> %>
@@ -1550,6 +1551,7 @@ defmodule DIYWeb.HomeLive do
             />
           <% @live_action == :settings -> %>
             <DIYWeb.Settings.settings
+              locale={@locale}
               build={@build}
               price={@price}
               market={@market}

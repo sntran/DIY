@@ -322,6 +322,19 @@ async function build(context, name) {
   await page.waitForSelector("body > canvas", { state: "attached" })
   await check(page, `${name} doors`)
   await page.evaluate(() => window.dispatchEvent(new Event("phx:page-loading-stop")))
+
+  // The languages: the first screen in Spanish and in Vietnamese, with the
+  // checks of axe. Then the walk goes on in English.
+  for (const [lang, title] of [["es", "Encuentre su próximo pequeño paso"], ["vi", "Tìm bước nhỏ tiếp theo của bạn"]]) {
+    await page.click(`#language-${lang}`)
+    await page.waitForSelector(`html[lang=${lang}] h1:has-text('${title}')`)
+    await page.waitForSelector(`#language-${lang}[aria-current=true]`)
+    await connected(page)
+    await check(page, `${name} doors (${lang})`)
+  }
+  await page.click("#language-en")
+  await page.waitForSelector("html[lang=en] h1:has-text('Find your next small step')")
+  await connected(page)
   await page.click("#door-my-house")
 
   await page.waitForSelector("#zip-form")

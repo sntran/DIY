@@ -72,6 +72,9 @@ defmodule DIY.MixProject do
        compile: false,
        depth: 1},
       {:jason, "~> 1.2"},
+      # The texts of the pages in English, Spanish and Vietnamese
+      # (`DIYWeb.Gettext`).
+      {:gettext, "~> 1.0"},
       # The HTTP client of the weather and of Power to Choose. On Cloudflare,
       # the VM sends its HTTP through fetch() of the Worker. Do not add
       # castore: the VM trusts only :public_key.cacerts_get/0.
@@ -101,6 +104,8 @@ defmodule DIY.MixProject do
         "compile --warnings-as-errors",
         "deps.unlock --unused",
         "format",
+        # The keys of the texts (priv/gettext/default.pot) follow the code.
+        "gettext.extract --check-up-to-date",
         "test --cover",
         # The tests of the JavaScript of the page (test/js/), with Node.js.
         "cmd npm test --silent"

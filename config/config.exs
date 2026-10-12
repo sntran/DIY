@@ -22,6 +22,9 @@ config :diy, DIYWeb.Endpoint,
   pubsub_server: DIY.PubSub,
   live_view: [signing_salt: "qA6hSwSl"]
 
+# The languages of the pages (DIY.Gettext and DIYWeb.Locale).
+config :diy, DIY.Gettext, default_locale: "en", locales: ~w(en es vi)
+
 # Configure LiveView
 config :phoenix_live_view,
   # the attribute set on all root tags. Used for Phoenix.LiveView.ColocatedCSS.

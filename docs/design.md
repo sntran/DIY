@@ -2712,6 +2712,71 @@ the numbers.
   panel with the wire. The current then comes from the busbar, and from
   the station again, with a click on each choice.
 
+## The languages
+
+The owner decided this: the app is in English, Spanish and Vietnamese.
+
+### The texts
+
+The texts of the pages are in Gettext (`DIY.Gettext`). The English text
+is the key: it is in Simplified Technical English. The keys are in
+`priv/gettext/default.pot`, and the translations are in
+`priv/gettext/es/LC_MESSAGES/default.po` and
+`priv/gettext/vi/LC_MESSAGES/default.po`.
+
+- A module of the pages uses `gettext/1`. A text with a number or a name
+  has a key for it, for example `%{size} · %{area} sq ft`.
+- A text of the core (for example the label of a kind of house in
+  `DIY.House`) is a key with `gettext_noop/1`. The page translates it
+  when it shows it (`DIY.Gettext.t/1`).
+- The numbers, the money and the dates keep the form of the United
+  States. The app is for houses in the United States: ZIP codes, the
+  NEC, and the prices of Texas.
+- The translations need a check by a person who speaks the language (an
+  open question of `TODO.md`).
+
+### The language of a page
+
+`DIYWeb.Locale` gives the language of a page:
+
+1. The choice of the person: the cookie `diy_language`, for one year. It
+   stays on the device, as the build does.
+2. Else the header Accept-Language of the browser: the language of the
+   app with the largest weight. A region (for example `es-MX`) counts as
+   its language.
+3. Else English.
+
+The plug puts the language in the session, and the hook of the LiveView
+reads it from the session. The page has the attribute `lang` of its
+language (WCAG 3.1.1).
+
+The person chooses a language with a link on the first screen or on the
+page Settings (`/language/:locale`). Each name is in its own language
+(`lang` and `hreflang`), so a screen reader reads it well. The current
+language has `aria-current`. The link works with no script. A change of
+a language does no harm, so the link needs no token of the session. The
+link goes back to a path of the app only, never to a different site.
+
+### The steps
+
+The first step has the tools and the choice of the language. It also
+translates the frame of the pages, the first screens, and the page
+Settings. The frame is the bar of the parts and the state of the save. The next steps
+translate the other pages, one group at a time. Until then, those pages
+are in English.
+
+### The tests of the languages
+
+- `test/diy_web/locale_test.exs` checks the header Accept-Language, with
+  a property test against a model. It checks the cookie, the link of a
+  language, and the first screens and the page Settings in Spanish and
+  in Vietnamese. It also checks that each key has a translation in each
+  language, with the same keys of names.
+- `mix.com precommit` checks that the keys follow the code
+  (`gettext.extract --check-up-to-date`).
+- The browser test shows the first screen in Spanish and in Vietnamese,
+  with the checks of axe, and then goes on in English.
+
 ## In a car
 
 The owner wants the app in a car later: Android Auto and Android
