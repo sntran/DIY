@@ -133,6 +133,11 @@ defmodule DIY.BuildWiresTest do
               to_dc: 60
             }} = Build.wire(turned, id)
 
+    # A turn to a far end that gives current makes the wire two ways.
+    {:ok, one_way} = Build.update_wire(turned, id, %{"two_way" => "false"})
+    {:ok, back} = Build.update_wire(one_way, id, %{"from" => station})
+    assert {:ok, %{from: ^station, two_way: true}} = Build.wire(back, id)
+
     # The same end changes nothing of the ends.
     {:ok, same} = Build.update_wire(turned, id, %{"from" => bus})
     assert Build.wire(same, id) == Build.wire(turned, id)
@@ -227,6 +232,26 @@ defmodule DIY.BuildWiresTest do
     assert {:ok, %{system: "48", two_way: true}} = Build.wire(shore_build, from_shore)
     {:ok, lower} = Build.update_item(shore_build, battery, %{"volts" => "12"})
     assert Enum.all?(lower.wires, &(&1.system == "12"))
+
+    # The voltage goes through a chain of busbars: battery to bus2, bus to
+    # bus2, and bus to the inverter.
+    {chain, bus2} = add(changed, bay, "dc_bus")
+    {:ok, chain, _id} = Build.add_wire(chain, battery, bus2)
+    {:ok, chain, link} = Build.add_wire(chain, bus, bus2)
+    {:ok, chain} = Build.update_item(chain, battery, %{"volts" => "24"})
+    assert Build.bus_systems(chain) == %{bus => "24", bus2 => "24"}
+    assert Enum.all?(chain.wires, &(&1.system == "24"))
+    {:ok, chain} = Build.update_wire(chain, link, %{"system" => "12"})
+    assert {:ok, %{system: "24"}} = Build.wire(chain, link)
+
+    # Two batteries of different voltages on one busbar: the busbar has
+    # the highest voltage.
+    {two, other_battery} = add(chain, bay, "van_battery")
+    {:ok, two, _id} = Build.add_wire(two, other_battery, bus2)
+    assert Build.bus_voltages(two)[bus] == MapSet.new(["12", "24"])
+    assert Build.bus_systems(two)[bus2] == "24"
+    {:ok, two} = Build.update_item(two, other_battery, %{"volts" => "48"})
+    assert Build.bus_systems(two) == %{bus => "48", bus2 => "48"}
 
     # A stored wire with a different system gets the system of its battery.
     map = Jason.decode!(Build.to_json(changed))

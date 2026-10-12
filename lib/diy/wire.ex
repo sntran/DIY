@@ -197,6 +197,10 @@ defmodule DIY.Wire do
   # busbar (it has a battery on it).
   @two_way ~w(van_battery dc_bus)
 
+  @doc "True for an item that can give current at the far end of a wire."
+  @spec gives_current?(map()) :: boolean()
+  def gives_current?(item), do: item.type in @two_way
+
   @doc """
   The system of a wire with a battery at an end: the voltage of the
   battery ("12", "24" or "48"). It is nil with no battery at the ends.
@@ -252,7 +256,7 @@ defmodule DIY.Wire do
       system: system,
       amps: 30.0,
       feet: 6.0,
-      two_way: dc?(system) and to.type in @two_way,
+      two_way: dc?(system) and gives_current?(to),
       awg: nil,
       from_ocpd: nil,
       to_ocpd: nil,

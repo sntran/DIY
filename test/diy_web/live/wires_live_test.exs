@@ -343,6 +343,9 @@ defmodule DIYWeb.WiresLiveTest do
     view |> element("#wire-#{fourth.id}-remove") |> render_click()
     Process.sleep(150)
     assert has_element?(view, "#item-said", "The wire is removed.")
+    # A late status of a different item changes nothing.
+    send(view.pid, {:wire_said, "i0", "A late status."})
+    refute render(view) =~ "A late status."
 
     # A busbar with 1 position, and 2 wires: a fault. The model of the
     # busbar shows its positions.
@@ -451,6 +454,33 @@ defmodule DIYWeb.WiresLiveTest do
            )
 
     assert has_element?(view, "#wire-#{id}-advice", "rated for DC at 58.4 V or more.")
+
+    # A second busbar with a wire to the first one: the wire between the
+    # busbars shows the system as a text.
+    {build, bus2} = add(build, bay, "dc_bus")
+    {:ok, build, link} = Build.add_wire(build, bus2, bus)
+    view = open(conn, ~p"/van?#{[id: van, item: bus2]}", build)
+
+    assert has_element?(
+             view,
+             "p#wire-#{link}-system",
+             "System: 48 V DC, the voltage of the battery at DC busbar or distributor."
+           )
+
+    refute has_element?(view, "#wire-volts p")
+
+    # A second battery of 12 V on the busbar: a fault.
+    {build, small} = add(build, bay, "van_battery")
+    {:ok, build, _id} = Build.add_wire(build, small, bus2)
+    view = open(conn, ~p"/van?#{[id: van, item: bus2]}", build)
+
+    assert has_element?(
+             view,
+             "#wire-volts[role=status] .wire-over",
+             "Batteries of 12 V and 48 V are on this busbar. The batteries on one busbar must have the same voltage. The app checks the wires for 48 V."
+           )
+
+    assert DIYWeb.Wires.volts_text(~w(12 24 48)) =~ "Batteries of 12 V, 24 V and 48 V are"
   end
 
   test "a wire on AC: one way, and no DC rating", %{conn: conn} do

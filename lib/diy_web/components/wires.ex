@@ -73,8 +73,15 @@ defmodule DIYWeb.Wires do
           Build.world(build, other) == world,
           do: other
 
-    # A busbar has a number of positions for wires.
+    # A busbar has a number of positions for wires, and the voltages of the
+    # batteries on it.
     ports = if assigns.item.type == "dc_bus", do: assigns.item.params["ports"]
+
+    volts =
+      build
+      |> Build.bus_voltages()
+      |> Map.get(assigns.item.id, MapSet.new())
+      |> Enum.sort_by(&String.to_integer/1)
 
     {build_max, item_max} = Build.max_wires()
 
@@ -95,6 +102,7 @@ defmodule DIYWeb.Wires do
         item_max: item_max,
         buses: Build.bus_systems(build),
         ports: ports,
+        volts: volts,
         used: length(wires),
         world: world
       )
@@ -113,6 +121,9 @@ defmodule DIYWeb.Wires do
       >
         {ports_text(@used, @ports)}
       </p>
+      <div :if={@ports} id="wire-volts" role="status">
+        <p :if={length(@volts) > 1} class="wire-over">{volts_text(@volts)}</p>
+      </div>
       <.wire
         :for={{wire, from, to, title} <- @wires}
         wire={wire}
@@ -186,6 +197,16 @@ defmodule DIYWeb.Wires do
   def ports_text(used, ports),
     do: "It has #{Format.count(ports, "position")} for wires. #{used} of them have a wire."
 
+  @doc """
+  The fault of a busbar with batteries of different voltages: the
+  batteries on one busbar must have one voltage.
+  """
+  def volts_text(volts) do
+    {last, first} = List.pop_at(Enum.map(volts, &"#{&1} V"), -1)
+
+    "Batteries of #{Enum.join(first, ", ")} and #{last} are on this busbar. The batteries on one busbar must have the same voltage. The app checks the wires for #{List.last(volts)} V."
+  end
+
   defp wire_error({:wire, id, key}, id), do: key
   defp wire_error(_error, _id), do: nil
 
@@ -202,7 +223,10 @@ defmodule DIYWeb.Wires do
     advice = Wire.advise(wire, Wire.ends(from, to))
     battery = Enum.find([from, to], &(&1.type == "van_battery"))
     buses = assigns.buses
-    bus = Enum.find([from, to], &(&1.type == "dc_bus"))
+    # A busbar with a battery gives its voltage, as in
+    # `DIY.Wire.end_system/4`. A busbar with no battery is on DC.
+    bus = Enum.find([from, to], &(&1.type == "dc_bus" and Map.has_key?(buses, &1.id)))
+    dc_only = Enum.any?([from, to], &(&1.type == "dc_bus"))
     names = %{from.id => Catalog.name(from), to.id => Catalog.name(to)}
 
     assigns =
@@ -221,10 +245,8 @@ defmodule DIYWeb.Wires do
         ends: names |> Enum.sort() |> Enum.with_index(),
         battery: battery && Catalog.name(battery),
         lead_acid: battery && battery.params["chemistry"] == "agm",
-        # A busbar with a battery gives its voltage. A busbar with no
-        # battery is on DC.
-        bus: if(bus && Map.has_key?(buses, bus.id), do: Catalog.name(bus)),
-        choices: if(bus, do: Enum.filter(@systems, &Wire.dc?(elem(&1, 0))), else: @systems)
+        bus: bus && Catalog.name(bus),
+        choices: if(dc_only, do: Enum.filter(@systems, &Wire.dc?(elem(&1, 0))), else: @systems)
       )
 
     ~H"""

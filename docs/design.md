@@ -2526,17 +2526,25 @@ the wires (`DIY.Build`, `wires`).
   DC, or 120 or 240 V AC. A wire has two ways when the far end also
   gives current: a battery, or a busbar with a battery on it.
 - A new wire gets typical numbers: 30 A and 6 ft. Its system is the
-  system of a battery at an end. Else it is 120 V AC at a transfer
-  switch or a shore power inlet, else 12 V DC. On DC, a wire to a
-  battery or to a busbar has two ways.
+  system of a battery at an end. At a busbar, it is 12 V DC. At a
+  transfer switch or a shore power inlet, it is 120 V AC. Else it is
+  12 V DC.
+  On DC, a wire to a battery or to a busbar has two ways.
 - When a battery is at an end, the system of the wire is always the
   voltage of the battery. A change of the battery changes its wires
   (`DIY.Build.change/2`), and the card shows the system as a text. So
   a check never uses an old voltage.
-- A busbar is on DC. A wire at a busbar gets the voltage of the first
-  battery that has a wire to the busbar (`DIY.Wire.end_system/4`). An
-  example is the wire from the busbar to the inverter of a van of 48 V.
-  With no battery on the busbar, the card gives only the DC systems.
+- A busbar is on DC. A wire at a busbar gets the voltage of the
+  batteries on the busbar (`DIY.Wire.end_system/4`). An example is the
+  wire from the busbar to the inverter of a van of 48 V. A battery is on
+  a busbar when a wire joins them. It is also on each busbar with a wire
+  to that busbar, and so on (`DIY.Build.bus_voltages/1`). With no
+  battery on the busbar, the card gives only the DC systems.
+- The batteries on one busbar must have one voltage. When they do not,
+  the panel of the busbar shows a fault. The wires then get the highest
+  voltage, because the DC ratings must be for it.
+- When the ends of a wire change places and the new far end is a battery
+  or a busbar, the wire has two ways.
 - What the person has: the wire size, and the breaker or the fuse at
   each end with its DC rating. Each one is empty until the person gives
   it.
@@ -2669,9 +2677,10 @@ item of the same place. A status tells that the wire is added, with its
 number when two wires join the same items. The same status a second
 time is empty for a short time first, so a screen reader reads it
 again. When the build, the item or each other item has its most wires,
-a text tells which one in place of the form. A number that is not valid shows its error at its field, and the
-wire does not change. The text of the positions of a busbar is a status
-too.
+a text tells which one in place of the form. A number that is not
+valid shows its error at its field, and the wire does not change. The
+text of the positions of a busbar is a status too, and so is the fault
+of batteries of different voltages on a busbar.
 
 The TLA+ models do not change. A check is a function of the numbers of
 one wire, with no steps in time. The property tests check it for all

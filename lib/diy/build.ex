@@ -212,11 +212,11 @@ defmodule DIY.Build do
   # Only the wires with an item at each end stay. A wire with a battery at
   # an end gets the voltage of the battery as its system: a change of the
   # battery changes its wires. A wire at a busbar gets the voltage of the
-  # battery on the busbar.
+  # batteries on the busbar.
   defp fit_wires(build) do
     by_id = Map.new(build.items, &{&1.id, &1})
     wires = Enum.filter(build.wires, &(by_id[&1.from] && by_id[&1.to]))
-    buses = bus_systems(wires, by_id)
+    buses = wires |> bus_voltages(by_id) |> systems()
 
     fitted =
       for wire <- wires,
@@ -229,21 +229,57 @@ defmodule DIY.Build do
   end
 
   @doc """
-  The system of each busbar with a battery, by the id of the busbar. It
-  is the voltage of the first battery that has a wire to the busbar.
+  The system of each busbar with a battery, by the id of the busbar. When
+  batteries of different voltages are on a busbar (a fault), it is the
+  highest voltage: the DC ratings must be for it.
   """
   @spec bus_systems(t()) :: %{String.t() => String.t()}
-  def bus_systems(build), do: bus_systems(build.wires, Map.new(build.items, &{&1.id, &1}))
+  def bus_systems(build), do: build |> bus_voltages() |> systems()
 
-  defp bus_systems(wires, by_id) do
-    for wire <- wires,
-        from = by_id[wire.from],
-        to = by_id[wire.to],
-        system = Wire.battery_system(from, to),
-        bus <- [from, to],
-        bus.type == "dc_bus",
-        reduce: %{},
-        do: (buses -> Map.put_new(buses, bus.id, system))
+  defp systems(voltages),
+    do: Map.new(voltages, fn {bus, set} -> {bus, Enum.max_by(set, &String.to_integer/1)} end)
+
+  @doc """
+  The voltages of the batteries on each busbar, by the id of the busbar.
+  A battery is on a busbar when a wire joins them. It is also on each
+  busbar with a wire to that busbar, and so on.
+  """
+  @spec bus_voltages(t()) :: %{String.t() => MapSet.t(String.t())}
+  def bus_voltages(build), do: bus_voltages(build.wires, Map.new(build.items, &{&1.id, &1}))
+
+  defp bus_voltages(wires, by_id) do
+    direct =
+      for wire <- wires,
+          from = by_id[wire.from],
+          to = by_id[wire.to],
+          system = Wire.battery_system(from, to),
+          bus <- [from, to],
+          bus.type == "dc_bus",
+          reduce: %{},
+          do: (buses -> Map.update(buses, bus.id, MapSet.new([system]), &MapSet.put(&1, system)))
+
+    # The page of the house shows a build with no items of a van
+    # (`house_view/1`). So a wire to a van has no item at that end here.
+    links =
+      for wire <- wires,
+          from = by_id[wire.from],
+          to = by_id[wire.to],
+          from.type == "dc_bus" and to.type == "dc_bus",
+          do: {from.id, to.id}
+
+    spread(direct, links)
+  end
+
+  # The busbars of a wire between two busbars share their voltages, until
+  # no busbar changes. Each loop adds a voltage, so the loops stop.
+  defp spread(voltages, links) do
+    next =
+      Enum.reduce(links, voltages, fn {a, b}, acc ->
+        set = MapSet.union(Map.get(acc, a, MapSet.new()), Map.get(acc, b, MapSet.new()))
+        if MapSet.size(set) == 0, do: acc, else: acc |> Map.put(a, set) |> Map.put(b, set)
+      end)
+
+    if next == voltages, do: voltages, else: spread(next, links)
   end
 
   # 96 random bits: two changes never get the same stamp.
@@ -970,7 +1006,7 @@ defmodule DIY.Build do
   def update_wire(build, id, values) when is_map(values) do
     with {:ok, wire} <- wire(build, id),
          {:ok, numbers} <- Wire.read(values, wire) do
-      wire = if values["from"] == wire.to, do: turn_wire(numbers), else: numbers
+      wire = if values["from"] == wire.to, do: turn_wire(build, numbers), else: numbers
 
       {:ok,
        change(
@@ -980,7 +1016,11 @@ defmodule DIY.Build do
     end
   end
 
-  defp turn_wire(wire) do
+  # The ends change places, with their breakers. When the new far end is a
+  # battery or a busbar, it gives current: the wire has two ways.
+  defp turn_wire(build, wire) do
+    {:ok, far} = item(build, wire.from)
+
     %{
       wire
       | from: wire.to,
@@ -988,7 +1028,8 @@ defmodule DIY.Build do
         from_ocpd: wire.to_ocpd,
         to_ocpd: wire.from_ocpd,
         from_dc: wire.to_dc,
-        to_dc: wire.from_dc
+        to_dc: wire.from_dc,
+        two_way: wire.two_way or Wire.gives_current?(far)
     }
   end
 
