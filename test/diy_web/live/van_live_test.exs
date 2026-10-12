@@ -150,7 +150,7 @@ defmodule DIYWeb.VanLiveTest do
     |> form("#item-form", %{"item_id" => van, "item" => %{"model" => "transit_148"}})
     |> render_change()
 
-    view |> element("#van-model") |> render_click()
+    view |> element("#use-model") |> render_click()
     assert render(view) =~ "Ford Transit 250"
     assert render(view) =~ "The app does not know the rating of an axle of this model"
     view |> element("#item-stage button", "They are right") |> render_click()
@@ -301,7 +301,7 @@ defmodule DIYWeb.VanLiveTest do
     |> form("#item-form", %{"item_id" => van, "item" => %{"model" => "other"}})
     |> render_change()
 
-    refute has_element?(view, "#van-model")
+    refute has_element?(view, "#use-model")
     refute has_element?(view, "#van-source")
     assert render(view) =~ "The app does not have the numbers of this van: the numbers now are"
   end

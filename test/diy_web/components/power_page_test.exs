@@ -25,6 +25,17 @@ defmodule DIYWeb.PowerPageTest do
     assert PowerPage.part_text(%{two | payback: nil}) =~
              "they add no savings. On savings alone, they do not pay back. The reason is the backup in an outage."
 
+    # The name of a model of station stays in the middle of the text.
+    models = %{
+      two
+      | items: [
+          %{type: "power_station", params: %{"model" => "ecoflow_delta_pro"}},
+          %{type: "power_station", params: %{"model" => "anker_solix_f3800"}}
+        ]
+    }
+
+    assert PowerPage.part_text(models) =~ "EcoFlow DELTA Pro and Anker SOLIX F3800 ($1,000)"
+
     # Panels with no savings: no reason.
     assert PowerPage.part_text(part("solar_panels", %{payback: nil, life: 25})) ==
              "Solar panels ($1,000): it adds no savings. On savings alone, it does not pay back."

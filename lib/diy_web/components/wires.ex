@@ -282,7 +282,7 @@ defmodule DIYWeb.Wires do
           System: {system_name(@wire.system)}, the voltage of {@battery}. Change it in the part of the battery.
         </p>
         <p :if={@battery && @battery_volts != @wire.system} id={"#{@id}-system"} class="stage-help">
-          System: {system_name(@wire.system)}. {@battery} is on a busbar with a battery of a higher voltage (a fault), so the app checks this wire for {system_name(
+          System: {system_name(@wire.system)}. {@battery} is joined to a battery of a higher voltage (a fault), so the app checks this wire for {system_name(
             @wire.system
           )}.
         </p>

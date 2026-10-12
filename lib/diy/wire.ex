@@ -216,16 +216,17 @@ defmodule DIY.Wire do
   @doc """
   The system of a wire from its ends:
 
-  - the voltage of a battery at an end. A battery on a busbar with a
-    higher voltage is a fault of the busbar. Then each wire of the battery
-    gets the higher voltage, because the DC ratings must be for it;
-  - else the voltage of the battery of a busbar at an end.
-
-  `highs` gives the system of each busbar with a battery, and of each
-  battery on a busbar with a higher voltage, by their ids.
+  - the voltage of a battery at an end. A battery joined to a battery of
+    a higher voltage (through a busbar or a wire) is a fault. Then each
+    wire of the battery gets the higher voltage, because the DC ratings
+    must be for it;
+  - else the voltage of the battery of a busbar at an end;
   - else 12 V DC at a busbar that has no battery, when the system was AC:
     a busbar is on DC;
   - else the system that the wire has.
+
+  `highs` gives the system of each busbar with a battery, and of each
+  battery joined to a battery of a higher voltage, by their ids.
   """
   @spec end_system(String.t(), map(), map(), %{String.t() => String.t()}) :: String.t()
   def end_system(system, from, to, highs) do

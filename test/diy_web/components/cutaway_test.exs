@@ -6,7 +6,7 @@ defmodule DIYWeb.CutawayTest do
 
   alias DIY.{Build, Catalog, House}
   alias DIYWeb.{Camera, Cutaway, Decor}
-  alias DIYWeb.Icon.Shapes
+  alias DIYWeb.Icon.{Shapes, StationShapes}
 
   defp house(floors \\ 2) do
     {house, rooms, items} =
@@ -549,8 +549,10 @@ defmodule DIYWeb.CutawayTest do
   test "for each kind, each turn and each camera, no part of a model paints after a part in front of it" do
     m = 0.0254
 
-    for type <- Catalog.types(), turn <- 0..3, camera <- [Camera.house(), Camera.van()] do
-      {w, d, h} = Catalog.size(type)
+    for type <- Catalog.types() ++ stations(),
+        turn <- 0..3,
+        camera <- [Camera.house(), Camera.van()] do
+      {w, d, h} = look_size(type)
       frame = %{at: {0, 0, 0}, size: {w * m, d * m, h * m}, turn: turn}
       indexed = type |> Shapes.model() |> Shapes.parts(frame, camera) |> Enum.with_index()
 
@@ -559,10 +561,18 @@ defmodule DIYWeb.CutawayTest do
           i < j,
           overlap?(part_screen(a, camera), part_screen(b, camera)) do
         refute behind?(b.box, a.box) and not behind?(a.box, b.box),
-               "#{type} at turn #{turn}, #{camera.name}: part #{b.id} is behind part #{a.id}"
+               "#{inspect(type)} at turn #{turn}, #{camera.name}: part #{b.id} is behind part #{a.id}"
       end
     end
   end
+
+  # The looks of the models of power stations (`DIYWeb.Icon.StationShapes`).
+  defp stations, do: for(key <- StationShapes.models(), do: {"power_station", key})
+
+  # The size of a look in inches: of its kind, or of its model of station.
+  defp look_size({"power_station", key}), do: Catalog.station_size(key)
+  defp look_size({type, _ports}), do: Catalog.size(type)
+  defp look_size(type), do: Catalog.size(type)
 
   # The box of the polygons of a part on the screen.
   defp part_screen(part, camera) do
@@ -610,6 +620,22 @@ defmodule DIYWeb.CutawayTest do
     end
   end
 
+  test "on the plan, the small faces of an item keep two decimals, and the furniture keeps one" do
+    build = house()
+    {build, bus} = add(build, room(build, "Garage"), "dc_bus")
+    objects = Enum.flat_map(Cutaway.view(build).levels, & &1.objects)
+    two = ~r/\d\.\d\d(?:[ ,]|$)/
+
+    # The green light of the busbar is a small face: it keeps its shape.
+    %{polys: polys} = Enum.find(objects, &(&1.id == bus))
+    assert Enum.any?(polys, fn {points, class} -> class =~ "i-led" and points =~ two end)
+
+    # The walls and the furniture keep one decimal.
+    others = for %{kind: kind, polys: polys} <- objects, kind != :item, poly <- polys, do: poly
+    assert length(others) > 100
+    refute Enum.any?(others, fn {points, _class} -> points =~ two end)
+  end
+
   test "the furniture is on the plan: fixed, with no tap, and a rug under the pieces" do
     build = house()
     [ground | _] = Cutaway.view(build).levels
@@ -647,8 +673,8 @@ defmodule DIYWeb.CutawayTest do
       # The margin of the depth is 1% of the largest side of an item (3 cm
       # at most). Thus the check of a small item is at its scale. A busbar
       # has a look for each number of its positions.
-      for type <- Catalog.types() ++ [{"dc_bus", 1}, {"dc_bus", 7}, {"dc_bus", 24}] do
-        {w, d, h} = Catalog.size(if is_tuple(type), do: elem(type, 0), else: type)
+      for type <- Catalog.types() ++ [{"dc_bus", 1}, {"dc_bus", 7}, {"dc_bus", 24}] ++ stations() do
+        {w, d, h} = look_size(type)
         frame = %{at: {0, 0, 0}, size: {w * m, d * m, h * m}, turn: turn, camera: camera}
         polys = for {:poly, corners, _class} <- Shapes.placed(type, frame), do: corners
         margin = min(0.03, 0.01 * Enum.max([w, d, h]) * m)

@@ -234,6 +234,8 @@
 .i-pink-t { fill: #fbcfe8 } .i-pink-l { fill: #f9a8d4 } .i-pink-r { fill: #ec4899 }
 /* The blue of the cases of Victron Energy (the Lynx Distributor). */
 .i-victron-t { fill: #5fb0ea } .i-victron-l { fill: #2b8bd3 } .i-victron-r { fill: #1d69a8 }
+.i-orange-t { fill: #ffb429 } .i-orange-l { fill: #ff9f1c } .i-orange-r { fill: #c66d19 }
+.i-titanium-t { fill: #a7a29c } .i-titanium-l { fill: #8a8580 } .i-titanium-r { fill: #6f6b67 }
 /* The steps between the face in the light and the face in the shade, for
    the parts of a round shape (DIYWeb.Camera.light/2). */
 .i-white-m1 { fill: color-mix(in oklab, #e9ecf0 75%, #c9ced6) } .i-white-m2 { fill: color-mix(in oklab, #e9ecf0 50%, #c9ced6) } .i-white-m3 { fill: color-mix(in oklab, #e9ecf0 25%, #c9ced6) }
@@ -249,6 +251,8 @@
 .i-copper-m1 { fill: color-mix(in oklab, #c97b43 75%, #a55f2c) } .i-copper-m2 { fill: color-mix(in oklab, #c97b43 50%, #a55f2c) } .i-copper-m3 { fill: color-mix(in oklab, #c97b43 25%, #a55f2c) }
 .i-pink-m1 { fill: color-mix(in oklab, #f9a8d4 75%, #ec4899) } .i-pink-m2 { fill: color-mix(in oklab, #f9a8d4 50%, #ec4899) } .i-pink-m3 { fill: color-mix(in oklab, #f9a8d4 25%, #ec4899) }
 .i-victron-m1 { fill: color-mix(in oklab, #2b8bd3 75%, #1d69a8) } .i-victron-m2 { fill: color-mix(in oklab, #2b8bd3 50%, #1d69a8) } .i-victron-m3 { fill: color-mix(in oklab, #2b8bd3 25%, #1d69a8) }
+.i-orange-m1 { fill: color-mix(in oklab, #ff9f1c 75%, #c66d19) } .i-orange-m2 { fill: color-mix(in oklab, #ff9f1c 50%, #c66d19) } .i-orange-m3 { fill: color-mix(in oklab, #ff9f1c 25%, #c66d19) }
+.i-titanium-m1 { fill: color-mix(in oklab, #8a8580 75%, #6f6b67) } .i-titanium-m2 { fill: color-mix(in oklab, #8a8580 50%, #6f6b67) } .i-titanium-m3 { fill: color-mix(in oklab, #8a8580 25%, #6f6b67) }
 .i-line { fill: #6b7280 } .i-black { fill: #1f2328 }
 /* At night (the dark mode), a white item in a picture of a house is dim,
    as the walls of the house are: for example, the van in the drive. */
@@ -277,7 +281,7 @@
 [data-ha=connected] .i-ha-light { fill: #22c55e }
 .i-led { fill: #34d399 } .i-hot { fill: #ef4444 } .i-flame { fill: #f59e0b } .i-bulb { fill: #fcd34d }
 /* A light that is off, and the orange line of the label of Victron. */
-.i-off { fill: #4b5563 } .i-stripe { fill: #e8562a }
+.i-off { fill: #4b5563 } .i-stripe { fill: #e8562a } .i-cyan { fill: #5fd5f5 }
 .i-pv { fill: #1e3a8a; stroke: #6d8fd6; stroke-width: 1; vector-effect: non-scaling-stroke }
 .i-pv-line { fill: #6d8fd6 }
 
@@ -401,6 +405,8 @@
   --c-copper-t: #e3a46f; --c-copper-l: #c98250; --c-copper-r: #a6653a;
   --c-pink-t: #efc4c8; --c-pink-l: #e0a7ad; --c-pink-r: #c48890;
   --c-victron-t: #8fc2e6; --c-victron-l: #5d9fd0; --c-victron-r: #457fae;
+  --c-orange-t: #f4b24f; --c-orange-l: #e4963a; --c-orange-r: #b9742b;
+  --c-titanium-t: #b0aaa3; --c-titanium-l: #98928b; --c-titanium-r: #7d7771;
   --c-sage-t: #b4c2a6; --c-sage-l: #9aab8c; --c-sage-r: #7f9073;
   --c-linen-t: #f6efe2; --c-linen-l: #e9dfcd; --c-linen-r: #d1c4ac;
   --c-rug-t: #9aa0c9; --c-rug-l: #8389b6; --c-rug-r: #6c719c;
@@ -424,6 +430,8 @@
     --c-copper-t: #a47650; --c-copper-l: #93603c; --c-copper-r: #7c4d2d;
     --c-pink-t: #ac8c8b; --c-pink-l: #a27879; --c-pink-r: #906466;
     --c-victron-t: #5f84a0; --c-victron-l: #4d7290; --c-victron-r: #3e5f7a;
+    --c-orange-t: #a7773d; --c-orange-l: #94652f; --c-orange-r: #7a5226;
+    --c-titanium-t: #7b746c; --c-titanium-l: #6a635c; --c-titanium-r: #59534d;
     --c-sage-t: #858a75; --c-sage-l: #747b64; --c-sage-r: #626953;
     --c-linen-t: #b1a89c; --c-linen-l: #a89d8e; --c-linen-r: #998c79;
     --c-rug-t: #74748c; --c-rug-l: #65657f; --c-rug-r: #56556e;
@@ -447,6 +455,8 @@
   --c-copper-t: #a47650; --c-copper-l: #93603c; --c-copper-r: #7c4d2d;
   --c-pink-t: #ac8c8b; --c-pink-l: #a27879; --c-pink-r: #906466;
   --c-victron-t: #5f84a0; --c-victron-l: #4d7290; --c-victron-r: #3e5f7a;
+  --c-orange-t: #a7773d; --c-orange-l: #94652f; --c-orange-r: #7a5226;
+  --c-titanium-t: #7b746c; --c-titanium-l: #6a635c; --c-titanium-r: #59534d;
   --c-sage-t: #858a75; --c-sage-l: #747b64; --c-sage-r: #626953;
   --c-linen-t: #b1a89c; --c-linen-l: #a89d8e; --c-linen-r: #998c79;
   --c-rug-t: #74748c; --c-rug-l: #65657f; --c-rug-r: #56556e;
@@ -480,6 +490,10 @@
 .cutaway-house .i-pink-m1 { fill: color-mix(in oklab, var(--c-pink-l) 75%, var(--c-pink-r)) } .cutaway-house .i-pink-m2 { fill: color-mix(in oklab, var(--c-pink-l) 50%, var(--c-pink-r)) } .cutaway-house .i-pink-m3 { fill: color-mix(in oklab, var(--c-pink-l) 25%, var(--c-pink-r)) }
 .cutaway-house .i-victron-t { fill: var(--c-victron-t) } .cutaway-house .i-victron-l { fill: var(--c-victron-l) } .cutaway-house .i-victron-r { fill: var(--c-victron-r) }
 .cutaway-house .i-victron-m1 { fill: color-mix(in oklab, var(--c-victron-l) 75%, var(--c-victron-r)) } .cutaway-house .i-victron-m2 { fill: color-mix(in oklab, var(--c-victron-l) 50%, var(--c-victron-r)) } .cutaway-house .i-victron-m3 { fill: color-mix(in oklab, var(--c-victron-l) 25%, var(--c-victron-r)) }
+.cutaway-house .i-orange-t { fill: var(--c-orange-t) } .cutaway-house .i-orange-l { fill: var(--c-orange-l) } .cutaway-house .i-orange-r { fill: var(--c-orange-r) }
+.cutaway-house .i-orange-m1 { fill: color-mix(in oklab, var(--c-orange-l) 75%, var(--c-orange-r)) } .cutaway-house .i-orange-m2 { fill: color-mix(in oklab, var(--c-orange-l) 50%, var(--c-orange-r)) } .cutaway-house .i-orange-m3 { fill: color-mix(in oklab, var(--c-orange-l) 25%, var(--c-orange-r)) }
+.cutaway-house .i-titanium-t { fill: var(--c-titanium-t) } .cutaway-house .i-titanium-l { fill: var(--c-titanium-l) } .cutaway-house .i-titanium-r { fill: var(--c-titanium-r) }
+.cutaway-house .i-titanium-m1 { fill: color-mix(in oklab, var(--c-titanium-l) 75%, var(--c-titanium-r)) } .cutaway-house .i-titanium-m2 { fill: color-mix(in oklab, var(--c-titanium-l) 50%, var(--c-titanium-r)) } .cutaway-house .i-titanium-m3 { fill: color-mix(in oklab, var(--c-titanium-l) 25%, var(--c-titanium-r)) }
 .cutaway-house .i-shade-t { fill: var(--c-shade-t) } .cutaway-house .i-shade-l { fill: var(--c-shade-l) } .cutaway-house .i-shade-r { fill: var(--c-shade-r) }
 .cutaway-house .i-shade-m1 { fill: color-mix(in oklab, var(--c-shade-l) 75%, var(--c-shade-r)) } .cutaway-house .i-shade-m2 { fill: color-mix(in oklab, var(--c-shade-l) 50%, var(--c-shade-r)) } .cutaway-house .i-shade-m3 { fill: color-mix(in oklab, var(--c-shade-l) 25%, var(--c-shade-r)) }
 .cutaway-house .i-sage-t { fill: var(--c-sage-t) } .cutaway-house .i-sage-l { fill: var(--c-sage-l) } .cutaway-house .i-sage-r { fill: var(--c-sage-r) }

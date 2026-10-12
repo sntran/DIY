@@ -6,7 +6,15 @@ defmodule DIYWeb.IconTest do
 
   alias DIY.Catalog
   alias DIYWeb.{Camera, Geometry, Icon}
-  alias DIYWeb.Icon.Shapes
+  alias DIYWeb.Icon.{Shapes, StationShapes}
+
+  # The looks of the models of power stations, each with its size in
+  # inches.
+  defp stations do
+    for {key, _name, _numbers, size, _source} <- Catalog.station_models(),
+        key in StationShapes.models(),
+        do: {{"power_station", key}, size}
+  end
 
   test "each kind has shapes of its own" do
     shapes = for kind <- Catalog.kinds(), do: Shapes.shapes(kind.type)
@@ -16,9 +24,11 @@ defmodule DIYWeb.IconTest do
   test "each class of the icons has a rule in app.css" do
     css = File.read!("assets/css/app.css")
 
+    looks = Enum.map(Catalog.kinds(), & &1.type) ++ Enum.map(stations(), &elem(&1, 0))
+
     classes =
-      for kind <- Catalog.kinds(),
-          {:poly, _corners, class} <- Shapes.shapes(kind.type),
+      for look <- looks,
+          {:poly, _corners, class} <- Shapes.shapes(look),
           name <- String.split(class),
           uniq: true,
           do: name
@@ -40,11 +50,20 @@ defmodule DIYWeb.IconTest do
           uniq: true,
           do: name
 
-    assert "victron" in materials
+    assert Enum.all?(~w(victron orange titanium), &(&1 in materials))
 
+    # Each shade has a rule, also in the house plan, and each light has its
+    # house color in the three blocks.
     for name <- materials do
-      assert length(Regex.scan(~r/--c-#{name}-t:/, css)) == 3, "no house colors for #{name}"
-      assert css =~ ".cutaway-house .i-#{name}-m2 {", "no house steps for #{name}"
+      for shade <- ~w(t l r m1 m2 m3) do
+        assert css =~ ~r/(?:^|\}\s*)\.i-#{name}-#{shade} \{/m, "no rule for i-#{name}-#{shade}"
+        assert css =~ ".cutaway-house .i-#{name}-#{shade} {", "no house rule for #{name}-#{shade}"
+      end
+
+      for light <- ~w(t l r) do
+        assert length(Regex.scan(~r/--c-#{name}-#{light}:/, css)) == 3,
+               "no house colors for #{name}-#{light}"
+      end
     end
   end
 
@@ -92,6 +111,30 @@ defmodule DIYWeb.IconTest do
     end
   end
 
+  test "the model of each power station has the size of its model" do
+    assert length(stations()) == 6
+
+    for {look, {w, d, h}} <- stations() do
+      {{x0, y0, z0}, {x1, y1, z1}} = Shapes.bounds(Shapes.model(look))
+
+      for {model, inches} <- [{x1 - x0, w}, {y1 - y0, d}, {z1 - z0, h}] do
+        assert abs(model / (inches * 0.0254) - 1) <= 0.05,
+               "#{inspect(look)}: #{Float.round(model, 3)} m for #{inches} in"
+      end
+    end
+  end
+
+  test "a power station shows its model, when the model has a look of its own" do
+    station = fn model -> %{type: "power_station", params: %{"model" => model}} end
+    assert Shapes.look(station.("ecoflow_delta_pro")) == {"power_station", "ecoflow_delta_pro"}
+    assert Shapes.look(station.("pecron_f5000lfp")) == "power_station"
+    assert Shapes.look(station.("other")) == "power_station"
+
+    # Each model has its own shapes, and the Plus differs from the F3800.
+    shapes = for {look, _size} <- stations(), do: Shapes.shapes(look)
+    assert length(Enum.uniq([Shapes.shapes("power_station") | shapes])) == 7
+  end
+
   test "a busbar shows its positions, with one size for each number" do
     default = Shapes.bounds(Shapes.model("dc_bus"))
     assert Shapes.model("dc_bus") == Shapes.model({"dc_bus", 4})
@@ -118,14 +161,18 @@ defmodule DIYWeb.IconTest do
       hoods = div(ports + 1, 2)
       assert Enum.count(fronts, &(abs(&1 - 0.045) < 1.0e-9)) == hoods
 
-      # A dark port for the cable of each position, on the hoods.
-      low = fn corners -> corners |> Enum.map(&elem(&1, 2)) |> Enum.max() < 0.04 end
+      # A dark port for the cable of each position, at the foot of the
+      # front of the hoods: from z = 0, and 12 mm high.
+      at_foot = fn corners ->
+        {z0, z1} = corners |> Enum.map(&elem(&1, 2)) |> Enum.min_max()
+        abs(z0) < 1.0e-9 and abs(z1 - 0.012) < 1.0e-9
+      end
 
       assert Enum.count(model, &match?({:face, c, {0, 1, 0}, "i-black"} when is_list(c), &1)) - 2 ==
                ports
 
       assert Enum.count(model, fn f ->
-               match?({:face, _, {0, 1, 0}, "i-black"}, f) and low.(elem(f, 1))
+               match?({:face, _, {0, 1, 0}, "i-black"}, f) and at_foot.(elem(f, 1))
              end) == ports
 
       assert Enum.count(fronts, &(abs(&1 - 0.02) < 1.0e-9)) ==
@@ -137,9 +184,17 @@ defmodule DIYWeb.IconTest do
   end
 
   # True when a flat face lies on a face of a solid part of its model. It
-  # is at most 12 mm in front of that face, and inside its edges.
+  # is at most 12 mm out of that face, and inside its edges.
   defp on_part?({:face, corners, normal, _class}, model) do
-    axis = %{{0, 1, 0} => 1, {1, 0, 0} => 0, {0, 0, 1} => 2}[normal]
+    {axis, sign} =
+      %{
+        {0, 1, 0} => {1, 1},
+        {1, 0, 0} => {0, 1},
+        {0, 0, 1} => {2, 1},
+        {0, -1, 0} => {1, -1},
+        {-1, 0, 0} => {0, -1}
+      }[normal]
+
     others = [0, 1, 2] -- [axis]
     plane = elem(hd(corners), axis)
 
@@ -149,7 +204,8 @@ defmodule DIYWeb.IconTest do
 
       part ->
         {low, high} = Shapes.bounds([part])
-        on = plane >= elem(high, axis) - 1.0e-9 and plane <= elem(high, axis) + 0.012
+        edge = elem(if(sign > 0, do: high, else: low), axis)
+        on = (plane - edge) * sign >= -1.0e-9 and (plane - edge) * sign <= 0.012
 
         on and
           Enum.all?(corners, fn point ->
@@ -160,17 +216,20 @@ defmodule DIYWeb.IconTest do
     end)
   end
 
-  test "each flat face of the station and of the busbar lies on a part" do
-    models = [Shapes.model("power_station") | Enum.map(1..24, &Shapes.model({"dc_bus", &1}))]
+  test "each flat face of the stations and of the busbar lies on a part" do
+    looks = ["power_station" | Enum.map(stations(), &elem(&1, 0))]
+    models = Enum.map(looks, &Shapes.model/1) ++ Enum.map(1..24, &Shapes.model({"dc_bus", &1}))
 
     for model <- models, {:face, _corners, normal, _class} = face <- model, normal != nil do
       assert on_part?(face, model), inspect(face)
     end
 
-    # The place of the screen of the station on the stage is on its front.
-    {:front, {x, y, z}, {w, h}} = DIYWeb.Stage.region("power_station")
-    face = {:face, [{x, y, z}, {x + w, y, z}, {x + w, y, z + h}, {x, y, z + h}], {0, 1, 0}, ""}
-    assert on_part?(face, Shapes.model("power_station"))
+    # The place of the panel of each station on the stage is on its front.
+    for look <- looks do
+      {:front, {x, y, z}, {w, h}} = DIYWeb.Stage.region(look)
+      face = {:face, [{x, y, z}, {x + w, y, z}, {x + w, y, z + h}, {x, y, z + h}], {0, 1, 0}, ""}
+      assert on_part?(face, Shapes.model(look)), inspect(look)
+    end
   end
 
   test "a loop round a rectangle with round corners" do

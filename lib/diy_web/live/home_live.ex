@@ -259,9 +259,17 @@ defmodule DIYWeb.HomeLive do
     end
   end
 
+  # A new model of a van or of a station gets a status: what changed.
   def handle_event("item", %{"item_id" => id, "item" => values}, socket) when is_map(values) do
-    case Build.update_item(socket.assigns.build, id, values) do
-      {:ok, build} -> {:noreply, socket |> assign(item_error: nil, item_said: nil) |> put(build)}
+    with {:ok, before} <- Build.item(socket.assigns.build, id),
+         {:ok, build} <- Build.update_item(socket.assigns.build, id, values) do
+      {:ok, item} = Build.item(build, id)
+      socket = assign(socket, item_error: nil, item_said: nil)
+
+      if before.params["model"] != item.params["model"],
+        do: {:noreply, socket |> say(Inside.model_said(item)) |> put(build)},
+        else: {:noreply, put(socket, build)}
+    else
       {:error, {:param, key}} -> {:noreply, assign(socket, :item_error, key)}
       {:error, _reason} -> {:noreply, socket}
     end
@@ -279,7 +287,7 @@ defmodule DIYWeb.HomeLive do
         n = Enum.count(build.wires, &(Enum.sort([&1.from, &1.to]) == pair))
         number = if n > 1, do: ": wire #{n}", else: ""
         said = "A wire from #{Catalog.name(a)} to #{Catalog.name(b)} is added#{number}."
-        {:noreply, socket |> say_wire(said) |> put(build)}
+        {:noreply, socket |> say(said) |> put(build)}
 
       {:error, _reason} ->
         {:noreply, socket}
@@ -298,7 +306,7 @@ defmodule DIYWeb.HomeLive do
   def handle_event("delete_wire", %{"id" => id}, socket) do
     case Build.delete_wire(socket.assigns.build, id) do
       {:ok, build} ->
-        {:noreply, socket |> say_wire("The wire is removed.") |> put(build)}
+        {:noreply, socket |> say("The wire is removed.") |> put(build)}
 
       {:error, _reason} ->
         {:noreply, socket}
@@ -452,8 +460,16 @@ defmodule DIYWeb.HomeLive do
     end
   end
 
-  def handle_event("van_model", %{"id" => id}, socket),
-    do: with_build(socket, Build.van_model(socket.assigns.build, id))
+  def handle_event("use_model", %{"id" => id}, socket) do
+    case Build.use_model(socket.assigns.build, id) do
+      {:ok, build} ->
+        {:ok, item} = Build.item(build, id)
+        {:noreply, socket |> say(Inside.model_said(item)) |> put(build)}
+
+      {:error, _reason} ->
+        {:noreply, socket}
+    end
+  end
 
   def handle_event(
         "add_room",
@@ -1350,8 +1366,8 @@ defmodule DIYWeb.HomeLive do
     end
   end
 
-  # The status of a wire again (`say_wire/2`), when no newer status came.
-  def handle_info({:wire_said, id, said}, %{assigns: %{item: id, item_said: nil}} = socket),
+  # A status again (`say/2`), when no newer status came.
+  def handle_info({:said, id, said}, %{assigns: %{item: id, item_said: nil}} = socket),
     do: {:noreply, assign(socket, :item_said, said)}
 
   # The devices of Home Assistant changed (DIYWeb.HomeAssistant): the page
@@ -1394,12 +1410,12 @@ defmodule DIYWeb.HomeLive do
     end
   end
 
-  # The status after a wire is added or removed. The same text a second
-  # time is empty for @said_again ms first, so a screen reader reads it
-  # again.
-  defp say_wire(socket, said) do
+  # The status after a wire is added or removed, or after a new model. The
+  # same text a second time is empty for @said_again ms first, so a screen
+  # reader reads it again.
+  defp say(socket, said) do
     if socket.assigns[:item_said] == said do
-      Process.send_after(self(), {:wire_said, socket.assigns.item, said}, @said_again)
+      Process.send_after(self(), {:said, socket.assigns.item, said}, @said_again)
       assign(socket, :item_said, nil)
     else
       assign(socket, :item_said, said)

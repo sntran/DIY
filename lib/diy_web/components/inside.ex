@@ -499,14 +499,6 @@ defmodule DIYWeb.Inside do
 
   defp devices_message(_error), do: "The app cannot read the devices of Home Assistant now."
 
-  # A name in a sentence: its first letter in lower case, but not in a
-  # word of capitals ("TV").
-  defp lower_first(name) do
-    {first, rest} = String.split_at(name, 1)
-    second = String.slice(rest, 0, 1)
-    if String.downcase(second) == second, do: String.downcase(first) <> rest, else: name
-  end
-
   defp away_text(1), do: "1 device is in an area of Home Assistant with no room here."
   defp away_text(n), do: "#{n} devices are in areas of Home Assistant with no room here."
 
@@ -579,7 +571,7 @@ defmodule DIYWeb.Inside do
                  not Map.has_key?(build.devices, &1.id))
            ),
          {:ok, room} <- Build.room(build, other.room) do
-      %{name: Catalog.name(other), room: room.name, kind: lower_first(Catalog.name(item))}
+      %{name: Catalog.name(other), room: room.name, kind: Catalog.text_name(item)}
     else
       _ -> nil
     end
@@ -1014,15 +1006,21 @@ defmodule DIYWeb.Inside do
           />
         </form>
         <button
-          :if={@item.type == "camper_van" and @item.params["model"] != "other"}
+          :if={@item.type in ~w(camper_van power_station) and @item.params["model"] != "other"}
           type="button"
-          id="van-model"
-          phx-click="van_model"
+          id="use-model"
+          phx-click="use_model"
           phx-value-id={@item.id}
           class="stage-btn"
         >
           Use the numbers of the model
         </button>
+        <p :if={station_source(@item)} id="station-source" class="stage-help">
+          The numbers of the model: {station_source(@item)}
+        </p>
+        <p :if={own_station_numbers?(@item)} id="station-own" class="stage-help">
+          Your numbers are not the numbers of the model. The key gives them.
+        </p>
         <.usage :if={:usage in @kind.features} usage={@build.usage} ha_meter={@ha_meter} />
       </section>
 
@@ -1401,10 +1399,24 @@ defmodule DIYWeb.Inside do
           Give each side in inches, from 1 to {@max}.
         </p>
       </form>
-      <p :if={@item.type not in ["solar_panels", "camper_van"]} class="stage-help">
-        {if @item.size,
-          do: "You gave this size.",
-          else: "These are the typical sizes of this kind of item. Give the sizes of your item."}
+      <%!-- The key of the typical size puts the focus here, not on a side:
+        LiveView does not change the value of a field with the focus. --%>
+      <p
+        :if={@item.type not in ["solar_panels", "camper_van"]}
+        id="size-help"
+        tabindex="-1"
+        class="stage-help"
+      >
+        {cond do
+          @item.size ->
+            "You gave this size."
+
+          station_source(@item) ->
+            "These are the sizes of the model. Change them only when your station has a different size, for example on a cart."
+
+          true ->
+            "These are the typical sizes of this kind of item. Give the sizes of your item."
+        end}
       </p>
       <div class="flex flex-wrap gap-2">
         <button
@@ -1420,12 +1432,13 @@ defmodule DIYWeb.Inside do
           :if={@item.size}
           type="button"
           id="typical-size"
-          phx-click="item_size"
-          phx-value-item_id={@item.id}
-          phx-value-typical="true"
+          phx-click={
+            JS.push("item_size", value: %{item_id: @item.id, typical: "true"})
+            |> JS.focus(to: "#size-help")
+          }
           class="stage-btn"
         >
-          The typical size
+          {if station_source(@item), do: "The size of the model", else: "The typical size"}
         </button>
       </div>
     </div>
@@ -1551,6 +1564,57 @@ defmodule DIYWeb.Inside do
          do: {:ok, item},
          else: (_other -> {:error, :item})
   end
+
+  @doc """
+  The status after a new model of a van or of a station, or after "Use
+  the numbers of the model". It tells the new numbers, or that the
+  numbers stay.
+  """
+  def model_said(%{type: "camper_van", params: %{"model" => "other"}}),
+    do: "Another van. The numbers stay."
+
+  def model_said(%{type: "camper_van", params: %{"model" => model}}) do
+    {_key, name, _numbers, _source} = List.keyfind(Catalog.van_models(), model, 0)
+    "#{name}: the numbers of the model are in the fields."
+  end
+
+  def model_said(%{type: "power_station", params: %{"model" => "other"}}),
+    do: "Another station. The numbers stay."
+
+  def model_said(%{type: "power_station", params: params} = station) do
+    {_key, name, numbers, {w, d, h}, _source} =
+      List.keyfind(Catalog.station_models(), params["model"], 0)
+
+    if Map.take(params, Map.keys(numbers)) == numbers do
+      size = if station.size, do: "", else: " Its size: #{w} by #{d} by #{h} in."
+
+      "#{name}: #{Format.value(numbers["kwh"])} kWh, #{Format.int(numbers["output_w"])} W, " <>
+        "a charge of #{Format.int(numbers["charge_w"])} W, " <>
+        "#{Format.int(numbers["solar_w"])} W of solar input, #{numbers["weight"]} lb.#{size}"
+    else
+      "#{name}. Your numbers stay. The key Use the numbers of the model gives its numbers."
+    end
+  end
+
+  # The source of the numbers of a model of power station, or nil for a
+  # different item and for another station.
+  defp station_source(%{type: "power_station", params: %{"model" => model}}) do
+    with {_key, _name, _numbers, _size, source} <-
+           List.keyfind(Catalog.station_models(), model, 0),
+         do: source
+  end
+
+  defp station_source(_item), do: nil
+
+  # True when a station of a model has numbers that are not the numbers of
+  # the model.
+  defp own_station_numbers?(%{type: "power_station", params: %{"model" => model} = params})
+       when model != "other" do
+    {_key, _name, numbers, _size, _source} = List.keyfind(Catalog.station_models(), model, 0)
+    Map.take(params, Map.keys(numbers)) != numbers
+  end
+
+  defp own_station_numbers?(_item), do: false
 
   # True when the house has a power station (a planned one too).
   defp station?(build), do: Enum.any?(build.items, &(&1.type == "power_station"))
