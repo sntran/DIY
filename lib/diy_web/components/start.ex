@@ -9,13 +9,18 @@ defmodule DIYWeb.Start do
   alias DIY.{Build, House}
   alias DIYWeb.Scene
 
-  @doc "The two doors of the first screen."
+  @doc "The two doors of the first screen, and the links of the languages."
+  attr :locale, :string, default: "en", doc: "the language of the page"
+
   def doors(assigns) do
     ~H"""
     <section class="space-y-4">
-      <h1 class="text-2xl font-bold">Find your next small step</h1>
+      <.languages locale={@locale} return="/" />
+      <h1 class="text-2xl font-bold">{gettext("Find your next small step")}</h1>
       <p>
-        Build a model of your house. See your power bill at once, and then see what each change does.
+        {gettext(
+          "Build a model of your house. See your power bill at once, and then see what each change does."
+        )}
       </p>
       <div class="grid gap-4 sm:grid-cols-2">
         <button
@@ -26,8 +31,8 @@ defmodule DIYWeb.Start do
           class="card card-border bg-base-200 overflow-hidden text-left hover:bg-base-300"
         >
           <Scene.sample id="door-house" />
-          <span class="px-6 pt-4 text-lg font-semibold">My house</span>
-          <span class="px-6 pb-5 text-sm opacity-80">I live in the house now.</span>
+          <span class="px-6 pt-4 text-lg font-semibold">{gettext("My house")}</span>
+          <span class="px-6 pb-5 text-sm opacity-80">{gettext("I live in the house now.")}</span>
         </button>
         <button
           id="door-planning"
@@ -37,12 +42,47 @@ defmodule DIYWeb.Start do
           class="card card-border bg-base-200 overflow-hidden text-left hover:bg-base-300"
         >
           <Scene.sample id="door-plan" plan />
-          <span class="px-6 pt-4 text-lg font-semibold">A house I'm planning</span>
-          <span class="px-6 pb-5 text-sm opacity-80">I look at a lot or a new build.</span>
+          <span class="px-6 pt-4 text-lg font-semibold">{gettext("A house I'm planning")}</span>
+          <span class="px-6 pb-5 text-sm opacity-80">
+            {gettext("I look at a lot or a new build.")}
+          </span>
         </button>
       </div>
-      <p class="text-sm opacity-80">Your build stays on this device. The server keeps no copy.</p>
+      <p class="text-sm opacity-80">
+        {gettext("Your build stays on this device. The server keeps no copy.")}
+      </p>
     </section>
+    """
+  end
+
+  attr :locale, :string, required: true, doc: "the language of the page"
+  attr :return, :string, required: true, doc: "the page after the change"
+  attr :title, :boolean, default: false, doc: "show the title Language"
+
+  @doc """
+  The links of the languages. Each name is in its own language (`lang`),
+  so a screen reader reads it well. The language of the page is the
+  current one.
+  """
+  def languages(assigns) do
+    ~H"""
+    <nav id="languages" aria-label={gettext("Language")}>
+      <h2 :if={@title} class="text-lg font-bold mb-2">{gettext("Language")}</h2>
+      <ul class="flex flex-wrap gap-2">
+        <li :for={{key, name} <- DIYWeb.Locale.names()}>
+          <a
+            id={"language-#{key}"}
+            href={~p"/language/#{key}?#{[return: @return]}"}
+            lang={key}
+            hreflang={key}
+            aria-current={key == @locale && "true"}
+            class={["btn btn-sm", if(key == @locale, do: "btn-primary", else: "btn-ghost")]}
+          >
+            {name}
+          </a>
+        </li>
+      </ul>
+    </nav>
     """
   end
 
@@ -54,13 +94,15 @@ defmodule DIYWeb.Start do
   def zip(assigns) do
     ~H"""
     <section class="space-y-4">
-      <p class="text-sm opacity-70">Step 1 of 2</p>
-      <h1 class="text-2xl font-bold">Where is the house?</h1>
+      <p class="text-sm opacity-70">{gettext("Step 1 of 2")}</p>
+      <h1 class="text-2xl font-bold">{gettext("Where is the house?")}</h1>
       <p>
-        The ZIP code gives the weather history of the place and the price of power. It stays on this device.
+        {gettext(
+          "The ZIP code gives the weather history of the place and the price of power. It stays on this device."
+        )}
       </p>
       <form id="zip-form" phx-submit="zip" class="flex gap-2">
-        <label for="zip" class="sr-only">ZIP code</label>
+        <label for="zip" class="sr-only">{gettext("ZIP code")}</label>
         <input
           id="zip"
           name="zip"
@@ -75,10 +117,12 @@ defmodule DIYWeb.Start do
           aria-describedby={@error && "zip-error"}
           required
         />
-        <button type="submit" class="btn btn-primary btn-lg">Next</button>
+        <button type="submit" class="btn btn-primary btn-lg">{gettext("Next")}</button>
       </form>
       <p :if={@error} id="zip-error" role="alert" class="text-error">{@error}</p>
-      <button type="button" phx-click="restart" class="btn btn-ghost btn-sm">Back</button>
+      <button type="button" phx-click="restart" class="btn btn-ghost btn-sm">
+        {gettext("Back")}
+      </button>
     </section>
     """
   end
@@ -92,20 +136,26 @@ defmodule DIYWeb.Start do
   def preset(assigns) do
     ~H"""
     <section class="space-y-4">
-      <p class="text-sm opacity-70">Step 2 of 2</p>
+      <p class="text-sm opacity-70">{gettext("Step 2 of 2")}</p>
       <%= if @build.door == "planning" do %>
-        <h1 class="text-2xl font-bold">The lot and the house</h1>
+        <h1 class="text-2xl font-bold">{gettext("The lot and the house")}</h1>
         <p>
-          Give the size of the lot, if you know it. Then start from a house like the one that you plan, or from nothing.
+          {gettext(
+            "Give the size of the lot, if you know it. Then start from a house like the one that you plan, or from nothing."
+          )}
         </p>
       <% else %>
-        <h1 class="text-2xl font-bold">A house like mine</h1>
-        <p>Choose the house that is most like yours. You can change each number later.</p>
+        <h1 class="text-2xl font-bold">{gettext("A house like mine")}</h1>
+        <p>
+          {gettext("Choose the house that is most like yours. You can change each number later.")}
+        </p>
       <% end %>
 
       <form id="preset-form" phx-submit="preset" class="space-y-5">
         <div :if={@build.door == "planning"}>
-          <label for="lot" class="font-semibold">The size of the lot (square feet)</label>
+          <label for="lot" class="font-semibold">
+            {gettext("The size of the lot (square feet)")}
+          </label>
           <input
             id="lot"
             name="preset[lot]"
@@ -114,11 +164,11 @@ defmodule DIYWeb.Start do
             placeholder="8000"
             class="input w-40 block mt-1"
           />
-          <p class="text-sm opacity-70">One acre is 43,560 square feet.</p>
+          <p class="text-sm opacity-70">{gettext("One acre is 43,560 square feet.")}</p>
         </div>
 
         <fieldset>
-          <legend class="font-semibold mb-2">The size of the house</legend>
+          <legend class="font-semibold mb-2">{gettext("The size of the house")}</legend>
           <div class="flex flex-wrap gap-2">
             <label
               :for={{key, label, sqft} <- House.sizes()}
@@ -133,13 +183,16 @@ defmodule DIYWeb.Start do
                 class="sr-only"
                 required
               />
-              {label} · {DIYWeb.Format.int(sqft)} sq ft
+              {gettext("%{size} · %{area} sq ft",
+                size: DIY.Gettext.t(label),
+                area: DIYWeb.Format.int(sqft)
+              )}
             </label>
           </div>
         </fieldset>
 
         <fieldset :if={@build.door == "my_house"}>
-          <legend class="font-semibold mb-2">The year that the house was built</legend>
+          <legend class="font-semibold mb-2">{gettext("The year that the house was built")}</legend>
           <div class="flex flex-wrap gap-2">
             <label
               :for={{key, label, _year} <- House.ages()}
@@ -154,13 +207,13 @@ defmodule DIYWeb.Start do
                 class="sr-only"
                 required
               />
-              {label}
+              {DIY.Gettext.t(label)}
             </label>
           </div>
         </fieldset>
 
         <fieldset>
-          <legend class="font-semibold mb-2">Floors</legend>
+          <legend class="font-semibold mb-2">{gettext("Floors")}</legend>
           <div class="flex flex-wrap gap-2">
             <label
               :for={floors <- 1..3}
@@ -181,7 +234,7 @@ defmodule DIYWeb.Start do
         </fieldset>
 
         <fieldset>
-          <legend class="font-semibold mb-2">Heat</legend>
+          <legend class="font-semibold mb-2">{gettext("Heat")}</legend>
           <div class="grid gap-2">
             <label
               :for={{key, label, text} <- House.heats()}
@@ -197,9 +250,9 @@ defmodule DIYWeb.Start do
                   class="radio radio-sm"
                   required
                 />
-                <span class="font-semibold">{label}</span>
+                <span class="font-semibold">{DIY.Gettext.t(label)}</span>
               </span>
-              <span class="text-sm opacity-80">{text}</span>
+              <span class="text-sm opacity-80">{DIY.Gettext.t(text)}</span>
             </label>
           </div>
         </fieldset>
@@ -210,9 +263,11 @@ defmodule DIYWeb.Start do
             type="submit"
             name="preset[start]"
             value="preset"
-            class="btn btn-primary btn-lg"
+            class="btn btn-primary btn-lg h-auto min-h-12 whitespace-normal"
           >
-            {if @build.door == "planning", do: "Start from a house like this", else: "See my house"}
+            {if @build.door == "planning",
+              do: gettext("Start from a house like this"),
+              else: gettext("See my house")}
           </button>
           <button
             :if={@build.door == "planning"}
@@ -220,9 +275,9 @@ defmodule DIYWeb.Start do
             type="submit"
             name="preset[start]"
             value="scratch"
-            class="btn btn-lg"
+            class="btn btn-lg h-auto min-h-12 whitespace-normal"
           >
-            Start from nothing
+            {gettext("Start from nothing")}
           </button>
         </div>
       </form>

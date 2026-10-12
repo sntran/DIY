@@ -9,6 +9,7 @@ defmodule DIYWeb.Settings do
   alias DIY.{Build, House, Zip}
   alias DIYWeb.{Format, HomeAssistant}
 
+  attr :locale, :string, default: "en", doc: "the language of the page"
   attr :build, :map, required: true
   attr :price, :map, required: true
   attr :market, :map, required: true
@@ -30,13 +31,15 @@ defmodule DIYWeb.Settings do
 
     ~H"""
     <section id="settings" class="space-y-6">
-      <h1 class="text-2xl font-bold">Settings</h1>
+      <h1 class="text-2xl font-bold">{gettext("Settings")}</h1>
+
+      <DIYWeb.Start.languages locale={@locale} return="/settings" title />
 
       <div class="space-y-2">
-        <h2 class="text-lg font-bold">The place</h2>
+        <h2 class="text-lg font-bold">{gettext("The place")}</h2>
         <form id="settings-zip" phx-submit="zip" class="flex gap-2 items-end">
           <label>
-            <span class="text-sm">ZIP code</span>
+            <span class="text-sm">{gettext("ZIP code")}</span>
             <input
               name="zip"
               value={@zip_text || @build.zip}
@@ -47,7 +50,7 @@ defmodule DIYWeb.Settings do
               class={["input input-sm w-28 block", @zip_error && "input-error"]}
             />
           </label>
-          <button class="btn btn-sm">Change</button>
+          <button class="btn btn-sm">{gettext("Change")}</button>
         </form>
         <p :if={@zip_error} id="settings-zip-error" role="alert" class="text-sm text-error">
           {@zip_error}
@@ -56,29 +59,42 @@ defmodule DIYWeb.Settings do
 
         <div :if={@place.state == "TX"} id="utility" class="space-y-1 text-sm">
           <p :if={@build.market && @build.market.choice}>
-            Retail choice{if @build.market.utility,
-              do: ": #{@build.market.utility} delivers the power"}.
+            {if @build.market.utility,
+              do:
+                gettext("Retail choice: %{utility} delivers the power.",
+                  utility: @build.market.utility
+                ),
+              else: gettext("Retail choice.")}
           </p>
           <p :if={@build.market && not @build.market.choice}>
-            No retail choice: a city utility or a co-op sells the power.
+            {gettext("No retail choice: a city utility or a co-op sells the power.")}
           </p>
           <div class="flex flex-wrap gap-2">
             <button type="button" phx-click="utility" phx-value-choice="false" class="btn btn-xs">
-              My utility is a city utility or a co-op
+              {gettext("My utility is a city utility or a co-op")}
             </button>
             <button type="button" phx-click="utility" phx-value-choice="true" class="btn btn-xs">
-              I choose my retail plan
+              {gettext("I choose my retail plan")}
             </button>
           </div>
         </div>
       </div>
 
       <div class="space-y-2">
-        <h2 class="text-lg font-bold">The price of power</h2>
-        <p class="text-sm">Now: {Format.cents(@price.cents)} for each kWh, {@price.source}.</p>
+        <h2 class="text-lg font-bold">{gettext("The price of power")}</h2>
+        <p class="text-sm">
+          {gettext("Now: %{price} for each kWh, %{source}.",
+            price: Format.cents(@price.cents),
+            source: DIY.Gettext.t(@price.source)
+          )}
+        </p>
         <form id="settings-price" phx-submit="price" class="flex gap-2 items-end">
           <label>
-            <span class="text-sm">Your price, in cents for one kWh (the total of the bill ÷ the kWh of the bill)</span>
+            <span class="text-sm">
+              {gettext(
+                "Your price, in cents for one kWh (the total of the bill ÷ the kWh of the bill)"
+              )}
+            </span>
             <input
               name="price"
               value={@build.price && Format.value(Float.round(@build.price, 2))}
@@ -87,28 +103,32 @@ defmodule DIYWeb.Settings do
               class="input input-sm w-28 block"
             />
           </label>
-          <button class="btn btn-sm">Save</button>
+          <button class="btn btn-sm">{gettext("Save")}</button>
         </form>
         <p class="text-xs opacity-70">
-          Leave it empty to use the typical price. Then the app also forgets the kWh of your bill.
+          {gettext(
+            "Leave it empty to use the typical price. Then the app also forgets the kWh of your bill."
+          )}
         </p>
         <form id="settings-night" phx-submit="power" class="space-y-2">
           <p class="text-sm">
-            A plan with a different price at night (for example, free nights): the price and the hours of the night.
+            {gettext(
+              "A plan with a different price at night (for example, free nights): the price and the hours of the night."
+            )}
           </p>
           <div class="flex flex-wrap gap-2 items-end">
             <label>
-              <span class="text-sm">At night (cents)</span>
+              <span class="text-sm">{gettext("At night (cents)")}</span>
               <input
                 name="night_cents"
                 value={@build.power.night_cents && Format.value(@build.power.night_cents)}
                 inputmode="decimal"
-                placeholder="none"
+                placeholder={gettext("none")}
                 class="input input-sm w-24 block"
               />
             </label>
             <label>
-              <span class="text-sm">From (hour)</span>
+              <span class="text-sm">{gettext("From (hour)")}</span>
               <input
                 name="night_from"
                 value={@build.power.night_from}
@@ -117,7 +137,7 @@ defmodule DIYWeb.Settings do
               />
             </label>
             <label>
-              <span class="text-sm">To (hour)</span>
+              <span class="text-sm">{gettext("To (hour)")}</span>
               <input
                 name="night_to"
                 value={@build.power.night_to}
@@ -125,17 +145,19 @@ defmodule DIYWeb.Settings do
                 class="input input-sm w-20 block"
               />
             </label>
-            <button class="btn btn-sm">Save</button>
+            <button class="btn btn-sm">{gettext("Save")}</button>
           </div>
-          <p class="text-xs opacity-70">Leave the price empty for one price at all hours.</p>
+          <p class="text-xs opacity-70">
+            {gettext("Leave the price empty for one price at all hours.")}
+          </p>
         </form>
       </div>
 
       <div class="space-y-2">
-        <h2 class="text-lg font-bold">The house</h2>
+        <h2 class="text-lg font-bold">{gettext("The house")}</h2>
         <form id="settings-house" phx-submit="house" class="grid grid-cols-2 gap-2">
           <label>
-            <span class="text-sm">Size (sq ft)</span>
+            <span class="text-sm">{gettext("Size (sq ft)")}</span>
             <input
               name="house[size]"
               value={@build.house.size}
@@ -144,7 +166,7 @@ defmodule DIYWeb.Settings do
             />
           </label>
           <label>
-            <span class="text-sm">Year built</span>
+            <span class="text-sm">{gettext("Year built")}</span>
             <input
               name="house[year]"
               value={@build.house.year}
@@ -153,7 +175,7 @@ defmodule DIYWeb.Settings do
             />
           </label>
           <label>
-            <span class="text-sm">Floors</span>
+            <span class="text-sm">{gettext("Floors")}</span>
             <select name="house[floors]" class="select select-sm w-full">
               <option :for={floors <- 1..3} value={floors} selected={floors == @build.house.floors}>
                 {floors}
@@ -161,30 +183,32 @@ defmodule DIYWeb.Settings do
             </select>
           </label>
           <label>
-            <span class="text-sm">Heat</span>
+            <span class="text-sm">{gettext("Heat")}</span>
             <select name="house[heat]" class="select select-sm w-full">
               <option
                 :for={{key, label, _text} <- House.heats()}
                 value={key}
                 selected={key == @build.house.heat}
               >
-                {label}
+                {DIY.Gettext.t(label)}
               </option>
             </select>
           </label>
-          <button class="btn btn-sm col-span-2">Save the house</button>
+          <button class="btn btn-sm col-span-2">{gettext("Save the house")}</button>
         </form>
         <p class="text-xs opacity-70">
-          The heat here is for the preset only. The items of the rooms give the estimate.
+          {gettext("The heat here is for the preset only. The items of the rooms give the estimate.")}
         </p>
       </div>
 
       <HomeAssistant.card ha={@ha} hub={hub(@build)} />
 
       <div class="space-y-2">
-        <h2 class="text-lg font-bold">The file of your build</h2>
+        <h2 class="text-lg font-bold">{gettext("The file of your build")}</h2>
         <p class="text-sm">
-          Your build stays on this device. Keep a file of it, or open it on a different device.
+          {gettext(
+            "Your build stays on this device. Keep a file of it, or open it on a different device."
+          )}
         </p>
         <a
           id="export"
@@ -192,26 +216,26 @@ defmodule DIYWeb.Settings do
           download="small-steps-home.json"
           class="btn btn-sm"
         >
-          Keep a file of the build
+          {gettext("Keep a file of the build")}
         </a>
         <form id="import" phx-change="upload" phx-submit="upload">
           <label class="text-sm">
-            Open a file of a build
+            {gettext("Open a file of a build")}
             <.live_file_input upload={@uploads.build_file} class="file-input file-input-sm block" />
           </label>
         </form>
       </div>
 
       <div class="space-y-2">
-        <h2 class="text-lg font-bold">Start again</h2>
+        <h2 class="text-lg font-bold">{gettext("Start again")}</h2>
         <button
           type="button"
           id="restart"
           phx-click="restart"
-          data-confirm="Remove this build from this device and start again?"
+          data-confirm={gettext("Remove this build from this device and start again?")}
           class="btn btn-sm btn-error btn-outline"
         >
-          Start again
+          {gettext("Start again")}
         </button>
       </div>
     </section>

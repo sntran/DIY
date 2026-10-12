@@ -186,7 +186,8 @@ defmodule DIYWeb.HomeLive do
       {:error, :zip} ->
         {:noreply,
          assign(socket,
-           zip_error: "The app does not know this ZIP code. Give 5 digits, for example 75070.",
+           zip_error:
+             gettext("The app does not know this ZIP code. Give 5 digits, for example 75070."),
            zip_text: String.slice(zip, 0, 10)
          )}
     end
@@ -203,7 +204,7 @@ defmodule DIYWeb.HomeLive do
          put_flash(
            socket,
            :error,
-           "Give the lot in square feet, from 100 to 100,000,000, or leave it empty."
+           gettext("Give the lot in square feet, from 100 to 100,000,000, or leave it empty.")
          )}
 
       {:error, :house} ->
@@ -211,7 +212,7 @@ defmodule DIYWeb.HomeLive do
          put_flash(
            socket,
            :error,
-           "Choose one of each: the size, the age, the floors and the heat."
+           gettext("Choose one of each: the size, the age, the floors and the heat.")
          )}
     end
   end
@@ -314,16 +315,22 @@ defmodule DIYWeb.HomeLive do
          |> put(Build.set_usage(socket.assigns.build, usage))
          |> put_flash(
            :info,
-           "The page has #{Format.count(length(usage.months), "month")} of your usage. The file stayed on this device."
+           ngettext(
+             "The page has 1 month of your usage. The file stayed on this device.",
+             "The page has %{count} months of your usage. The file stayed on this device.",
+             length(usage.months)
+           )
          )}
 
       :error ->
-        {:noreply, put_flash(socket, :error, "The app cannot read the usage of this file.")}
+        {:noreply,
+         put_flash(socket, :error, gettext("The app cannot read the usage of this file."))}
     end
   end
 
   def handle_event("usage_error", %{"error" => error}, socket) when is_binary(error) do
-    {:noreply, put_flash(socket, :error, String.slice(error, 0, 200))}
+    # The text comes from the script of the page, in English.
+    {:noreply, put_flash(socket, :error, {"en", String.slice(error, 0, 200)})}
   end
 
   def handle_event("clear_usage", _params, socket) do
@@ -340,7 +347,11 @@ defmodule DIYWeb.HomeLive do
        |> put(Build.set_usage(build, usage))
        |> put_flash(
          :info,
-         "The page has #{Format.count(length(usage.months), "month")} of your usage from Home Assistant."
+         ngettext(
+           "The page has 1 month of your usage from Home Assistant.",
+           "The page has %{count} months of your usage from Home Assistant.",
+           length(usage.months)
+         )
        )}
     else
       _ -> {:noreply, socket}
@@ -433,7 +444,7 @@ defmodule DIYWeb.HomeLive do
         {:noreply,
          socket
          |> put(build)
-         |> put_flash(:info, "The power station is at home now.")
+         |> put_flash(:info, gettext("The power station is at home now."))
          |> push_patch(to: plan_path(socket, []))}
 
       result ->
@@ -646,7 +657,11 @@ defmodule DIYWeb.HomeLive do
 
       {:error, :price} ->
         {:noreply,
-         put_flash(socket, :error, "Give the price in cents for one kWh, for example 14.5.")}
+         put_flash(
+           socket,
+           :error,
+           gettext("Give the price in cents for one kWh, for example 14.5.")
+         )}
     end
   end
 
@@ -686,14 +701,19 @@ defmodule DIYWeb.HomeLive do
          |> put(build)
          |> put_flash(
            :info,
-           "The app now uses the price of your bill: #{Format.cents(cents)} for each kWh."
+           gettext("The app now uses the price of your bill: %{price} for each kWh.",
+             price: Format.cents(cents)
+           )
          )}
       else
         {:noreply,
          put_flash(
            socket,
            :error,
-           "These numbers give #{Format.cents(cents)} for each kWh. Check the total and the kWh of the bill."
+           gettext(
+             "These numbers give %{price} for each kWh. Check the total and the kWh of the bill.",
+             price: Format.cents(cents)
+           )
          )}
       end
     else
@@ -702,7 +722,9 @@ defmodule DIYWeb.HomeLive do
          put_flash(
            socket,
            :error,
-           "Give the total of the bill in dollars and its kWh, for example 150 and 1,100."
+           gettext(
+             "Give the total of the bill in dollars and its kWh, for example 150 and 1,100."
+           )
          )}
     end
   end
@@ -720,10 +742,11 @@ defmodule DIYWeb.HomeLive do
         {:noreply, put(socket, build)}
 
       {:error, :floors} ->
-        {:noreply, put_flash(socket, :error, "Remove the rooms of the top floor first.")}
+        {:noreply, put_flash(socket, :error, gettext("Remove the rooms of the top floor first."))}
 
       {:error, _reason} ->
-        {:noreply, put_flash(socket, :error, "Give numbers in the limits of each field.")}
+        {:noreply,
+         put_flash(socket, :error, gettext("Give numbers in the limits of each field."))}
     end
   end
 
@@ -746,7 +769,9 @@ defmodule DIYWeb.HomeLive do
       end)
 
     {:noreply,
-     socket |> put(build) |> put_flash(:info, "The planned items are part of your house now.")}
+     socket
+     |> put(build)
+     |> put_flash(:info, gettext("The planned items are part of your house now."))}
   end
 
   def handle_event("power", params, socket) do
@@ -811,13 +836,13 @@ defmodule DIYWeb.HomeLive do
         {:noreply,
          socket
          |> assign(:efl, nil)
-         |> put_flash(:error, "The app cannot read this EFL: it has no average prices.")}
+         |> put_flash(:error, gettext("The app cannot read this EFL: it has no average prices."))}
 
       {:error, :lines} ->
         {:noreply,
          socket
          |> assign(:efl, nil)
-         |> put_flash(:error, "The app cannot read the text of this file.")}
+         |> put_flash(:error, gettext("The app cannot read the text of this file."))}
     end
   end
 
@@ -826,7 +851,7 @@ defmodule DIYWeb.HomeLive do
       {:noreply,
        socket
        |> assign(:efl, nil)
-       |> put_flash(:error, "The app cannot read this file. Open the PDF of an EFL.")}
+       |> put_flash(:error, gettext("The app cannot read this file. Open the PDF of an EFL."))}
 
   def handle_event("add_efl_plan", %{"name" => name}, socket) when is_binary(name) do
     case socket.assigns.efl do
@@ -880,17 +905,22 @@ defmodule DIYWeb.HomeLive do
     case Build.add_plan(socket.assigns.build, plan) do
       {:ok, build, _id} ->
         {:noreply,
-         socket |> put(build) |> put_flash(:info, "The worksheet has #{plan.name} now.")}
+         socket
+         |> put(build)
+         |> put_flash(:info, gettext("The worksheet has %{plan} now.", plan: plan.name))}
 
       {:error, :plans} ->
-        {:noreply, put_flash(socket, :error, "The worksheet has 10 plans. Remove a plan first.")}
+        {:noreply,
+         put_flash(socket, :error, gettext("The worksheet has 10 plans. Remove a plan first."))}
 
       {:error, :plan} ->
         {:noreply,
          put_flash(
            socket,
            :error,
-           "The app cannot keep this plan. A number of the plan is not in the range that the app accepts."
+           gettext(
+             "The app cannot keep this plan. A number of the plan is not in the range that the app accepts."
+           )
          )}
     end
   end
@@ -902,16 +932,16 @@ defmodule DIYWeb.HomeLive do
     end
   end
 
-  defp plan_error(:name), do: "Give the plan a name."
+  defp plan_error(:name), do: gettext("Give the plan a name.")
 
   defp plan_error(field) when field in [:tdu_base, :tdu_cents],
-    do: "Give the delivery charges of your utility: its EFL gives them."
+    do: gettext("Give the delivery charges of your utility: its EFL gives them.")
 
   defp plan_error(:fee_kwh),
-    do: "Give the kWh of the minimum usage fee: the fee is for a month under that kWh."
+    do: gettext("Give the kWh of the minimum usage fee: the fee is for a month under that kWh.")
 
   defp plan_error(_field),
-    do: "Give each number of the plan in the limits: dollars, cents or kWh."
+    do: gettext("Give each number of the plan in the limits: dollars, cents or kWh.")
 
   defp flag(build, id, flag, value) when value in ["true", "false"],
     do: Build.flag_item(build, id, flag, value == "true")
@@ -967,16 +997,16 @@ defmodule DIYWeb.HomeLive do
     do: {:noreply, put_flash(socket, :error, move_error(reason))}
 
   defp move_error(:plan),
-    do: "A wall of a room is from 2 to 200 feet long, and a room stays near the house."
+    do: gettext("A wall of a room is from 2 to 200 feet long, and a room stays near the house.")
 
-  defp move_error(:overlap), do: "A room or a zone cannot go over a different one."
-  defp move_error(:place), do: "This item cannot go in that room."
-  defp move_error(:van), do: "A zone stays in the van."
-  defp move_error(:fixed), do: "The cab and the roof of the van stay where they are."
+  defp move_error(:overlap), do: gettext("A room or a zone cannot go over a different one.")
+  defp move_error(:place), do: gettext("This item cannot go in that room.")
+  defp move_error(:van), do: gettext("A zone stays in the van.")
+  defp move_error(:fixed), do: gettext("The cab and the roof of the van stay where they are.")
 
   # An item or a room that is not on the plan now (it went to a van, or a
   # different tab removed it).
-  defp move_error(_reason), do: "This item or this room is not on the plan now."
+  defp move_error(_reason), do: gettext("This item or this room is not on the plan now.")
 
   # A length in feet from the sheet, in inches: from more than 0 to the
   # largest side of a room.
@@ -1052,10 +1082,10 @@ defmodule DIYWeb.HomeLive do
            socket
            |> put(build)
            |> assign(:bill_month, nil)
-           |> put_flash(:info, "The page shows the build of the file now.")}
+           |> put_flash(:info, gettext("The page shows the build of the file now."))}
 
         {:error, _reason} ->
-          {:noreply, put_flash(socket, :error, "The file is not a build of this app.")}
+          {:noreply, put_flash(socket, :error, gettext("The file is not a build of this app."))}
       end
     else
       {:noreply, socket}
@@ -1094,18 +1124,20 @@ defmodule DIYWeb.HomeLive do
   end
 
   defp power_error(:night_cents),
-    do: "Give the price at night in cents, from 0 to 200, or leave it empty."
+    do: gettext("Give the price at night in cents, from 0 to 200, or leave it empty.")
 
-  defp power_error(field) when field in [:night_from, :night_to], do: "Give an hour from 0 to 23."
-  defp power_error(:night), do: "The night must start and end at different hours."
-  defp power_error(:buyback_cents), do: "Give the price in cents, from 0 to 200."
-  defp power_error(:reserve), do: "Give a part from 0 to 100%."
-  defp power_error(:mode), do: "Choose how you use the batteries."
+  defp power_error(field) when field in [:night_from, :night_to],
+    do: gettext("Give an hour from 0 to 23.")
 
-  defp room_error(:name), do: "Give the room a name."
-  defp room_error(:level), do: "Choose a floor of the house."
-  defp room_error(:place), do: "Choose a place: inside, outside or the roof."
-  defp room_error(:house), do: "Choose a house first."
+  defp power_error(:night), do: gettext("The night must start and end at different hours.")
+  defp power_error(:buyback_cents), do: gettext("Give the price in cents, from 0 to 200.")
+  defp power_error(:reserve), do: gettext("Give a part from 0 to 100%.")
+  defp power_error(:mode), do: gettext("Choose how you use the batteries.")
+
+  defp room_error(:name), do: gettext("Give the room a name.")
+  defp room_error(:level), do: gettext("Choose a floor of the house.")
+  defp room_error(:place), do: gettext("Choose a place: inside, outside or the roof.")
+  defp room_error(:house), do: gettext("Choose a house first.")
 
   defp lookup(options, key) do
     Enum.find_value(options, fn {k, _label, value} -> if k == key, do: value end)
@@ -1435,6 +1467,9 @@ defmodule DIYWeb.HomeLive do
 
   @impl true
   def render(assigns) do
+    # The frame, the first screens and Settings are in the language of the
+    # page (DIYWeb.Locale). The pages that are not translated yet are in
+    # English (lang="en").
     ~H"""
     <Layouts.app
       flash={@flash}
@@ -1449,107 +1484,120 @@ defmodule DIYWeb.HomeLive do
       <div id="top" phx-hook="Top" data-page={page_key(assigns)} class="hidden"></div>
       <noscript>
         <p class="alert alert-warning">
-          This app needs JavaScript. Turn on JavaScript in the browser.
+          {gettext("This app needs JavaScript. Turn on JavaScript in the browser.")}
         </p>
       </noscript>
 
       <p :if={is_nil(@build)} class="py-16 text-center opacity-70">
-        The page reads your build from this device.
+        {gettext("The page reads your build from this device.")}
       </p>
 
       <%= if @build do %>
         <%= cond do %>
           <% is_nil(@build.door) -> %>
-            <DIYWeb.Start.doors />
+            <DIYWeb.Start.doors locale={@locale} />
           <% is_nil(@build.zip) -> %>
             <DIYWeb.Start.zip build={@build} error={@zip_error} typed={@zip_text} />
           <% is_nil(@build.house) -> %>
             <DIYWeb.Start.preset build={@build} />
           <% @live_action == :inside -> %>
-            <DIYWeb.Inside.inside
-              build={Build.house_view(@build)}
-              away={Van.stations(@build).away}
-              estimate={@full}
-              bill={@bill}
-              price={@price}
-              view={@cutaway}
-              item={@item}
-              add={@add}
-              room={@room}
-              sheet={@sheet}
-              status={@status}
-              item_error={assigns[:item_error]}
-              item_said={assigns[:item_said]}
-              outage={DIYWeb.PowerPage.outage_text(@power, @whatif)}
-              ha={@ha}
-              item_frames={@item_frames}
-              ha_rooms={@ha_rooms}
-              ha_sync={@ha_sync}
-              ha_devices={@ha_devices}
-              ha_states={@ha_states}
-              ha_control={@ha_control}
-              ha_energy={@ha_energy}
-              ghosts={@ghosts}
-              ha_count={@ha_count}
-              ha_away={@ha_away}
-            />
+            <div lang="en" class="contents">
+              <DIYWeb.Inside.inside
+                build={Build.house_view(@build)}
+                away={Van.stations(@build).away}
+                estimate={@full}
+                bill={@bill}
+                price={@price}
+                view={@cutaway}
+                item={@item}
+                add={@add}
+                room={@room}
+                sheet={@sheet}
+                status={@status}
+                item_error={assigns[:item_error]}
+                item_said={assigns[:item_said]}
+                outage={DIYWeb.PowerPage.outage_text(@power, @whatif)}
+                ha={@ha}
+                item_frames={@item_frames}
+                ha_rooms={@ha_rooms}
+                ha_sync={@ha_sync}
+                ha_devices={@ha_devices}
+                ha_states={@ha_states}
+                ha_control={@ha_control}
+                ha_energy={@ha_energy}
+                ghosts={@ghosts}
+                ha_count={@ha_count}
+                ha_away={@ha_away}
+              />
+            </div>
           <% @live_action == :estimate -> %>
-            <DIYWeb.Math.estimate
-              build={Build.today(Build.house_view(@build))}
-              planned={Enum.count(Build.house_view(@build).items, & &1.planned)}
-              estimate={@estimate}
-              power={@power}
-              bill={@bill}
-              price={@price}
-              weather={@weather}
-            />
+            <div lang="en" class="contents">
+              <DIYWeb.Math.estimate
+                build={Build.today(Build.house_view(@build))}
+                planned={Enum.count(Build.house_view(@build).items, & &1.planned)}
+                estimate={@estimate}
+                power={@power}
+                bill={@bill}
+                price={@price}
+                weather={@weather}
+              />
+            </div>
           <% @live_action == :power -> %>
-            <DIYWeb.PowerPage.page
-              build={Build.house_view(@build)}
-              power={@power}
-              whatif={@whatif}
-              price={@price}
-              away={Van.stations(@build).away}
-              scene={@scene}
-            />
+            <div lang="en" class="contents">
+              <DIYWeb.PowerPage.page
+                build={Build.house_view(@build)}
+                power={@power}
+                whatif={@whatif}
+                price={@price}
+                away={Van.stations(@build).away}
+                scene={@scene}
+              />
+            </div>
           <% @live_action == :plans and plans?(@build) and @bill != nil -> %>
-            <DIYWeb.LessonPage.page
-              build={@build}
-              bill={@bill}
-              step={lesson_step(@lesson_step, @build)}
-              plan_id={@plan_id}
-              tdu={tdu(@build)}
-              efl={@efl}
-              checks={@checks}
-              answers={@answers}
-              hint={@hint}
-              shares={@shares}
-            />
+            <div lang="en" class="contents">
+              <DIYWeb.LessonPage.page
+                build={@build}
+                bill={@bill}
+                step={lesson_step(@lesson_step, @build)}
+                plan_id={@plan_id}
+                tdu={tdu(@build)}
+                efl={@efl}
+                checks={@checks}
+                answers={@answers}
+                hint={@hint}
+                shares={@shares}
+              />
+            </div>
           <% @live_action == :plans -> %>
-            <p id="no-lesson" class="py-8 opacity-80">
-              The plan lesson is for a house in Texas, in an area with retail choice, with its estimate.
-            </p>
+            <div lang="en" class="contents">
+              <p id="no-lesson" class="py-8 opacity-80">
+                The plan lesson is for a house in Texas, in an area with retail choice, with its estimate.
+              </p>
+            </div>
           <% @live_action == :van -> %>
-            <DIYWeb.VanPage.page
-              build={@build}
-              van_id={@van_id}
-              item={@item}
-              add={@add}
-              climate={@weather.climate}
-              item_error={assigns[:item_error]}
-              item_said={assigns[:item_said]}
-              item_frames={@item_frames}
-              estimate={@full}
-              price={@price}
-              ha={@ha}
-              scene={@van_scene}
-              view={@van_view}
-              room={@room}
-              sheet={@sheet}
-              status={@status}
-            />
+            <div lang="en" class="contents">
+              <DIYWeb.VanPage.page
+                build={@build}
+                van_id={@van_id}
+                item={@item}
+                add={@add}
+                climate={@weather.climate}
+                item_error={assigns[:item_error]}
+                item_said={assigns[:item_said]}
+                item_frames={@item_frames}
+                estimate={@full}
+                price={@price}
+                ha={@ha}
+                scene={@van_scene}
+                view={@van_view}
+                room={@room}
+                sheet={@sheet}
+                status={@status}
+              />
+            </div>
           <% @live_action == :settings -> %>
             <DIYWeb.Settings.settings
+              locale={@locale}
               build={@build}
               price={@price}
               market={@market}
@@ -1559,18 +1607,20 @@ defmodule DIYWeb.HomeLive do
               zip_text={@zip_text}
             />
           <% true -> %>
-            <DIYWeb.Front.front
-              build={@build}
-              estimate={@estimate}
-              bill={@bill}
-              whatif={@whatif}
-              price={@price}
-              weather={@weather}
-              market={@market}
-              outside={@outside}
-              bill_month={@bill_month}
-              ha_meter={DIYWeb.HomeAssistant.meter_offer(%{ha_energy: @ha_energy, build: @build})}
-            />
+            <div lang="en" class="contents">
+              <DIYWeb.Front.front
+                build={@build}
+                estimate={@estimate}
+                bill={@bill}
+                whatif={@whatif}
+                price={@price}
+                weather={@weather}
+                market={@market}
+                outside={@outside}
+                bill_month={@bill_month}
+                ha_meter={DIYWeb.HomeAssistant.meter_offer(%{ha_energy: @ha_energy, build: @build})}
+              />
+            </div>
         <% end %>
       <% end %>
     </Layouts.app>

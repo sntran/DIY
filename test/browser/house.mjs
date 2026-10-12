@@ -322,6 +322,19 @@ async function build(context, name) {
   await page.waitForSelector("body > canvas", { state: "attached" })
   await check(page, `${name} doors`)
   await page.evaluate(() => window.dispatchEvent(new Event("phx:page-loading-stop")))
+
+  // The languages: the first screen in Spanish and in Vietnamese, with the
+  // checks of axe. Then the walk goes on in English.
+  for (const [lang, title] of [["es", "Encuentre su próximo pequeño paso"], ["vi", "Tìm bước nhỏ tiếp theo của bạn"]]) {
+    await page.click(`#language-${lang}`)
+    await page.waitForSelector(`html[lang=${lang}] h1:has-text('${title}')`)
+    await page.waitForSelector(`#language-${lang}[aria-current=true]`)
+    await connected(page)
+    await check(page, `${name} doors (${lang})`)
+  }
+  await page.click("#language-en")
+  await page.waitForSelector("html[lang=en] h1:has-text('Find your next small step')")
+  await connected(page)
   await page.click("#door-my-house")
 
   await page.waitForSelector("#zip-form")
@@ -778,6 +791,25 @@ async function build(context, name) {
   // Settings has the card too, with a link to the hub.
   await page.waitForSelector("#ha-hub:has-text('Your hub is in Living room')")
   return page
+}
+
+// The first screens at 320 px in Spanish and in Vietnamese: the longer
+// texts must not make the page wider than the screen (WCAG 1.4.10).
+for (const [lang, zip] of [["es", "75070"], ["vi", "75070"]]) {
+  const context = await browser.newContext({ viewport: { width: 320, height: 700 } })
+  const page = await context.newPage()
+  page.on("pageerror", (error) => { faults++; console.log(`320 px ${lang}: page error: ${error.message}`) })
+  await page.goto(`${site}/language/${lang}?return=%2F`)
+  await page.waitForSelector(`html[lang=${lang}] #door-planning`)
+  await connected(page)
+  await page.click("#door-planning")
+  await page.fill("#zip", zip)
+  await page.click("#zip-form button[type=submit]")
+  await page.waitForSelector("#start-preset")
+  const wide = await page.evaluate(() => document.documentElement.scrollWidth)
+  assert.ok(wide <= 320, `320 px ${lang}: the page is ${wide} px wide`)
+  await check(page, `320 px ${lang} preset`)
+  await context.close()
 }
 
 // On a desktop, the person wants less motion: an item is at once on its

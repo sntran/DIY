@@ -24,7 +24,7 @@ defmodule DIYWeb.Layouts do
     <header class="navbar min-h-12 px-4">
       <a href="/" class="flex-1 font-semibold">Small Steps Home</a>
       <span :if={@nav} id="device-status" class="text-xs opacity-70">
-        {if @saved, do: "Saved on this device", else: "Not saved yet"}
+        {if @saved, do: gettext("Saved on this device"), else: gettext("Not saved yet")}
       </span>
     </header>
 
@@ -37,28 +37,28 @@ defmodule DIYWeb.Layouts do
     <nav
       :if={@nav}
       class="dock dock-sm z-40 border-t border-base-300 bg-base-100"
-      aria-label="The parts of your build"
+      aria-label={gettext("The parts of your build")}
     >
       <.link
         patch={~p"/"}
         class={[@action == :front && "dock-active"]}
         aria-current={@action == :front && "page"}
       >
-        <.icon name="hero-home" class="size-5" /><span class="dock-label">House</span>
+        <.icon name="hero-home" class="size-5" /><span class="dock-label">{gettext("House")}</span>
       </.link>
       <.link
         patch={~p"/inside"}
         class={[@action in [:inside, :van] && "dock-active"]}
         aria-current={rooms_current(@action)}
       >
-        <.icon name="hero-squares-2x2" class="size-5" /><span class="dock-label">Rooms</span>
+        <.icon name="hero-squares-2x2" class="size-5" /><span class="dock-label">{gettext("Rooms")}</span>
       </.link>
       <.link
         patch={~p"/estimate"}
         class={[@action == :estimate && "dock-active"]}
         aria-current={@action == :estimate && "page"}
       >
-        <.icon name="hero-chart-bar" class="size-5" /><span class="dock-label">Bill</span>
+        <.icon name="hero-chart-bar" class="size-5" /><span class="dock-label">{gettext("Bill")}</span>
       </.link>
       <.link
         :if={@power}
@@ -66,7 +66,7 @@ defmodule DIYWeb.Layouts do
         class={[@action == :power && "dock-active"]}
         aria-current={@action == :power && "page"}
       >
-        <.icon name="hero-bolt" class="size-5" /><span class="dock-label">Power</span>
+        <.icon name="hero-bolt" class="size-5" /><span class="dock-label">{gettext("Power")}</span>
       </.link>
       <.link
         :if={@plans}
@@ -74,14 +74,14 @@ defmodule DIYWeb.Layouts do
         class={[@action == :plans && "dock-active"]}
         aria-current={@action == :plans && "page"}
       >
-        <.icon name="hero-document-text" class="size-5" /><span class="dock-label">Plans</span>
+        <.icon name="hero-document-text" class="size-5" /><span class="dock-label">{gettext("Plans")}</span>
       </.link>
       <.link
         patch={~p"/settings"}
         class={[@action == :settings && "dock-active"]}
         aria-current={@action == :settings && "page"}
       >
-        <.icon name="hero-cog-6-tooth" class="size-5" /><span class="dock-label">Settings</span>
+        <.icon name="hero-cog-6-tooth" class="size-5" /><span class="dock-label">{gettext("Settings")}</span>
       </.link>
     </nav>
 

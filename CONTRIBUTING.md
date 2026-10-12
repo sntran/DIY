@@ -99,6 +99,22 @@ Check the service, and run the job again when it is up.
   Simplified Technical English: `feat(house): add the rooms`.
 - Update the docs of the behavior that you change.
 
+## The texts of the pages
+
+The pages are in English, Spanish and Vietnamese (`DIY.Gettext`, and the
+section "The languages" of `docs/design.md`). The English text is the
+key. For a new text of a page:
+
+1. Write it with `gettext/1` (or `ngettext/3`), in Simplified Technical
+   English.
+2. Run `mix.com gettext.extract --merge`.
+3. Write its translation in `priv/gettext/es/LC_MESSAGES/default.po` and
+   in `priv/gettext/vi/LC_MESSAGES/default.po`.
+
+A test fails when a text has no translation, or when a translation does
+not have the same keys (`%{name}`). `mix.com precommit` fails when the
+keys do not follow the code.
+
 ## The language of the docs
 
 The docs, the code comments, the text of the pages, the log text and the

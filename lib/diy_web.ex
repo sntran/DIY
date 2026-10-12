@@ -45,6 +45,8 @@ defmodule DIYWeb do
       import Phoenix.HTML
       # Core UI components
       import DIYWeb.CoreComponents
+      # The texts in the language of the page
+      use Gettext, backend: DIY.Gettext
 
       # Common modules used in templates
       alias Phoenix.LiveView.JS

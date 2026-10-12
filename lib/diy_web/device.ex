@@ -27,7 +27,10 @@ defmodule DIYWeb.Device do
   from the device (a restore, a conflict, or a different tab), the protocol
   calls `build_changed(socket)` of the LiveView, if it has one, before the
   next render.
+
+  The notices of the protocol are in the language of the page.
   """
+  use Gettext, backend: DIY.Gettext
   import Phoenix.Component, only: [assign: 3]
 
   alias DIY.Build
@@ -70,7 +73,7 @@ defmodule DIYWeb.Device do
       LiveView.put_flash(
         socket,
         :error,
-        "The build is too large for this device. Remove some items."
+        gettext("The build is too large for this device. Remove some items.")
       )
     else
       save(socket, build, text, device)
@@ -90,7 +93,10 @@ defmodule DIYWeb.Device do
   end
 
   defp newer,
-    do: "The build on this device comes from a newer version of the app. Load the page again."
+    do:
+      gettext(
+        "The build on this device comes from a newer version of the app. Load the page again."
+      )
 
   @doc "True when the device has the build of the page."
   def saved?(%{build: %Build{stamp: stamp}, device: %{saved: stamp}}), do: true
@@ -150,7 +156,7 @@ defmodule DIYWeb.Device do
          |> take(text, stamp, true)
          |> LiveView.put_flash(
            :info,
-           "A different tab changed this build. This page shows that build now."
+           gettext("A different tab changed this build. This page shows that build now.")
          )}
     end
   end
@@ -186,7 +192,12 @@ defmodule DIYWeb.Device do
         socket
       end
 
-    {:halt, LiveView.put_flash(socket, :error, "This device did not save the build: #{error}")}
+    {:halt,
+     LiveView.put_flash(
+       socket,
+       :error,
+       gettext("This device did not save the build: %{error}", error: error)
+     )}
   end
 
   def handle_event("device:" <> _event, _params, socket), do: {:halt, socket}
@@ -228,7 +239,9 @@ defmodule DIYWeb.Device do
         |> assign(:build, Build.new())
         |> LiveView.put_flash(
           :info,
-          "The page cannot read the build on this device. It starts a new build, and keeps a copy of the old one."
+          gettext(
+            "The page cannot read the build on this device. It starts a new build, and keeps a copy of the old one."
+          )
         )
     end
   end

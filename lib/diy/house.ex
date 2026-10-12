@@ -9,29 +9,36 @@ defmodule DIY.House do
   age. The page tells the user so.
   """
 
+  use Gettext, backend: DIY.Gettext
+
   alias DIY.Catalog
 
   @sizes [
-    {"small", "Small", 1_200},
-    {"medium", "Medium", 1_800},
-    {"large", "Large", 2_500},
-    {"very_large", "Very large", 3_500}
+    {"small", gettext_noop("Small"), 1_200},
+    {"medium", gettext_noop("Medium"), 1_800},
+    {"large", gettext_noop("Large"), 2_500},
+    {"very_large", gettext_noop("Very large"), 3_500}
   ]
 
   @ages [
-    {"before_1980", "Before 1980", 1_970},
-    {"1980s_1990s", "1980 to 1999", 1_990},
-    {"2000s", "2000 to 2009", 2_005},
-    {"since_2010", "2010 or newer", 2_016}
+    {"before_1980", gettext_noop("Before 1980"), 1_970},
+    {"1980s_1990s", gettext_noop("1980 to 1999"), 1_990},
+    {"2000s", gettext_noop("2000 to 2009"), 2_005},
+    {"since_2010", gettext_noop("2010 or newer"), 2_016}
   ]
 
   @heats [
-    {"gas", "Gas", "A gas furnace, a gas water heater and a gas stove."},
-    {"heat_pump", "Heat pump", "All electric: the AC heats too."},
-    {"electric", "Electric heat", "All electric: heat strips or baseboard heaters."}
+    {"gas", gettext_noop("Gas"),
+     gettext_noop("A gas furnace, a gas water heater and a gas stove.")},
+    {"heat_pump", gettext_noop("Heat pump"), gettext_noop("All electric: the AC heats too.")},
+    {"electric", gettext_noop("Electric heat"),
+     gettext_noop("All electric: heat strips or baseboard heaters.")}
   ]
 
-  @doc "The sizes of a preset: `{key, label, square feet}`."
+  @doc """
+  The sizes of a preset: `{key, label, square feet}`. The labels here are
+  in English: the page translates them (`DIY.Gettext.t/1`).
+  """
   def sizes, do: @sizes
 
   @doc "The ages of a preset: `{key, label, year}`."
