@@ -76,12 +76,24 @@ defmodule DIYWeb.Wires do
     # A busbar has a number of positions for wires.
     ports = if assigns.item.type == "dc_bus", do: assigns.item.params["ports"]
 
+    {build_max, item_max} = Build.max_wires()
+
+    full =
+      cond do
+        length(build.wires) >= build_max -> :build
+        Build.wires_full?(build, assigns.item.id) -> :item
+        true -> nil
+      end
+
     assigns =
       assign(assigns,
         wires: wires,
         others: Enum.reject(others, &Build.wires_full?(build, &1.id)),
         any_other: others != [],
-        full: Build.wires_full?(build, assigns.item.id),
+        full: full,
+        build_max: build_max,
+        item_max: item_max,
+        buses: Build.bus_systems(build),
         ports: ports,
         used: length(wires),
         world: world
@@ -107,10 +119,11 @@ defmodule DIYWeb.Wires do
         from={from}
         to={to}
         title={title}
+        buses={@buses}
         error={wire_error(@error, wire.id)}
       />
       <form
-        :if={@others != [] and not @full}
+        :if={@others != [] and is_nil(@full)}
         id="add-wire"
         phx-submit="add_wire"
         class="stage-field"
@@ -124,8 +137,8 @@ defmodule DIYWeb.Wires do
           <button type="submit" id="add-wire-button" class="stage-btn">Add</button>
         </div>
       </form>
-      <p :if={@full or (@any_other and @others == [])} id="wire-full" class="stage-help">
-        {full_text()}
+      <p :if={@full || (@any_other and @others == [])} id="wire-full" class="stage-help">
+        {full_text(@full, @build_max, @item_max)}
       </p>
       <p :if={not @any_other} id="wire-none" class="stage-help">
         {none_text(@world)}
@@ -136,11 +149,17 @@ defmodule DIYWeb.Wires do
 
   defp pair(wire), do: Enum.sort([wire.from, wire.to])
 
-  defp full_text do
-    {build, item} = Build.max_wires()
+  # Why the person cannot add a wire: the build, this item, or each other
+  # item has its most wires.
+  defp full_text(:build, max, _item_max),
+    do: "The build has #{max} wires, the most for a build. Remove a wire to add a different one."
 
-    "An item has #{item} wires at most, and a build has #{build} wires at most. Remove a wire to add a different one."
-  end
+  defp full_text(:item, _max, max),
+    do:
+      "This item has #{max} wires, the most for an item. Remove a wire of this item to add a different one."
+
+  defp full_text(nil, _max, max),
+    do: "Each other item that takes wires here has #{max} wires, the most for an item."
 
   # The kinds that take wires in each place (`DIY.Catalog`).
   defp none_text(:house),
@@ -174,6 +193,7 @@ defmodule DIYWeb.Wires do
   attr :from, :map, required: true
   attr :to, :map, required: true
   attr :title, :string, required: true
+  attr :buses, :map, required: true, doc: "the system of each busbar with a battery"
   attr :error, :atom, default: nil
 
   defp wire(assigns) do
@@ -181,6 +201,8 @@ defmodule DIYWeb.Wires do
     two_way = Wire.two_way?(wire)
     advice = Wire.advise(wire, Wire.ends(from, to))
     battery = Enum.find([from, to], &(&1.type == "van_battery"))
+    buses = assigns.buses
+    bus = Enum.find([from, to], &(&1.type == "dc_bus"))
     names = %{from.id => Catalog.name(from), to.id => Catalog.name(to)}
 
     assigns =
@@ -198,7 +220,11 @@ defmodule DIYWeb.Wires do
         # the radio that is on.
         ends: names |> Enum.sort() |> Enum.with_index(),
         battery: battery && Catalog.name(battery),
-        lead_acid: battery && battery.params["chemistry"] == "agm"
+        lead_acid: battery && battery.params["chemistry"] == "agm",
+        # A busbar with a battery gives its voltage. A busbar with no
+        # battery is on DC.
+        bus: if(bus && Map.has_key?(buses, bus.id), do: Catalog.name(bus)),
+        choices: if(bus, do: Enum.filter(@systems, &Wire.dc?(elem(&1, 0))), else: @systems)
       )
 
     ~H"""
@@ -221,16 +247,19 @@ defmodule DIYWeb.Wires do
             </label>
           </div>
         </fieldset>
-        <div :if={is_nil(@battery)} class="stage-field">
+        <div :if={is_nil(@battery) and is_nil(@bus)} class="stage-field">
           <label for={"#{@id}-system"} class="stage-label">System</label>
           <select id={"#{@id}-system"} name="wire[system]" class="stage-input">
-            <option :for={{key, label} <- systems()} value={key} selected={key == @wire.system}>
+            <option :for={{key, label} <- @choices} value={key} selected={key == @wire.system}>
               {label}
             </option>
           </select>
         </div>
         <p :if={@battery} id={"#{@id}-system"} class="stage-help">
           System: {system_name(@wire.system)}, the voltage of {@battery}. Change it in the part of the battery.
+        </p>
+        <p :if={is_nil(@battery) and @bus} id={"#{@id}-system"} class="stage-help">
+          System: {system_name(@wire.system)}, the voltage of the battery at {@bus}. Change it in the part of the battery.
         </p>
         <p :if={@lead_acid} id={"#{@id}-lead-acid"} class="stage-help">
           {@battery} is lead acid. The app uses the voltages of LiFePO4: ask the maker of the battery for its highest voltage.
@@ -270,7 +299,7 @@ defmodule DIYWeb.Wires do
         <p class="wire-head">What the rules ask for</p>
         <ul class="stage-list">
           <li>
-            Current: 125% of {amps(@wire.amps)} A is {amps(@advice.need)} A. This is for a load all the time, 3 hours or more (NEC 210.19(A) and 215.2(A)(1)).
+            Current: 125% of {amps(@wire.amps)} A is {amps(@advice.need)} A. This is for a load all the time: 3 hours or more (NEC Article 100, 210.19(A) and 215.2(A)(1)).
           </li>
           <li :if={@advice.awg}>
             Wire: {@advice.awg} AWG copper or larger, rated 75 °C, with terminals of 75 °C. With it, the voltage drop is {percent(
@@ -380,7 +409,7 @@ defmodule DIYWeb.Wires do
           role="group"
           aria-labelledby={"#{@id}-remove-text"}
         >
-          <p id={"#{@id}-remove-text"}>Remove the wire from {@from_name} to {@to_name}?</p>
+          <p id={"#{@id}-remove-text"}>Remove this wire: {@title}?</p>
           <button
             type="button"
             id={"#{@id}-remove"}
@@ -457,8 +486,6 @@ defmodule DIYWeb.Wires do
     </div>
     """
   end
-
-  defp systems, do: @systems
 
   defp system_name(system), do: @systems |> List.keyfind(system, 0) |> elem(1)
 

@@ -65,7 +65,9 @@ defmodule DIY.Build do
     an item (`add_wire/3`). Each wire has an `id`, the item at each end
     (`from` gives the current, `to`), and its numbers (`DIY.Wire`). A
     wire goes away with an item at its end. When a battery is at an end,
-    the system of the wire is the voltage of the battery.
+    the system of the wire is the voltage of the battery. A wire at a
+    busbar is on DC, with the voltage of a battery on the busbar
+    (`DIY.Wire.end_system/4`).
 
   After each change, the plan is whole again (`DIY.Layout.fill/1`). Each
   room of the house has a plan, and each item is in its room.
@@ -209,17 +211,39 @@ defmodule DIY.Build do
 
   # Only the wires with an item at each end stay. A wire with a battery at
   # an end gets the voltage of the battery as its system: a change of the
-  # battery changes its wires.
+  # battery changes its wires. A wire at a busbar gets the voltage of the
+  # battery on the busbar.
   defp fit_wires(build) do
     by_id = Map.new(build.items, &{&1.id, &1})
+    wires = Enum.filter(build.wires, &(by_id[&1.from] && by_id[&1.to]))
+    buses = bus_systems(wires, by_id)
 
-    wires =
-      for wire <- build.wires,
-          from = by_id[wire.from],
-          to = by_id[wire.to],
-          do: %{wire | system: Wire.battery_system(from, to) || wire.system}
+    fitted =
+      for wire <- wires,
+          do: %{
+            wire
+            | system: Wire.end_system(wire.system, by_id[wire.from], by_id[wire.to], buses)
+          }
 
-    %{build | wires: wires}
+    %{build | wires: fitted}
+  end
+
+  @doc """
+  The system of each busbar with a battery, by the id of the busbar. It
+  is the voltage of the first battery that has a wire to the busbar.
+  """
+  @spec bus_systems(t()) :: %{String.t() => String.t()}
+  def bus_systems(build), do: bus_systems(build.wires, Map.new(build.items, &{&1.id, &1}))
+
+  defp bus_systems(wires, by_id) do
+    for wire <- wires,
+        from = by_id[wire.from],
+        to = by_id[wire.to],
+        system = Wire.battery_system(from, to),
+        bus <- [from, to],
+        bus.type == "dc_bus",
+        reduce: %{},
+        do: (buses -> Map.put_new(buses, bus.id, system))
   end
 
   # 96 random bits: two changes never get the same stamp.

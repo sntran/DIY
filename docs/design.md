@@ -2533,12 +2533,17 @@ the wires (`DIY.Build`, `wires`).
   voltage of the battery. A change of the battery changes its wires
   (`DIY.Build.change/2`), and the card shows the system as a text. So
   a check never uses an old voltage.
+- A busbar is on DC. A wire at a busbar gets the voltage of the first
+  battery that has a wire to the busbar (`DIY.Wire.end_system/4`). An
+  example is the wire from the busbar to the inverter of a van of 48 V.
+  With no battery on the busbar, the card gives only the DC systems.
 - What the person has: the wire size, and the breaker or the fuse at
   each end with its DC rating. Each one is empty until the person gives
   it.
-- A build has 100 wires at most, and an item has 24 wires at most (the
-  most positions of a busbar). The limit of an item keeps the panel
-  small. A wire goes away with an item at its end. A wire that the app
+- A build has 100 wires at most. The person can add a wire only when
+  each end has less than 24 wires, the most positions of a busbar. This
+  limit keeps the panel small. A stored build is not checked for the limit of
+  an item. A wire goes away with an item at its end. A wire that the app
   cannot read goes away when the build loads: a wire must not stop the
   build from loading. The first 100 good wires stay.
 
@@ -2639,13 +2644,14 @@ The panel of each item that takes wires has the part Wires
    ends), the system, the current of the port and the length. On DC, a
    switch tells that the far end also gives current. The two ends stay
    in one order (the order of their ids). When the ends change places,
-   only the choice that is on changes. A browser keeps the value of the
-   field that has the focus, so a change of the values breaks the
-   choice.
+   only the choice that is on changes. LiveView does not change the
+   value of the field that has the focus, so a change of the values
+   breaks the choice.
 3. What the rules ask for: the current with the margin, the wire, and
    the breaker or the fuse at each end. The breaker has a range: from
    the smallest rating to the largest that the wire takes. On DC, the
-   page tells the DC rating and why.
+   page tells the DC rating and why. A load all the time is a load of 3
+   hours or more (NEC Article 100).
 4. What the person has: the wire size, and the breaker or the fuse at
    each end with its DC rating. The breakers and the DC ratings are
    whole numbers: their fields take only whole numbers, and their error
@@ -2659,9 +2665,11 @@ The panel of each item that takes wires has the part Wires
    the wire is removed.
 
 Under the cards, the person adds a wire from the item to a different
-item of the same place. A status tells that the wire is added. When the
-item or the build has its most wires, a text tells it in place of the
-form. A number that is not valid shows its error at its field, and the
+item of the same place. A status tells that the wire is added, with its
+number when two wires join the same items. The same status a second
+time is empty for a short time first, so a screen reader reads it
+again. When the build, the item or each other item has its most wires,
+a text tells which one in place of the form. A number that is not valid shows its error at its field, and the
 wire does not change. The text of the positions of a busbar is a status
 too.
 

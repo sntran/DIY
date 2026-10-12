@@ -50,7 +50,9 @@ defmodule DIY.Wire do
     copper of NEC Chapter 9, Table 8.
 
   When a battery is at an end, the system of the wire is the voltage of
-  the battery (`battery_system/2`): `DIY.Build` keeps them the same.
+  the battery. A wire at a busbar is on DC, with the voltage of a battery
+  that has a wire to the busbar (`end_system/4`). `DIY.Build` keeps them
+  the same.
   """
 
   @typedoc "A size of copper wire, from 14 AWG to 4/0 AWG."
@@ -208,17 +210,40 @@ defmodule DIY.Wire do
   end
 
   @doc """
+  The system of a wire from its ends:
+
+  - the voltage of a battery at an end;
+  - else the voltage of the battery of a busbar at an end (`buses`: the
+    system of each busbar with a battery, by its id);
+  - else 12 V DC at a busbar that has no battery, when the system was AC:
+    a busbar is on DC;
+  - else the system that the wire has.
+  """
+  @spec end_system(String.t(), map(), map(), %{String.t() => String.t()}) :: String.t()
+  def end_system(system, from, to, buses) do
+    bus = Enum.find_value([from, to], &(&1.type == "dc_bus" and buses[&1.id]))
+
+    cond do
+      battery = battery_system(from, to) -> battery
+      bus -> bus
+      Enum.any?([from, to], &(&1.type == "dc_bus")) and not dc?(system) -> "12"
+      true -> system
+    end
+  end
+
+  @doc """
   The typical numbers of a new wire from an item to an item: 30 A and 6
-  ft. The system is the system of a battery at an end. Else it is 120 V
-  AC at a transfer switch or a shore power inlet, else 12 V DC. On DC, a
-  wire to a battery or to a busbar has two ways. The person has nothing
-  yet.
+  ft. The system is the system of a battery at an end. At a busbar, it is
+  12 V DC. At a transfer switch or a shore power inlet, it is 120 V AC.
+  Else it is 12 V DC. On DC, a wire to a battery or to a busbar has two ways.
+  The person has nothing yet.
   """
   @spec defaults(map(), map()) :: wire()
   def defaults(from, to) do
     system =
       cond do
         system = battery_system(from, to) -> system
+        Enum.any?([from, to], &(&1.type == "dc_bus")) -> "12"
         Enum.any?([from, to], &(&1.type in ~w(transfer_switch shore_power))) -> "120"
         true -> "12"
       end

@@ -216,6 +216,18 @@ defmodule DIY.BuildWiresTest do
     {:ok, same} = Build.update_wire(changed, id, %{"system" => "12", "amps" => "20"})
     assert {:ok, %{system: "48", amps: 20.0}} = Build.wire(same, id)
 
+    # The wires at a busbar get the voltage of the battery on the busbar.
+    {:ok, changed, to_bus} = Build.add_wire(changed, battery, bus)
+    assert Build.bus_systems(changed) == %{bus => "48"}
+    assert {:ok, %{system: "48"}} = Build.wire(changed, to_bus)
+    assert {:ok, %{system: "48"}} = Build.wire(changed, other)
+    {:ok, shore_build, _shore} = Build.add_item(changed, bay, "shore_power")
+    shore = List.last(shore_build.items).id
+    {:ok, shore_build, from_shore} = Build.add_wire(shore_build, shore, bus)
+    assert {:ok, %{system: "48", two_way: true}} = Build.wire(shore_build, from_shore)
+    {:ok, lower} = Build.update_item(shore_build, battery, %{"volts" => "12"})
+    assert Enum.all?(lower.wires, &(&1.system == "12"))
+
     # A stored wire with a different system gets the system of its battery.
     map = Jason.decode!(Build.to_json(changed))
 

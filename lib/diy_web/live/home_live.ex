@@ -274,8 +274,11 @@ defmodule DIYWeb.HomeLive do
         {:ok, wire} = Build.wire(build, id)
         {:ok, a} = Build.item(build, wire.from)
         {:ok, b} = Build.item(build, wire.to)
-        said = "A wire from #{Catalog.name(a)} to #{Catalog.name(b)} is added."
-        {:noreply, socket |> assign(:item_said, said) |> put(build)}
+        pair = Enum.sort([a.id, b.id])
+        n = Enum.count(build.wires, &(Enum.sort([&1.from, &1.to]) == pair))
+        number = if n > 1, do: ": wire #{n}", else: ""
+        said = "A wire from #{Catalog.name(a)} to #{Catalog.name(b)} is added#{number}."
+        {:noreply, socket |> say_wire(said) |> put(build)}
 
       {:error, _reason} ->
         {:noreply, socket}
@@ -294,7 +297,7 @@ defmodule DIYWeb.HomeLive do
   def handle_event("delete_wire", %{"id" => id}, socket) do
     case Build.delete_wire(socket.assigns.build, id) do
       {:ok, build} ->
-        {:noreply, socket |> assign(:item_said, "The wire is removed.") |> put(build)}
+        {:noreply, socket |> say_wire("The wire is removed.") |> put(build)}
 
       {:error, _reason} ->
         {:noreply, socket}
@@ -1315,6 +1318,10 @@ defmodule DIYWeb.HomeLive do
     end
   end
 
+  # The status of a wire again (`say_wire/2`), when no newer status came.
+  def handle_info({:wire_said, id, said}, %{assigns: %{item: id, item_said: nil}} = socket),
+    do: {:noreply, assign(socket, :item_said, said)}
+
   # The devices of Home Assistant changed (DIYWeb.HomeAssistant): the page
   # draws the ghosts again.
   def handle_info(:ha_devices, socket), do: {:noreply, pictures(socket)}
@@ -1349,6 +1356,18 @@ defmodule DIYWeb.HomeLive do
 
     if value == before do
       Process.send_after(self(), {:item_said, id, what, value, said}, @said_again)
+      assign(socket, :item_said, nil)
+    else
+      assign(socket, :item_said, said)
+    end
+  end
+
+  # The status after a wire is added or removed. The same text a second
+  # time is empty for @said_again ms first, so a screen reader reads it
+  # again.
+  defp say_wire(socket, said) do
+    if socket.assigns[:item_said] == said do
+      Process.send_after(self(), {:wire_said, socket.assigns.item, said}, @said_again)
       assign(socket, :item_said, nil)
     else
       assign(socket, :item_said, said)

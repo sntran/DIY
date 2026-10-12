@@ -207,8 +207,19 @@ defmodule DIY.WireTest do
     assert %{system: "12", two_way: true} = Wire.defaults(station, bus)
     assert %{system: "120", two_way: false} = Wire.defaults(station, switch)
     assert %{system: "12", two_way: false} = Wire.defaults(bus, inverter)
-    # On AC, a wire to a busbar has one way.
-    assert %{system: "120", two_way: false} = Wire.defaults(shore, bus)
+    # A busbar is on DC: the wire of the charger of a shore power inlet to
+    # a busbar has two ways.
+    assert %{system: "12", two_way: true} = Wire.defaults(shore, bus)
+    assert %{system: "120", two_way: false} = Wire.defaults(shore, inverter)
+
+    # The system from the ends: a battery, else the battery of a busbar,
+    # else DC at a busbar.
+    bus = Map.put(bus, :id, "i9")
+    assert Wire.end_system("120", station, battery, %{}) == "24"
+    assert Wire.end_system("12", bus, inverter, %{"i9" => "48"}) == "48"
+    assert Wire.end_system("120", shore, bus, %{}) == "12"
+    assert Wire.end_system("24", shore, bus, %{"i8" => "48"}) == "24"
+    assert Wire.end_system("240", station, switch, %{"i9" => "48"}) == "240"
 
     # The system of a battery at an end.
     assert Wire.battery_system(station, battery) == "24"
@@ -280,6 +291,7 @@ defmodule DIY.WireTest do
           {%{"feet" => 0.5}, :feet},
           {%{"feet" => "500.1"}, :feet},
           {%{"amps" => String.duplicate("1", 33)}, :amps},
+          {%{"amps" => String.pad_leading("27.5", 33)}, :amps},
           {%{"amps" => "0." <> String.duplicate("1", 31)}, :amps},
           {%{"two_way" => "yes"}, :two_way},
           {%{"awg" => "5"}, :awg},

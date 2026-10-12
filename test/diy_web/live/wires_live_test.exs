@@ -64,12 +64,20 @@ defmodule DIYWeb.WiresLiveTest do
 
     assert has_element?(view, "#{id}-title", "Power station to DC busbar or distributor")
     assert has_element?(view, "#{id}-system option[selected][value='12']")
+    # A busbar with no battery is on DC: the choice has no AC.
+    assert has_element?(view, "#{id}-system option[value='48']")
+    refute has_element?(view, "#{id}-system option[value='120']")
     assert has_element?(view, "#{id}-amps[value='30'][step=any][inputmode=decimal]")
     assert has_element?(view, "#{id} [role=switch][name='wire[two_way]'][checked]")
 
     # The busbar takes no fuse less than 40 A (MEGA fuses): 8 AWG carries
     # 50 A.
-    assert has_element?(view, "#{id}-advice", "Current: 125% of 30 A is 37.5 A.")
+    assert has_element?(
+             view,
+             "#{id}-advice",
+             "Current: 125% of 30 A is 37.5 A. This is for a load all the time: 3 hours or more (NEC Article 100, 210.19(A) and 215.2(A)(1))."
+           )
+
     assert has_element?(view, "#{id}-advice", "Wire: 8 AWG copper or larger, rated 75 °C")
 
     assert has_element?(
@@ -289,12 +297,10 @@ defmodule DIYWeb.WiresLiveTest do
     assert has_element?(view, radio.(if(bus == first, do: 0, else: 1), bus) <> "[checked]")
     refute has_element?(view, "#{id} [name='wire[from]'][value=#{station}][checked]")
 
-    # On AC, the far end has no breaker, and no DC rating.
-    view |> form("#{id}-form", %{"wire" => %{"system" => "120"}}) |> render_change()
-    refute has_element?(view, "#{id} [name='wire[two_way]']")
-    refute has_element?(view, "#{id}-from-dc")
-    refute has_element?(view, "#{id}-to-ocpd")
-    refute has_element?(view, "#{id}-advice", "rated for DC")
+    # A wire at a busbar stays on DC.
+    render_change(view, "wire", %{"wire_id" => wire.id, "wire" => %{"system" => "120"}})
+    assert hd(build_of(view).wires).system == "12"
+    assert has_element?(view, "#{id} [name='wire[two_way]']")
 
     # The busbar shows the same wire in its panel, and its positions.
     render_patch(view, ~p"/inside?#{[item: bus]}")
@@ -324,9 +330,19 @@ defmodule DIYWeb.WiresLiveTest do
     assert has_element?(view, "#wire-ports.stage-help", "4 of them have a wire.")
     [_, _, third, fourth] = build_of(view).wires
 
-    for wire <- [third, fourth] do
-      view |> element("#wire-#{wire.id}-remove") |> render_click()
-    end
+    assert has_element?(
+             view,
+             "#item-said",
+             "A wire from DC busbar or distributor to Power station is added: wire 4."
+           )
+
+    # The same status two times: it is empty for a short time first, so a
+    # screen reader reads it again.
+    view |> element("#wire-#{third.id}-remove") |> render_click()
+    assert has_element?(view, "#item-said", "The wire is removed.")
+    view |> element("#wire-#{fourth.id}-remove") |> render_click()
+    Process.sleep(150)
+    assert has_element?(view, "#item-said", "The wire is removed.")
 
     # A busbar with 1 position, and 2 wires: a fault. The model of the
     # busbar shows its positions.
@@ -351,7 +367,7 @@ defmodule DIYWeb.WiresLiveTest do
     assert has_element?(
              view,
              "#wire-#{second.id}-confirm[role=group].hidden",
-             "Remove the wire from DC busbar or distributor to Power station?"
+             "Remove this wire: DC busbar or distributor to Power station, wire 2?"
            )
 
     assert has_element?(view, "#wire-#{second.id}-keep", "Keep it")
@@ -387,14 +403,69 @@ defmodule DIYWeb.WiresLiveTest do
     assert has_element?(
              view,
              "#wire-full",
-             "An item has 24 wires at most, and a build has 100 wires at most. Remove a wire to add a different one."
+             "This item has 24 wires, the most for an item. Remove a wire of this item to add a different one."
            )
 
-    # The busbar is full: the other station cannot add a wire to it.
+    # The station and the busbar are full: the other station cannot add a
+    # wire to them.
     render_patch(view, ~p"/inside?#{[item: other]}")
     refute has_element?(view, "#add-wire")
-    assert has_element?(view, "#wire-full")
+
+    assert has_element?(
+             view,
+             "#wire-full",
+             "Each other item that takes wires here has 24 wires, the most for an item."
+           )
+
     refute has_element?(view, "#wire-none")
+
+    # A build with 100 wires (a stored build).
+    [one | _] = build.wires
+    many = %{build | wires: for(n <- 1..100, do: %{one | id: "w#{1000 + n}"})}
+    view = open(conn, ~p"/inside?#{[item: other]}", many)
+
+    assert has_element?(
+             view,
+             "#wire-full",
+             "The build has 100 wires, the most for a build. Remove a wire to add a different one."
+           )
+  end
+
+  test "a battery, a busbar and an inverter in a van: the wires at the busbar have the voltage of the battery",
+       %{conn: conn} do
+    build = preset()
+    {:ok, build, van} = Build.add_item(build, room(build, "Driveway"), "camper_van")
+    bay = Build.zone(build, van, :bay).id
+    {build, battery} = add(build, bay, "van_battery")
+    {build, bus} = add(build, bay, "dc_bus")
+    {build, inverter} = add(build, bay, "inverter")
+    {:ok, build} = Build.update_item(build, battery, %{"volts" => "48"})
+    {:ok, build, _id} = Build.add_wire(build, battery, bus)
+    {:ok, build, id} = Build.add_wire(build, bus, inverter)
+    view = open(conn, ~p"/van?#{[id: van, item: inverter]}", build)
+
+    assert has_element?(
+             view,
+             "p#wire-#{id}-system",
+             "System: 48 V DC, the voltage of the battery at DC busbar or distributor. Change it in the part of the battery."
+           )
+
+    assert has_element?(view, "#wire-#{id}-advice", "rated for DC at 58.4 V or more.")
+  end
+
+  test "a wire on AC: one way, and no DC rating", %{conn: conn} do
+    build = preset()
+    {build, station} = add(build, room(build, "Garage"), "power_station")
+    {build, switch} = add(build, room(build, "Garage"), "transfer_switch")
+    {:ok, build, id} = Build.add_wire(build, station, switch)
+    view = open(conn, ~p"/inside?#{[item: station]}", build)
+    id = "#wire-#{id}"
+    assert has_element?(view, "#{id}-system option[selected][value='120']")
+    refute has_element?(view, "#{id} [name='wire[two_way]']")
+    refute has_element?(view, "#{id}-from-dc")
+    refute has_element?(view, "#{id}-to-ocpd")
+    refute has_element?(view, "#{id}-advice", "rated for DC")
+    assert has_element?(view, "#{id}-advice", "At Power station: a breaker or a fuse of 40 A")
   end
 
   test "an item with no second item that takes wires, and an item with no wires", %{conn: conn} do
