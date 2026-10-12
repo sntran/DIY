@@ -91,6 +91,7 @@ defmodule DIYWeb.StationLiveTest do
     |> render_change()
 
     assert station(view, id).params["kwh"] == 5.0
+    assert has_element?(view, "#station-own", "Your numbers are not the numbers of the model.")
     choose(view, id, "anker_solix_f3800")
     assert station(view, id).params["kwh"] == 5.0
     assert has_element?(view, "#item-said", "Anker SOLIX F3800. Your numbers stay.")
@@ -103,6 +104,7 @@ defmodule DIYWeb.StationLiveTest do
     view |> element("#use-model") |> render_click()
     assert station(view, id).params["kwh"] == 3.84
     assert has_element?(view, "#item-said", "Pecron E3800LFP: 3.84 kWh")
+    refute has_element?(view, "#station-own")
 
     # A size of the person stays with a new model. The key gives the size
     # of the model again, and the focus goes to the first side.
@@ -115,9 +117,14 @@ defmodule DIYWeb.StationLiveTest do
     assert has_element?(view, "#item-said", "Anker SOLIX F3800: 3.84 kWh, 6,000 W")
     refute has_element?(view, "#item-said", "Its size")
     assert has_element?(view, "#item-place", "You gave this size.")
-    assert has_element?(view, ~s(#typical-size[phx-click*="size-w"]), "The size of the model")
+    # The focus goes to the help of the size: LiveView does not change the
+    # value of a field with the focus.
+    assert has_element?(view, ~s(#typical-size[phx-click*="size-help"]), "The size of the model")
+    refute has_element?(view, ~s(#typical-size[phx-click*="size-w"]))
+    assert has_element?(view, ~s(#size-help[tabindex="-1"]))
     view |> element("#typical-size") |> render_click()
     assert station(view, id).size == nil
+    assert has_element?(view, "#size-w[value='15']")
 
     # The F3800 of Anker has its own look: the warm gray.
     assert render(view) =~ "i-titanium-"

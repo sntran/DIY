@@ -397,7 +397,7 @@ defmodule DIYWeb.PowerPage do
     do: %{
       name:
         Enum.map_join(
-          [Catalog.name(first) | Enum.map(rest, &String.downcase(Catalog.name(&1)))],
+          [Catalog.name(first) | Enum.map(rest, &Catalog.text_name/1)],
           " and ",
           & &1
         ),

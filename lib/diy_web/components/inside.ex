@@ -499,14 +499,6 @@ defmodule DIYWeb.Inside do
 
   defp devices_message(_error), do: "The app cannot read the devices of Home Assistant now."
 
-  # A name in a sentence: its first letter in lower case, but not in a
-  # word of capitals ("TV").
-  defp lower_first(name) do
-    {first, rest} = String.split_at(name, 1)
-    second = String.slice(rest, 0, 1)
-    if String.downcase(second) == second, do: String.downcase(first) <> rest, else: name
-  end
-
   defp away_text(1), do: "1 device is in an area of Home Assistant with no room here."
   defp away_text(n), do: "#{n} devices are in areas of Home Assistant with no room here."
 
@@ -579,7 +571,7 @@ defmodule DIYWeb.Inside do
                  not Map.has_key?(build.devices, &1.id))
            ),
          {:ok, room} <- Build.room(build, other.room) do
-      %{name: Catalog.name(other), room: room.name, kind: lower_first(Catalog.name(item))}
+      %{name: Catalog.name(other), room: room.name, kind: Catalog.text_name(item)}
     else
       _ -> nil
     end
@@ -1026,6 +1018,9 @@ defmodule DIYWeb.Inside do
         <p :if={station_source(@item)} id="station-source" class="stage-help">
           The numbers of the model: {station_source(@item)}
         </p>
+        <p :if={own_station_numbers?(@item)} id="station-own" class="stage-help">
+          Your numbers are not the numbers of the model. The key gives them.
+        </p>
         <.usage :if={:usage in @kind.features} usage={@build.usage} ha_meter={@ha_meter} />
       </section>
 
@@ -1404,7 +1399,14 @@ defmodule DIYWeb.Inside do
           Give each side in inches, from 1 to {@max}.
         </p>
       </form>
-      <p :if={@item.type not in ["solar_panels", "camper_van"]} class="stage-help">
+      <%!-- The key of the typical size puts the focus here, not on a side:
+        LiveView does not change the value of a field with the focus. --%>
+      <p
+        :if={@item.type not in ["solar_panels", "camper_van"]}
+        id="size-help"
+        tabindex="-1"
+        class="stage-help"
+      >
         {cond do
           @item.size ->
             "You gave this size."
@@ -1432,7 +1434,7 @@ defmodule DIYWeb.Inside do
           id="typical-size"
           phx-click={
             JS.push("item_size", value: %{item_id: @item.id, typical: "true"})
-            |> JS.focus(to: "#size-w")
+            |> JS.focus(to: "#size-help")
           }
           class="stage-btn"
         >
@@ -1603,6 +1605,16 @@ defmodule DIYWeb.Inside do
   end
 
   defp station_source(_item), do: nil
+
+  # True when a station of a model has numbers that are not the numbers of
+  # the model.
+  defp own_station_numbers?(%{type: "power_station", params: %{"model" => model} = params})
+       when model != "other" do
+    {_key, _name, numbers, _size, _source} = List.keyfind(Catalog.station_models(), model, 0)
+    Map.take(params, Map.keys(numbers)) != numbers
+  end
+
+  defp own_station_numbers?(_item), do: false
 
   # True when the house has a power station (a planned one too).
   defp station?(build), do: Enum.any?(build.items, &(&1.type == "power_station"))

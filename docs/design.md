@@ -1334,7 +1334,9 @@ and the checks of the lesson.
 The owner asked for the stations that the DIY world knows. The request
 was: "Pecron E3800LFP, EcoFlow Delta Pro, EcoFlow DELTA Pro 3, and EcoFlow
 DU (whole house), or the Anker Solix". The app reads "EcoFlow DU (whole house)" as
-the DELTA Pro Ultra (DPU), the whole-home station of EcoFlow. It reads
+the DELTA Pro Ultra (DPU), the whole-home station of EcoFlow. EcoFlow also
+sells the DELTA Pro Ultra X (12 kWh, 12 kW) for the whole home: the owner
+can ask for it. It reads
 "the Anker Solix" as the SOLIX F3800 and the F3800 Plus. The Pecron
 F5000LFP, the look of the kind, is a model too. The person chooses the
 model of a station in its panel (the choice "Model",
@@ -1364,7 +1366,8 @@ The rules:
   shows the source under the numbers. Where the maker gives only a
   current, the numbers come from Adorama, and the source tells it.
 - The charge from the wall is the AC charge from an outlet of 120 V and
-  15 A: 1,800 W for each model. The page Power uses it as the limit of
+  15 A: 1,800 W for each model. A load that runs for hours gets 80% of
+  the outlet (1,440 W): the help of the field tells it. The page Power uses it as the limit of
   the charge from the grid in one hour (`DIY.Power`). Many stations take
   more with a cable of 30 A or on 240 V. The source tells that number,
   and the person can give it.
@@ -1383,13 +1386,15 @@ The rules:
   So a pass through the list of models (with the arrow keys, for
   example) never deletes the numbers that the person gave. The key "Use
   the numbers of the model" gives the numbers of the model
-  (`DIY.Build.use_model/2`). The price, the extra batteries and "It
-  powers" always stay.
+  (`DIY.Build.use_model/2`). When the numbers are not the numbers of the
+  model, a line under the source tells it. The price, the extra
+  batteries and "It powers" always stay.
 - A size that the person gives stays with a new model. With no such size,
   a station has the size of its model, and "Another station" has the size
   and the look of the kind (`DIY.Layout.size/1`). The key "The size of
-  the model" gives the size of the model again, and the focus goes to
-  the first side of the size.
+  the model" gives the size of the model again. The focus goes to the
+  help of the size, not to a side: LiveView does not change the value of
+  a field with the focus.
 - A status tells a screen reader the new numbers and the size, or that
   the numbers stay. It comes after a new model, and after "Use the
   numbers of the model". A new model of a van gets a status too.

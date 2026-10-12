@@ -749,7 +749,7 @@ defmodule DIY.Catalog do
           1800,
           50,
           20000,
-          "The most power of its AC charge from a wall outlet. An outlet of 120 V and 15 A gives 1,800 W at most. Some stations take more with a cable of 30 A or on 240 V."
+          "The most power of its AC charge from a wall outlet. An outlet of 120 V and 15 A gives 1,800 W at most, and 1,440 W for a load that runs for hours. Some stations take more with a cable of 30 A or on 240 V."
         ),
         int("solar_w", "Solar input", "W", 1000, 0, 20000, "The most solar power that it takes."),
         choice(
@@ -1569,6 +1569,22 @@ defmodule DIY.Catalog do
   end
 
   def name(%{type: type}), do: kind(type).name
+
+  @doc """
+  The name of an item in the middle of a sentence. The name of a model of
+  power station is a proper name, and it stays. Else the first letter is
+  in lower case, but not in a word of capitals ("TV").
+  """
+  def text_name(%{type: "power_station", params: %{"model" => model}} = item)
+      when model != "other",
+      do: name(item)
+
+  def text_name(item) do
+    name = name(item)
+    {first, rest} = String.split_at(name, 1)
+    second = String.slice(rest, 0, 1)
+    if String.downcase(second) == second, do: String.downcase(first) <> rest, else: name
+  end
 
   @doc """
   Reads the parameters of an item of a type, from the map of a form or of a

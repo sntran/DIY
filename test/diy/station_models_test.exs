@@ -73,22 +73,26 @@ defmodule DIY.StationModelsTest do
   end
 
   test "the numbers and the sizes of the makers" do
-    assert numbers("pecron_f5000lfp") == %{
-             "kwh" => 5.12,
-             "output_w" => 7200,
-             "charge_w" => 1800,
-             "solar_w" => 5800,
-             "weight" => 124
-           }
-
-    assert numbers("pecron_e3800lfp")["kwh"] == 3.84 and
-             numbers("pecron_e3800lfp")["weight"] == 87
-
-    assert numbers("ecoflow_delta_pro")["output_w"] == 3600
-    assert numbers("ecoflow_delta_pro_3")["kwh"] == 4.096
-    assert numbers("ecoflow_delta_pro_ultra")["solar_w"] == 5600
-    assert numbers("anker_solix_f3800")["solar_w"] == 2400
-    assert numbers("anker_solix_f3800_plus")["solar_w"] == 3200
+    # Each model: the battery, the output, the solar input and the weight
+    # (the charge from the wall is 1,800 W for each).
+    for {key, {kwh, output, solar, weight}} <- [
+          {"pecron_f5000lfp", {5.12, 7200, 5800, 124}},
+          {"pecron_e3800lfp", {3.84, 4200, 3000, 87}},
+          {"ecoflow_delta_pro", {3.6, 3600, 1600, 99}},
+          {"ecoflow_delta_pro_3", {4.096, 4000, 2600, 114}},
+          {"ecoflow_delta_pro_ultra", {6.144, 7200, 5600, 182}},
+          {"anker_solix_f3800", {3.84, 6000, 2400, 132}},
+          {"anker_solix_f3800_plus", {3.84, 6000, 3200, 137}}
+        ] do
+      assert numbers(key) == %{
+               "kwh" => kwh,
+               "output_w" => output,
+               "charge_w" => 1800,
+               "solar_w" => solar,
+               "weight" => weight
+             },
+             key
+    end
 
     # The front of a DELTA Pro is its short end; the F3800 stands up.
     assert Catalog.station_size("ecoflow_delta_pro") == {11, 25, 16}
@@ -104,6 +108,12 @@ defmodule DIY.StationModelsTest do
     station = fn model -> %{type: "power_station", params: %{"model" => model}} end
     assert Catalog.name(station.("ecoflow_delta_pro_ultra")) == "EcoFlow DELTA Pro Ultra"
     assert Catalog.name(station.("other")) == "Power station"
+
+    # In the middle of a sentence, the name of a model stays. A different
+    # name starts in lower case, but not a word of capitals.
+    assert Catalog.text_name(station.("anker_solix_f3800")) == "Anker SOLIX F3800"
+    assert Catalog.text_name(station.("other")) == "power station"
+    assert Catalog.text_name(%{type: "tv", params: %{}}) == "TV"
   end
 
   test "a new model gives its numbers; the numbers and the size of the person stay" do
