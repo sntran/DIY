@@ -169,7 +169,7 @@ defmodule DIYWeb.Front do
     </details>
     <p class="text-xs opacity-80">
       A kWh (a kilowatt-hour) is 1,000 watts for one hour. The bill counts your use in kWh.
-      At {Format.cents(@cents)} for each kWh: {@price.source}.{if @power.night_cents,
+      At {Format.cents(@cents)} for each kWh: {DIY.Gettext.en(@price.source)}.{if @power.night_cents,
         do:
           " At night (#{@power.night_from}:00 to #{@power.night_to}:00): #{Format.cents(@power.night_cents)}."}{if @bill.export >
                                                                                                                      0,
@@ -222,7 +222,7 @@ defmodule DIYWeb.Front do
         The gas items: {Enum.join(@names, ", ")}. A therm is the unit of gas on the bill: 100,000 BTU.
         The bill has a fixed charge near {Format.dollars(@gas.fixed)} each month, and near {Format.dollars(
           @gas.dollars
-        )} for each therm. These numbers come from {@gas.source}.
+        )} for each therm. These numbers come from {DIY.Gettext.en(@gas.source)}.
       </p>
     </div>
     """

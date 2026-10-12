@@ -2727,8 +2727,16 @@ is the key: it is in Simplified Technical English. The keys are in
 - A module of the pages uses `gettext/1`. A text with a number or a name
   has a key for it, for example `%{size} · %{area} sq ft`.
 - A text of the core (for example the label of a kind of house in
-  `DIY.House`) is a key with `gettext_noop/1`. The page translates it
-  when it shows it (`DIY.Gettext.t/1`).
+  `DIY.House`) is a key with `gettext_noop/1`. A text with values is a
+  key and its values, for example the source of a price in
+  `DIY.Prices`. The page translates it when it shows it
+  (`DIY.Gettext.t/1`). A page that is not translated yet shows it in
+  English (`DIY.Gettext.en/1`).
+- A notice (a flash) is in the language of the page. A notice from a
+  script of the page is in English: it is `{"en", text}`, and the notice
+  has `lang="en"`.
+- A text with a count has a form for each plural form of the language
+  (`ngettext/3`). Vietnamese has one form.
 - The numbers, the money and the dates keep the form of the United
   States. The app is for houses in the United States: ZIP codes, the
   NEC, and the prices of Texas.
@@ -2746,36 +2754,53 @@ is the key: it is in Simplified Technical English. The keys are in
    its language.
 3. Else English.
 
-The plug puts the language in the session, and the hook of the LiveView
-reads it from the session. The page has the attribute `lang` of its
-language (WCAG 3.1.1).
+The plug puts the language in the assigns, for the attribute `lang` of
+the page (WCAG 3.1.1). The signed session of the LiveView keeps the
+language of the first render (`DIYWeb.Locale.live_session/1`), and the
+hook of the LiveView reads it. A reconnect of the socket, after a deploy
+or when a phone wakes up, reads the cookie session again. The cookie can
+have a newer language from a different tab. The signed session wins, so
+the texts stay in the language of the attribute `lang`. A reload shows
+the new language.
 
 The person chooses a language with a link on the first screen or on the
 page Settings (`/language/:locale`). Each name is in its own language
 (`lang` and `hreflang`), so a screen reader reads it well. The current
 language has `aria-current`. The link works with no script. A change of
-a language does no harm, so the link needs no token of the session. The
-link goes back to a path of the app only, never to a different site.
+a language does no harm, so the link needs no token of the session. A
+link of a different site can only change the language, and the person
+can change it back on the page Settings. The link goes back to a path of
+the app only: letters, digits and a simple query. Each other value goes
+to `/`. The cookie is `Secure` on https.
 
 ### The steps
 
 The first step has the tools and the choice of the language. It also
 translates the frame of the pages, the first screens, and the page
-Settings. The frame is the bar of the parts and the state of the save. The next steps
-translate the other pages, one group at a time. Until then, those pages
-are in English.
+Settings. The frame is the bar of the parts, the state of the save, and
+the notices. The next steps translate the other pages, one group at a
+time. Until then, those pages are in English, and their main part has
+`lang="en"` (WCAG 3.1.2): a screen reader reads them with an English
+voice. The card of Home Assistant on the page Settings and the page of
+its sign-in also have `lang="en"` for now.
 
 ### The tests of the languages
 
 - `test/diy_web/locale_test.exs` checks the header Accept-Language, with
-  a property test against a model. It checks the cookie, the link of a
-  language, and the first screens and the page Settings in Spanish and
-  in Vietnamese. It also checks that each key has a translation in each
-  language, with the same keys of names.
+  a property test against a model. It checks the cookie before the
+  header, the link of a language with a property test of its return
+  path, and the signed session. It checks the first screens, the
+  notices and the page Settings in Spanish and in Vietnamese. It checks
+  that the pages that are not translated have `lang="en"` and English
+  sources. It also checks that each key has a translation in each
+  language, with the same keys of names. A translation is not the
+  English text, except a name.
 - `mix.com precommit` checks that the keys follow the code
   (`gettext.extract --check-up-to-date`).
 - The browser test shows the first screen in Spanish and in Vietnamese,
-  with the checks of axe, and then goes on in English.
+  with the checks of axe, and then goes on in English. It also checks
+  the screen of the house presets at 320 px in Spanish and in
+  Vietnamese: the page is not wider than the screen.
 
 ## In a car
 

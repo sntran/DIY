@@ -129,11 +129,13 @@ defmodule DIYWeb.Math do
             one hour for each °F colder outside: 60%, because the sun and the people in the house help. These factors are a simple model of
             the app, not a measurement.
           </li>
-          <li>The price: {Format.cents(@price.cents)} for each kWh, {@price.source}.</li>
+          <li>
+            The price: {Format.cents(@price.cents)} for each kWh, {DIY.Gettext.en(@price.source)}.
+          </li>
           <li :if={@estimate.therms > 0} id="gas-price">
             The price of gas: a fixed charge near {Format.dollars(@gas.fixed)} each month, and near {Format.dollars(
               @gas.dollars
-            )} for each therm. These numbers come from {@gas.source}.
+            )} for each therm. These numbers come from {DIY.Gettext.en(@gas.source)}.
           </li>
           <li>
             The range: for a month, the same month of each of the 10 years, with the least and the most kWh; for

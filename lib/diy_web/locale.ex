@@ -8,18 +8,24 @@ defmodule DIYWeb.Locale do
   the language comes from the header Accept-Language of the browser, else
   it is English.
 
-  - As a plug, it puts the language in the session, and in the assigns of
-    the connection for the attribute `lang` of the page. It also sets it
-    for the texts of the first render.
+  - As a plug, it puts the language in the assigns of the connection, for
+    the attribute `lang` of the page.
+  - The signed session of a LiveView keeps the language of its first
+    render (`live_session/1`). A reconnect of the socket reads the cookie
+    session again, for example after a deploy or when a phone wakes up.
+    The cookie can have a newer language from a different tab. The
+    signed session wins, so the page stays in the language of its `lang`.
   - As a hook of a LiveView (`on_mount/4`), it sets the language of the
     process from the session, and puts it in the assigns.
   - `update/2` keeps the choice of the person (a link on the first screen
     or on the page Settings), and goes back to the page. A change of a
-    language does no harm, so the link needs no token of the session.
+    language does no harm, so the link needs no token of the session. A
+    link of a different site can only change the language, and the person
+    can change it back on the page Settings.
   """
   import Plug.Conn
 
-  @locales ~w(en es vi)
+  @locales Application.compile_env!(:diy, [DIY.Gettext, :allowed_locales])
   @cookie "diy_language"
   @year 365 * 24 * 60 * 60
 
@@ -48,8 +54,8 @@ defmodule DIYWeb.Locale do
   end
 
   defp weighted({part, index}) do
-    [tag | params] = part |> String.trim() |> String.split(";")
-    base = tag |> String.split("-") |> hd() |> String.downcase()
+    [tag | params] = String.split(part, ";")
+    base = tag |> String.trim() |> String.split("-") |> hd() |> String.downcase()
 
     case weight(params) do
       q when q > 0 -> [{base, q, index}]
@@ -59,7 +65,7 @@ defmodule DIYWeb.Locale do
 
   defp weight(params) do
     Enum.find_value(params, 1.0, fn param ->
-      with "q=" <> value <- String.trim(param),
+      with "q=" <> value <- param |> String.trim() |> String.downcase(),
            {q, ""} <- Float.parse(value) do
         q
       else
@@ -85,15 +91,13 @@ defmodule DIYWeb.Locale do
 
   def call(conn, _opts) do
     conn = fetch_cookies(conn)
-    locale = of_conn(conn)
-    Gettext.put_locale(DIY.Gettext, locale)
-
-    conn
-    |> put_session("locale", locale)
-    |> assign(:locale, locale)
+    assign(conn, :locale, of_conn(conn))
   end
 
   ## The hook of a LiveView
+
+  @doc "The signed session of a LiveView: the language of its first render."
+  def live_session(conn), do: %{"locale" => conn.assigns.locale}
 
   def on_mount(:default, _params, session, socket) do
     locale = if session["locale"] in @locales, do: session["locale"], else: "en"
@@ -114,17 +118,25 @@ defmodule DIYWeb.Locale do
 
     conn =
       if locale in @locales,
-        do: put_resp_cookie(conn, @cookie, locale, max_age: @year, same_site: "Lax"),
+        do:
+          put_resp_cookie(conn, @cookie, locale,
+            max_age: @year,
+            same_site: "Lax",
+            secure: conn.scheme == :https
+          ),
         else: conn
 
     conn
     |> Phoenix.Controller.redirect(to: back)
   end
 
-  # Only a path of the app: it starts with one "/", and it is not a
-  # different site ("//" or "/\\").
-  defp back("/" <> rest = path) when byte_size(path) <= 200 do
-    if String.starts_with?(rest, ["/", "\\"]), do: "/", else: path
+  # Only a path of a page of the app, with a simple query: letters,
+  # digits and a few signs. Each other value goes to "/": a different site
+  # ("//" or "/\\"), and a sign that a redirect does not take.
+  @path ~r/\A\/(?:[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)*)?(?:\?[A-Za-z0-9_.~=&%-]*)?\z/
+
+  defp back(path) when is_binary(path) and byte_size(path) <= 200 do
+    if Regex.match?(@path, path), do: path, else: "/"
   end
 
   defp back(_return), do: "/"

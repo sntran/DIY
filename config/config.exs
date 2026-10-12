@@ -23,7 +23,7 @@ config :diy, DIYWeb.Endpoint,
   live_view: [signing_salt: "qA6hSwSl"]
 
 # The languages of the pages (DIY.Gettext and DIYWeb.Locale).
-config :diy, DIY.Gettext, default_locale: "en", locales: ~w(en es vi)
+config :diy, DIY.Gettext, default_locale: "en", allowed_locales: ~w(en es vi)
 
 # Configure LiveView
 config :phoenix_live_view,

@@ -34,7 +34,7 @@ msgstr "2010 o después"
 #: lib/diy/house.ex:32
 #, elixir-autogen, elixir-format
 msgid "A gas furnace, a gas water heater and a gas stove."
-msgstr "Una calefacción a gas, un calentador de agua a gas y una estufa a gas."
+msgstr "Un calefactor a gas, un calentador de agua a gas y una estufa a gas."
 
 #: lib/diy_web/components/start.ex:45
 #, elixir-autogen, elixir-format
@@ -197,7 +197,7 @@ msgstr "Mi casa"
 #: lib/diy_web/components/settings.ex:74
 #, elixir-autogen, elixir-format
 msgid "My utility is a city utility or a co-op"
-msgstr "Mi compañía es de la ciudad o una cooperativa"
+msgstr "Mi compañía de luz es municipal o una cooperativa"
 
 #: lib/diy_web/components/start.ex:120
 #, elixir-autogen, elixir-format
@@ -207,7 +207,7 @@ msgstr "Siguiente"
 #: lib/diy_web/components/settings.ex:70
 #, elixir-autogen, elixir-format
 msgid "No retail choice: a city utility or a co-op sells the power."
-msgstr "Sin elección de proveedor: una compañía de la ciudad o una cooperativa vende la electricidad."
+msgstr "Sin elección de proveedor: una compañía de luz municipal o una cooperativa vende la electricidad."
 
 #: lib/diy_web/components/layouts.ex:27
 #, elixir-autogen, elixir-format
@@ -252,7 +252,7 @@ msgstr "Elección de proveedor."
 #: lib/diy_web/components/settings.ex:64
 #, elixir-autogen, elixir-format
 msgid "Retail choice: %{utility} delivers the power."
-msgstr "Elección de proveedor: %{utility} entrega la electricidad."
+msgstr "Elección de proveedor: %{utility} distribuye la electricidad."
 
 #: lib/diy_web/components/layouts.ex:54
 #, elixir-autogen, elixir-format
@@ -423,18 +423,18 @@ msgstr "Código postal"
 msgid "none"
 msgstr "ninguno"
 
-#: lib/diy_web/live/home_live.ex:188
+#: lib/diy_web/live/home_live.ex:190
 #, elixir-autogen, elixir-format
 msgid "The app does not know this ZIP code. Give 5 digits, for example 75070."
 msgstr "La app no conoce este código postal. Escriba 5 dígitos, por ejemplo 75070."
 
-#: lib/diy/prices.ex:159
+#: lib/diy/prices.ex:156
 #, elixir-autogen, elixir-format
 msgid "a line through the bills of the homes of %{place} in the 12 months of 2024 (US Energy Information Administration)"
-msgstr "una línea por las facturas de los hogares de %{place} en los 12 meses de 2024 (Administración de Información Energética de EE. UU.)"
+msgstr "una recta ajustada a las facturas de los hogares de %{place} en los 12 meses de 2024 (Administración de Información Energética de EE. UU.)"
 
-#: lib/diy/prices.ex:136
-#: lib/diy/prices.ex:152
+#: lib/diy/prices.ex:133
+#: lib/diy/prices.ex:149
 #, elixir-autogen, elixir-format
 msgid "the US"
 msgstr "EE. UU."
@@ -444,12 +444,261 @@ msgstr "EE. UU."
 msgid "the average price for homes in %{place}, January to July 2026 (US Energy Information Administration, Electric Power Monthly, table 5.6.B)"
 msgstr "el precio promedio para hogares en %{place}, de enero a julio de 2026 (Administración de Información Energética de EE. UU., Electric Power Monthly, tabla 5.6.B)"
 
-#: lib/diy/prices.ex:115
+#: lib/diy/prices.ex:114
 #, elixir-autogen, elixir-format
 msgid "the middle price (the median) of %{plans} plans for your ZIP code on Power to Choose (%{date}). It is the price at 1,000 kWh in one month, with the delivery charges"
-msgstr "el precio del medio (la mediana) de %{plans} planes para su código postal en Power to Choose (%{date}). Es el precio a 1,000 kWh en un mes, con los cargos de entrega"
+msgstr "el precio del medio (la mediana) de %{plans} planes para su código postal en Power to Choose (%{date}). Es el precio con 1,000 kWh en un mes, con los cargos de distribución"
 
-#: lib/diy/prices.ex:108
+#: lib/diy/prices.ex:107
 #, elixir-autogen, elixir-format
 msgid "the price that you gave"
-msgstr "el precio que usted dio"
+msgstr "el precio que usted indicó"
+
+#: lib/diy_web/device.ex:159
+#, elixir-autogen, elixir-format
+msgid "A different tab changed this build. This page shows that build now."
+msgstr "Otra pestaña cambió este modelo. Esta página muestra ese modelo ahora."
+
+#: lib/diy_web/live/home_live.ex:1002
+#, elixir-autogen, elixir-format
+msgid "A room or a zone cannot go over a different one."
+msgstr "Un cuarto o una zona no puede quedar encima de otro."
+
+#: lib/diy_web/live/home_live.ex:1000
+#, elixir-autogen, elixir-format
+msgid "A wall of a room is from 2 to 200 feet long, and a room stays near the house."
+msgstr "Una pared de un cuarto mide de 2 a 200 pies, y un cuarto queda cerca de la casa."
+
+#: lib/diy_web/live/home_live.ex:1004
+#, elixir-autogen, elixir-format
+msgid "A zone stays in the van."
+msgstr "Una zona se queda en la camioneta."
+
+#: lib/diy_web/live/home_live.ex:1138
+#, elixir-autogen, elixir-format
+msgid "Choose a floor of the house."
+msgstr "Elija un piso de la casa."
+
+#: lib/diy_web/live/home_live.ex:1140
+#, elixir-autogen, elixir-format
+msgid "Choose a house first."
+msgstr "Primero elija una casa."
+
+#: lib/diy_web/live/home_live.ex:1139
+#, elixir-autogen, elixir-format
+msgid "Choose a place: inside, outside or the roof."
+msgstr "Elija un lugar: adentro, afuera o el techo."
+
+#: lib/diy_web/live/home_live.ex:1135
+#, elixir-autogen, elixir-format
+msgid "Choose how you use the batteries."
+msgstr "Elija cómo usa las baterías."
+
+#: lib/diy_web/live/home_live.ex:215
+#, elixir-autogen, elixir-format
+msgid "Choose one of each: the size, the age, the floors and the heat."
+msgstr "Elija uno de cada uno: el tamaño, la edad, los pisos y la calefacción."
+
+#: lib/diy_web/components/core_components.ex:40
+#, elixir-autogen, elixir-format
+msgid "Close"
+msgstr "Cerrar"
+
+#: lib/diy_web/live/home_live.ex:1134
+#, elixir-autogen, elixir-format
+msgid "Give a part from 0 to 100%."
+msgstr "Indique una parte de 0 a 100%."
+
+#: lib/diy_web/live/home_live.ex:1130
+#, elixir-autogen, elixir-format
+msgid "Give an hour from 0 to 23."
+msgstr "Indique una hora de 0 a 23."
+
+#: lib/diy_web/live/home_live.ex:944
+#, elixir-autogen, elixir-format
+msgid "Give each number of the plan in the limits: dollars, cents or kWh."
+msgstr "Indique cada número del plan dentro de los límites: dólares, centavos o kWh."
+
+#: lib/diy_web/live/home_live.ex:749
+#, elixir-autogen, elixir-format
+msgid "Give numbers in the limits of each field."
+msgstr "Indique números dentro de los límites de cada campo."
+
+#: lib/diy_web/live/home_live.ex:938
+#, elixir-autogen, elixir-format
+msgid "Give the delivery charges of your utility: its EFL gives them."
+msgstr "Indique los cargos de distribución de su compañía de luz: su EFL los da."
+
+#: lib/diy_web/live/home_live.ex:941
+#, elixir-autogen, elixir-format
+msgid "Give the kWh of the minimum usage fee: the fee is for a month under that kWh."
+msgstr "Indique los kWh del cargo por uso mínimo: el cargo es para un mes por debajo de esos kWh."
+
+#: lib/diy_web/live/home_live.ex:207
+#, elixir-autogen, elixir-format
+msgid "Give the lot in square feet, from 100 to 100,000,000, or leave it empty."
+msgstr "Indique el terreno en pies cuadrados, de 100 a 100,000,000, o déjelo vacío."
+
+#: lib/diy_web/live/home_live.ex:935
+#, elixir-autogen, elixir-format
+msgid "Give the plan a name."
+msgstr "Dele un nombre al plan."
+
+#: lib/diy_web/live/home_live.ex:1127
+#, elixir-autogen, elixir-format
+msgid "Give the price at night in cents, from 0 to 200, or leave it empty."
+msgstr "Indique el precio de noche en centavos, de 0 a 200, o déjelo vacío."
+
+#: lib/diy_web/live/home_live.ex:663
+#, elixir-autogen, elixir-format
+msgid "Give the price in cents for one kWh, for example 14.5."
+msgstr "Indique el precio en centavos por un kWh, por ejemplo 14.5."
+
+#: lib/diy_web/live/home_live.ex:1133
+#, elixir-autogen, elixir-format
+msgid "Give the price in cents, from 0 to 200."
+msgstr "Indique el precio en centavos, de 0 a 200."
+
+#: lib/diy_web/live/home_live.ex:1137
+#, elixir-autogen, elixir-format
+msgid "Give the room a name."
+msgstr "Dele un nombre al cuarto."
+
+#: lib/diy_web/live/home_live.ex:725
+#, elixir-autogen, elixir-format
+msgid "Give the total of the bill in dollars and its kWh, for example 150 and 1,100."
+msgstr "Indique el total de la factura en dólares y sus kWh, por ejemplo 150 y 1,100."
+
+#: lib/diy_web/live/home_live.ex:745
+#, elixir-autogen, elixir-format
+msgid "Remove the rooms of the top floor first."
+msgstr "Primero borre los cuartos del piso de arriba."
+
+#: lib/diy_web/live/home_live.ex:921
+#, elixir-autogen, elixir-format
+msgid "The app cannot keep this plan. A number of the plan is not in the range that the app accepts."
+msgstr "La app no puede guardar este plan. Un número del plan no está en el rango que la app acepta."
+
+#: lib/diy_web/live/home_live.ex:845
+#, elixir-autogen, elixir-format
+msgid "The app cannot read the text of this file."
+msgstr "La app no puede leer el texto de este archivo."
+
+#: lib/diy_web/live/home_live.ex:327
+#, elixir-autogen, elixir-format
+msgid "The app cannot read the usage of this file."
+msgstr "La app no puede leer el consumo de este archivo."
+
+#: lib/diy_web/live/home_live.ex:839
+#, elixir-autogen, elixir-format
+msgid "The app cannot read this EFL: it has no average prices."
+msgstr "La app no puede leer esta EFL: no tiene precios promedio."
+
+#: lib/diy_web/live/home_live.ex:854
+#, elixir-autogen, elixir-format
+msgid "The app cannot read this file. Open the PDF of an EFL."
+msgstr "La app no puede leer este archivo. Abra el PDF de una EFL."
+
+#: lib/diy_web/live/home_live.ex:704
+#, elixir-autogen, elixir-format
+msgid "The app now uses the price of your bill: %{price} for each kWh."
+msgstr "La app ahora usa el precio de su factura: %{price} por cada kWh."
+
+#: lib/diy_web/device.ex:76
+#, elixir-autogen, elixir-format
+msgid "The build is too large for this device. Remove some items."
+msgstr "El modelo es demasiado grande para este dispositivo. Borre algunos aparatos."
+
+#: lib/diy_web/device.ex:97
+#, elixir-autogen, elixir-format
+msgid "The build on this device comes from a newer version of the app. Load the page again."
+msgstr "El modelo de este dispositivo viene de una versión más nueva de la app. Cargue la página de nuevo."
+
+#: lib/diy_web/live/home_live.ex:1005
+#, elixir-autogen, elixir-format
+msgid "The cab and the roof of the van stay where they are."
+msgstr "La cabina y el techo de la camioneta se quedan donde están."
+
+#: lib/diy_web/live/home_live.ex:1088
+#, elixir-autogen, elixir-format
+msgid "The file is not a build of this app."
+msgstr "El archivo no es un modelo de esta app."
+
+#: lib/diy_web/live/home_live.ex:1132
+#, elixir-autogen, elixir-format
+msgid "The night must start and end at different hours."
+msgstr "La noche debe empezar y terminar a horas diferentes."
+
+#: lib/diy_web/device.ex:242
+#, elixir-autogen, elixir-format
+msgid "The page cannot read the build on this device. It starts a new build, and keeps a copy of the old one."
+msgstr "La página no puede leer el modelo de este dispositivo. Empieza un modelo nuevo y guarda una copia del anterior."
+
+#: lib/diy_web/live/home_live.ex:350
+#, elixir-autogen, elixir-format
+msgid "The page has 1 month of your usage from Home Assistant."
+msgid_plural "The page has %{count} months of your usage from Home Assistant."
+msgstr[0] "La página tiene 1 mes de su consumo de Home Assistant."
+msgstr[1] "La página tiene %{count} meses de su consumo de Home Assistant."
+
+#: lib/diy_web/live/home_live.ex:318
+#, elixir-autogen, elixir-format
+msgid "The page has 1 month of your usage. The file stayed on this device."
+msgid_plural "The page has %{count} months of your usage. The file stayed on this device."
+msgstr[0] "La página tiene 1 mes de su consumo. El archivo se quedó en este dispositivo."
+msgstr[1] "La página tiene %{count} meses de su consumo. El archivo se quedó en este dispositivo."
+
+#: lib/diy_web/live/home_live.ex:1492
+#, elixir-autogen, elixir-format
+msgid "The page reads your build from this device."
+msgstr "La página lee su modelo de este dispositivo."
+
+#: lib/diy_web/live/home_live.ex:1085
+#, elixir-autogen, elixir-format
+msgid "The page shows the build of the file now."
+msgstr "La página muestra ahora el modelo del archivo."
+
+#: lib/diy_web/live/home_live.ex:774
+#, elixir-autogen, elixir-format
+msgid "The planned items are part of your house now."
+msgstr "Los aparatos planeados ahora son parte de su casa."
+
+#: lib/diy_web/live/home_live.ex:447
+#, elixir-autogen, elixir-format
+msgid "The power station is at home now."
+msgstr "La estación de energía está en casa ahora."
+
+#: lib/diy_web/live/home_live.ex:910
+#, elixir-autogen, elixir-format
+msgid "The worksheet has %{plan} now."
+msgstr "La hoja de trabajo tiene %{plan} ahora."
+
+#: lib/diy_web/live/home_live.ex:914
+#, elixir-autogen, elixir-format
+msgid "The worksheet has 10 plans. Remove a plan first."
+msgstr "La hoja de trabajo tiene 10 planes. Primero borre un plan."
+
+#: lib/diy_web/live/home_live.ex:713
+#, elixir-autogen, elixir-format
+msgid "These numbers give %{price} for each kWh. Check the total and the kWh of the bill."
+msgstr "Estos números dan %{price} por cada kWh. Revise el total y los kWh de la factura."
+
+#: lib/diy_web/live/home_live.ex:1487
+#, elixir-autogen, elixir-format
+msgid "This app needs JavaScript. Turn on JavaScript in the browser."
+msgstr "Esta app necesita JavaScript. Active JavaScript en el navegador."
+
+#: lib/diy_web/device.ex:199
+#, elixir-autogen, elixir-format
+msgid "This device did not save the build: %{error}"
+msgstr "Este dispositivo no guardó el modelo: %{error}"
+
+#: lib/diy_web/live/home_live.ex:1003
+#, elixir-autogen, elixir-format
+msgid "This item cannot go in that room."
+msgstr "Este aparato no puede ir en ese cuarto."
+
+#: lib/diy_web/live/home_live.ex:1009
+#, elixir-autogen, elixir-format
+msgid "This item or this room is not on the plan now."
+msgstr "Este aparato o este cuarto ya no está en el plano."

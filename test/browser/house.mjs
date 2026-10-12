@@ -793,6 +793,25 @@ async function build(context, name) {
   return page
 }
 
+// The first screens at 320 px in Spanish and in Vietnamese: the longer
+// texts must not make the page wider than the screen (WCAG 1.4.10).
+for (const [lang, zip] of [["es", "75070"], ["vi", "75070"]]) {
+  const context = await browser.newContext({ viewport: { width: 320, height: 700 } })
+  const page = await context.newPage()
+  page.on("pageerror", (error) => { faults++; console.log(`320 px ${lang}: page error: ${error.message}`) })
+  await page.goto(`${site}/language/${lang}?return=%2F`)
+  await page.waitForSelector(`html[lang=${lang}] #door-planning`)
+  await connected(page)
+  await page.click("#door-planning")
+  await page.fill("#zip", zip)
+  await page.click("#zip-form button[type=submit]")
+  await page.waitForSelector("#start-preset")
+  const wide = await page.evaluate(() => document.documentElement.scrollWidth)
+  assert.ok(wide <= 320, `320 px ${lang}: the page is ${wide} px wide`)
+  await check(page, `320 px ${lang} preset`)
+  await context.close()
+}
+
 // On a desktop, the person wants less motion: an item is at once on its
 // stage. So the walk checks the flights and the way with less motion, and
 // it is shorter.

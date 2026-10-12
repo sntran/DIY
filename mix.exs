@@ -73,7 +73,7 @@ defmodule DIY.MixProject do
        depth: 1},
       {:jason, "~> 1.2"},
       # The texts of the pages in English, Spanish and Vietnamese
-      # (`DIYWeb.Gettext`).
+      # (`DIY.Gettext`).
       {:gettext, "~> 1.0"},
       # The HTTP client of the weather and of Power to Choose. On Cloudflare,
       # the VM sends its HTTP through fetch() of the Worker. Do not add

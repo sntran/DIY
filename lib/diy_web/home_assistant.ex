@@ -660,7 +660,7 @@ defmodule DIYWeb.HomeAssistant do
     assigns = assign(assigns, status: status(assigns.ha), linked: linked?(assigns.ha))
 
     ~H"""
-    <div id="home-assistant-card" class="space-y-2">
+    <div id="home-assistant-card" lang="en" class="space-y-2">
       <h2 :if={@title} class="text-lg font-bold">Home Assistant</h2>
       <p class="text-sm">
         Connect your Home Assistant to bring its rooms and devices into the app.

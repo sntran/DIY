@@ -11,8 +11,8 @@ defmodule DIY.Prices do
   3. The average price for homes in the state, from the US Energy
      Information Administration.
 
-  The texts of the sources are in the language of the page
-  (`DIY.Gettext`).
+  A source is a text of the core: a key and its values. The page shows it
+  in its language (`DIY.Gettext.t/1`).
   """
   use Gettext, backend: DIY.Gettext
 
@@ -75,10 +75,9 @@ defmodule DIY.Prices do
   @us 18.19
   defp eia_source(place),
     do:
-      gettext(
-        "the average price for homes in %{place}, January to July 2026 (US Energy Information Administration, Electric Power Monthly, table 5.6.B)",
-        place: place
-      )
+      {gettext_noop(
+         "the average price for homes in %{place}, January to July 2026 (US Energy Information Administration, Electric Power Monthly, table 5.6.B)"
+       ), place: place}
 
   # The natural gas bill of a home: a fixed charge each month, and a price
   # for each 1,000 cubic feet (Mcf). The app fits a line to the bills of
@@ -100,23 +99,21 @@ defmodule DIY.Prices do
   @gas_us {17.90, 10.86}
   @therms_mcf 10.37
 
-  @type t :: %{cents: float(), source: String.t(), kind: atom()}
+  @type t :: %{cents: float(), source: DIY.Gettext.text(), kind: atom()}
 
   @doc "The price for the estimate of a build."
   @spec price(DIY.Build.t()) :: t()
   def price(%{price: price}) when is_number(price),
-    do: %{cents: price, source: gettext("the price that you gave"), kind: :user}
+    do: %{cents: price, source: gettext_noop("the price that you gave"), kind: :user}
 
   def price(%{market: %{choice: true, median: median, plans: plans, date: date}})
       when is_number(median) do
     %{
       cents: median,
       source:
-        gettext(
-          "the middle price (the median) of %{plans} plans for your ZIP code on Power to Choose (%{date}). It is the price at 1,000 kWh in one month, with the delivery charges",
-          plans: plans,
-          date: date
-        ),
+        {gettext_noop(
+           "the middle price (the median) of %{plans} plans for your ZIP code on Power to Choose (%{date}). It is the price at 1,000 kWh in one month, with the delivery charges"
+         ), plans: plans, date: date},
       kind: :market
     }
   end
@@ -133,11 +130,11 @@ defmodule DIY.Prices do
         }
 
       :error ->
-        %{cents: @us, source: eia_source(gettext("the US")), kind: :country}
+        %{cents: @us, source: eia_source({gettext_noop("the US"), []}), kind: :country}
     end
   end
 
-  @type gas :: %{fixed: float(), dollars: float(), source: String.t()}
+  @type gas :: %{fixed: float(), dollars: float(), source: DIY.Gettext.text()}
 
   @doc """
   The price of natural gas, in dollars: the fixed charge of a month, and
@@ -149,17 +146,16 @@ defmodule DIY.Prices do
     {place, {fixed, mcf}} =
       case DIY.Zip.lookup(zip) do
         {:ok, %{state: "TX"}} -> {"Texas", @gas["TX"]}
-        _other -> {gettext("the US"), @gas_us}
+        _other -> {{gettext_noop("the US"), []}, @gas_us}
       end
 
     %{
       fixed: fixed,
       dollars: mcf / @therms_mcf,
       source:
-        gettext(
-          "a line through the bills of the homes of %{place} in the 12 months of 2024 (US Energy Information Administration)",
-          place: place
-        )
+        {gettext_noop(
+           "a line through the bills of the homes of %{place} in the 12 months of 2024 (US Energy Information Administration)"
+         ), place: place}
     }
   end
 

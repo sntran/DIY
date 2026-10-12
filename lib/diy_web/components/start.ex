@@ -263,7 +263,7 @@ defmodule DIYWeb.Start do
             type="submit"
             name="preset[start]"
             value="preset"
-            class="btn btn-primary btn-lg"
+            class="btn btn-primary btn-lg h-auto min-h-12 whitespace-normal"
           >
             {if @build.door == "planning",
               do: gettext("Start from a house like this"),
@@ -275,7 +275,7 @@ defmodule DIYWeb.Start do
             type="submit"
             name="preset[start]"
             value="scratch"
-            class="btn btn-lg"
+            class="btn btn-lg h-auto min-h-12 whitespace-normal"
           >
             {gettext("Start from nothing")}
           </button>

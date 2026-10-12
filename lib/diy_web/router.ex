@@ -18,7 +18,11 @@ defmodule DIYWeb.Router do
     # it needs no script.
     get "/language/:locale", LanguageController, :update
 
-    live_session :build, on_mount: [DIYWeb.Locale, DIYWeb.Device, DIYWeb.HomeAssistant] do
+    # The signed session keeps the language of the first render
+    # (DIYWeb.Locale.live_session/1).
+    live_session :build,
+      session: {DIYWeb.Locale, :live_session, []},
+      on_mount: [DIYWeb.Locale, DIYWeb.Device, DIYWeb.HomeAssistant] do
       live "/", HomeLive, :front
       live "/inside", HomeLive, :inside
       live "/estimate", HomeLive, :estimate
@@ -29,7 +33,9 @@ defmodule DIYWeb.Router do
     end
 
     # The sign-in page of Home Assistant, in its own tab: it needs no build.
-    live_session :sign_in, on_mount: [DIYWeb.Locale, {DIYWeb.HomeAssistant, :sign_in}] do
+    live_session :sign_in,
+      session: {DIYWeb.Locale, :live_session, []},
+      on_mount: [DIYWeb.Locale, {DIYWeb.HomeAssistant, :sign_in}] do
       live "/ha/sign-in", SignInLive
     end
   end

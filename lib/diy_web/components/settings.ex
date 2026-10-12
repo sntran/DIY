@@ -85,7 +85,7 @@ defmodule DIYWeb.Settings do
         <p class="text-sm">
           {gettext("Now: %{price} for each kWh, %{source}.",
             price: Format.cents(@price.cents),
-            source: @price.source
+            source: DIY.Gettext.t(@price.source)
           )}
         </p>
         <form id="settings-price" phx-submit="price" class="flex gap-2 items-end">
