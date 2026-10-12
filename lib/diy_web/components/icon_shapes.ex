@@ -868,31 +868,99 @@ defmodule DIYWeb.Icon.Shapes do
       ]
   end
 
-  # A power station: a body with round corners, with two handles on its
-  # top, at the front and at the back. Each handle is an arch: two posts and
-  # a grip, with a gap under the grip for the hand. Its dark front has its
-  # screen and its outlets. Its side has vents.
+  # A power station on its trolley, as the Pecron F5000LFP. The dark body
+  # has round corners, and a grip at each end of its top. Its black front
+  # has the inputs at the left, and the screen with its two green buttons.
+  # The DC outputs are under the screen, and the AC outputs are at the
+  # right. Each group is in an orange frame. The name is under them. Its
+  # side has the dust screen and the ports for more batteries. The trolley
+  # has a wheel at each corner.
   def model("power_station") do
-    {w, d, h} = {0.625, 0.265, 0.41}
-    top = h - 0.03
+    {w, d, base, h} = {0.551, 0.381, 0.115, 0.44}
+    # The front of the body.
+    y = d - 0.006
 
-    handle = fn y ->
-      box({0.1, y, top}, {0.03, 0.025, 0.02}, "gray") ++
-        box({w - 0.13, y, top}, {0.03, 0.025, 0.02}, "gray") ++
-        box({0.1, y, top + 0.02}, {w - 0.2, 0.025, 0.012}, "gray")
+    # The wheels look to the front. A front wheel shows its gray hub. The
+    # tray of the trolley goes up round the foot of the body.
+    wheels =
+      for {x, wy} <- [
+            {0.055, 0.045},
+            {w - 0.055, 0.045},
+            {0.055, d - 0.071},
+            {w - 0.055, d - 0.071}
+          ],
+          part <-
+            tube({x, wy, 0.03}, 0.03, 0.026, :y, "dark") ++
+              box({x - 0.022, wy - 0.007, 0.06}, {0.044, 0.04, 0.005}, "gray"),
+          do: part
+
+    hubs =
+      for x <- [0.055, w - 0.055],
+          do: disc({x, d - 0.044, 0.03}, :front, 0.013, "i-gray-t")
+
+    outlet = fn x ->
+      [
+        front({x, y, 0.34}, {0.04, 0.04}, "i-dark-t", 0.008),
+        front({x + 0.011, y, 0.356}, {0.004, 0.012}, "i-black", 0.01),
+        front({x + 0.025, y, 0.356}, {0.004, 0.012}, "i-black", 0.01)
+      ]
     end
 
-    box({0.04, 0.03, 0}, {w - 0.08, d - 0.06, 0.02}, "dark") ++
-      rbox({0, 0, 0.02}, {w, d, h - 0.05}, 0.03, "steel") ++
-      handle.(0.03) ++
-      handle.(d - 0.055) ++
+    wheels ++
+      hubs ++
+      box({0, 0, 0.065}, {w, d, base - 0.065}, "dark") ++
+      rbox({0.006, 0.006, base}, {w - 0.012, d - 0.012, h - base}, 0.035, "dark") ++
       [
-        front({0.03, d, 0.05}, {w - 0.06, h - 0.13}, "i-dark-l"),
-        front({0.06, d + 0.002, 0.2}, {0.14, 0.08}, "i-screen"),
-        front({0.08, d + 0.004, 0.23}, {0.07, 0.02}, "i-led")
+        top({0.03, 0.08, h}, {0.035, d - 0.16}, "i-dark-r", 0.002),
+        top({w - 0.065, 0.08, h}, {0.035, d - 0.16}, "i-dark-r", 0.002),
+        front({0.045, y, 0.262}, {0.461, 0.145}, "i-black", 0.002),
+        # The DC input and the AC input.
+        front({0.056, y, 0.352}, {0.078, 0.045}, "i-flame", 0.004),
+        front({0.059, y, 0.355}, {0.072, 0.035}, "i-dark-l", 0.006),
+        front({0.072, y, 0.366}, {0.012, 0.014}, "i-black", 0.008),
+        front({0.106, y, 0.366}, {0.012, 0.014}, "i-black", 0.008),
+        front({0.056, y, 0.272}, {0.078, 0.072}, "i-flame", 0.004),
+        front({0.059, y, 0.275}, {0.072, 0.062}, "i-dark-l", 0.006),
+        disc({0.095, y + 0.008, 0.306}, :front, 0.016, "i-black"),
+        # The screen and its buttons.
+        front({0.146, y, 0.33}, {0.094, 0.068}, "i-dark-l", 0.004),
+        front({0.152, y, 0.336}, {0.082, 0.056}, "i-black", 0.006),
+        front({0.158, y, 0.344}, {0.016, 0.04}, "i-white-t", 0.008)
       ] ++
-      for(k <- 0..3, do: front({0.26 + k * 0.08, d + 0.002, 0.18}, {0.05, 0.06}, "i-white-t")) ++
-      for(k <- 0..3, do: side({w, 0.06, 0.1 + k * 0.05}, {d - 0.12, 0.012}, "i-line"))
+      for(k <- 0..2, do: front({0.188, y, 0.376 - k * 0.014}, {0.038, 0.005}, "i-white-t", 0.008)) ++
+      [
+        disc({0.256, y + 0.006, 0.378}, :front, 0.009, "i-led"),
+        disc({0.256, y + 0.006, 0.35}, :front, 0.009, "i-led"),
+        # The DC outputs.
+        front({0.146, y, 0.272}, {0.126, 0.048}, "i-flame", 0.004),
+        front({0.149, y, 0.275}, {0.12, 0.036}, "i-black", 0.006)
+      ] ++
+      for(k <- 0..4, do: front({0.158 + k * 0.021, y, 0.288}, {0.012, 0.008}, "i-steel-t", 0.008)) ++
+      [
+        # The AC outputs: four outlets, the TT-30 and the L14-30.
+        front({0.284, y, 0.272}, {0.216, 0.126}, "i-flame", 0.004),
+        front({0.287, y, 0.275}, {0.21, 0.114}, "i-black", 0.006)
+      ] ++
+      Enum.flat_map(0..3, &outlet.(0.296 + &1 * 0.051)) ++
+      [
+        disc({0.33, y + 0.008, 0.302}, :front, 0.024, "i-dark-t"),
+        disc({0.45, y + 0.008, 0.302}, :front, 0.026, "i-flame"),
+        disc({0.45, y + 0.01, 0.302}, :front, 0.021, "i-dark-t"),
+        # The name plate, and the name of the model in orange.
+        front({0.2, y, 0.19}, {0.15, 0.04}, "i-dark-r", 0.002),
+        front({0.215, y, 0.203}, {0.12, 0.014}, "i-white-t", 0.004),
+        front({0.235, y, 0.17}, {0.08, 0.011}, "i-flame", 0.002),
+        # The dust screen and the ports for more batteries, on the side.
+        side({w - 0.006, 0.06, 0.25}, {0.24, 0.15}, "i-black", 0.002)
+      ] ++
+      for(
+        k <- 0..9,
+        do: side({w - 0.006, 0.068 + k * 0.023, 0.256}, {0.008, 0.138}, "i-dark-l", 0.004)
+      ) ++
+      [
+        side({w - 0.006, 0.145, 0.135}, {0.04, 0.06}, "i-dark-t", 0.002),
+        side({w - 0.006, 0.195, 0.135}, {0.04, 0.06}, "i-dark-t", 0.002)
+      ]
   end
 
   # Solar panels on a post: the frame, the cells in rows of 6, and the lines
@@ -1378,31 +1446,81 @@ defmodule DIYWeb.Icon.Shapes do
       for(k <- 0..5, do: side({w, 0.03, 0.05 + k * 0.045}, {d - 0.06, 0.012}, "i-line"))
   end
 
-  # A DC distributor on a wall: a black base, and a blue cover with a fuse
-  # window and a light for each position. The copper busbar comes out at
-  # the two ends, with a bolt on each end. The positions share the width of
-  # the cover, so each number of positions has the same size.
+  # A busbar with fuse holders, as the Victron Lynx Distributor, on a
+  # wall: a blue case with an end cap at each side. The red cap (+) and
+  # the black cap (-) of its busbars come out at the left. The front has
+  # the orange line of Victron, and a row of lights. Each position has a
+  # gray light, and the green light of the power is in the middle. The white
+  # lines of its label are under the lights. A hood for the cables of two
+  # positions is at the bottom, with a dark port for the cable of each
+  # position. A small block is between the two hoods in the middle. The
+  # black base shows at the right side. The positions share the width of
+  # the case, so each number of positions has the same size.
   def model("dc_bus"), do: model({"dc_bus", 4})
 
   def model({"dc_bus", ports}) do
     {w, d, h} = {0.29, 0.078, 0.17}
-    pitch = (w - 0.09) / ports
-    led = min(0.012, pitch * 0.5)
+    # The front of the middle part, and the front of the end caps.
+    {y, cap} = {0.062, 0.07}
+    {x0, x1} = {0.082, 0.234}
+    # The green light is in the middle, with half of the gray lights at
+    # each side of it.
+    middle = (x0 + x1) / 2
+    {left, right} = {div(ports, 2), ports - div(ports, 2)}
+    pitch = min((middle - x0) / max(left, 1), (x1 - middle) / right)
+    r = min(0.0035, pitch * 0.3)
+    light = fn x -> disc({x, y + 0.002, 0.1}, :front, r, "i-off") end
 
-    rbox({0.02, 0, 0}, {w - 0.04, 0.03, h}, 0.008, "dark") ++
-      rbox({0.035, 0.03, 0.012}, {w - 0.07, d - 0.032, h - 0.024}, 0.012, "blue") ++
-      Enum.flat_map(0..(ports - 1), fn k ->
-        x = 0.045 + k * pitch
+    lights =
+      [disc({middle, y + 0.002, 0.1}, :front, 0.0035, "i-led")] ++
+        for(k <- 0..(left - 1)//1, do: light.(x0 + (middle - x0) * k / left)) ++
+        for(k <- 1..right//1, do: light.(middle + (x1 - middle) * k / right))
 
-        [
-          front({x + pitch * 0.2, d - 0.002, 0.035}, {pitch * 0.6, 0.06}, "i-white-t", 0.002),
-          front({x + (pitch - led) / 2, d - 0.002, 0.12}, {led, 0.008}, "i-led", 0.002)
-        ]
+    hoods = div(ports + 1, 2)
+    span = (x1 - x0 + 0.01) / hoods
+    # The small block in the gap between the two hoods in the middle.
+    gap = min(0.012, span * 0.16)
+
+    block =
+      if rem(hoods, 2) == 0,
+        do: rslab(:y, {0, middle - gap / 2}, {0.02, gap}, gap / 4, y, 0.008, "victron"),
+        else: []
+
+    arrow = fn tip, back ->
+      face(
+        [{tip, y + 0.002, 0.1}, {back, y + 0.002, 0.096}, {back, y + 0.002, 0.104}],
+        {0, 1, 0},
+        "i-white-t"
+      )
+    end
+
+    box({0, 0.018, 0.1}, {0.024, 0.04, 0.042}, "red") ++
+      box({0, 0.018, 0.028}, {0.024, 0.04, 0.042}, "dark") ++
+      rslab(:y, {0.008, 0.024}, {h - 0.008, 0.036}, 0.01, 0, cap, "victron") ++
+      rslab(:y, {0.018, 0.06}, {h - 0.026, w - 0.096}, 0.006, 0, y, "victron") ++
+      rslab(:y, {0.008, w - 0.036}, {h - 0.008, 0.036}, 0.01, 0, cap, "victron") ++
+      Enum.flat_map(0..(hoods - 1), fn k ->
+        x = x0 - 0.005 + k * span + span * 0.1
+        rslab(:y, {0, x}, {0.045, span * 0.8}, min(0.012, span * 0.25), y, d - y, "victron")
       end) ++
-      box({0, 0.005, 0.07}, {0.02, 0.02, 0.03}, "copper") ++
-      box({w - 0.02, 0.005, 0.07}, {0.02, 0.02, 0.03}, "copper") ++
-      cylinder({0.01, 0.015, 0.1}, 0.006, 0.01, "steel") ++
-      cylinder({w - 0.01, 0.015, 0.1}, 0.006, 0.01, "steel")
+      block ++
+      ports(ports, hoods, x0 - 0.005 + span * 0.1, span, d) ++
+      [
+        front({0.074, y, 0.136}, {0.042, 0.005}, "i-white-t", 0.002),
+        front({0.07, y, 0.112}, {0.174, 0.008}, "i-stripe", 0.002),
+        arrow.(0.067, 0.073),
+        arrow.(0.249, 0.243)
+      ] ++
+      lights ++
+      [
+        front({0.07, y, 0.09}, {0.174, 0.0015}, "i-white-t", 0.002),
+        front({0.072, y, 0.076}, {0.06, 0.006}, "i-white-t", 0.002),
+        front({0.072, y, 0.058}, {0.028, 0.01}, "i-white-t", 0.002),
+        front({0.07, y, 0.05}, {0.174, 0.0015}, "i-white-t", 0.002),
+        disc({0.042, cap + 0.001, 0.1}, :front, 0.004, "i-black"),
+        disc({w - 0.018, cap + 0.001, 0.1}, :front, 0.004, "i-black"),
+        side({w, 0.006, 0.03}, {0.058, 0.12}, "i-black", 0.001)
+      ]
   end
 
   # A shore power inlet: a square plate with round corners, and the round
@@ -1496,6 +1614,20 @@ defmodule DIYWeb.Icon.Shapes do
         front({w / 2 - 0.04, d, h - 0.12}, {0.08, 0.12}, "i-light-wood-r"),
         front({0.08, d, 0.08}, {0.16, 0.1}, "i-white-t")
       ]
+  end
+
+  # The ports of a busbar: a dark opening for the cable of each position,
+  # on the front of its hood. A hood has the cables of two positions (the
+  # last hood has one when the count is odd).
+  defp ports(ports, hoods, x0, span, d) do
+    for k <- 0..(hoods - 1),
+        count = min(2, ports - 2 * k),
+        j <- 0..(count - 1) do
+      width = span * 0.8 / count
+      {cx, w} = {x0 + k * span + width * (j + 0.5), width * 0.55}
+      loop = rounded({cx - w / 2, 0.006}, {w, 0.022}, w / 3)
+      face(for({u, v} <- loop, do: {u, d + 0.001, v}), {0, 1, 0}, "i-black")
+    end
   end
 
   # A washer or a dryer with a door in front: a white body with round

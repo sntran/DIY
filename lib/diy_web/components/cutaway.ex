@@ -208,12 +208,14 @@ defmodule DIYWeb.Cutaway do
     (`label/3`).
 
   The objects go in the order of the paint (`DIYWeb.Camera.order/2`), and
-  the points go to the SVG.
+  the points go to the SVG. The small faces of the objects keep two
+  decimals (`DIYWeb.Camera.plan_points/3`).
   """
   def layer(%{id: id, name: name, z: z, camera: camera}, parts) do
     objects = Camera.order(parts.objects, camera)
     svg = fn {corners, class} -> {Camera.points(camera, {0, 0}, corners), class} end
     svg_polys = fn part -> %{part | polys: Enum.map(part.polys, svg)} end
+    fine = fn {corners, class} -> {Camera.plan_points(camera, {0, 0}, corners), class} end
 
     polys =
       Enum.map(parts.ground ++ parts.slabs, &elem(&1, 0)) ++
@@ -229,7 +231,7 @@ defmodule DIYWeb.Cutaway do
       low: Enum.map(parts.low, svg_polys),
       slabs: Enum.map(parts.slabs, &slab_svg(&1, camera)),
       rooms: Enum.map(parts.rooms, svg_polys),
-      objects: Enum.map(objects, svg_polys),
+      objects: Enum.map(objects, fn part -> %{part | polys: Enum.map(part.polys, fine)} end),
       labels: parts.labels,
       box: bounds(polys, camera)
     }

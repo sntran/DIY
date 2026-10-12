@@ -216,22 +216,35 @@ defmodule DIY.Wire do
   @doc """
   The system of a wire from its ends:
 
-  - the voltage of a battery at an end;
-  - else the voltage of the battery of a busbar at an end (`buses`: the
-    system of each busbar with a battery, by its id);
+  - the voltage of a battery at an end. A battery on a busbar with a
+    higher voltage is a fault of the busbar. Then each wire of the battery
+    gets the higher voltage, because the DC ratings must be for it;
+  - else the voltage of the battery of a busbar at an end.
+
+  `highs` gives the system of each busbar with a battery, and of each
+  battery on a busbar with a higher voltage, by their ids.
   - else 12 V DC at a busbar that has no battery, when the system was AC:
     a busbar is on DC;
   - else the system that the wire has.
   """
   @spec end_system(String.t(), map(), map(), %{String.t() => String.t()}) :: String.t()
-  def end_system(system, from, to, buses) do
-    bus = Enum.find_value([from, to], &(&1.type == "dc_bus" and buses[&1.id]))
+  def end_system(system, from, to, highs) do
+    bus = Enum.find_value([from, to], &(&1.type == "dc_bus" and highs[&1.id]))
+    battery = Enum.find([from, to], &(&1.type == "van_battery"))
 
     cond do
-      battery = battery_system(from, to) -> battery
-      bus -> bus
-      Enum.any?([from, to], &(&1.type == "dc_bus")) and not dc?(system) -> "12"
-      true -> system
+      battery ->
+        own = battery.params["volts"]
+        Enum.max_by([own, highs[Map.get(battery, :id)] || own, bus || own], &volts/1)
+
+      bus ->
+        bus
+
+      Enum.any?([from, to], &(&1.type == "dc_bus")) and not dc?(system) ->
+        "12"
+
+      true ->
+        system
     end
   end
 

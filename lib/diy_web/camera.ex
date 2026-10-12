@@ -77,9 +77,29 @@ defmodule DIYWeb.Camera do
     end)
   end
 
+  @doc """
+  The SVG `points` of a polygon of the plan. A small polygon (a side of
+  its box under 1 unit) gets two decimals, so that its shape stays at the
+  highest zoom. One step of one decimal is near 8 mm of the house. Each
+  other polygon gets one decimal.
+  """
+  def plan_points(camera, origin, corners) do
+    points = Enum.map(corners, &at(camera, origin, &1))
+    {xs, ys} = Enum.unzip(points)
+    {x0, x1} = Enum.min_max(xs)
+    {y0, y1} = Enum.min_max(ys)
+    round = if x1 - x0 < 1 or y1 - y0 < 1, do: &round2/1, else: &round1/1
+    Enum.map_join(points, " ", fn {sx, sy} -> "#{round.(sx)},#{round.(sy)}" end)
+  end
+
   @doc "A number with one decimal, as a string with no zero after the point."
-  def round1(n) do
-    n = Float.round(n / 1, 1)
+  def round1(n), do: rounded(n, 1)
+
+  @doc "A number with two decimals, as a string with no zero at the end."
+  def round2(n), do: rounded(n, 2)
+
+  defp rounded(n, decimals) do
+    n = Float.round(n / 1, decimals)
     if n == trunc(n), do: Integer.to_string(trunc(n)), else: Float.to_string(n)
   end
 

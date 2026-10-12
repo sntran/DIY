@@ -227,5 +227,16 @@ defmodule DIYWeb.CameraTest do
     assert Camera.round1(2.25) == "2.3"
     assert Camera.round1(-0.04) == "0"
     assert Camera.points(Camera.house(), {0, 0}, [{0, 0, 0}, {0, 0, 1}]) == "0,0 0,-10.2"
+
+    # On the plan, a small polygon keeps two decimals, and a large one has
+    # one decimal.
+    assert Camera.round2(2.255) == "2.26" or Camera.round2(2.255) == "2.25"
+    assert Camera.round2(3.0) == "3"
+    small = [{0, 0, 0}, {0.004, 0, 0}, {0.004, 0, 0.004}]
+    assert Camera.plan_points(Camera.house(), {0, 0}, small) =~ ~r/\d\.\d\d/
+    large = [{0, 0, 0}, {1.0, 0, 0}, {1.0, 0, 1.0}]
+
+    assert Camera.plan_points(Camera.house(), {0, 0}, large) ==
+             Camera.points(Camera.house(), {0, 0}, large)
   end
 end

@@ -1295,8 +1295,10 @@ defmodule DIY.Catalog do
     "pool_pump" => {25, 8, 11},
     # No source: a tower heater.
     "space_heater" => {10, 7, 25},
-    # EcoFlow DELTA Pro: 25 by 11.2 by 16.4 in (retailer listings).
-    "power_station" => {25, 11, 16},
+    # Pecron F5000LFP: 21.7 by 15 by 13.1 in (Pecron). Its trolley is not in
+    # the data of Pecron: on it, the station is near 17 in high (an estimate
+    # from the photos of Pecron).
+    "power_station" => {22, 15, 17},
     # One panel of 400 W (`DIY.Layout`): 1134 by 1722 mm, 108 half cells.
     "solar_panels" => {45, 68, 2},
     # Generac RXSW100A3, 100 A: 14.6 by 7.1 by 20 in (Greentech Renewables).
@@ -1345,8 +1347,8 @@ defmodule DIY.Catalog do
     "van_battery" => {13, 7, 9},
     # Victron MultiPlus 12/3000/120 on a wall: 258 by 218 by 362 mm (retailer listings).
     "inverter" => {10, 9, 14},
-    # Victron Lynx Distributor: 290 by 170 by 80 mm, 2.2 kg (retailer
-    # listings). It is on a wall: 80 mm is its depth.
+    # Victron Lynx Distributor: 290 by 170 by 80 mm, 2.2 kg (the manual of
+    # Victron). It is on a wall: 80 mm is its depth.
     "dc_bus" => {11, 3, 7},
     # No source: an inlet and its charger.
     "shore_power" => {6, 3, 6},

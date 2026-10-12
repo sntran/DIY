@@ -244,6 +244,7 @@ defmodule DIYWeb.Wires do
         # the radio that is on.
         ends: names |> Enum.sort() |> Enum.with_index(),
         battery: battery && Catalog.name(battery),
+        battery_volts: battery && battery.params["volts"],
         lead_acid: battery && battery.params["chemistry"] == "agm",
         bus: bus && Catalog.name(bus),
         choices: if(dc_only, do: Enum.filter(@systems, &Wire.dc?(elem(&1, 0))), else: @systems)
@@ -277,8 +278,13 @@ defmodule DIYWeb.Wires do
             </option>
           </select>
         </div>
-        <p :if={@battery} id={"#{@id}-system"} class="stage-help">
+        <p :if={@battery && @battery_volts == @wire.system} id={"#{@id}-system"} class="stage-help">
           System: {system_name(@wire.system)}, the voltage of {@battery}. Change it in the part of the battery.
+        </p>
+        <p :if={@battery && @battery_volts != @wire.system} id={"#{@id}-system"} class="stage-help">
+          System: {system_name(@wire.system)}. {@battery} is on a busbar with a battery of a higher voltage (a fault), so the app checks this wire for {system_name(
+            @wire.system
+          )}.
         </p>
         <p :if={is_nil(@battery) and @bus} id={"#{@id}-system"} class="stage-help">
           System: {system_name(@wire.system)}, the voltage of the battery at {@bus}. Change it in the part of the battery.
