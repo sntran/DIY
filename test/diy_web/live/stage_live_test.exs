@@ -83,7 +83,12 @@ defmodule DIYWeb.StageLiveTest do
     assert length(Regex.scan(~r/class="stage-frame"/, html)) == frames
     assert has_element?(view, ".stage-frame[data-frame='#{frames - 1}']:not([hidden])")
     assert has_element?(view, ".stage-frame[data-frame='0'][hidden]")
-    assert has_element?(view, "#item-stage-model-#{fridge.id}[phx-update=ignore][data-view]")
+    assert has_element?(view, "#item-stage-model-#{fridge.id}[data-view]")
+
+    assert has_element?(
+             view,
+             "#item-stage-model-#{fridge.id} #item-stage-frames-#{fridge.id}[phx-update=ignore]"
+           )
 
     # The tag of the number of the fridge: on its EnergyGuide label. Its
     # name starts with its text.

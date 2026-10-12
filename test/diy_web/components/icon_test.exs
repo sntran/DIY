@@ -70,6 +70,21 @@ defmodule DIYWeb.IconTest do
     end
   end
 
+  test "a busbar shows its positions, with one size for each number" do
+    default = Shapes.bounds(Shapes.model("dc_bus"))
+    assert Shapes.model("dc_bus") == Shapes.model({"dc_bus", 4})
+
+    for ports <- [1, 2, 7, 24] do
+      model = Shapes.model({"dc_bus", ports})
+      assert Shapes.bounds(model) == default
+      # A fuse window and a light for each position.
+      assert Enum.count(model, &match?({:face, _, _, "i-led"}, &1)) == ports
+    end
+
+    assert Shapes.look(%{type: "dc_bus", params: %{"ports" => 7}}) == {"dc_bus", 7}
+    assert Shapes.look(%{type: "fridge", params: %{}}) == "fridge"
+  end
+
   test "a loop round a rectangle with round corners" do
     near? = fn {a, b}, {c, d} -> abs(a - c) < 1.0e-9 and abs(b - d) < 1.0e-9 end
 

@@ -16,7 +16,7 @@ defmodule DIYWeb.Inside do
   use DIYWeb, :html
 
   alias DIY.{Build, Catalog, Estimate, Layout, Prices, Solar}
-  alias DIYWeb.{Camera, Cutaway, Format, HomeAssistant, Icon, Stage}
+  alias DIYWeb.{Camera, Cutaway, Format, HomeAssistant, Icon, Stage, Wires}
 
   @place_names %{indoor: "Inside", outdoor: "Outside", roof: "On the roof"}
 
@@ -36,7 +36,10 @@ defmodule DIYWeb.Inside do
     default: nil,
     doc: "\"room\" (change the room), \"new_room\" or \"ha_rooms\" (`DIYWeb.HomeAssistant`)"
 
-  attr :item_error, :string, default: nil
+  attr :item_error, :any,
+    default: nil,
+    doc: "the key of a number that is not valid, or `{:wire, id, key}`"
+
   attr :item_said, :string, default: nil, doc: "the new value after − or +, for a screen reader"
 
   attr :item_frames, :map,
@@ -725,7 +728,11 @@ defmodule DIYWeb.Inside do
   attr :item, :map, required: true
   attr :estimate, :map, required: true
   attr :price, :map, required: true
-  attr :error, :string, default: nil
+
+  attr :error, :any,
+    default: nil,
+    doc: "the key of a number that is not valid, or `{:wire, id, key}`"
+
   attr :said, :string, default: nil, doc: "the new value after − or +, for a screen reader"
   attr :outage, :string, default: nil
   attr :close, :string, default: "/inside", doc: "the page of the close link"
@@ -784,7 +791,7 @@ defmodule DIYWeb.Inside do
 
     features =
       cond do
-        in_van -> Enum.filter(kind.features, &(&1 in @van_features))
+        in_van -> Enum.filter(kind.features, &(&1 in [:wires | @van_features]))
         van -> kind.features
         true -> kind.features -- @van_features
       end
@@ -1020,6 +1027,8 @@ defmodule DIYWeb.Inside do
       </section>
 
       <p id="item-said" class="sr-only" role="status">{@said}</p>
+
+      <Wires.section :if={:wires in @kind.features} build={@build} item={@item} error={@error} />
 
       <section id="part-where" class="stage-sec" aria-labelledby="part-where-title">
         <h3 id="part-where-title" class="stage-sec-title">Where it is</h3>
@@ -1552,7 +1561,7 @@ defmodule DIYWeb.Inside do
 
   # The items that a station can run: the items that use power.
   defp loads_power?(%{type: type}),
-    do: type not in ~w(power_station solar_panels transfer_switch smart_meter camper_van)
+    do: type not in ~w(power_station solar_panels transfer_switch smart_meter camper_van dc_bus)
 
   # A month that shows the work of an item: January for heat, July else.
   defp math_month(%{type: type}) when type in ["furnace", "heat_strips", "space_heater"], do: 1
@@ -1592,6 +1601,7 @@ defmodule DIYWeb.Inside do
   defp feature(:weight), do: "the weight budget of the van"
   defp feature(:van_power), do: "the power budget of the van"
   defp feature(:safety), do: "the safety notes of the van"
+  defp feature(:wires), do: "the checks of its wires (NEC)"
 
   attr :usage, :map, default: nil
   attr :ha_meter, :map, default: nil

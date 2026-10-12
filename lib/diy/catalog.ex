@@ -656,7 +656,7 @@ defmodule DIY.Catalog do
       type: "power_station",
       name: "Power station",
       places: [:indoor, :outdoor, :bay, :bed],
-      features: [:backup, :shift, :power_view, :weight, :van_power],
+      features: [:backup, :shift, :power_view, :weight, :van_power, :wires],
       params: [
         float(
           "kwh",
@@ -767,7 +767,7 @@ defmodule DIY.Catalog do
       type: "transfer_switch",
       name: "Interlock, transfer switch or subpanel",
       places: [:indoor, :outdoor],
-      features: [:power_view],
+      features: [:power_view, :wires],
       params: [
         choice(
           "device",
@@ -904,7 +904,7 @@ defmodule DIY.Catalog do
       type: "dc_charger",
       name: "Alternator charger (DC-DC)",
       places: [:cab, :bay],
-      features: [:weight, :van_power],
+      features: [:weight, :van_power, :wires],
       params: [
         int(
           "amps",
@@ -1096,7 +1096,7 @@ defmodule DIY.Catalog do
       type: "van_battery",
       name: "Battery bank",
       places: [:bay, :bed],
-      features: [:weight, :van_power, :safety],
+      features: [:weight, :van_power, :safety, :wires],
       params: [
         int(
           "ah",
@@ -1129,7 +1129,7 @@ defmodule DIY.Catalog do
       type: "inverter",
       name: "Inverter",
       places: [:bay],
-      features: [:weight, :van_power],
+      features: [:weight, :van_power, :wires],
       params: [
         int(
           "watts",
@@ -1154,10 +1154,37 @@ defmodule DIY.Catalog do
       ]
     },
     %{
+      type: "dc_bus",
+      name: "DC busbar or distributor",
+      places: [:indoor, :outdoor, :bay],
+      features: [:weight, :wires],
+      params: [
+        int(
+          "ports",
+          "Positions for wires",
+          nil,
+          4,
+          1,
+          24,
+          "The studs or the fuse holders for the wires. A Victron Lynx Distributor has 4."
+        ),
+        int(
+          "fuse_min",
+          "Smallest fuse",
+          "A",
+          40,
+          0,
+          2000,
+          "The smallest fuse that its fuse holders take, or 0 with no fuse holders. A Victron Lynx Distributor takes MEGA fuses. The smallest MEGA fuse of Victron for 48 V is 40 A (80 V, part CIP138040020)."
+        ),
+        weight(5)
+      ]
+    },
+    %{
       type: "shore_power",
       name: "Shore power inlet and charger",
       places: [:bay],
-      features: [:weight],
+      features: [:weight, :wires],
       params: [weight(10)]
     },
     %{
@@ -1318,6 +1345,9 @@ defmodule DIY.Catalog do
     "van_battery" => {13, 7, 9},
     # Victron MultiPlus 12/3000/120 on a wall: 258 by 218 by 362 mm (retailer listings).
     "inverter" => {10, 9, 14},
+    # Victron Lynx Distributor: 290 by 170 by 80 mm, 2.2 kg (retailer
+    # listings). It is on a wall: 80 mm is its depth.
+    "dc_bus" => {11, 3, 7},
     # No source: an inlet and its charger.
     "shore_power" => {6, 3, 6},
     # One panel of 400 W, as the solar panels of a house.

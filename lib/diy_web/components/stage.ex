@@ -295,22 +295,26 @@ defmodule DIYWeb.Stage do
           tabindex="-1"
           data-close
         ></.link>
+        <%!-- The hook places the model with its style: a patch keeps it.
+          The frames keep the frame that shows (phx-update="ignore"). --%>
         <div
           id={"#{@id}-model-#{@item}"}
-          phx-update="ignore"
+          phx-mounted={JS.ignore_attributes(["style"])}
           class="stage-model"
           data-view={numbers(@frames.view)}
           aria-hidden="true"
         >
-          <svg
-            :for={{polys, i} <- Enum.with_index(@frames.frames)}
-            viewBox={numbers(@frames.view)}
-            class="stage-frame"
-            data-frame={i}
-            hidden={i != @frame_count - 1}
-          >
-            <polygon :for={{points, class} <- polys} points={points} class={class} />
-          </svg>
+          <div id={frames_id(@id, @item, @frames)} phx-update="ignore" class="contents">
+            <svg
+              :for={{polys, i} <- Enum.with_index(@frames.frames)}
+              viewBox={numbers(@frames.view)}
+              class="stage-frame"
+              data-frame={i}
+              hidden={i != @frame_count - 1}
+            >
+              <polygon :for={{points, class} <- polys} points={points} class={class} />
+            </svg>
+          </div>
         </div>
         <section class="stage-panel" phx-mounted={JS.ignore_attributes(["style"])}>
           <div class="stage-scroll">
@@ -348,4 +352,10 @@ defmodule DIYWeb.Stage do
     </div>
     """
   end
+
+  # The frames of the model stay (phx-update="ignore"). A new look of the
+  # item (a busbar with a new number of positions) has new frames. They have
+  # a new id, so the page gets them.
+  defp frames_id(id, item, %{shown: {{_type, n}, _plan}}), do: "#{id}-frames-#{item}-#{n}"
+  defp frames_id(id, item, _frames), do: "#{id}-frames-#{item}"
 end

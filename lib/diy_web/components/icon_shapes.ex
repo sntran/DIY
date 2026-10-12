@@ -53,6 +53,14 @@ defmodule DIYWeb.Icon.Shapes do
   def placed(type, frame), do: draw(model(type), frame, frame.camera)
 
   @doc """
+  The look of an item: the kind of its model. A busbar shows its number of
+  positions for wires (`{"dc_bus", ports}`). Each other item has the model
+  of its kind.
+  """
+  def look(%{type: "dc_bus", params: %{"ports" => ports}}), do: {"dc_bus", ports}
+  def look(%{type: type}), do: type
+
+  @doc """
   The shapes of a model at the scale of the world, with its own size (in
   meters). The model has a turn, and its back corner is at a point of the
   world (`at`). The `camera` shows the faces that look to it.
@@ -861,14 +869,23 @@ defmodule DIYWeb.Icon.Shapes do
   end
 
   # A power station: a body with round corners, with two handles on its
-  # top. Its dark front has its screen and its outlets. Its side has vents.
+  # top, at the front and at the back. Each handle is an arch: two posts and
+  # a grip, with a gap under the grip for the hand. Its dark front has its
+  # screen and its outlets. Its side has vents.
   def model("power_station") do
     {w, d, h} = {0.625, 0.265, 0.41}
+    top = h - 0.03
+
+    handle = fn y ->
+      box({0.1, y, top}, {0.03, 0.025, 0.02}, "gray") ++
+        box({w - 0.13, y, top}, {0.03, 0.025, 0.02}, "gray") ++
+        box({0.1, y, top + 0.02}, {w - 0.2, 0.025, 0.012}, "gray")
+    end
 
     box({0.04, 0.03, 0}, {w - 0.08, d - 0.06, 0.02}, "dark") ++
       rbox({0, 0, 0.02}, {w, d, h - 0.05}, 0.03, "steel") ++
-      box({0.05, 0.04, h - 0.03}, {0.07, d - 0.08, 0.03}, "dark") ++
-      box({w - 0.12, 0.04, h - 0.03}, {0.07, d - 0.08, 0.03}, "dark") ++
+      handle.(0.03) ++
+      handle.(d - 0.055) ++
       [
         front({0.03, d, 0.05}, {w - 0.06, h - 0.13}, "i-dark-l"),
         front({0.06, d + 0.002, 0.2}, {0.14, 0.08}, "i-screen"),
@@ -1359,6 +1376,33 @@ defmodule DIYWeb.Icon.Shapes do
         front({0.1, d, 0.06}, {0.05, 0.08}, "i-black")
       ] ++
       for(k <- 0..5, do: side({w, 0.03, 0.05 + k * 0.045}, {d - 0.06, 0.012}, "i-line"))
+  end
+
+  # A DC distributor on a wall: a black base, and a blue cover with a fuse
+  # window and a light for each position. The copper busbar comes out at
+  # the two ends, with a bolt on each end. The positions share the width of
+  # the cover, so each number of positions has the same size.
+  def model("dc_bus"), do: model({"dc_bus", 4})
+
+  def model({"dc_bus", ports}) do
+    {w, d, h} = {0.29, 0.078, 0.17}
+    pitch = (w - 0.09) / ports
+    led = min(0.012, pitch * 0.5)
+
+    rbox({0.02, 0, 0}, {w - 0.04, 0.03, h}, 0.008, "dark") ++
+      rbox({0.035, 0.03, 0.012}, {w - 0.07, d - 0.032, h - 0.024}, 0.012, "blue") ++
+      Enum.flat_map(0..(ports - 1), fn k ->
+        x = 0.045 + k * pitch
+
+        [
+          front({x + pitch * 0.2, d - 0.002, 0.035}, {pitch * 0.6, 0.06}, "i-white-t", 0.002),
+          front({x + (pitch - led) / 2, d - 0.002, 0.12}, {led, 0.008}, "i-led", 0.002)
+        ]
+      end) ++
+      box({0, 0.005, 0.07}, {0.02, 0.02, 0.03}, "copper") ++
+      box({w - 0.02, 0.005, 0.07}, {0.02, 0.02, 0.03}, "copper") ++
+      cylinder({0.01, 0.015, 0.1}, 0.006, 0.01, "steel") ++
+      cylinder({w - 0.01, 0.015, 0.1}, 0.006, 0.01, "steel")
   end
 
   # A shore power inlet: a square plate with round corners, and the round

@@ -645,15 +645,16 @@ defmodule DIYWeb.CutawayTest do
       end
 
       # The margin of the depth is 1% of the largest side of an item (3 cm
-      # at most). Thus the check of a small item is at its scale.
-      for type <- Catalog.types() do
-        {w, d, h} = Catalog.size(type)
+      # at most). Thus the check of a small item is at its scale. A busbar
+      # has a look for each number of its positions.
+      for type <- Catalog.types() ++ [{"dc_bus", 1}, {"dc_bus", 7}, {"dc_bus", 24}] do
+        {w, d, h} = Catalog.size(if is_tuple(type), do: elem(type, 0), else: type)
         frame = %{at: {0, 0, 0}, size: {w * m, d * m, h * m}, turn: turn, camera: camera}
         polys = for {:poly, corners, _class} <- Shapes.placed(type, frame), do: corners
         margin = min(0.03, 0.01 * Enum.max([w, d, h]) * m)
 
         assert depth_faults(polys, camera, margin) == [],
-               "#{type} at turn #{turn}, #{camera.name}"
+               "#{inspect(type)} at turn #{turn}, #{camera.name}"
       end
     end
   end
