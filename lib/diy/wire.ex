@@ -25,7 +25,9 @@ defmodule DIY.Wire do
   The rules:
 
   - The current all the time is a continuous load: the breaker and the
-    wire are at least 125% of it (NEC 210.19(A) and 210.20(A)).
+    wire are at least 125% of it. The rules are NEC 210.19(A) and
+    210.20(A) for a branch circuit, and NEC 215.2(A)(1) and 215.3 for a
+    feeder.
   - The ampacity of copper wire comes from the 75 °C column of NEC Table
     310.16. The terminals at the two ends must be rated 75 °C (NEC
     110.14(C)).
@@ -34,15 +36,21 @@ defmodule DIY.Wire do
     rating, the next standard rating is permitted (NEC 240.4(B)). Wire of
     14, 12 and 10 AWG takes 15, 20 and 30 A at most (NEC 240.4(D)).
   - The standard ratings come from NEC Table 240.6(A).
-  - A wire between two sources has a breaker or a fuse at each end: it is
-    protected from all the sources (NEC 705.30).
+  - A breaker or a fuse is at the end where the wire gets its current (NEC
+    240.21). A wire between two sources has one at each end: it is
+    protected from all the sources (NEC 705.30(A)).
   - On DC, a breaker or a fuse is rated for DC, at the highest voltage of
     the battery or more (NEC 706.31(C) and 110.3(B)). A cell of a LiFePO4
-    battery is at 3.65 V when it is full. So the battery is at 14.6 V for
-    12 V, 29.2 V for 24 V, and 58.4 V for 48 V.
+    battery charges to 3.65 V at most (for example, the data sheet of the
+    EVE LF280K cell). So a battery of 12 V (4 cells) is at 14.6 V. A
+    battery of 24 V (8 cells) is at 29.2 V, and of 48 V (16 cells) at
+    58.4 V.
   - The voltage drop is not more than 3% (an informational note of NEC
     210.19(A): advice, not a rule). It uses the DC resistance of stranded
     copper of NEC Chapter 9, Table 8.
+
+  When a battery is at an end, the system of the wire is the voltage of
+  the battery (`battery_system/2`): `DIY.Build` keeps them the same.
   """
 
   @typedoc "A size of copper wire, from 14 AWG to 4/0 AWG."
@@ -106,15 +114,18 @@ defmodule DIY.Wire do
              [225, 250, 300, 350, 400, 450, 500, 600, 700, 800, 1000, 1200, 1600, 2000] ++
              [2500, 3000, 4000, 5000, 6000]
 
-  # The volts of each system, and the highest volts of a LiFePO4 battery
-  # on DC.
+  # The volts of each system, and the cells of a LiFePO4 battery in
+  # series on DC.
   @systems %{
-    "12" => {12, 14.6},
-    "24" => {24, 29.2},
-    "48" => {48, 58.4},
+    "12" => {12, 4},
+    "24" => {24, 8},
+    "48" => {48, 16},
     "120" => {120, nil},
     "240" => {240, nil}
   }
+
+  # The highest volts of a LiFePO4 cell, when it is full.
+  @cell_volts 3.65
 
   @continuous 1.25
   @max_drop 3.0
@@ -135,9 +146,18 @@ defmodule DIY.Wire do
   @spec volts(String.t()) :: pos_integer()
   def volts(system), do: elem(Map.fetch!(@systems, system), 0)
 
+  @doc "The cells in series of a LiFePO4 battery of the system, or nil on AC."
+  @spec cells(String.t()) :: pos_integer() | nil
+  def cells(system), do: elem(Map.fetch!(@systems, system), 1)
+
   @doc "The highest volts of a LiFePO4 battery of the system, or nil on AC."
   @spec highest(String.t()) :: float() | nil
-  def highest(system), do: elem(Map.fetch!(@systems, system), 1)
+  def highest(system) do
+    case cells(system) do
+      nil -> nil
+      cells -> Float.round(cells * @cell_volts, 2)
+    end
+  end
 
   @doc "The standard ratings of NEC Table 240.6(A)."
   @spec ratings() :: [pos_integer()]
@@ -176,6 +196,18 @@ defmodule DIY.Wire do
   @two_way ~w(van_battery dc_bus)
 
   @doc """
+  The system of a wire with a battery at an end: the voltage of the
+  battery ("12", "24" or "48"). It is nil with no battery at the ends.
+  """
+  @spec battery_system(map(), map()) :: String.t() | nil
+  def battery_system(from, to) do
+    case Enum.find([from, to], &(&1.type == "van_battery")) do
+      nil -> nil
+      battery -> battery.params["volts"]
+    end
+  end
+
+  @doc """
   The typical numbers of a new wire from an item to an item: 30 A and 6
   ft. The system is the system of a battery at an end. Else it is 120 V
   AC at a transfer switch or a shore power inlet, else 12 V DC. On DC, a
@@ -186,7 +218,7 @@ defmodule DIY.Wire do
   def defaults(from, to) do
     system =
       cond do
-        battery = Enum.find([from, to], &(&1.type == "van_battery")) -> battery.params["volts"]
+        system = battery_system(from, to) -> system
         Enum.any?([from, to], &(&1.type in ~w(transfer_switch shore_power))) -> "120"
         true -> "12"
       end
@@ -228,11 +260,15 @@ defmodule DIY.Wire do
     to_dc: {:maybe, {:int, 1, 1500}}
   ]
 
+  # The longest text of a number. A longer text is not valid: the parse of
+  # a very long text costs much time.
+  @max_text 32
+
   @doc """
   Reads the numbers of a wire from a map with text keys (a form or JSON).
   The map changes the numbers of a wire (`base`). A key that is not in
   the map keeps its value. The error names the first number that is not
-  valid.
+  valid. A text of more than 32 bytes is not valid.
   """
   @spec read(map(), wire()) :: {:ok, wire()} | {:error, atom()}
   def read(values, base) when is_map(values) do
@@ -250,6 +286,7 @@ defmodule DIY.Wire do
     end)
   end
 
+  defp cast(_type, value) when is_binary(value) and byte_size(value) > @max_text, do: :error
   defp cast({:maybe, _type}, nil), do: {:ok, nil}
 
   defp cast({:maybe, type}, value) when is_binary(value) do

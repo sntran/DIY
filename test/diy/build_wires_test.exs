@@ -65,20 +65,38 @@ defmodule DIY.BuildWiresTest do
     {:ok, two, _id} = Build.add_wire(wired, bus, station)
     assert length(Build.wires_of(two, station)) == 2
 
-    # The errors: the same item, an item that takes no wires, an item that
-    # is not there, and 100 wires.
+    # The errors: the same item, an item that takes no wires, and an item
+    # that is not there.
     assert Build.add_wire(build, station, station) == {:error, :wire}
     assert Build.add_wire(build, station, fridge.id) == {:error, :wire}
     assert Build.add_wire(build, "i0", bus) == {:error, :item}
     assert Build.add_wire(build, station, "i0") == {:error, :item}
+  end
+
+  test "an item has 24 wires at most, and a build has 100 wires at most" do
+    assert Build.max_wires() == {100, 24}
+    {build, station, bus} = garage()
+    {build, other} = add(build, room(build, "Garage"), "power_station")
 
     full =
-      Enum.reduce(1..100, build, fn _n, build ->
+      Enum.reduce(1..23, build, fn _n, build ->
         {:ok, build, _id} = Build.add_wire(build, station, bus)
         build
       end)
 
-    assert Build.add_wire(full, station, bus) == {:error, :wires}
+    refute Build.wires_full?(full, bus)
+    {:ok, full, _id} = Build.add_wire(full, station, bus)
+    assert Build.wires_full?(full, bus) and Build.wires_full?(full, station)
+    refute Build.wires_full?(full, other)
+    # The busbar at the far end is full too.
+    assert Build.add_wire(full, other, bus) == {:error, :wires}
+    assert Build.add_wire(full, station, other) == {:error, :wires}
+
+    # 100 wires in the build: no item can get one more.
+    {:ok, one, _id} = Build.add_wire(build, other, bus)
+    many = %{one | wires: List.duplicate(hd(one.wires), 100)}
+    assert Build.wires_full?(many, station)
+    assert Build.add_wire(many, station, bus) == {:error, :wires}
   end
 
   test "the numbers of a wire change, and its ends can change places" do
@@ -120,6 +138,7 @@ defmodule DIY.BuildWiresTest do
     assert Build.wire(same, id) == Build.wire(turned, id)
 
     assert Build.update_wire(build, id, %{"amps" => "0"}) == {:error, :amps}
+    assert Build.update_wire(build, id, %{"from_dc" => "58.4"}) == {:error, :from_dc}
     assert Build.update_wire(build, "w0", %{}) == {:error, :wire}
 
     {:ok, removed} = Build.delete_wire(changed, id)
@@ -167,6 +186,46 @@ defmodule DIY.BuildWiresTest do
     # The removal of the van removes its items and their wires.
     {:ok, no_van} = Build.delete_item(home, van)
     assert no_van.wires == []
+
+    # A stored build with no van: its zones and their items go when the
+    # build loads, with their wires.
+    map = Jason.decode!(Build.to_json(home))
+    items = Enum.reject(map["items"], &(&1["id"] == van))
+    assert {:ok, loaded} = Build.from_json(Jason.encode!(%{map | "items" => items}))
+    assert loaded.wires == []
+  end
+
+  test "the system of a wire is the voltage of a battery at its end" do
+    build = preset()
+    {:ok, build, van} = Build.add_item(build, room(build, "Driveway"), "camper_van")
+    bay = Build.zone(build, van, :bay).id
+    {build, battery} = add(build, bay, "van_battery")
+    {build, inverter} = add(build, bay, "inverter")
+    {build, bus} = add(build, bay, "dc_bus")
+    {:ok, build, id} = Build.add_wire(build, battery, inverter)
+    {:ok, build, other} = Build.add_wire(build, bus, inverter)
+    {:ok, build} = Build.update_wire(build, other, %{"system" => "24"})
+
+    # The battery changes to 48 V: its wire changes with it. The wire with
+    # no battery keeps its system.
+    {:ok, changed} = Build.update_item(build, battery, %{"volts" => "48"})
+    assert {:ok, %{system: "48"}} = Build.wire(changed, id)
+    assert {:ok, %{system: "24"}} = Build.wire(changed, other)
+
+    # The person cannot give a wire of a battery a different system.
+    {:ok, same} = Build.update_wire(changed, id, %{"system" => "12", "amps" => "20"})
+    assert {:ok, %{system: "48", amps: 20.0}} = Build.wire(same, id)
+
+    # A stored wire with a different system gets the system of its battery.
+    map = Jason.decode!(Build.to_json(changed))
+
+    wires =
+      Enum.map(map["wires"], fn wire ->
+        if wire["id"] == id, do: %{wire | "system" => "12"}, else: wire
+      end)
+
+    assert {:ok, loaded} = Build.from_json(Jason.encode!(%{map | "wires" => wires}))
+    assert {:ok, %{system: "48"}} = Build.wire(loaded, id)
   end
 
   test "the wires in the JSON of the build" do
@@ -188,7 +247,6 @@ defmodule DIY.BuildWiresTest do
 
     for bad <- [
           %{stored | "id" => 5},
-          %{stored | "id" => String.duplicate("w", 21)},
           %{stored | "from" => "i0"},
           %{stored | "to" => "i0"},
           %{stored | "to" => station},
@@ -211,7 +269,20 @@ defmodule DIY.BuildWiresTest do
     many = for n <- 1..105, do: %{stored | "id" => "w#{n + 200}"}
     {:ok, loaded} = Build.from_json(Jason.encode!(%{map | "wires" => many}))
     assert length(loaded.wires) == 100
+    assert List.last(loaded.wires).id == "w300"
     assert loaded.seq >= 300
+
+    # The 100 wires are the first good wires: bad wires do not count.
+    bad = for n <- 1..100, do: %{stored | "id" => "w#{n + 400}", "to" => "i0"}
+    good = for n <- 1..5, do: %{stored | "id" => "w#{n + 600}"}
+    {:ok, loaded} = Build.from_json(Jason.encode!(%{map | "wires" => bad ++ good}))
+    assert Enum.map(loaded.wires, & &1.id) == ~w(w601 w602 w603 w604 w605)
+
+    # A long id: the next id is longer, and the wires stay after a load.
+    long = %{stored | "id" => "w" <> String.duplicate("9", 19)}
+    {:ok, loaded} = Build.from_json(Jason.encode!(%{map | "wires" => [long]}))
+    {:ok, more, _id} = Build.add_wire(loaded, station, bus)
+    assert {:ok, %{wires: [_one, _two]}} = read(more)
 
     # Wires that are not a list: the build is not valid.
     assert Build.from_json(Jason.encode!(%{map | "wires" => %{}})) == {:error, :wires}

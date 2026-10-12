@@ -21,6 +21,39 @@ defmodule DIY.WireTest do
 
   @none %{from_min: 0, to_min: 0}
 
+  # The tables of the NEC, written again for the tests. The first is the
+  # largest breaker of each size (240.4(B) and (D)). The second is the DC
+  # resistance of stranded copper (Chapter 9, Table 8, ohms for 1000 ft).
+  @largest Enum.zip(
+             ~w(14 12 10 8 6 4 3 2 1 1/0 2/0 3/0 4/0),
+             [15, 20, 30, 50, 70, 90, 100, 125, 150, 150, 175, 200, 250]
+           )
+           |> Map.new()
+
+  @ohms Enum.zip(
+          ~w(14 12 10 8 6 4 3 2 1 1/0 2/0 3/0 4/0),
+          [
+            3.14,
+            1.98,
+            1.24,
+            0.778,
+            0.491,
+            0.308,
+            0.245,
+            0.194,
+            0.154,
+            0.122,
+            0.0967,
+            0.0766,
+            0.0608
+          ]
+        )
+        |> Map.new()
+
+  # The drop of the test: two times the run, at the volts of the system.
+  defp drop(awg, amps, feet, system),
+    do: amps * @ohms[awg] * 2 * feet / 1000 / String.to_integer(system) * 100
+
   test "the tables of the NEC" do
     assert Wire.sizes() == ~w(14 12 10 8 6 4 3 2 1 1/0 2/0 3/0 4/0)
     assert Wire.systems() == ~w(12 24 48 120 240)
@@ -31,42 +64,82 @@ defmodule DIY.WireTest do
 
     # 240.4(D) for small wire, else the ampacity or the next standard
     # rating (240.4(B)).
-    assert Enum.map(Wire.sizes(), &Wire.largest/1) ==
-             [15, 20, 30, 50, 70, 90, 100, 125, 150, 150, 175, 200, 250]
+    assert Map.new(Wire.sizes(), &{&1, Wire.largest(&1)}) == @largest
 
-    # Table 240.6(A).
+    # Table 240.6(A), with 10 A (the edition of 2023).
+    assert Wire.ratings() ==
+             [10, 15, 20, 25, 30, 35, 40, 45, 50, 60, 70, 80, 90, 100, 110, 125, 150, 175] ++
+               [200, 225, 250, 300, 350, 400, 450, 500, 600, 700, 800, 1000, 1200, 1600] ++
+               [2000, 2500, 3000, 4000, 5000, 6000]
+
     assert Wire.rating(37.5) == 40
     assert Wire.rating(10) == 10
     assert Wire.rating(0.5) == 10
     assert Wire.rating(6000) == 6000
     assert Wire.rating(6001) == nil
 
-    assert Wire.dc?("48") and not Wire.dc?("120")
-    assert Wire.volts("24") == 24
-    assert Wire.highest("12") == 14.6
-    assert Wire.highest("48") == 58.4
-    assert Wire.highest("240") == nil
+    # Chapter 9, Table 8: 12 A on 12 V over 500 ft (1000 ft of copper)
+    # drops the resistance of 1000 ft, in percent.
+    for awg <- Wire.sizes() do
+      assert_in_delta Wire.drop(awg, 12, 500, "12") / 100, @ohms[awg], 1.0e-12, awg
+    end
 
     # 2 × 6 ft of 10 AWG (1.24 ohms for 1000 ft) with 30 A on 12 V: 3.72%.
     assert_in_delta Wire.drop("10", 30, 6, "12"), 3.72, 1.0e-9
     assert_raise ArgumentError, fn -> Wire.ampacity("5") end
+
+    # The systems: the volts, and the cells of a LiFePO4 battery at 3.65 V.
+    assert Enum.map(Wire.systems(), &Wire.dc?/1) == [true, true, true, false, false]
+    assert Enum.map(Wire.systems(), &Wire.volts/1) == [12, 24, 48, 120, 240]
+    assert Enum.map(Wire.systems(), &Wire.cells/1) == [4, 8, 16, nil, nil]
+    assert Enum.map(Wire.systems(), &Wire.highest/1) == [14.6, 29.2, 58.4, nil, nil]
+  end
+
+  test "the limits of the rules" do
+    # 40 A needs 50 A: 8 AWG carries 50 A, and it takes a breaker of 50 A.
+    at = wire("120", 40, 6)
+    assert %{need: 50.0, from: 50, awg: "8"} = Wire.advise(at, @none)
+    assert Wire.check(%{at | awg: "8", from_ocpd: 50}) == []
+    assert Wire.check(%{at | awg: "10", from_ocpd: 50}) |> hd() == {:wire_small, nil, 50.0}
+
+    # A breaker at the need is enough. A breaker at the largest of the
+    # wire protects it.
+    assert Wire.check(%{at | awg: "6", from_ocpd: 50}) == []
+    assert Wire.check(%{at | awg: "6", from_ocpd: 49}) == [{:ocpd_small, :from, 50.0}]
+    assert Wire.check(%{at | awg: "6", from_ocpd: 70}) == []
+    assert Wire.check(%{at | awg: "6", from_ocpd: 80}) == [{:ocpd_big, :from, 70}]
+
+    # A DC rating at the highest volts is enough.
+    dc = %{wire("12", 8, 1) | awg: "14", from_ocpd: 10}
+    assert Wire.check(%{dc | from_dc: 15}) == []
+    assert Wire.check(%{dc | from_dc: 14}) == [{:dc_rating, :from, 14.6}]
+
+    # 10 A on 12 V over 9 ft of 12 AWG drops 2.97%: no fault. Over 9.2 ft,
+    # it drops 3.04%: a fault.
+    assert Wire.check(%{wire("12", 10, 9) | awg: "12", from_ocpd: 15}) == []
+    assert [{:drop, nil, drop}] = Wire.check(%{wire("12", 10, 9.2) | awg: "12", from_ocpd: 15})
+    assert_in_delta drop, 3.036, 1.0e-9
   end
 
   test "the example of the owner: a power station on 48 V to a busbar with MEGA fuses" do
-    # The port gives 30 A. The busbar takes no fuse less than 60 A (the
-    # smallest MEGA fuse for 48 V). So the wire must carry 60 A: 6 AWG.
+    # The port gives 30 A. The busbar takes no fuse less than 40 A (the
+    # smallest MEGA fuse of Victron for 48 V). So the wire must carry 40 A:
+    # 8 AWG.
     station = wire("48", 30, 6, true)
-    advice = Wire.advise(station, %{from_min: 0, to_min: 60})
-    assert %{need: 37.5, from: 40, to: 60, awg: "6", highest: 58.4} = advice
-    assert_in_delta advice.drop, Wire.drop("6", 30, 6, "48"), 1.0e-12
+    advice = Wire.advise(station, %{from_min: 0, to_min: 40})
+    assert %{need: 37.5, from: 40, to: 40, awg: "8", highest: 58.4} = advice
+    assert_in_delta advice.drop, drop("8", 30, 6, "48"), 1.0e-12
+
+    # With a fuse of 60 A in the busbar, the wire must carry 60 A: 6 AWG.
+    assert %{from: 40, to: 60, awg: "6"} = Wire.advise(station, %{from_min: 0, to_min: 60})
 
     # The advice passes its own check.
-    ok = %{station | awg: "6", from_ocpd: 40, from_dc: 60, to_ocpd: 60, to_dc: 80}
+    ok = %{station | awg: "8", from_ocpd: 40, from_dc: 60, to_ocpd: 40, to_dc: 80}
     assert Wire.check(ok) == []
 
     # A wire of 10 AWG with a breaker of 30 A rated 48 V DC, and a fuse of
-    # 60 A at the busbar.
-    bad = %{station | awg: "10", from_ocpd: 30, from_dc: 48, to_ocpd: 60, to_dc: 80}
+    # 40 A at the busbar.
+    bad = %{station | awg: "10", from_ocpd: 30, from_dc: 48, to_ocpd: 40, to_dc: 80}
 
     assert Wire.check(bad) == [
              {:wire_small, nil, 37.5},
@@ -116,14 +189,31 @@ defmodule DIY.WireTest do
     station = %{type: "power_station", params: %{}}
     switch = %{type: "transfer_switch", params: %{}}
     inverter = %{type: "inverter", params: %{}}
+    shore = %{type: "shore_power", params: %{}}
 
-    assert %{system: "24", amps: 30.0, feet: 6.0, two_way: true, awg: nil} =
-             Wire.defaults(station, battery)
+    assert Wire.defaults(station, battery) == %{
+             system: "24",
+             amps: 30.0,
+             feet: 6.0,
+             two_way: true,
+             awg: nil,
+             from_ocpd: nil,
+             to_ocpd: nil,
+             from_dc: nil,
+             to_dc: nil
+           }
 
     assert %{system: "24", two_way: false} = Wire.defaults(battery, inverter)
     assert %{system: "12", two_way: true} = Wire.defaults(station, bus)
     assert %{system: "120", two_way: false} = Wire.defaults(station, switch)
     assert %{system: "12", two_way: false} = Wire.defaults(bus, inverter)
+    # On AC, a wire to a busbar has one way.
+    assert %{system: "120", two_way: false} = Wire.defaults(shore, bus)
+
+    # The system of a battery at an end.
+    assert Wire.battery_system(station, battery) == "24"
+    assert Wire.battery_system(battery, inverter) == "24"
+    assert Wire.battery_system(station, bus) == nil
 
     assert Wire.ends(station, bus) == %{from_min: 0, to_min: 80}
     assert Wire.ends(bus, inverter) == %{from_min: 80, to_min: 0}
@@ -166,6 +256,18 @@ defmodule DIY.WireTest do
 
     assert {:ok, %{two_way: false}} = Wire.read(%{"two_way" => "false"}, read)
 
+    # The highest numbers, and a text of 32 bytes.
+    assert {:ok, %{feet: 500.0, to_ocpd: 2000, to_dc: 1500, amps: 27.5}} =
+             Wire.read(
+               %{
+                 "feet" => "500",
+                 "to_ocpd" => "2000",
+                 "to_dc" => "1500",
+                 "amps" => String.pad_leading("27.5", 32)
+               },
+               base
+             )
+
     # The first number that is not valid.
     for {values, key} <- [
           {%{"system" => "36"}, :system},
@@ -176,11 +278,15 @@ defmodule DIY.WireTest do
           {%{"amps" => "1e400"}, :amps},
           {%{"amps" => nil}, :amps},
           {%{"feet" => 0.5}, :feet},
+          {%{"feet" => "500.1"}, :feet},
+          {%{"amps" => String.duplicate("1", 33)}, :amps},
+          {%{"amps" => "0." <> String.duplicate("1", 31)}, :amps},
           {%{"two_way" => "yes"}, :two_way},
           {%{"awg" => "5"}, :awg},
           {%{"from_ocpd" => "40.5"}, :from_ocpd},
           {%{"from_ocpd" => 2001}, :from_ocpd},
           {%{"to_ocpd" => 0}, :to_ocpd},
+          {%{"to_ocpd" => "2001"}, :to_ocpd},
           {%{"from_dc" => "1501"}, :from_dc},
           {%{"to_dc" => 48.0}, :to_dc},
           {%{"amps" => "0", "feet" => "0"}, :amps}
@@ -196,8 +302,8 @@ defmodule DIY.WireTest do
           amps <- float(min: 1.0, max: 1000.0),
           feet <- float(min: 1.0, max: 500.0),
           two_way <- boolean(),
-          from_min <- member_of([0, 0, 60, 125]),
-          to_min <- member_of([0, 0, 60, 125, 2000])
+          from_min <- member_of([0, 0, 40, 60, 125]),
+          to_min <- member_of([0, 0, 40, 60, 125, 2000])
         ) do
       {wire(system, amps, feet, two_way), %{from_min: from_min, to_min: to_min}}
     end
@@ -296,20 +402,27 @@ defmodule DIY.WireTest do
                 true ->
                   [
                     ocpd[side] < need && {:ocpd_small, side, need},
-                    awg && ocpd[side] > Wire.largest(awg) &&
-                      {:ocpd_big, side, Wire.largest(awg)},
+                    awg && ocpd[side] > @largest[awg] && {:ocpd_big, side, @largest[awg]},
                     highest && dc[side] && dc[side] < highest && {:dc_rating, side, highest}
                   ]
               end
             end) ++
             [
-              awg && Wire.drop(awg, wire.amps, wire.feet, wire.system) > 3.0 &&
-                {:drop, nil, Wire.drop(awg, wire.amps, wire.feet, wire.system)}
+              awg && drop(awg, wire.amps, wire.feet, wire.system) > 3.0 &&
+                {:drop, nil, drop(awg, wire.amps, wire.feet, wire.system)}
             ],
           & &1
         )
 
-      assert faults == expected
+      # The drop of the app and of the test can differ in the last bit.
+      assert length(faults) == length(expected)
+
+      for {fault, model} <- Enum.zip(faults, expected) do
+        case {fault, model} do
+          {{:drop, nil, a}, {:drop, nil, b}} -> assert_in_delta a, b, 1.0e-9
+          _other -> assert fault == model
+        end
+      end
     end
   end
 

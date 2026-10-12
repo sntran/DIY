@@ -23,40 +23,69 @@ defmodule DIYWeb.Wires do
     {"240", "240 V AC"}
   ]
 
-  # The range of each number, for the text of an error.
+  # The range of each number, for the text of an error, and true for a
+  # whole number.
   @ranges %{
-    amps: {1, 1000},
-    feet: {1, 500},
-    from_ocpd: {1, 2000},
-    to_ocpd: {1, 2000},
-    from_dc: {1, 1500},
-    to_dc: {1, 1500}
+    amps: {1, 1000, false},
+    feet: {1, 500, false},
+    from_ocpd: {1, 2000, true},
+    to_ocpd: {1, 2000, true},
+    from_dc: {1, 1500, true},
+    to_dc: {1, 1500, true}
   }
 
   attr :build, :map, required: true
   attr :item, :map, required: true
   attr :error, :any, default: nil, doc: "`{:wire, id, key}`: a number of a wire that is not valid"
 
-  @doc "The part Wires of the panel of an item."
+  @doc """
+  The part Wires of the panel of an item. It shows the wires with the
+  other end in the same place (`DIY.Build.world/2`). A wire to a station
+  that is in the other place waits: it shows again when the station comes
+  back.
+  """
   def section(assigns) do
-    by_id = Map.new(assigns.build.items, &{&1.id, &1})
+    build = assigns.build
+    by_id = Map.new(build.items, &{&1.id, &1})
+    world = Build.world(build, assigns.item)
 
     wires =
-      for wire <- Build.wires_of(assigns.build, assigns.item.id),
-          Map.has_key?(by_id, wire.from) and Map.has_key?(by_id, wire.to),
-          do: {wire, by_id[wire.from], by_id[wire.to]}
+      for wire <- Build.wires_of(build, assigns.item.id),
+          from = by_id[wire.from],
+          to = by_id[wire.to],
+          Build.world(build, from) == Build.world(build, to),
+          do: {wire, from, to}
 
-    world = Build.world(assigns.build, assigns.item)
+    # Two wires between the same two items get a number in their title.
+    pairs = Enum.frequencies_by(wires, fn {wire, _from, _to} -> pair(wire) end)
+
+    {wires, _seen} =
+      Enum.map_reduce(wires, %{}, fn {wire, from, to}, seen ->
+        n = Map.get(seen, pair(wire), 0) + 1
+        title = "#{Catalog.name(from)} to #{Catalog.name(to)}"
+        title = if pairs[pair(wire)] > 1, do: "#{title}, wire #{n}", else: title
+        {{wire, from, to, title}, Map.put(seen, pair(wire), n)}
+      end)
 
     others =
-      for other <- assigns.build.items,
+      for other <- build.items,
           other.id != assigns.item.id and Build.wired?(other),
-          Build.world(assigns.build, other) == world,
+          Build.world(build, other) == world,
           do: other
 
     # A busbar has a number of positions for wires.
     ports = if assigns.item.type == "dc_bus", do: assigns.item.params["ports"]
-    assigns = assign(assigns, wires: wires, others: others, ports: ports, used: length(wires))
+
+    assigns =
+      assign(assigns,
+        wires: wires,
+        others: Enum.reject(others, &Build.wires_full?(build, &1.id)),
+        any_other: others != [],
+        full: Build.wires_full?(build, assigns.item.id),
+        ports: ports,
+        used: length(wires),
+        world: world
+      )
 
     ~H"""
     <section id="part-wires" class="stage-sec" aria-labelledby="part-wires-title">
@@ -64,18 +93,28 @@ defmodule DIYWeb.Wires do
       <p class="stage-help">
         The app checks each wire with the rules of the NEC, the National Electrical Code (2023). It does not replace an electrician or the inspector of your city.
       </p>
-      <p :if={@ports} id="wire-ports" class={if @used > @ports, do: "wire-over", else: "stage-help"}>
+      <p
+        :if={@ports}
+        id="wire-ports"
+        role="status"
+        class={if @used > @ports, do: "wire-over", else: "stage-help"}
+      >
         {ports_text(@used, @ports)}
       </p>
       <.wire
-        :for={{wire, from, to} <- @wires}
-        build={@build}
+        :for={{wire, from, to, title} <- @wires}
         wire={wire}
         from={from}
         to={to}
+        title={title}
         error={wire_error(@error, wire.id)}
       />
-      <form :if={@others != []} id="add-wire" phx-submit="add_wire" class="stage-field">
+      <form
+        :if={@others != [] and not @full}
+        id="add-wire"
+        phx-submit="add_wire"
+        class="stage-field"
+      >
         <input type="hidden" name="from" value={@item.id} />
         <label for="wire-to" class="stage-label">Add a wire from this item to</label>
         <div class="wire-add">
@@ -85,12 +124,31 @@ defmodule DIYWeb.Wires do
           <button type="submit" id="add-wire-button" class="stage-btn">Add</button>
         </div>
       </form>
-      <p :if={@others == []} id="wire-none" class="stage-help">
-        Add a second item that takes wires: a battery, a busbar, an inverter, a power station, an alternator charger, a transfer switch or a shore power inlet.
+      <p :if={@full or (@any_other and @others == [])} id="wire-full" class="stage-help">
+        {full_text()}
+      </p>
+      <p :if={not @any_other} id="wire-none" class="stage-help">
+        {none_text(@world)}
       </p>
     </section>
     """
   end
+
+  defp pair(wire), do: Enum.sort([wire.from, wire.to])
+
+  defp full_text do
+    {build, item} = Build.max_wires()
+
+    "An item has #{item} wires at most, and a build has #{build} wires at most. Remove a wire to add a different one."
+  end
+
+  # The kinds that take wires in each place (`DIY.Catalog`).
+  defp none_text(:house),
+    do: "Add a second item that takes wires: a power station, a busbar or a transfer switch."
+
+  defp none_text(_van),
+    do:
+      "Add a second item that takes wires: a battery, a busbar, an inverter, a power station, an alternator charger or a shore power inlet."
 
   @doc """
   The text of the positions of a busbar: how many have a wire. When more
@@ -112,16 +170,18 @@ defmodule DIYWeb.Wires do
   defp wire_error({:wire, id, key}, id), do: key
   defp wire_error(_error, _id), do: nil
 
-  attr :build, :map, required: true
   attr :wire, :map, required: true
   attr :from, :map, required: true
   attr :to, :map, required: true
+  attr :title, :string, required: true
   attr :error, :atom, default: nil
 
   defp wire(assigns) do
-    wire = assigns.wire
+    %{wire: wire, from: from, to: to} = assigns
     two_way = Wire.two_way?(wire)
-    advice = Wire.advise(wire, Wire.ends(assigns.from, assigns.to))
+    advice = Wire.advise(wire, Wire.ends(from, to))
+    battery = Enum.find([from, to], &(&1.type == "van_battery"))
+    names = %{from.id => Catalog.name(from), to.id => Catalog.name(to)}
 
     assigns =
       assign(assigns,
@@ -132,28 +192,36 @@ defmodule DIYWeb.Wires do
         largest: advice.awg && Wire.largest(advice.awg),
         faults: Wire.check(wire),
         has: Enum.any?([wire.awg, wire.from_ocpd, wire.to_ocpd]),
-        from_name: Catalog.name(assigns.from),
-        to_name: Catalog.name(assigns.to)
+        from_name: names[from.id],
+        to_name: names[to.id],
+        # The ends in a fixed order: a change of the source changes only
+        # the radio that is on.
+        ends: names |> Enum.sort() |> Enum.with_index(),
+        battery: battery && Catalog.name(battery),
+        lead_acid: battery && battery.params["chemistry"] == "agm"
       )
 
     ~H"""
     <article id={@id} class="wire" aria-labelledby={"#{@id}-title"}>
-      <h4 id={"#{@id}-title"} class="wire-title">{@from_name} to {@to_name}</h4>
+      <h4 id={"#{@id}-title"} class="wire-title">{@title}</h4>
       <form id={"#{@id}-form"} phx-change="wire" phx-submit="wire" class="stage-fields">
         <input type="hidden" name="wire_id" value={@wire.id} />
         <fieldset class="stage-field">
           <legend class="stage-label">The current comes from</legend>
           <div class="stage-choices">
-            <label
-              :for={{end_id, name} <- [{@from.id, @from_name}, {@to.id, @to_name}]}
-              class="stage-choice"
-            >
-              <input type="radio" name="wire[from]" value={end_id} checked={end_id == @from.id} />
+            <label :for={{{end_id, name}, n} <- @ends} class="stage-choice">
+              <input
+                type="radio"
+                id={"#{@id}-end-#{n}"}
+                name="wire[from]"
+                value={end_id}
+                checked={end_id == @from.id}
+              />
               <span>{name}</span>
             </label>
           </div>
         </fieldset>
-        <div class="stage-field">
+        <div :if={is_nil(@battery)} class="stage-field">
           <label for={"#{@id}-system"} class="stage-label">System</label>
           <select id={"#{@id}-system"} name="wire[system]" class="stage-input">
             <option :for={{key, label} <- systems()} value={key} selected={key == @wire.system}>
@@ -161,6 +229,12 @@ defmodule DIYWeb.Wires do
             </option>
           </select>
         </div>
+        <p :if={@battery} id={"#{@id}-system"} class="stage-help">
+          System: {system_name(@wire.system)}, the voltage of {@battery}. Change it in the part of the battery.
+        </p>
+        <p :if={@lead_acid} id={"#{@id}-lead-acid"} class="stage-help">
+          {@battery} is lead acid. The app uses the voltages of LiFePO4: ask the maker of the battery for its highest voltage.
+        </p>
         <.number
           id={"#{@id}-amps"}
           name="wire[amps]"
@@ -195,6 +269,9 @@ defmodule DIYWeb.Wires do
       <div id={"#{@id}-advice"} class="wire-advice">
         <p class="wire-head">What the rules ask for</p>
         <ul class="stage-list">
+          <li>
+            Current: 125% of {amps(@wire.amps)} A is {amps(@advice.need)} A. This is for a load all the time, 3 hours or more (NEC 210.19(A) and 215.2(A)(1)).
+          </li>
           <li :if={@advice.awg}>
             Wire: {@advice.awg} AWG copper or larger, rated 75 °C, with terminals of 75 °C. With it, the voltage drop is {percent(
               @advice.drop
@@ -208,6 +285,11 @@ defmodule DIYWeb.Wires do
         </ul>
         <p :if={@two_way and @advice.to > Wire.rating(@advice.need)} class="stage-help">
           {@to_name} takes no fuse less than {@advice.to} A: the wire must carry it.
+        </p>
+        <p :if={@advice.highest} class="stage-help">
+          {volts(@advice.highest)} V is the voltage of a full LiFePO4 battery of {system_name(
+            @wire.system
+          )}: {Wire.cells(@wire.system)} cells at 3.65 V.
         </p>
       </div>
 
@@ -231,6 +313,7 @@ defmodule DIYWeb.Wires do
             label="Breaker or fuse"
             unit="A"
             value={@wire.from_ocpd}
+            whole
             error={@error == :from_ocpd && range(:from_ocpd)}
           />
           <.number
@@ -240,6 +323,7 @@ defmodule DIYWeb.Wires do
             label="Its DC rating, on its label"
             unit="V"
             value={@wire.from_dc}
+            whole
             error={@error == :from_dc && range(:from_dc)}
           />
         </fieldset>
@@ -251,6 +335,7 @@ defmodule DIYWeb.Wires do
             label="Breaker or fuse"
             unit="A"
             value={@wire.to_ocpd}
+            whole
             error={@error == :to_ocpd && range(:to_ocpd)}
           />
           <.number
@@ -259,6 +344,7 @@ defmodule DIYWeb.Wires do
             label="Its DC rating, on its label"
             unit="V"
             value={@wire.to_dc}
+            whole
             error={@error == :to_dc && range(:to_dc)}
           />
         </fieldset>
@@ -275,16 +361,51 @@ defmodule DIYWeb.Wires do
         </p>
       </div>
 
-      <button
-        type="button"
-        phx-click={
-          JS.push("delete_wire", value: %{id: @wire.id})
-          |> JS.focus(to: "#part-wires-title")
-        }
-        class="stage-btn stage-danger"
-      >
-        Remove the wire
-      </button>
+      <div class="stage-remove">
+        <button
+          type="button"
+          id={"#{@id}-ask-remove"}
+          phx-click={
+            JS.hide()
+            |> JS.show(to: "##{@id}-confirm", display: "flex")
+            |> JS.focus(to: "##{@id}-keep")
+          }
+          class="stage-btn stage-danger"
+        >
+          Remove the wire
+        </button>
+        <div
+          id={"#{@id}-confirm"}
+          class="stage-confirm hidden"
+          role="group"
+          aria-labelledby={"#{@id}-remove-text"}
+        >
+          <p id={"#{@id}-remove-text"}>Remove the wire from {@from_name} to {@to_name}?</p>
+          <button
+            type="button"
+            id={"#{@id}-remove"}
+            phx-click={
+              JS.push("delete_wire", value: %{id: @wire.id})
+              |> JS.focus(to: "#part-wires-title")
+            }
+            class="stage-btn stage-danger"
+          >
+            Remove
+          </button>
+          <button
+            type="button"
+            id={"#{@id}-keep"}
+            phx-click={
+              JS.hide(to: "##{@id}-confirm")
+              |> JS.show(to: "##{@id}-ask-remove")
+              |> JS.focus(to: "##{@id}-ask-remove")
+            }
+            class="stage-btn"
+          >
+            Keep it
+          </button>
+        </div>
+      </div>
     </article>
     """
   end
@@ -295,6 +416,7 @@ defmodule DIYWeb.Wires do
   attr :unit, :string, required: true
   attr :value, :any, required: true
   attr :help, :string, default: nil
+  attr :whole, :boolean, default: false, doc: "true for a whole number"
   attr :error, :any, default: false, doc: "the text of the error, or false"
 
   # A number of a wire: a field and its unit. An empty field is a number
@@ -321,8 +443,8 @@ defmodule DIYWeb.Wires do
           name={@name}
           value={Format.value(@value)}
           type="number"
-          step="any"
-          inputmode="decimal"
+          step={if @whole, do: "1", else: "any"}
+          inputmode={if @whole, do: "numeric", else: "decimal"}
           phx-debounce="400"
           aria-invalid={@error && "true"}
           aria-describedby={@described}
@@ -338,9 +460,13 @@ defmodule DIYWeb.Wires do
 
   defp systems, do: @systems
 
+  defp system_name(system), do: @systems |> List.keyfind(system, 0) |> elem(1)
+
   defp range(key) do
-    {min, max} = Map.fetch!(@ranges, key)
-    "Give a number from #{min} to #{max}, or nothing."
+    case Map.fetch!(@ranges, key) do
+      {min, max, true} -> "Give a whole number from #{min} to #{max}, or nothing."
+      {min, max, false} -> "Give a number from #{min} to #{max}, or nothing."
+    end
   end
 
   # The name of an item with its room, for the list of the ends.
@@ -371,11 +497,11 @@ defmodule DIYWeb.Wires do
   @doc "The text of a fault of `DIY.Wire.check/1`."
   def fault_text({:wire_small, nil, need}, wire, _from, _to),
     do:
-      "The wire is too small: #{wire.awg} AWG carries #{Wire.ampacity(wire.awg)} A, and the wire needs #{amps(need)} A. This is 125% of #{amps(wire.amps)} A (NEC 210.19(A))."
+      "The wire is too small: #{wire.awg} AWG carries #{Wire.ampacity(wire.awg)} A, and the wire needs #{amps(need)} A. This is 125% of #{amps(wire.amps)} A (NEC 210.19(A) and 215.2(A)(1))."
 
   def fault_text({:ocpd_small, side, need}, wire, from, to),
     do:
-      "The breaker or the fuse at #{name(side, from, to)} is too small: #{ocpd(wire, side)} A is less than #{amps(need)} A. It can open at the normal current (NEC 210.20(A))."
+      "The breaker or the fuse at #{name(side, from, to)} is too small: #{ocpd(wire, side)} A is less than #{amps(need)} A. It can open at the normal current (NEC 210.20(A) and 215.3)."
 
   def fault_text({:ocpd_big, side, largest}, wire, from, to),
     do:
@@ -387,7 +513,7 @@ defmodule DIYWeb.Wires do
 
   def fault_text({:no_ocpd, :to, nil}, _wire, _from, to),
     do:
-      "The wire has no breaker or fuse at #{to}. That end also gives current: it can feed a fault on the wire (NEC 705.30)."
+      "The wire has no breaker or fuse at #{to}. That end also gives current: it can feed a fault on the wire (NEC 705.30(A))."
 
   def fault_text({:dc_rating, side, highest}, wire, from, to),
     do:

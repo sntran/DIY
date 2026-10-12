@@ -2518,6 +2518,9 @@ the wires (`DIY.Build`, `wires`).
 - A wire goes from the item that gives the current (`from`) to a
   different item (`to`). A new wire joins two items of one place: the
   house, or one van. A wire stays when a station goes to a van and back.
+  While the station is in the other place, the wire waits: the panels
+  do not show it, and a busbar does not count it. It shows again when
+  the station comes back.
 - Its numbers (`DIY.Wire`) are the system, the most current of the
   port, the length one way, and two ways. The system is 12, 24 or 48 V
   DC, or 120 or 240 V AC. A wire has two ways when the far end also
@@ -2526,12 +2529,18 @@ the wires (`DIY.Build`, `wires`).
   system of a battery at an end. Else it is 120 V AC at a transfer
   switch or a shore power inlet, else 12 V DC. On DC, a wire to a
   battery or to a busbar has two ways.
+- When a battery is at an end, the system of the wire is always the
+  voltage of the battery. A change of the battery changes its wires
+  (`DIY.Build.change/2`), and the card shows the system as a text. So
+  a check never uses an old voltage.
 - What the person has: the wire size, and the breaker or the fuse at
   each end with its DC rating. Each one is empty until the person gives
   it.
-- A build has 100 wires at most. A wire goes away with an item at its
-  end. A wire that the app cannot read goes away when the build loads:
-  a wire must not stop the build from loading.
+- A build has 100 wires at most, and an item has 24 wires at most (the
+  most positions of a busbar). The limit of an item keeps the panel
+  small. A wire goes away with an item at its end. A wire that the app
+  cannot read goes away when the build loads: a wire must not stop the
+  build from loading. The first 100 good wires stay.
 
 ### The busbar
 
@@ -2539,11 +2548,11 @@ The new kind "DC busbar or distributor" (`dc_bus`) is a busbar with
 fuse holders, for example a Victron Lynx Distributor. It has two
 numbers. The first is its positions for wires (its studs or its fuse
 holders), from 1 to 24: the Lynx has 4. The second is the smallest fuse
-that its holders take. The Lynx takes MEGA fuses. For 48
-V, the smallest MEGA fuse of Victron is 60 A, rated 80 V (retailer
-listings of the part CIP138060020). The Lynx is 290 by 170 by 80 mm,
-and 2.2 kg (retailer listings). A busbar uses no power: the estimate
-does not count it.
+that its holders take. The Lynx takes MEGA fuses. For 48 V, the
+smallest MEGA fuse of Victron is 40 A, rated 80 V (the part
+CIP138040020, in the listings of retailers). The manual of the Lynx
+Distributor gives its size and its weight: 290 by 170 by 80 mm, and
+2.2 kg. A busbar uses no power: the estimate does not count it.
 
 The model of a busbar shows a fuse window and a light for each position
 (`DIYWeb.Icon.Shapes.look/1`). The positions share the width of the
@@ -2557,8 +2566,10 @@ the busbar than it has positions, the panel shows a fault.
 faults of what the person has.
 
 - The current of the port is a load all the time (a continuous load).
-  So the wire and the breaker are at least 125% of it (NEC 210.19(A)
-  and 210.20(A)).
+  So the wire and the breaker are at least 125% of it. The rules are
+  NEC 210.19(A) and 210.20(A) for a branch circuit, and NEC 215.2(A)(1)
+  and 215.3 for a feeder. The number is the same. The page tells the
+  current with the margin, and that it is for a load all the time.
 - The ampacity of copper wire comes from the 75 °C column of NEC Table
   310.16. The terminals at the two ends must be rated 75 °C (NEC
   110.14(C)). The page tells this.
@@ -2567,13 +2578,19 @@ faults of what the person has.
   rating, the next standard rating is permitted (NEC 240.4(B)). Wire of
   14, 12 and 10 AWG takes 15, 20 and 30 A at most (NEC 240.4(D)). The
   standard ratings come from NEC Table 240.6(A).
-- A wire with two ways has a breaker or a fuse at each end: it is
-  protected from all the sources (NEC 705.30). A busbar at an end takes
-  no fuse less than its smallest fuse. So the wire must carry that fuse.
+- A breaker or a fuse is at the end where the wire gets its current
+  (NEC 240.21). A wire with two ways has one at each end: it is
+  protected from all the sources (NEC 705.30(A)). A busbar at an end
+  takes no fuse less than its smallest fuse. So the wire must carry that
+  fuse.
 - On DC, a breaker or a fuse is rated for DC, at the highest voltage of
   the battery or more (NEC 706.31(C) and 110.3(B)). The app uses
-  LiFePO4: 3.65 V for each cell when it is full. This is 14.6 V for 12
-  V, 29.2 V for 24 V, and 58.4 V for 48 V.
+  LiFePO4: a cell charges to 3.65 V at most (for example, the data
+  sheet of the EVE LF280K cell). This is 14.6 V for 12 V (4 cells),
+  29.2 V for 24 V (8 cells), and 58.4 V for 48 V (16 cells). The page
+  tells this. The manual of the Lynx Distributor says that MEGA fuses
+  of 58 V are for 48 V systems. A full battery of 16 cells can have
+  58.4 V, so the app asks for more, on the safe side.
 - The voltage drop is 3% or less. This is the advice of an
   informational note of NEC 210.19(A), not a rule. The app uses the DC
   resistance of stranded copper of NEC Chapter 9, Table 8. The current
@@ -2584,12 +2601,16 @@ smallest standard breaker at each end. A wire of 4/0 AWG or less is not
 always enough: then the page tells the person to ask an electrician.
 
 The example of the owner: the cascade port of a Pecron E3600LFP gives
-30 A at 48 V to a Lynx Distributor. The MJ32 cable of Pecron for this
-port gives 44 to 58 V DC, and 1200 W at most for each XT60 plug. The
-breaker at the station is 125% of 30 A at least: 37.5 A, so 40 A. The
-Lynx takes no fuse less than 60 A. So the wire must carry 60 A: 6 AWG
-(65 A, and a fuse of 70 A at most by NEC 240.4(B)). The breaker is for
-DC, at 58.4 V or more. A breaker that is rated 48 V DC is not enough.
+30 A at 48 V to a Lynx Distributor. The 30 A is the number of the
+owner. The page of the MJ32 cable of Pecron gives 44 to 58 V DC. It
+gives 1200 W at most for each XT60 plug: 27.3 A at 44 V. So 30 A is on
+the safe side. The breaker at the station is 125% of 30 A at least:
+37.5 A, so 40 A. The Lynx takes no fuse less than 40 A, so its fuse is
+40 A too. The wire must carry 40 A: 8 AWG (50 A, with a drop of 0.6%
+on 6 ft). The breakers are for DC, at 58.4 V or more. A breaker that
+is rated 48 V DC is not enough. When the Lynx has a fuse of 60 A, the
+person sets its smallest fuse to 60 A. Then the wire must carry 60 A:
+6 AWG (65 A, and a fuse of 70 A at most by NEC 240.4(B)).
 
 The app does not check these yet:
 
@@ -2599,7 +2620,12 @@ The app does not check these yet:
 - the interrupting rating of a fuse next to a large battery (NEC 110.9);
 - wire of aluminum, and the 60 °C column for terminals that are not
   rated 75 °C;
-- a lead acid battery, which has a different highest voltage;
+- a lead acid battery, which has a different highest voltage. The card
+  tells this when a battery at an end is lead acid;
+- the rule for the wire from an energy storage system. NEC 706.30(B) of
+  the edition of 2020 asks that this wire carries the full rating of
+  its fuse, with no next standard rating. The app could not get the
+  text of 2023, so the owner must check it;
 - the wires on the plan.
 
 ### The panel
@@ -2607,24 +2633,37 @@ The app does not check these yet:
 The panel of each item that takes wires has the part Wires
 (`DIYWeb.Wires`). It lists the wires of the item. Each wire is a card:
 
-1. Its numbers: the end that gives the current (a choice of the two
+1. Its title: the names of the two ends. Two wires between the same
+   two items get a number ("wire 2").
+2. Its numbers: the end that gives the current (a choice of the two
    ends), the system, the current of the port and the length. On DC, a
-   switch tells that the far end also gives current.
-2. What the rules ask for: the wire, and the breaker or the fuse at each
-   end. The breaker has a range: from the smallest rating to the largest
-   that the wire takes. On DC, the page tells the DC rating.
-3. What the person has: the wire size, and the breaker or the fuse at
-   each end with its DC rating.
-4. The faults, each with its rule of the NEC, in a status: a screen
+   switch tells that the far end also gives current. The two ends stay
+   in one order (the order of their ids). When the ends change places,
+   only the choice that is on changes. A browser keeps the value of the
+   field that has the focus, so a change of the values breaks the
+   choice.
+3. What the rules ask for: the current with the margin, the wire, and
+   the breaker or the fuse at each end. The breaker has a range: from
+   the smallest rating to the largest that the wire takes. On DC, the
+   page tells the DC rating and why.
+4. What the person has: the wire size, and the breaker or the fuse at
+   each end with its DC rating. The breakers and the DC ratings are
+   whole numbers: their fields take only whole numbers, and their error
+   tells it.
+5. The faults, each with its rule of the NEC, in a status: a screen
    reader reads a change. A fault has the color of a danger and a bar
    at its start, so the color is not the only sign. With no fault, the
    card tells that what the person has meets the rules.
-5. A button removes the wire. The focus then goes to the title of the
-   part.
+6. A button removes the wire, after a question, as for an item. The
+   focus then goes to the title of the part, and a status tells that
+   the wire is removed.
 
 Under the cards, the person adds a wire from the item to a different
-item of the same place. A number that is not valid shows its error at
-its field, and the wire does not change.
+item of the same place. A status tells that the wire is added. When the
+item or the build has its most wires, a text tells it in place of the
+form. A number that is not valid shows its error at its field, and the
+wire does not change. The text of the positions of a busbar is a status
+too.
 
 The TLA+ models do not change. A check is a function of the numbers of
 one wire, with no steps in time. The property tests check it for all
@@ -2632,23 +2671,29 @@ the numbers.
 
 ### The tests of the wires
 
-- `test/diy/wire_test.exs` checks the tables of the NEC, the example
-  of the owner, a wire on AC and the voltage drop. It also checks the
-  numbers from a form or from JSON. Property tests check that the advice
-  meets the rules, and that it is the smallest wire that does. More
-  current never gives a smaller wire or a smaller breaker. A model of
-  the rules gives the same faults as `check/1` for any numbers.
+- `test/diy/wire_test.exs` checks all the numbers of the tables of the
+  NEC, and the numbers at the limits of the rules. It checks the example
+  of the owner, a wire on AC and the voltage drop. It also checks the numbers
+  from a form or from JSON. Property tests check that the advice meets
+  the rules, and that it is the smallest wire that does. More current
+  never gives a smaller wire or a smaller breaker. A model of the rules,
+  with its own tables, gives the same faults as `check/1` for any
+  numbers.
 - `test/diy/build_wires_test.exs` checks a wire between two items, its
   numbers, and its ends that change places. It checks a wire that goes
-  away with its item, the wires of a van, and the wires in the JSON of
-  the build. A property test checks that each wire has an item that
-  takes wires at each end, after any steps.
+  away with its item, the wires of a van, and the system of a battery.
+  It also checks the limits, and the wires in the JSON of the build. A property test checks
+  that each wire has an item that takes wires at each end, after any
+  steps.
 - `test/diy_web/live/wires_live_test.exs` checks the part Wires in the
   panel. It has the example of the owner, each fault, and the errors of
-  the fields. It also has a wire on AC, and the wires of a van.
+  the fields. It also has the order of the ends and a wire on AC. It has
+  the wires of a van, a wire that waits, and an item with its most
+  wires.
 - The browser test: the person adds a busbar and a wire from the power
   station. The page shows the advice and a fault, and axe checks the
-  panel with the wire.
+  panel with the wire. The current then comes from the busbar, and from
+  the station again, with a click on each choice.
 
 ## In a car
 

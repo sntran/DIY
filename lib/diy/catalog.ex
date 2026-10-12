@@ -1172,10 +1172,10 @@ defmodule DIY.Catalog do
           "fuse_min",
           "Smallest fuse",
           "A",
-          60,
+          40,
           0,
           2000,
-          "The smallest fuse that its fuse holders take, or 0 with no fuse holders. A Victron Lynx Distributor takes MEGA fuses. For 48 V, the smallest MEGA fuse of Victron is 60 A (80 V)."
+          "The smallest fuse that its fuse holders take, or 0 with no fuse holders. A Victron Lynx Distributor takes MEGA fuses. The smallest MEGA fuse of Victron for 48 V is 40 A (80 V, part CIP138040020)."
         ),
         weight(5)
       ]

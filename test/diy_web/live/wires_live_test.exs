@@ -51,36 +51,65 @@ defmodule DIYWeb.WiresLiveTest do
              "DC busbar or distributor, in Garage"
            )
 
-    # The person adds a wire to the busbar.
+    # The person adds a wire to the busbar. A status tells it.
     view |> form("#add-wire", %{"to" => bus}) |> render_submit()
     [wire] = build_of(view).wires
     id = "#wire-#{wire.id}"
+
+    assert has_element?(
+             view,
+             "#item-said[role=status]",
+             "A wire from Power station to DC busbar or distributor is added."
+           )
+
     assert has_element?(view, "#{id}-title", "Power station to DC busbar or distributor")
     assert has_element?(view, "#{id}-system option[selected][value='12']")
-    assert has_element?(view, "#{id}-amps[value='30']")
+    assert has_element?(view, "#{id}-amps[value='30'][step=any][inputmode=decimal]")
     assert has_element?(view, "#{id} [role=switch][name='wire[two_way]'][checked]")
 
-    # The busbar takes no fuse less than 60 A: the wire must carry 60 A.
-    assert has_element?(view, "#{id}-advice", "Wire: 6 AWG copper or larger, rated 75 °C")
+    # The busbar takes no fuse less than 40 A (MEGA fuses): 8 AWG carries
+    # 50 A.
+    assert has_element?(view, "#{id}-advice", "Current: 125% of 30 A is 37.5 A.")
+    assert has_element?(view, "#{id}-advice", "Wire: 8 AWG copper or larger, rated 75 °C")
 
     assert has_element?(
              view,
              "#{id}-advice",
-             "At Power station: a breaker or a fuse of 40 A to 70 A"
+             "At Power station: a breaker or a fuse of 40 A to 50 A, rated for DC at 14.6 V or more."
            )
 
-    assert has_element?(view, "#{id}-advice", "rated for DC at 14.6 V or more.")
+    assert has_element?(
+             view,
+             "#{id}-advice",
+             "At DC busbar or distributor: a breaker or a fuse of 40 A to 50 A"
+           )
+
+    assert has_element?(
+             view,
+             "#{id}-advice",
+             "14.6 V is the voltage of a full LiFePO4 battery of 12 V DC: 4 cells at 3.65 V."
+           )
+
+    refute has_element?(view, "#{id}-advice", "takes no fuse less than")
+
+    # A busbar with fuses of 60 A at least: the wire must carry 60 A. The
+    # panel of the busbar shows the wire too.
+    render_patch(view, ~p"/inside?#{[item: bus]}")
+    view |> form("#item-form", %{"item" => %{"fuse_min" => "60"}}) |> render_change()
+    assert has_element?(view, "#{id}-advice", "Wire: 6 AWG copper or larger")
+
+    assert has_element?(
+             view,
+             "#{id}-advice",
+             "DC busbar or distributor takes no fuse less than 60 A: the wire must carry it."
+           )
+
+    render_patch(view, ~p"/inside?#{[item: station]}")
 
     assert has_element?(
              view,
              "#{id}-advice",
              "At DC busbar or distributor: a breaker or a fuse of 60 A to 70 A"
-           )
-
-    assert has_element?(
-             view,
-             "#{id}-advice",
-             "takes no fuse less than 60 A: the wire must carry it."
            )
 
     # On 48 V: the DC rating of a LiFePO4 battery when it is full.
@@ -102,13 +131,13 @@ defmodule DIYWeb.WiresLiveTest do
     assert has_element?(
              view,
              check,
-             "The wire is too small: 10 AWG carries 35 A, and the wire needs 37.5 A. This is 125% of 30 A (NEC 210.19(A))."
+             "The wire is too small: 10 AWG carries 35 A, and the wire needs 37.5 A. This is 125% of 30 A (NEC 210.19(A) and 215.2(A)(1))."
            )
 
     assert has_element?(
              view,
              check,
-             "The breaker or the fuse at Power station is too small: 30 A is less than 37.5 A."
+             "The breaker or the fuse at Power station is too small: 30 A is less than 37.5 A. It can open at the normal current (NEC 210.20(A) and 215.3)."
            )
 
     assert has_element?(
@@ -122,7 +151,7 @@ defmodule DIYWeb.WiresLiveTest do
     assert has_element?(
              view,
              check,
-             "The breaker or the fuse at DC busbar or distributor does not protect the wire: 10 AWG takes 30 A at most, and it is 60 A."
+             "The breaker or the fuse at DC busbar or distributor does not protect the wire: 10 AWG takes 30 A at most, and it is 60 A. Use a larger wire or a smaller breaker (NEC 240.4)."
            )
 
     # The fields of each end are in a group with the name of the end.
@@ -148,7 +177,7 @@ defmodule DIYWeb.WiresLiveTest do
     assert has_element?(
              view,
              check,
-             "The wire has no breaker or fuse at DC busbar or distributor. That end also gives current: it can feed a fault on the wire (NEC 705.30)."
+             "The wire has no breaker or fuse at DC busbar or distributor. That end also gives current: it can feed a fault on the wire (NEC 705.30(A))."
            )
 
     view |> form("#{id}-has", %{"wire" => %{"from_ocpd" => ""}}) |> render_change()
@@ -200,7 +229,12 @@ defmodule DIYWeb.WiresLiveTest do
 
     # A long wire: the voltage drop.
     view |> form("#{id}-form", %{"wire" => %{"feet" => "100"}}) |> render_change()
-    assert has_element?(view, check, "The voltage drop is 6.1%. The NEC advises 3% or less")
+
+    assert has_element?(
+             view,
+             check,
+             "The voltage drop is 6.1%. The NEC advises 3% or less: use a larger wire or a shorter wire (an informational note of NEC 210.19(A))."
+           )
 
     # A number that is not valid: the field tells it, and nothing changes.
     view |> form("#{id}-form", %{"wire" => %{"amps" => "0"}}) |> render_change()
@@ -214,30 +248,46 @@ defmodule DIYWeb.WiresLiveTest do
 
     assert hd(build_of(view).wires).amps == 30.0
 
-    for {part, key, field} <- [{"form", "feet", "feet"}, {"has", "from_dc", "from-dc"}] do
-      view |> form("#{id}-#{part}", %{"wire" => %{key => "0"}}) |> render_change()
-      assert has_element?(view, "#{id}-#{field}-error", "Give a number from 1 to")
+    view |> form("#{id}-form", %{"wire" => %{"feet" => "0"}}) |> render_change()
+    assert has_element?(view, "#{id}-feet-error", "Give a number from 1 to 500, or nothing.")
+
+    # The breakers and the DC ratings are whole numbers.
+    for {key, field, max} <- [
+          {"from_ocpd", "from-ocpd", 2000},
+          {"to_ocpd", "to-ocpd", 2000},
+          {"from_dc", "from-dc", 1500},
+          {"to_dc", "to-dc", 1500}
+        ] do
+      assert has_element?(view, "#{id}-#{field}[step='1'][inputmode=numeric]")
+      view |> form("#{id}-has", %{"wire" => %{key => "58.4"}}) |> render_change()
+
+      assert has_element?(
+               view,
+               "#{id}-#{field}-error",
+               "Give a whole number from 1 to #{max}, or nothing."
+             )
     end
 
-    view |> form("#{id}-has", %{"wire" => %{"from_ocpd" => "0"}}) |> render_change()
-
-    assert has_element?(
-             view,
-             "#{id}-from-ocpd-error",
-             "Give a number from 1 to 2000, or nothing."
-           )
-
-    view |> form("#{id}-has", %{"wire" => %{"to_ocpd" => "0"}}) |> render_change()
-    assert has_element?(view, "#{id}-to-ocpd-error")
-    view |> form("#{id}-has", %{"wire" => %{"to_dc" => "0"}}) |> render_change()
-    assert has_element?(view, "#{id}-to-dc-error")
     view |> form("#{id}-form", %{"wire" => %{"amps" => "30"}}) |> render_change()
     refute has_element?(view, ".stage-error")
 
-    # The current comes from the busbar: the ends change places.
+    # The current comes from the busbar: the ends change places. The
+    # radios stay in their order: only the radio that is on changes.
+    [first, last] = Enum.sort([station, bus])
+    radio = &"#{id}-end-#{&1}[value=#{&2}]"
+    assert has_element?(view, radio.(0, first)) and has_element?(view, radio.(1, last))
+
+    assert has_element?(
+             view,
+             radio.(if(station == first, do: 0, else: 1), station) <> "[checked]"
+           )
+
     view |> form("#{id}-form", %{"wire" => %{"from" => bus}}) |> render_change()
     assert has_element?(view, "#{id}-title", "DC busbar or distributor to Power station")
     assert hd(build_of(view).wires).from == bus
+    assert has_element?(view, radio.(0, first)) and has_element?(view, radio.(1, last))
+    assert has_element?(view, radio.(if(bus == first, do: 0, else: 1), bus) <> "[checked]")
+    refute has_element?(view, "#{id} [name='wire[from]'][value=#{station}][checked]")
 
     # On AC, the far end has no breaker, and no DC rating.
     view |> form("#{id}-form", %{"wire" => %{"system" => "120"}}) |> render_change()
@@ -252,12 +302,31 @@ defmodule DIYWeb.WiresLiveTest do
 
     assert has_element?(
              view,
-             "#wire-ports.stage-help",
+             "#wire-ports.stage-help[role=status]",
              "It has 4 positions for wires. 1 of them has a wire."
            )
 
     view |> form("#add-wire", %{"to" => station}) |> render_submit()
     assert has_element?(view, "#wire-ports", "2 of them have a wire.")
+
+    # Two wires between the same two items: their titles have a number.
+    [_, second] = build_of(view).wires
+    assert has_element?(view, "#{id}-title", "DC busbar or distributor to Power station, wire 1")
+
+    assert has_element?(
+             view,
+             "#wire-#{second.id}-title",
+             "DC busbar or distributor to Power station, wire 2"
+           )
+
+    # 4 wires: all the positions have a wire, with no fault.
+    for _n <- 1..2, do: view |> form("#add-wire", %{"to" => station}) |> render_submit()
+    assert has_element?(view, "#wire-ports.stage-help", "4 of them have a wire.")
+    [_, _, third, fourth] = build_of(view).wires
+
+    for wire <- [third, fourth] do
+      view |> element("#wire-#{wire.id}-remove") |> render_click()
+    end
 
     # A busbar with 1 position, and 2 wires: a fault. The model of the
     # busbar shows its positions.
@@ -276,24 +345,69 @@ defmodule DIYWeb.WiresLiveTest do
              "#item-stage-model-#{bus} #item-stage-frames-#{bus}-1[phx-update=ignore]"
            )
 
-    [_, second] = build_of(view).wires
-    view |> element("#wire-#{second.id} button", "Remove the wire") |> render_click()
+    # The removal of a wire asks first, in the card of the wire.
+    assert has_element?(view, "#wire-#{second.id}-ask-remove", "Remove the wire")
+
+    assert has_element?(
+             view,
+             "#wire-#{second.id}-confirm[role=group].hidden",
+             "Remove the wire from DC busbar or distributor to Power station?"
+           )
+
+    assert has_element?(view, "#wire-#{second.id}-keep", "Keep it")
+    view |> element("#wire-#{second.id}-remove") |> render_click()
+    assert has_element?(view, "#item-said", "The wire is removed.")
     view |> form("#item-form", %{"item" => %{"ports" => "4"}}) |> render_change()
 
     # A wire that is not there changes nothing. The person removes the wire.
     render_change(view, "wire", %{"wire_id" => "w0", "wire" => %{"amps" => "5"}})
-    view |> element("#{id} button", "Remove the wire") |> render_click()
+    render_click(view, "delete_wire", %{"id" => "w0"})
+    view |> element("#{id}-remove") |> render_click()
     assert build_of(view).wires == []
     refute has_element?(view, id)
     render_submit(view, "add_wire", %{"from" => bus, "to" => bus})
     assert build_of(view).wires == []
   end
 
+  test "an item with its most wires", %{conn: conn} do
+    build = preset()
+    {build, station} = add(build, room(build, "Garage"), "power_station")
+    {build, bus} = add(build, room(build, "Garage"), "dc_bus")
+    {build, other} = add(build, room(build, "Garage"), "power_station")
+
+    build =
+      Enum.reduce(1..24, build, fn _n, build ->
+        {:ok, build, _id} = Build.add_wire(build, station, bus)
+        build
+      end)
+
+    view = open(conn, ~p"/inside?#{[item: station]}", build)
+    refute has_element?(view, "#add-wire")
+
+    assert has_element?(
+             view,
+             "#wire-full",
+             "An item has 24 wires at most, and a build has 100 wires at most. Remove a wire to add a different one."
+           )
+
+    # The busbar is full: the other station cannot add a wire to it.
+    render_patch(view, ~p"/inside?#{[item: other]}")
+    refute has_element?(view, "#add-wire")
+    assert has_element?(view, "#wire-full")
+    refute has_element?(view, "#wire-none")
+  end
+
   test "an item with no second item that takes wires, and an item with no wires", %{conn: conn} do
     build = preset()
     {build, station} = add(build, room(build, "Garage"), "power_station")
     view = open(conn, ~p"/inside?#{[item: station]}", build)
-    assert has_element?(view, "#wire-none", "Add a second item that takes wires")
+
+    assert has_element?(
+             view,
+             "#wire-none",
+             "Add a second item that takes wires: a power station, a busbar or a transfer switch."
+           )
+
     refute has_element?(view, "#add-wire")
 
     fridge = Enum.find(build.items, &(&1.type == "fridge"))
@@ -311,7 +425,7 @@ defmodule DIYWeb.WiresLiveTest do
              "It has 4 positions for wires. No position has a wire yet."
            )
 
-    assert has_element?(view, "#param-fuse_min[value='60']")
+    assert has_element?(view, "#param-fuse_min[value='40']")
     refute has_element?(view, "#flags-form [name=backup]")
   end
 
@@ -324,6 +438,16 @@ defmodule DIYWeb.WiresLiveTest do
     {build, house_station} = add(build, room(build, "Garage"), "power_station")
     {:ok, build} = Build.update_item(build, battery, %{"volts" => "48"})
 
+    # A battery with no second item in its van.
+    {:ok, alone} = Build.delete_item(build, Enum.find(build.items, &(&1.type == "inverter")).id)
+    view = open(conn, ~p"/van?#{[id: van, item: battery]}", alone)
+
+    assert has_element?(
+             view,
+             "#wire-none",
+             "a battery, a busbar, an inverter, a power station, an alternator charger or a shore power inlet."
+           )
+
     view = open(conn, ~p"/van?#{[id: van, item: battery]}", build)
     assert has_element?(view, "#part-more", "the checks of its wires (NEC)")
     # Only the items of the van: not the station of the house.
@@ -335,8 +459,29 @@ defmodule DIYWeb.WiresLiveTest do
     inverter = Enum.find(build.items, &(&1.type == "inverter")).id
     view |> form("#add-wire", %{"to" => inverter}) |> render_submit()
     [wire] = build_of(view).wires
-    assert has_element?(view, "#wire-#{wire.id}-system option[selected][value='48']")
+
+    # The system is the voltage of the battery: no choice in the card.
+    assert has_element?(
+             view,
+             "p#wire-#{wire.id}-system",
+             "System: 48 V DC, the voltage of Battery bank. Change it in the part of the battery."
+           )
+
     assert has_element?(view, "#wire-#{wire.id}-advice", "rated for DC at 58.4 V or more.")
+    refute has_element?(view, "#wire-#{wire.id}-lead-acid")
+
+    # The battery changes: the wire changes with it.
+    view
+    |> form("#item-form", %{"item" => %{"volts" => "24", "chemistry" => "agm"}})
+    |> render_change()
+
+    assert has_element?(view, "#wire-#{wire.id}-advice", "rated for DC at 29.2 V or more.")
+
+    assert has_element?(
+             view,
+             "#wire-#{wire.id}-lead-acid",
+             "Battery bank is lead acid. The app uses the voltages of LiFePO4: ask the maker of the battery for its highest voltage."
+           )
 
     # A wire of a station that went home: the panel of the house shows no
     # wire to the van.
@@ -346,5 +491,14 @@ defmodule DIYWeb.WiresLiveTest do
     view = open(conn, ~p"/inside?#{[item: house_station]}", build)
     assert has_element?(view, "#part-wires")
     refute has_element?(view, "#part-wires .wire")
+
+    # The battery does not show it either. It shows again when the station
+    # is in the van again.
+    view = open(conn, ~p"/van?#{[id: van, item: battery]}", build)
+    assert has_element?(view, "#part-wires .wire", "Inverter")
+    refute has_element?(view, "#part-wires .wire", "Power station")
+    {:ok, build} = Build.take_to_van(build, house_station, van)
+    view = open(conn, ~p"/van?#{[id: van, item: battery]}", build)
+    assert has_element?(view, "#part-wires .wire", "Power station")
   end
 end

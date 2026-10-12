@@ -61,10 +61,11 @@ defmodule DIY.Build do
     id), for the rooms with a link (`link_area/3`).
   - `devices`: the device of Home Assistant of each item (its id), for the
     items with a link (`add_device/5`). A device has one item at most.
-  - `wires`: the wires between the items, at most 100 (`add_wire/3`). Each
-    wire has an `id`, the item at each end (`from` gives the current,
-    `to`), and its numbers (`DIY.Wire`). A wire goes away with an item
-    at its end.
+  - `wires`: the wires between the items, at most 100, and at most 24 for
+    an item (`add_wire/3`). Each wire has an `id`, the item at each end
+    (`from` gives the current, `to`), and its numbers (`DIY.Wire`). A
+    wire goes away with an item at its end. When a battery is at an end,
+    the system of the wire is the voltage of the battery.
 
   After each change, the plan is whole again (`DIY.Layout.fill/1`). Each
   room of the house has a plan, and each item is in its room.
@@ -80,6 +81,7 @@ defmodule DIY.Build do
   # stays valid.
   @hints ~w(swipe plan)
   @max_wires 100
+  @max_item_wires 24
   @places Catalog.places()
 
   @enforce_keys [:revision]
@@ -201,14 +203,23 @@ defmodule DIY.Build do
     # An item that went away takes its link to a device and its wires with
     # it.
     devices = Map.take(changed.devices, Enum.map(changed.items, & &1.id))
-    %__MODULE__{} = changed = keep_wires(changed)
+    %__MODULE__{} = changed = fit_wires(changed)
     %__MODULE__{changed | revision: revision + 1, stamp: new_stamp(), devices: devices}
   end
 
-  # Only the wires with an item at each end stay.
-  defp keep_wires(build) do
-    ids = MapSet.new(build.items, & &1.id)
-    %{build | wires: Enum.filter(build.wires, &(&1.from in ids and &1.to in ids))}
+  # Only the wires with an item at each end stay. A wire with a battery at
+  # an end gets the voltage of the battery as its system: a change of the
+  # battery changes its wires.
+  defp fit_wires(build) do
+    by_id = Map.new(build.items, &{&1.id, &1})
+
+    wires =
+      for wire <- build.wires,
+          from = by_id[wire.from],
+          to = by_id[wire.to],
+          do: %{wire | system: Wire.battery_system(from, to) || wire.system}
+
+    %{build | wires: wires}
   end
 
   # 96 random bits: two changes never get the same stamp.
@@ -897,11 +908,20 @@ defmodule DIY.Build do
   @spec wires_of(t(), String.t()) :: [wire()]
   def wires_of(build, item_id), do: Enum.filter(build.wires, &(item_id in [&1.from, &1.to]))
 
+  @doc "The most wires of a build, and of an item."
+  @spec max_wires() :: {pos_integer(), pos_integer()}
+  def max_wires, do: {@max_wires, @max_item_wires}
+
+  @doc "True when the build or the item has its most wires (`max_wires/0`)."
+  @spec wires_full?(t(), String.t()) :: boolean()
+  def wires_full?(build, item_id),
+    do: length(build.wires) >= @max_wires or length(wires_of(build, item_id)) >= @max_item_wires
+
   @doc """
   Adds a wire from an item to a different item, with typical numbers
   (`DIY.Wire.defaults/2`). The two items must take wires, in one place
-  (`world/2`). A build has 100 wires at most (`:wires`). A wire stays when
-  a station goes to a van and back.
+  (`world/2`). A build has 100 wires at most, and an item has 24 at most
+  (`:wires`). A wire stays when a station goes to a van and back.
   """
   @spec add_wire(t(), String.t(), String.t()) :: {:ok, t(), String.t()} | {:error, atom()}
   def add_wire(build, from, to) do
@@ -909,7 +929,7 @@ defmodule DIY.Build do
          {:ok, b} <- item(build, to),
          true <- (from != to and wired?(a) and wired?(b)) || {:error, :wire},
          true <- world(build, a) == world(build, b) || {:error, :wire},
-         true <- length(build.wires) < @max_wires || {:error, :wires} do
+         true <- not (wires_full?(build, from) or wires_full?(build, to)) || {:error, :wires} do
       {id, build} = next_id(build, "w")
       wire = Map.merge(%{id: id, from: from, to: to}, Wire.defaults(a, b))
       {:ok, change(build, &%{&1 | wires: &1.wires ++ [wire]}), id}
@@ -1070,7 +1090,7 @@ defmodule DIY.Build do
          wires: wires
        }
        |> repair_vans()
-       |> keep_wires()
+       |> fit_wires()
        |> Layout.fill()}
     end
   end
@@ -1581,24 +1601,24 @@ defmodule DIY.Build do
   # The wires. A build of an older version has none. A wire that the app
   # cannot read goes away: a wire must not stop the build from loading. A
   # wire needs a different item that takes wires at each end, and an id of
-  # its own.
+  # its own. The first 100 good wires stay.
   defp wires(nil, _items), do: {:ok, []}
 
   defp wires(wires, items) when is_list(wires) do
     by_id = Map.new(items, &{&1.id, &1})
 
     {list, _ids} =
-      wires
-      |> Enum.take(@max_wires)
-      |> Enum.reduce({[], MapSet.new()}, fn wire, {list, ids} ->
+      Enum.reduce_while(wires, {[], MapSet.new()}, fn wire, {list, ids} = acc ->
         case read_wire(wire, by_id) do
           {:ok, wire} ->
-            if wire.id in ids,
-              do: {list, ids},
-              else: {[wire | list], MapSet.put(ids, wire.id)}
+            cond do
+              wire.id in ids -> {:cont, acc}
+              length(list) + 1 >= @max_wires -> {:halt, {[wire | list], ids}}
+              true -> {:cont, {[wire | list], MapSet.put(ids, wire.id)}}
+            end
 
           :error ->
-            {list, ids}
+            {:cont, acc}
         end
       end)
 
@@ -1608,7 +1628,7 @@ defmodule DIY.Build do
   defp wires(_wires, _items), do: {:error, :wires}
 
   defp read_wire(%{"id" => id, "from" => from, "to" => to} = wire, by_id)
-       when is_binary(id) and byte_size(id) <= 20 and from != to do
+       when is_binary(id) and from != to do
     with %{} = a <- by_id[from],
          %{} = b <- by_id[to],
          true <- wired?(a) and wired?(b),
