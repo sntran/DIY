@@ -876,11 +876,12 @@ defmodule DIYWeb.Icon.Shapes do
   # side has the dust screen and the ports for more batteries. The trolley
   # has a wheel at each corner.
   def model("power_station") do
-    {w, d, base, h} = {0.551, 0.381, 0.1, 0.432}
+    {w, d, base, h} = {0.551, 0.381, 0.115, 0.44}
     # The front of the body.
     y = d - 0.006
 
-    # The wheels look to the front. A front wheel shows its gray hub.
+    # The wheels look to the front. A front wheel shows its gray hub. The
+    # tray of the trolley goes up round the foot of the body.
     wheels =
       for {x, wy} <- [
             {0.055, 0.045},
@@ -889,13 +890,13 @@ defmodule DIYWeb.Icon.Shapes do
             {w - 0.055, d - 0.071}
           ],
           part <-
-            tube({x, wy, 0.035}, 0.035, 0.026, :y, "dark") ++
-              box({x - 0.022, wy - 0.007, 0.07}, {0.044, 0.04, 0.005}, "gray"),
+            tube({x, wy, 0.03}, 0.03, 0.026, :y, "dark") ++
+              box({x - 0.022, wy - 0.007, 0.06}, {0.044, 0.04, 0.005}, "gray"),
           do: part
 
     hubs =
       for x <- [0.055, w - 0.055],
-          do: disc({x, d - 0.044, 0.035}, :front, 0.016, "i-steel-t")
+          do: disc({x, d - 0.044, 0.03}, :front, 0.013, "i-gray-t")
 
     outlet = fn x ->
       [
@@ -907,7 +908,7 @@ defmodule DIYWeb.Icon.Shapes do
 
     wheels ++
       hubs ++
-      box({0, 0, 0.075}, {w, d, 0.025}, "dark") ++
+      box({0, 0, 0.065}, {w, d, base - 0.065}, "dark") ++
       rbox({0.006, 0.006, base}, {w - 0.012, d - 0.012, h - base}, 0.035, "dark") ++
       [
         top({0.03, 0.08, h}, {0.035, d - 0.16}, "i-dark-r", 0.002),
@@ -923,7 +924,7 @@ defmodule DIYWeb.Icon.Shapes do
         disc({0.095, y + 0.008, 0.306}, :front, 0.016, "i-black"),
         # The screen and its buttons.
         front({0.146, y, 0.33}, {0.094, 0.068}, "i-dark-l", 0.004),
-        front({0.152, y, 0.336}, {0.082, 0.056}, "i-screen", 0.006),
+        front({0.152, y, 0.336}, {0.082, 0.056}, "i-black", 0.006),
         front({0.158, y, 0.344}, {0.016, 0.04}, "i-white-t", 0.008)
       ] ++
       for(k <- 0..2, do: front({0.188, y, 0.376 - k * 0.014}, {0.038, 0.005}, "i-white-t", 0.008)) ++
@@ -957,8 +958,8 @@ defmodule DIYWeb.Icon.Shapes do
         do: side({w - 0.006, 0.068 + k * 0.023, 0.256}, {0.008, 0.138}, "i-dark-l", 0.004)
       ) ++
       [
-        side({w - 0.006, d - 0.12, 0.12}, {0.04, 0.06}, "i-dark-t", 0.002),
-        side({w - 0.006, d - 0.17, 0.12}, {0.04, 0.06}, "i-dark-t", 0.002)
+        side({w - 0.006, 0.145, 0.135}, {0.04, 0.06}, "i-dark-t", 0.002),
+        side({w - 0.006, 0.195, 0.135}, {0.04, 0.06}, "i-dark-t", 0.002)
       ]
   end
 
@@ -1451,8 +1452,8 @@ defmodule DIYWeb.Icon.Shapes do
   # the orange line of Victron, and a row of lights. Each position has a
   # gray light, and the green light of the power is in the middle. The white
   # lines of its label are under the lights. A hood for the cables of two
-  # positions is at the bottom. The rail for the next Lynx is at the
-  # right side. The positions share the width of the case, so each number
+  # positions is at the bottom, with a small block between the two hoods
+  # in the middle. The black base shows at the right side. The positions share the width of the case, so each number
   # of positions has the same size.
   def model("dc_bus"), do: model({"dc_bus", 4})
 
@@ -1461,20 +1462,28 @@ defmodule DIYWeb.Icon.Shapes do
     # The front of the middle part, and the front of the end caps.
     {y, cap} = {0.062, 0.07}
     {x0, x1} = {0.082, 0.234}
-    pitch = (x1 - x0) / ports
+    # The green light is in the middle, with half of the gray lights at
+    # each side of it.
+    middle = (x0 + x1) / 2
+    {left, right} = {div(ports, 2), ports - div(ports, 2)}
+    pitch = min((middle - x0) / max(left, 1), (x1 - middle) / right)
     r = min(0.0035, pitch * 0.3)
+    light = fn x -> disc({x, y + 0.002, 0.1}, :front, r, "i-off") end
 
     lights =
-      for k <- 0..ports do
-        center = {x0 + (x1 - x0) * k / ports, y + 0.002, 0.1}
-
-        if k == div(ports, 2),
-          do: disc(center, :front, 0.0035, "i-led"),
-          else: disc(center, :front, r, "i-off")
-      end
+      [disc({middle, y + 0.002, 0.1}, :front, 0.0035, "i-led")] ++
+        for(k <- 0..(left - 1)//1, do: light.(x0 + (middle - x0) * k / left)) ++
+        for(k <- 1..right//1, do: light.(middle + (x1 - middle) * k / right))
 
     hoods = div(ports + 1, 2)
     span = (x1 - x0 + 0.01) / hoods
+    # The small block in the gap between the two hoods in the middle.
+    gap = min(0.012, span * 0.16)
+
+    block =
+      if rem(hoods, 2) == 0,
+        do: rslab(:y, {0, middle - gap / 2}, {0.02, gap}, gap / 4, y, 0.008, "victron"),
+        else: []
 
     arrow = fn tip, back ->
       face(
@@ -1493,11 +1502,12 @@ defmodule DIYWeb.Icon.Shapes do
         x = x0 - 0.005 + k * span + span * 0.1
         rslab(:y, {0, x}, {0.045, span * 0.8}, min(0.012, span * 0.25), y, d - y, "victron")
       end) ++
+      block ++
       [
         front({0.074, y, 0.136}, {0.042, 0.005}, "i-white-t", 0.002),
         front({0.07, y, 0.112}, {0.174, 0.008}, "i-stripe", 0.002),
-        arrow.(0.065, 0.071),
-        arrow.(0.251, 0.245)
+        arrow.(0.067, 0.073),
+        arrow.(0.249, 0.243)
       ] ++
       lights ++
       [

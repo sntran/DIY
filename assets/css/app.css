@@ -277,7 +277,7 @@
 [data-ha=connected] .i-ha-light { fill: #22c55e }
 .i-led { fill: #34d399 } .i-hot { fill: #ef4444 } .i-flame { fill: #f59e0b } .i-bulb { fill: #fcd34d }
 /* A light that is off, and the orange line of the label of Victron. */
-.i-off { fill: #8b929c } .i-stripe { fill: #e8562a }
+.i-off { fill: #4b5563 } .i-stripe { fill: #e8562a }
 .i-pv { fill: #1e3a8a; stroke: #6d8fd6; stroke-width: 1; vector-effect: non-scaling-stroke }
 .i-pv-line { fill: #6d8fd6 }
 

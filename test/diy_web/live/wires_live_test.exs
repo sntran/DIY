@@ -481,6 +481,15 @@ defmodule DIYWeb.WiresLiveTest do
            )
 
     assert DIYWeb.Wires.volts_text(~w(12 24 48)) =~ "Batteries of 12 V, 24 V and 48 V are"
+
+    # The card of the wire of the battery of 12 V tells why it has 48 V.
+    view = open(conn, ~p"/van?#{[id: van, item: small]}", build)
+
+    assert has_element?(
+             view,
+             "#part-wires p[id$=-system]",
+             "System: 48 V DC. Battery bank is on a busbar with a battery of a higher voltage (a fault), so the app checks this wire for 48 V DC."
+           )
   end
 
   test "a wire on AC: one way, and no DC rating", %{conn: conn} do

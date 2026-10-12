@@ -1289,13 +1289,20 @@ on a light page.
     outputs, each group in an orange frame. Its side has the dust
     screen. The station is 21.7 by 15 by 13.1 in (Pecron). The data of
     Pecron does not give the trolley. So the height on the trolley (near
-    17 in) is an estimate from the photos of Pecron;
+    17 in) is an estimate from the photos of Pecron. The look and the size
+    are those of the F5000LFP, but the numbers of a new station are
+    typical numbers (2 kWh, 2,400 W);
   - a busbar has the look of the Victron Lynx Distributor, which many
     people know. It has a blue case with an end cap at each side, and the
     red and black caps of its busbars. Its front has the orange line of
     Victron and a gray light for each position. It also has the green
     light of the power, the white lines of the label, and the hoods for
-    the cables. The material `victron` has the blue of the case.
+    the cables. A small block is between the two hoods in the middle.
+    The material `victron` has the blue of the case.
+
+On the plan of the house, a small face keeps two decimals in its points,
+so that its shape stays at the highest zoom
+(`DIYWeb.Camera.plan_points/3`). A larger face has one decimal.
 
 The icon is next to the name of the item in these places:
 
@@ -2543,8 +2550,10 @@ the wires (`DIY.Build`, `wires`).
   transfer switch or a shore power inlet, it is 120 V AC. Else it is
   12 V DC.
   On DC, a wire to a battery or to a busbar has two ways.
-- When a battery is at an end, the system of the wire is always the
-  voltage of the battery. A change of the battery changes its wires
+- When a battery is at an end, the system of the wire is the voltage of
+  the battery. A battery on a busbar with a higher voltage is a fault.
+  Then each wire of the battery gets the higher voltage, and the card
+  tells why. A change of the battery changes its wires
   (`DIY.Build.change/2`), and the card shows the system as a text. So
   a check never uses an old voltage.
 - A busbar is on DC. A wire at a busbar gets the voltage of the
@@ -2556,7 +2565,7 @@ the wires (`DIY.Build`, `wires`).
 - The batteries on one busbar must have one voltage. When they do not,
   the panel of the busbar shows a fault. The wires then get the highest
   voltage, because the DC ratings must be for it. This is also true for
-  the wire of a battery with a lower voltage.
+  each wire of a battery with a lower voltage: its + is on the busbar.
 - When the ends of a wire change places and the new far end is a battery
   or a busbar, the wire has two ways.
 - What the person has: the wire size, and the breaker or the fuse at

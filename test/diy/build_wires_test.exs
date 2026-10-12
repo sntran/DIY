@@ -264,10 +264,14 @@ defmodule DIY.BuildWiresTest do
     {:ok, two} = Build.update_item(two, other_battery, %{"volts" => "48"})
     assert Build.bus_systems(two) == %{bus => "48", bus2 => "48"}
     # Each wire at the busbars gets 48 V, also the wire of the battery of
-    # 24 V. The wire of that battery to the inverter keeps 24 V.
+    # 24 V. Its + is on the busbar of 48 V, so its wire to the inverter
+    # gets 48 V too.
     at_bus = Enum.filter(two.wires, &(&1.from in [bus, bus2] or &1.to in [bus, bus2]))
     assert length(at_bus) == 5 and Enum.all?(at_bus, &(&1.system == "48"))
-    assert {:ok, %{system: "24"}} = Build.wire(two, id)
+    assert {:ok, %{system: "48"}} = Build.wire(two, id)
+    # With one voltage again, the wire has the voltage of its battery.
+    {:ok, one} = Build.update_item(two, other_battery, %{"volts" => "24"})
+    assert {:ok, %{system: "24"}} = Build.wire(one, id)
 
     # A stored wire with a different system gets the system of its battery.
     map = Jason.decode!(Build.to_json(changed))

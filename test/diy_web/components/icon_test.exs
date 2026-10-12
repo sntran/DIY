@@ -23,7 +23,29 @@ defmodule DIYWeb.IconTest do
           uniq: true,
           do: name
 
-    for class <- classes, do: assert(css =~ "." <> class <> " {", "no rule for #{class}")
+    # The rule of the class itself, at the start of a line or after a
+    # different rule: not only a rule of the house plan. The classes of the
+    # small loops (a flame, a hot coil) have rules only in the house plan.
+    for class <- classes do
+      if class in ~w(i-fire i-coil),
+        do: assert(css =~ ".cutaway-house .#{class} {"),
+        else: assert(css =~ ~r/(?:^|\}\s*)\.#{class} \{/m, "no rule for #{class}")
+    end
+
+    # Each material has its colors in the house plan, in light and in the
+    # two blocks of the dark mode.
+    materials =
+      for class <- classes,
+          [_, name] <- [Regex.run(~r/^i-([a-z-]+)-t$/, class)],
+          uniq: true,
+          do: name
+
+    assert "victron" in materials
+
+    for name <- materials do
+      assert length(Regex.scan(~r/--c-#{name}-t:/, css)) == 3, "no house colors for #{name}"
+      assert css =~ ".cutaway-house .i-#{name}-m2 {", "no house steps for #{name}"
+    end
   end
 
   test "the sprite has a group for each kind, and an icon uses its group in a square box" do
@@ -74,19 +96,71 @@ defmodule DIYWeb.IconTest do
     default = Shapes.bounds(Shapes.model("dc_bus"))
     assert Shapes.model("dc_bus") == Shapes.model({"dc_bus", 4})
 
-    for ports <- [1, 2, 7, 24] do
+    for ports <- 1..24 do
       model = Shapes.model({"dc_bus", ports})
       assert Shapes.bounds(model) == default
-      # A gray light for each position, the green light of the power, and
-      # a hood for the cables of two positions.
+      # A gray light for each position, and the green light of the power
+      # in the middle.
       assert Enum.count(model, &match?({:face, _, _, "i-off"}, &1)) == ports
-      assert Enum.count(model, &match?({:face, _, _, "i-led"}, &1)) == 1
-      hoods = Enum.count(model, &match?({:prism, :y, _loop, 0.062, _length, "victron"}, &1))
-      assert hoods == div(ports + 1, 2)
+
+      assert [{:face, green, _, "i-led"}] =
+               Enum.filter(model, &match?({:face, _, _, "i-led"}, &1))
+
+      {xs, _ys, _zs} = green |> Enum.map(&Tuple.to_list/1) |> Enum.zip() |> List.to_tuple()
+      assert_in_delta Enum.sum(Tuple.to_list(xs)) / tuple_size(xs), 0.158, 1.0e-9
+
+      # A hood (45 mm high) for the cables of two positions, and a small
+      # block between the two hoods in the middle.
+      fronts =
+        for {:prism, :y, loop, 0.062, _length, "victron"} <- model,
+            do: loop |> Enum.map(&elem(&1, 0)) |> Enum.max()
+
+      hoods = div(ports + 1, 2)
+      assert Enum.count(fronts, &(abs(&1 - 0.045) < 1.0e-9)) == hoods
+
+      assert Enum.count(fronts, &(abs(&1 - 0.02) < 1.0e-9)) ==
+               if(rem(hoods, 2) == 0, do: 1, else: 0)
     end
 
     assert Shapes.look(%{type: "dc_bus", params: %{"ports" => 7}}) == {"dc_bus", 7}
     assert Shapes.look(%{type: "fridge", params: %{}}) == "fridge"
+  end
+
+  # True when a flat face lies on a face of a solid part of its model. It
+  # is at most 12 mm in front of that face, and inside its edges.
+  defp on_part?({:face, corners, normal, _class}, model) do
+    axis = %{{0, 1, 0} => 1, {1, 0, 0} => 0, {0, 0, 1} => 2}[normal]
+    others = [0, 1, 2] -- [axis]
+    plane = elem(hd(corners), axis)
+
+    Enum.any?(model, fn
+      {:face, _, _, _} ->
+        false
+
+      part ->
+        {low, high} = Shapes.bounds([part])
+        on = plane >= elem(high, axis) - 1.0e-9 and plane <= elem(high, axis) + 0.012
+
+        on and
+          Enum.all?(corners, fn point ->
+            Enum.all?(others, fn i ->
+              elem(point, i) >= elem(low, i) - 1.0e-9 and elem(point, i) <= elem(high, i) + 1.0e-9
+            end)
+          end)
+    end)
+  end
+
+  test "each flat face of the station and of the busbar lies on a part" do
+    models = [Shapes.model("power_station") | Enum.map(1..24, &Shapes.model({"dc_bus", &1}))]
+
+    for model <- models, {:face, _corners, normal, _class} = face <- model, normal != nil do
+      assert on_part?(face, model), inspect(face)
+    end
+
+    # The place of the screen of the station on the stage is on its front.
+    {:front, {x, y, z}, {w, h}} = DIYWeb.Stage.region("power_station")
+    face = {:face, [{x, y, z}, {x + w, y, z}, {x + w, y, z + h}, {x, y, z + h}], {0, 1, 0}, ""}
+    assert on_part?(face, Shapes.model("power_station"))
   end
 
   test "a loop round a rectangle with round corners" do

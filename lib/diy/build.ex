@@ -217,12 +217,13 @@ defmodule DIY.Build do
     by_id = Map.new(build.items, &{&1.id, &1})
     wires = Enum.filter(build.wires, &(by_id[&1.from] && by_id[&1.to]))
     buses = wires |> bus_voltages(by_id) |> systems()
+    highs = Map.merge(buses, battery_highs(wires, by_id, buses))
 
     fitted =
       for wire <- wires,
           do: %{
             wire
-            | system: Wire.end_system(wire.system, by_id[wire.from], by_id[wire.to], buses)
+            | system: Wire.end_system(wire.system, by_id[wire.from], by_id[wire.to], highs)
           }
 
     %{build | wires: fitted}
@@ -235,6 +236,27 @@ defmodule DIY.Build do
   """
   @spec bus_systems(t()) :: %{String.t() => String.t()}
   def bus_systems(build), do: build |> bus_voltages() |> systems()
+
+  # The batteries on a busbar with a higher voltage (a fault): each gets
+  # the highest voltage of its busbars.
+  defp battery_highs(wires, by_id, buses) do
+    for wire <- wires,
+        from = by_id[wire.from],
+        to = by_id[wire.to],
+        battery <- [from, to],
+        battery.type == "van_battery",
+        bus <- [from, to],
+        system = bus.type == "dc_bus" && buses[bus.id],
+        Wire.volts(system) > Wire.volts(battery.params["volts"]),
+        reduce: %{},
+        do: (highs ->
+               Map.update(
+                 highs,
+                 battery.id,
+                 system,
+                 &Enum.max_by([&1, system], fn s -> Wire.volts(s) end)
+               ))
+  end
 
   defp systems(voltages),
     do: Map.new(voltages, fn {bus, set} -> {bus, Enum.max_by(set, &String.to_integer/1)} end)
