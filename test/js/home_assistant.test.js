@@ -12,7 +12,7 @@ import {
   open, sessionStore, Link, SignIn, homeAssistantHook, signInHook, browserParts, signInParts, key, CommandError,
   deviceList, REGISTRY_WAIT, controlList, deviceStates, CONTROLS, STATE_WAIT, CONTROL_WAIT,
   energySources, zoneOf, monthOf, dayOf, monthStart, meterMonths, deviceEnergy, METER_MONTHS, DEVICE_MONTHS,
-  MAX_ENERGY_DEVICES,
+  MAX_ENERGY_DEVICES, STATION_PARTS, STATION_SWITCHES, STATION_SOURCES, stationList, stationStates,
 } from "../../assets/js/home_assistant.js"
 
 const HA = "http://ha.test:8123"
@@ -1593,10 +1593,10 @@ test("the devices for the ghosts: the main entities give the domains and the are
   // A device in no area can be no ghost: it is not in the list. With no
   // name, a device has the name of its model.
   assert.deepEqual(deviceList(devices, entities), [
-    {id: "lamp", name: "Lamp", area: "living", domains: ["light", "sensor"], model: "Bulb 2"},
-    {id: "tv", name: "Den TV", area: "den", domains: ["media_player"], model: null},
-    {id: "plug", name: "", area: "hall", domains: ["switch"], model: null},
-    {id: "strip", name: "LED strip", area: "hall", domains: ["light"], model: "LED strip"},
+    {id: "lamp", name: "Lamp", area: "living", domains: ["light", "sensor"], station: null, model: "Bulb 2"},
+    {id: "tv", name: "Den TV", area: "den", domains: ["media_player"], station: null, model: null},
+    {id: "plug", name: "", area: "hall", domains: ["switch"], station: null, model: null},
+    {id: "strip", name: "LED strip", area: "hall", domains: ["light"], station: null, model: "LED strip"},
   ])
 })
 
@@ -1659,7 +1659,7 @@ test("the hook reads the devices, the entities and the areas of Home Assistant",
     ["subscribe_events", "area_registry_updated"], ["subscribe_entities", undefined],
   ])
   assert.deepEqual(page.pushes.at(-1), ["ha:devices", {
-    devices: [{id: "lamp", name: "Lamp", area: "living", domains: ["light"], model: null}],
+    devices: [{id: "lamp", name: "Lamp", area: "living", domains: ["light"], station: null, model: null}],
     areas: [{id: "living", name: "Living Room", floor: "ground"}, {id: "yard", name: "Yard", floor: null}],
   }])
   assert.equal(link.watching, true)
@@ -2011,7 +2011,7 @@ test("the switch of an item turns its device on and off", async () => {
   // shows the old state after the end.
   assert.deepEqual(page.pushes.slice(-2), [
     ["ha:states", {states: {lamp: "off", combo: "unavailable"}}],
-    ["ha:control_done", {device: "lamp", error: null}],
+    ["ha:control_done", {device: "lamp", part: null, error: null}],
   ])
   assert.equal(page.timers.size, 0)
 
@@ -2023,17 +2023,17 @@ test("the switch of an item turns its device on and off", async () => {
     {domain: "light", service: "turn_on", ids: ["light.combo"]},
     {domain: "switch", service: "turn_on", ids: ["switch.combo"]},
   ])
-  assert.deepEqual(page.pushes.at(-1), ["ha:control_done", {device: "combo", error: null}])
+  assert.deepEqual(page.pushes.at(-1), ["ha:control_done", {device: "combo", part: null, error: null}])
 
   // A device that the app does not turn on or off, and a call that Home
   // Assistant refuses.
   await link.control("tv", true)
-  assert.deepEqual(page.pushes.at(-1), ["ha:control_done", {device: "tv", error: "failed"}])
+  assert.deepEqual(page.pushes.at(-1), ["ha:control_done", {device: "tv", part: null, error: "failed"}])
   ha.fail = (message) => message.type === "call_service" ? {code: "home_assistant_error", message: "No"} : null
   const refused = link.control("lamp", true)
   await serve(ha, [socket])
   await refused
-  assert.deepEqual(page.pushes.at(-1), ["ha:control_done", {device: "lamp", error: "failed"}])
+  assert.deepEqual(page.pushes.at(-1), ["ha:control_done", {device: "lamp", part: null, error: "failed"}])
 
   // Home Assistant does not answer: after a wait, the hook stops the wait
   // (timeout). A late answer then changes nothing.
@@ -2041,7 +2041,7 @@ test("the switch of an item turns its device on and off", async () => {
   const late = link.control("lamp", false)
   const [timer] = [...page.timers.values()].filter((one) => one.ms === CONTROL_WAIT)
   timer.f()
-  assert.deepEqual(page.pushes.at(-1), ["ha:control_done", {device: "lamp", error: "timeout"}])
+  assert.deepEqual(page.pushes.at(-1), ["ha:control_done", {device: "lamp", part: null, error: "timeout"}])
   const count = page.pushes.filter(([event]) => event === "ha:control_done").length
   await serve(ha, [socket])
   await late
@@ -2051,7 +2051,7 @@ test("the switch of an item turns its device on and off", async () => {
   const waiting = link.control("lamp", true)
   socket.drop()
   await waiting
-  assert.deepEqual(page.pushes.at(-1), ["ha:control_done", {device: "lamp", error: "offline"}])
+  assert.deepEqual(page.pushes.at(-1), ["ha:control_done", {device: "lamp", part: null, error: "offline"}])
   link.stop()
 
   // The LiveView asks for a control.
@@ -2061,8 +2061,310 @@ test("the switch of an item turns its device on and off", async () => {
   const self = {...hook, pushEvent: (event, payload) => other.pushes.push([event, payload]), handleEvent: (event, f) => { handlers[event] = f }}
   self.mounted()
   await handlers["ha:control"]({device: "lamp", on: true})
-  assert.deepEqual(other.pushes.at(-1), ["ha:control_done", {device: "lamp", error: "failed"}])
+  assert.deepEqual(other.pushes.at(-1), ["ha:control_done", {device: "lamp", part: null, error: "failed"}])
   self.destroyed()
+})
+
+// The entities of the power stations, as each integration gives them. The
+// integration of Pecron: "entry:device:code". pecron-monitor, through
+// MQTT: "pecron_key_name". EcoFlow Cloud: "ecoflow-sn-key". EcoFlow BLE:
+// "ef_sn_key". The integration of the community for Pecron
+// (jsight/ha-pecron): "pecron_key_code", not a source of the app.
+const official = (code, fields = {}) => ({platform: "pecron", unique_id: `01J:dev1:${code}`, ...fields})
+const community = (code) => ({platform: "pecron", unique_id: `pecron_ABC1_${code}`})
+const monitor = (name) => ({platform: "mqtt", unique_id: `pecron_aabbccddeeff_${name}`})
+const cloud = (key) => ({platform: "ecoflow_cloud", unique_id: `ecoflow-MR51ZAS-${key}`})
+const ble = (key) => ({platform: "ef_ble", unique_id: `ef_DCABZ8_${key}`})
+
+test("the power stations of each integration, and the entities of their parts", () => {
+  assert.deepEqual(STATION_PARTS, {battery: "sensor", input: "sensor", output: "sensor", ac: "switch", dc: "switch"})
+  assert.deepEqual(STATION_SWITCHES, ["ac", "dc"])
+  assert.deepEqual(STATION_SOURCES.map((source) => [source.maker, source.platform]), [
+    ["pecron", "pecron"], ["pecron", "mqtt"], ["ecoflow", "ecoflow_cloud"], ["ecoflow", "ef_ble"],
+  ])
+  const devices = ["e3800", "f5000", "monitor", "dp3", "ultra", "dpro", "wave", "half", "plug"]
+    .map((id) => haDevice(id, {area_id: "garage", model: id === "wave" ? "Wave 3" : null}))
+  const entities = [
+    haEntity("sensor.e3800_battery", "e3800", official("battery_percentage")),
+    // A disabled entity does not count. A different code, a part in the
+    // wrong domain, and an entity with no unique id: no part.
+    haEntity("sensor.e3800_in_old", "e3800", official("total_input_power", {disabled_by: "user"})),
+    haEntity("sensor.e3800_in", "e3800", official("total_input_power")),
+    haEntity("sensor.e3800_out", "e3800", official("total_output_power")),
+    haEntity("switch.e3800_ac", "e3800", official("ac_switch_hm")),
+    haEntity("switch.e3800_dc", "e3800", official("dc_switch_hm")),
+    haEntity("sensor.e3800_volts", "e3800", official("battery_voltage")),
+    haEntity("sensor.e3800_ac", "e3800", official("ac_switch_hm")),
+    haEntity("sensor.e3800_odd", "e3800", {platform: "pecron"}),
+    // The integration of the community for Pecron is not a source.
+    haEntity("sensor.f5000_battery", "f5000", community("battery_percentage")),
+    haEntity("sensor.f5000_out", "f5000", community("total_output_power")),
+    haEntity("switch.f5000_ac", "f5000", community("ac_switch")),
+    // A switch with the unique id of a part, of a different platform.
+    haEntity("switch.e3800_dc_2", "e3800", {platform: "template", unique_id: "01J:dev1:dc_switch_hm"}),
+    haEntity("sensor.monitor_battery", "monitor", monitor("battery")),
+    haEntity("sensor.monitor_in", "monitor", monitor("total_input")),
+    haEntity("sensor.monitor_out", "monitor", monitor("total_output")),
+    haEntity("switch.monitor_ac", "monitor", monitor("ac")),
+    haEntity("switch.monitor_dc", "monitor", monitor("dc")),
+    haEntity("switch.monitor_ups", "monitor", monitor("ups")),
+    // The battery of all the packs, not of the main pack. Two AC outlets.
+    haEntity("sensor.dp3_battery", "dp3", cloud("cms-batt-soc")),
+    haEntity("sensor.dp3_main", "dp3", cloud("bms-batt-soc")),
+    haEntity("sensor.dp3_in", "dp3", cloud("pow-in-sum-w")),
+    haEntity("sensor.dp3_out", "dp3", cloud("pow-out-sum-w")),
+    haEntity("switch.dp3_lv", "dp3", cloud("cfg-lv-ac-out-open")),
+    haEntity("switch.dp3_hv", "dp3", cloud("cfg-hv-ac-out-open")),
+    haEntity("switch.dp3_12v", "dp3", cloud("cfg-dc-12v-out-open")),
+    // The public API of EcoFlow: no switch of the outlets.
+    haEntity("sensor.ultra_battery", "ultra", {platform: "ecoflow_cloud", unique_id: "ecoflow-api-Y711Z-hs-yj751-pd-appshow-addr-soc"}),
+    haEntity("sensor.ultra_out", "ultra", {platform: "ecoflow_cloud", unique_id: "ecoflow-api-Y711Z-hs-yj751-pd-appshow-addr-wattsOutSum"}),
+    haEntity("sensor.dpro_battery", "dpro", ble("battery_level")),
+    haEntity("sensor.dpro_pack", "dpro", ble("battery_1_battery_level")),
+    haEntity("sensor.dpro_in", "dpro", ble("input_power")),
+    haEntity("sensor.dpro_out", "dpro", ble("output_power")),
+    haEntity("switch.dpro_ac", "dpro", ble("ac_ports")),
+    haEntity("switch.dpro_dc", "dpro", ble("dc_12v_port")),
+    // A Wave has a battery and a power out, but it is not a station. A
+    // battery with no power out is not a station either.
+    haEntity("sensor.wave_battery", "wave", ble("battery_level")),
+    haEntity("sensor.wave_out", "wave", ble("output_power")),
+    haEntity("sensor.half_battery", "half", monitor("battery")),
+    haEntity("switch.plug", "plug", {platform: "tplink", unique_id: "ac_switch"}),
+  ]
+  const stations = stationList(devices, entities)
+  assert.deepEqual([...stations], [
+    ["e3800", {maker: "pecron", parts: {
+      battery: ["sensor.e3800_battery"], input: ["sensor.e3800_in"], output: ["sensor.e3800_out"],
+      ac: ["switch.e3800_ac"], dc: ["switch.e3800_dc"],
+    }}],
+    ["monitor", {maker: "pecron", parts: {
+      battery: ["sensor.monitor_battery"], input: ["sensor.monitor_in"], output: ["sensor.monitor_out"],
+      ac: ["switch.monitor_ac"], dc: ["switch.monitor_dc"],
+    }}],
+    ["dp3", {maker: "ecoflow", parts: {
+      battery: ["sensor.dp3_battery"], input: ["sensor.dp3_in"], output: ["sensor.dp3_out"],
+      ac: ["switch.dp3_hv", "switch.dp3_lv"], dc: ["switch.dp3_12v"],
+    }}],
+    ["ultra", {maker: "ecoflow", parts: {battery: ["sensor.ultra_battery"], output: ["sensor.ultra_out"]}}],
+    ["dpro", {maker: "ecoflow", parts: {
+      battery: ["sensor.dpro_battery"], input: ["sensor.dpro_in"], output: ["sensor.dpro_out"],
+      ac: ["switch.dpro_ac"], dc: ["switch.dpro_dc"],
+    }}],
+  ])
+  // The list of the devices has the maker of each station.
+  assert.deepEqual(deviceList(devices, entities).map((device) => [device.id, device.station]), [
+    ["e3800", "pecron"], ["f5000", null], ["monitor", "pecron"], ["dp3", "ecoflow"], ["ultra", "ecoflow"],
+    ["dpro", "ecoflow"], ["wave", null], ["half", null], ["plug", null],
+  ])
+
+  // The numbers of the sensors, and the states of the switches. A part
+  // that the station does not have is null. The AC outlets of a DELTA Pro
+  // 3 are on when one of them is on.
+  const states = new Map([
+    ["sensor.e3800_battery", "82"], ["sensor.e3800_in", "12.5"], ["sensor.e3800_out", "unavailable"],
+    ["switch.e3800_ac", "on"], ["switch.e3800_dc", "unknown"], ["sensor.monitor_battery", "unknown"],
+    ["switch.monitor_ac", "off"], ["sensor.dp3_battery", "40"], ["switch.dp3_hv", "off"], ["switch.dp3_lv", "on"], ["switch.dp3_12v", "off"],
+  ])
+  const shown = stationStates(new Map([...stations].map(([id, station]) => [id, station.parts])), states)
+  assert.deepEqual(shown.e3800, {battery: 82, input: 12.5, output: null, ac: "on", dc: "unavailable"})
+  assert.deepEqual(shown.monitor, {battery: null, input: null, output: null, ac: "off", dc: "unavailable"})
+  assert.deepEqual(shown.dp3, {battery: 40, input: null, output: null, ac: "on", dc: "off"})
+  assert.deepEqual(shown.ultra, {battery: null, input: null, output: null, ac: null, dc: null})
+})
+
+test("each part of a station is an entity of its source, and each state is a state of the page", () => {
+  const ids = ["sensor.a", "sensor.b", "sensor.c", "switch.a", "switch.b"]
+  const uniques = [
+    "x:y:battery_percentage", "x:y:total_output_power", "pecron_K_total_input_power", "pecron_K_ac_switch",
+    "pecron_aabb_battery", "pecron_aabb_total_output", "pecron_aabb_dc", "ecoflow-S1-pd-soc",
+    "ecoflow-S1-pd-wattsOutSum", "ecoflow-S1-inv-cfgAcEnabled", "ef_S1_battery_level", "ef_S1_output_power",
+    "ef_S1_ac_ports", "ef_S1_battery_1_battery_level", "x:y:battery_voltage",
+  ]
+  const entity = fc.record({
+    entity_id: fc.constantFrom(...ids),
+    device_id: fc.constantFrom("s1", "s2"),
+    platform: fc.constantFrom("pecron", "mqtt", "ecoflow_cloud", "ef_ble", "other"),
+    unique_id: fc.constantFrom(...uniques),
+    disabled_by: fc.constantFrom(null, "user"),
+  })
+  const devices = [{id: "s1", model: null}, {id: "s2", model: "Wave 3"}]
+  const value = fc.constantFrom("on", "off", "unknown", "unavailable", "0", "57", "1e3", "-4.5", "")
+  fc.assert(fc.property(fc.array(entity), fc.dictionary(fc.constantFrom(...ids), value), (entities, raw) => {
+    const stations = stationList(devices, entities)
+    for (const device of devices) {
+      // The first source that gives a battery and a power out.
+      const live = entities.filter((one) => one.device_id === device.id && !one.disabled_by)
+      const gives = (source, part) => live.some((one) => one.platform === source.platform &&
+        one.entity_id.startsWith(STATION_PARTS[part] + ".") && source.parts[part].test(one.unique_id))
+      const source = STATION_SOURCES.find((source) => !source.others?.test(device.model ?? "") &&
+        gives(source, "battery") && gives(source, "output"))
+      assert.equal(stations.get(device.id)?.maker, source?.maker)
+      for (const [part, own] of Object.entries(stations.get(device.id)?.parts ?? {})) {
+        assert.deepEqual(own, [...own].sort())
+        for (const id of own) {
+          assert.ok(live.some((one) => one.entity_id === id && one.platform === source.platform &&
+            source.parts[part].test(one.unique_id)), `${device.id} ${part} ${id}`)
+          assert.ok(id.startsWith(STATION_PARTS[part] + "."))
+        }
+      }
+    }
+    const states = new Map(Object.entries(raw))
+    const parts = new Map([...stations].map(([id, station]) => [id, station.parts]))
+    const result = stationStates(parts, states)
+    for (const [device, own] of parts) {
+      for (const part of Object.keys(STATION_PARTS)) {
+        const shown = result[device][part]
+        const values = (own[part] ?? []).map((id) => states.get(id))
+        if (!own[part]) assert.equal(shown, null)
+        else if (STATION_SWITCHES.includes(part)) {
+          assert.equal(shown, values.includes("on") ? "on" : values.includes("off") ? "off" : "unavailable")
+        } else {
+          const numbers = values.map((one) => Number.parseFloat(one)).filter(Number.isFinite)
+          assert.equal(shown, numbers[0] ?? null)
+        }
+      }
+    }
+  }))
+})
+
+// A Home Assistant with a lamp, a power station of Pecron and a DELTA Pro
+// 3 of EcoFlow in the garage. The station of Pecron has a battery, its
+// power out and two switches. The DELTA Pro 3 has two AC outlets.
+const garage = (extra = {}) => registry({
+  areas: [{area_id: "garage", name: "Garage"}],
+  devices: [
+    haDevice("lamp", {area_id: "garage"}), haDevice("e3800", {area_id: "garage", model: "E3800LFP"}),
+    haDevice("dp3", {area_id: "garage", model: "DELTA_PRO_3"}),
+  ],
+  entities: [
+    haEntity("light.lamp", "lamp"),
+    haEntity("sensor.e3800_battery", "e3800", official("battery_percentage")),
+    haEntity("sensor.e3800_out", "e3800", official("total_output_power")),
+    haEntity("switch.e3800_ac", "e3800", official("ac_switch_hm")),
+    haEntity("switch.e3800_dc", "e3800", official("dc_switch_hm")),
+    haEntity("sensor.dp3_battery", "dp3", cloud("cms-batt-soc")),
+    haEntity("sensor.dp3_out", "dp3", cloud("pow-out-sum-w")),
+    haEntity("switch.dp3_hv", "dp3", cloud("cfg-hv-ac-out-open")),
+    haEntity("switch.dp3_lv", "dp3", cloud("cfg-lv-ac-out-open")),
+  ],
+  states: {
+    "light.lamp": "on", "sensor.e3800_battery": "64", "sensor.e3800_out": "350",
+    "switch.e3800_ac": "on", "switch.e3800_dc": "off", "sensor.dp3_battery": "90", "sensor.dp3_out": "0",
+    "switch.dp3_hv": "on", "switch.dp3_lv": "off",
+  },
+  ...extra,
+})
+
+// The last parts of the stations that the hook sent to the LiveView.
+const lastStations = (page) => page.pushes.findLast(([event]) => event === "ha:stations")?.[1].stations
+
+test("the hook watches the parts of the stations, and turns their AC and DC outlets on and off", async () => {
+  const page = parts()
+  const {link, socket} = await connected(page)
+  const ha = garage()
+  const read = link.devices()
+  await serve(ha, [socket])
+  await read
+  tick(page)
+
+  // One watch for the lamp and the parts of the stations. The switches of
+  // a station are not a switch of the whole device.
+  const watch = socket.sent.find((message) => message.type === "subscribe_entities")
+  assert.deepEqual(watch.entity_ids, [
+    "light.lamp", "sensor.dp3_battery", "sensor.dp3_out", "sensor.e3800_battery", "sensor.e3800_out",
+    "switch.dp3_hv", "switch.dp3_lv", "switch.e3800_ac", "switch.e3800_dc",
+  ])
+  assert.deepEqual(lastStates(page), {lamp: "on"})
+  assert.deepEqual(lastStations(page), {
+    e3800: {battery: 64, input: null, output: 350, ac: "on", dc: "off"},
+    dp3: {battery: 90, input: null, output: 0, ac: "on", dc: null},
+  })
+
+  // A new number of the battery.
+  ha.set("sensor.e3800_battery", "63")
+  tick(page)
+  assert.equal(lastStations(page).e3800.battery, 63)
+
+  // The AC outlets go off: one call for their switch only. The new state
+  // comes before the end.
+  const done = link.control("e3800", false, "ac")
+  await serve(ha, [socket])
+  await done
+  assert.deepEqual(ha.calls, [{domain: "switch", service: "turn_off", ids: ["switch.e3800_ac"]}])
+  assert.deepEqual(page.pushes.slice(-3), [
+    ["ha:states", {states: {lamp: "on"}}],
+    ["ha:stations", {stations: {
+      e3800: {battery: 63, input: null, output: 350, ac: "off", dc: "off"},
+      dp3: {battery: 90, input: null, output: 0, ac: "on", dc: null},
+    }}],
+    ["ha:control_done", {device: "e3800", part: "ac", error: null}],
+  ])
+
+  // The AC outlets of 120 V and of 240 V of the DELTA Pro 3 go off
+  // together.
+  ha.calls = []
+  const both = link.control("dp3", false, "ac")
+  await serve(ha, [socket])
+  await both
+  assert.deepEqual(ha.calls, [{domain: "switch", service: "turn_off", ids: ["switch.dp3_hv", "switch.dp3_lv"]}])
+  assert.equal(lastStations(page).dp3.ac, "off")
+
+  // The hook does not know three controls: a part that the station does
+  // not have, a part of a lamp, and the whole station.
+  ha.calls = []
+  await link.control("lamp", true, "ac")
+  assert.deepEqual(page.pushes.at(-1), ["ha:control_done", {device: "lamp", part: "ac", error: "failed"}])
+  await link.control("dp3", true, "dc")
+  assert.deepEqual(page.pushes.at(-1), ["ha:control_done", {device: "dp3", part: "dc", error: "failed"}])
+  await link.control("e3800", true)
+  assert.deepEqual(page.pushes.at(-1), ["ha:control_done", {device: "e3800", part: null, error: "failed"}])
+  assert.deepEqual(ha.calls, [])
+  link.stop()
+
+  // The LiveView asks for a control of a part. A part that is not a
+  // switch is no part.
+  const other = parts()
+  const handlers = {}
+  const hook = homeAssistantHook(() => other.deps)
+  const self = {...hook, pushEvent: (event, payload) => other.pushes.push([event, payload]), handleEvent: (event, f) => { handlers[event] = f }}
+  self.mounted()
+  await handlers["ha:control"]({device: "e3800", on: true, part: "dc"})
+  assert.deepEqual(other.pushes.at(-1), ["ha:control_done", {device: "e3800", part: "dc", error: "failed"}])
+  await handlers["ha:control"]({device: "e3800", on: true, part: "battery"})
+  assert.deepEqual(other.pushes.at(-1), ["ha:control_done", {device: "e3800", part: null, error: "failed"}])
+  self.destroyed()
+})
+
+test("the hook sends the stations when Home Assistant has one, and one time more to clear them", async () => {
+  const page = parts()
+  const {link, socket} = await connected(page)
+  const read = async (ha) => {
+    const done = link.devices()
+    await serve(ha, [socket])
+    await done
+    tick(page)
+  }
+  const sent = () => page.pushes.filter(([event]) => event === "ha:stations").length
+
+  // No station: no message of the stations.
+  await read(home())
+  assert.equal(sent(), 0)
+  await read(garage())
+  assert.equal(Object.keys(lastStations(page)).length, 2)
+
+  // The stations go, and no entity is left to watch: the page gets no
+  // station, one time.
+  const bare = registry({
+    devices: [haDevice("tv", {area_id: "living"})], entities: [haEntity("media_player.tv", "tv")],
+  })
+  await read(bare)
+  assert.deepEqual(lastStates(page), {})
+  assert.deepEqual(lastStations(page), {})
+  const count = sent()
+  await read(home())
+  assert.equal(sent(), count)
+  link.stop()
 })
 
 test("after any steps, the LiveView gets the states of Home Assistant, and none while the socket is closed", async () => {

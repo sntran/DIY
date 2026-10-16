@@ -29,7 +29,8 @@ let faults = 0
 // and one is on the patio. The sun is a service, not a device of the
 // house. The ceiling lights are on. The energy settings have the meter
 // of the house: 25 kWh each day of the last 40 days. They also have the
-// ceiling lights: 12 kWh last month, and 4 kWh this month.
+// ceiling lights: 12 kWh last month, and 4 kWh this month. A power station
+// of Pecron is on the patio, with the integration of Pecron.
 const device = (id, name, area_id, entity, extra = {}) => ({
   device: { id, name, name_by_user: null, area_id, entry_type: null, disabled_by: null, model: null, ...extra },
   entity: { entity_id: entity, device_id: id, area_id: null, entity_category: null, hidden_by: null, disabled_by: null },
@@ -43,6 +44,18 @@ const energySensor = {
   entity_id: "sensor.ceiling_energy", device_id: "lights", area_id: null, entity_category: null, hidden_by: null,
   disabled_by: null,
 }
+// An entity of the station: the code of its part is at the end of its
+// unique id.
+const pecron = (entity_id, code) => ({
+  entity_id, device_id: "station", area_id: null, entity_category: null, hidden_by: null, disabled_by: null,
+  platform: "pecron", unique_id: `01J:station:${code}`,
+})
+const station = [
+  pecron("sensor.station_battery", "battery_percentage"),
+  pecron("sensor.station_out", "total_output_power"),
+  pecron("switch.station_ac", "ac_switch_hm"),
+  pecron("switch.station_dc", "dc_switch_hm"),
+]
 const devices = [
   device("lights", "Ceiling Lights", "living_room", "light.ceiling"),
   device("tv", "Living Room TV", "living_room", "media_player.tv"),
@@ -56,9 +69,15 @@ const homeAssistant = await fakeHomeAssistant({
     { area_id: "patio", name: "Patio", floor_id: null },
     { area_id: "guest_suite", name: "Guest Suite", floor_id: null },
   ],
-  devices: devices.map((one) => one.device),
-  entities: [...devices.map((one) => one.entity), energySensor],
-  states: { "light.ceiling": "on", "media_player.tv": "playing" },
+  devices: [
+    ...devices.map((one) => one.device),
+    device("station", "Backup battery", "patio", "", { model: "E3800LFP" }).device,
+  ],
+  entities: [...devices.map((one) => one.entity), energySensor, ...station],
+  states: {
+    "light.ceiling": "on", "media_player.tv": "playing", "sensor.station_battery": "64",
+    "sensor.station_out": "350", "switch.station_ac": "on", "switch.station_dc": "off",
+  },
   prefs: {
     energy_sources: [{ type: "grid", stat_energy_from: "sensor.grid_in", stat_energy_to: null }],
     device_consumption: [{ stat_consumption: "sensor.ceiling_energy", name: "Ceiling Lights" }],
@@ -645,13 +664,13 @@ async function build(context, name) {
   assert.equal(homeAssistant.registry.areas.length, new Set(homeAssistant.registry.areas.map((one) => one.name)).size)
 
   // The ghosts of the devices. The ceiling lights and the TV are in the
-  // living room. The fan is on the patio (a room after the match). One
-  // comes in with the keyboard (the list of the rooms). One comes in with
-  // a tap on the plan.
+  // living room. The fan and the station are on the patio (a room after
+  // the match). One comes in with the keyboard (the list of the rooms).
+  // One comes in with a tap on the plan.
   await page.goto(`${site}/inside`)
   await connected(page)
-  await page.waitForSelector("#ha-ghosts:has-text('3 devices of Home Assistant are not in the house yet.')")
-  assert.equal(await page.locator("#plan-svg g.p-ghost").count(), 3)
+  await page.waitForSelector("#ha-ghosts:has-text('4 devices of Home Assistant are not in the house yet.')")
+  assert.equal(await page.locator("#plan-svg g.p-ghost").count(), 4)
   // A ghost is pale and blue, with a dashed edge: not the colors of an
   // item. Its edge has a contrast of 3:1 at least on the floors.
   const look = await page.$eval("#plan-svg g.p-ghost polygon:not(.p-shadow)", (polygon) => {
@@ -718,6 +737,32 @@ async function build(context, name) {
   // The house has a TV of the preset: the panel tells that it can be the
   // same TV.
   await page.waitForSelector("#item-stage #ha-twin")
+  await page.click("#item-stage .stage-back")
+  await page.waitForSelector("#item-stage", { state: "detached" })
+  // The station of Pecron comes with its model, its numbers and its
+  // outlets. Each run of the walk starts with the AC outlets on.
+  homeAssistant.set("switch.station_ac", "on")
+  await follow(page, "#plan-list button:has-text('Add Backup battery from Home Assistant')")
+  await page.waitForSelector("#item-stage #item-stage-title:has-text('Pecron E3800LFP')")
+  await page.waitForSelector("#item-stage [data-stage=landed]")
+  await page.waitForSelector("#ha-battery:has-text('64%')")
+  await page.waitForSelector("#ha-output:has-text('350 W')")
+  await page.waitForSelector("#ha-input:has-text('Not known')")
+  await page.waitForSelector("#ha-switch-ac[role=switch][aria-checked=true]")
+  await page.waitForSelector("#ha-dc-state:has-text('It is off.')")
+  assert.equal(await page.locator("#ha-switch").count(), 0)
+  await check(page, `${name} station`)
+  // The keyboard turns the AC outlets off: one call for their switch, and
+  // the switch keeps the focus.
+  await page.focus("#ha-switch-ac")
+  await page.keyboard.press("Space")
+  await page.waitForSelector("#ha-switch-ac[aria-checked=false][aria-disabled=false]")
+  assert.equal(await page.evaluate(() => document.activeElement?.id), "ha-switch-ac")
+  assert.deepEqual(homeAssistant.calls.at(-1), { domain: "switch", service: "turn_off", ids: ["switch.station_ac"] })
+  // The battery changes in Home Assistant: the page follows.
+  homeAssistant.set("sensor.station_battery", "63")
+  await page.waitForSelector("#ha-battery:has-text('63%')")
+  homeAssistant.set("sensor.station_battery", "64")
   await page.click("#item-stage .stage-back")
   await page.waitForSelector("#item-stage", { state: "detached" })
   await page.waitForSelector("#ha-ghosts:has-text('1 device of Home Assistant is not in the house yet.')")
@@ -872,6 +917,15 @@ for (const colorScheme of ["light", "dark"]) {
     await check(page, `${name} real usage`)
     await page.click("nav >> text=House")
     assert.match(await page.textContent("#real-average"), /\$\d+/)
+
+    // The station of Pecron goes: the walk checks the power with a station
+    // of its own.
+    await page.click("nav >> text=Rooms")
+    await page.waitForSelector("#inside")
+    await follow(page, 'a[id^="item-"]:has-text("Pecron E3800LFP")')
+    await page.click("#ask-remove")
+    await page.click("#delete-item")
+    await page.waitForSelector("#item-stage", { state: "detached" })
 
     // The power: a station in the laundry runs the fridge, and the person
     // plans panels on the roof.

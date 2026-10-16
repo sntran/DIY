@@ -60,7 +60,7 @@ defmodule DIY.Build do
   - `areas`: the area of Home Assistant of each room of the house (its
     id), for the rooms with a link (`link_area/3`).
   - `devices`: the device of Home Assistant of each item (its id), for the
-    items with a link (`add_device/5`). A device has one item at most.
+    items with a link (`add_device/6`). A device has one item at most.
   - `wires`: the wires between the items, at most 100, and at most 24 for
     an item (`add_wire/3`). Each wire has an `id`, the item at each end
     (`from` gives the current, `to`), and its numbers (`DIY.Wire`). A
@@ -610,18 +610,27 @@ defmodule DIY.Build do
   device (`device_params/1`): for example one bulb, not the lights of a
   whole house. A device has one item at most: a device with an item is an
   error (`:taken`). The item goes to its place in the room (`at`, the
-  place of its ghost), or to a free place (`nil`).
+  place of its ghost), or to a free place (`nil`). The values change the
+  item as `update_item/3` does: for example the model of a power station
+  (`DIY.HomeAssistant.device_values/2`) gives the numbers of the model.
   """
-  @spec add_device(t(), String.t(), String.t(), String.t(), map() | nil) ::
-          {:ok, t(), String.t()} | {:error, atom()}
-  def add_device(build, room_id, type, device, at \\ nil) do
+  @spec add_device(t(), String.t(), String.t(), String.t(), map() | nil, map()) ::
+          {:ok, t(), String.t()} | {:error, term()}
+  def add_device(build, room_id, type, device, at \\ nil, values \\ %{}) do
     with true <- (is_binary(device) and ha_id?(device)) || {:error, :device},
          true <- device_item(build, device) == nil || {:error, :taken},
          {:ok, room} <- room(build, room_id),
-         true <- area_room?(room) || {:error, :room} do
-      add_item(build, room_id, type, device_params(type), device, valid_at(at))
+         true <- area_room?(room) || {:error, :room},
+         {:ok, build, id} <-
+           add_item(build, room_id, type, device_params(type), device, valid_at(at)),
+         {:ok, build} <- device_values(build, id, values) do
+      {:ok, build, id}
     end
   end
+
+  # With no values, the build has one change only.
+  defp device_values(build, _id, values) when values == %{}, do: {:ok, build}
+  defp device_values(build, id, values), do: update_item(build, id, values)
 
   @doc """
   The numbers of an item for one device of Home Assistant: one bulb, one

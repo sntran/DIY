@@ -264,6 +264,8 @@ defmodule DIYWeb.GhostLiveTest do
       %{ok | "domains" => "light"},
       %{ok | "domains" => [5]},
       %{ok | "domains" => List.duplicate("light", 31)},
+      Map.put(ok, "station", "anker"),
+      Map.put(ok, "station", ["pecron"]),
       %{"id" => "x"},
       "device"
     ]
@@ -271,15 +273,30 @@ defmodule DIYWeb.GhostLiveTest do
     %{devices: devices, areas: areas} =
       HomeAssistant.read_devices(%{
         "devices" =>
-          bad ++ [ok, %{ok | "name" => "Second"}, %{ok | "id" => "d2", "model" => long}],
+          bad ++
+            [
+              ok,
+              %{ok | "name" => "Second"},
+              %{ok | "id" => "d2", "model" => long},
+              Map.merge(ok, %{"id" => "d3", "station" => "pecron", "model" => "E3800LFP"})
+            ],
         "areas" => [%{"id" => "a", "name" => "A", "floor" => nil}, %{"id" => 5}]
       })
 
     # The first device with an id counts. A model that is too long is nil.
-    # The page reads the kind of each device one time.
+    # The page reads the kind of each device one time. A device with the
+    # maker of a power station is a power station.
+    light = %{name: "Lamp", area: nil, domains: ["light"], station: nil, kind: "lights"}
+
     assert devices == [
-             %{id: "d1", name: "Lamp", area: nil, domains: ["light"], model: nil, kind: "lights"},
-             %{id: "d2", name: "Lamp", area: nil, domains: ["light"], model: nil, kind: "lights"}
+             Map.merge(light, %{id: "d1", model: nil}),
+             Map.merge(light, %{id: "d2", model: nil}),
+             Map.merge(light, %{
+               id: "d3",
+               model: "E3800LFP",
+               station: "pecron",
+               kind: "power_station"
+             })
            ]
 
     assert areas == [%{id: "a", name: "A", floor: nil}]

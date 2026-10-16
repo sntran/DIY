@@ -176,7 +176,12 @@ defmodule DIYWeb.Math do
                                                                                                                                                             ", less the kWh to the grid × #{Format.cents(@settings.buyback_cents)}"}.
         <.link patch={~p"/power"} class="link">The page Power shows how the app gets the kWh from the grid.</.link>
       </p>
-      <div class="overflow-x-auto">
+      <div
+        class="overflow-x-auto"
+        tabindex="0"
+        role="region"
+        aria-label="The bill of each month with your equipment"
+      >
         <table class="table table-xs sm:table-sm" id="bill-months">
           <thead>
             <tr>

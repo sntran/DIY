@@ -775,6 +775,9 @@ button.stage-switch { padding: 0; border: 0 }
 /* The row of this switch is not a label: only the word and the switch
    take a tap. */
 .stage-row-plain { cursor: default }
+.stage-facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0.25rem 1rem; margin: 0; font-size: 0.95rem }
+.stage-facts dt { color: var(--stage-muted) }
+.stage-facts dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums }
 .stage-row-plain label { cursor: pointer }
 .stage-link { min-height: 1.5rem; padding: 0; border: 0; background: none; color: var(--stage-link); font-weight: 600;
   text-decoration: underline; cursor: pointer }
