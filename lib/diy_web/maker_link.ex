@@ -2,20 +2,24 @@ defmodule DIYWeb.MakerLink do
   @moduledoc """
   The LiveView part of the direct link to the cloud of the maker of a
   power station, for a person with no Home Assistant. The hook `MakerLink`
-  of the page (`assets/js/maker_link.js`) keeps the token on the device. It
-  reads the stations through the relay of the app
-  (`DIYWeb.RelayController`). The LiveView never sees the token. The TLA+
-  model `specs/MakerLink.tla` checks the rules of the hook.
+  of the page (`assets/js/maker_link.js`) keeps the token of Pecron, or
+  the keys of EcoFlow, on the device. It reads the stations of Pecron
+  through the relay of the app (`DIYWeb.RelayController`). It reads the
+  stations of EcoFlow directly from the page (`assets/js/ecoflow.js`). The
+  LiveView never sees the token or the keys. The TLA+ model
+  `specs/MakerLink.tla` checks the rules of the hook.
 
   A LiveView with `on_mount DIYWeb.MakerLink` gets two assigns:
 
-  - `:makers`: for each maker (`"pecron"`), the state of the link and the
+  - `:makers`: for each maker (`"pecron"` and `"ecoflow"`), the state of the link and the
     error of the last step (`message/2`). The states are `loading`,
     `none`, `connecting`, `connected`, `offline` and `refused`. It also has
     the stations of the account (`nil` before the hook tells them). It
     also keeps the switches of each station of the last list
     (`switches`), also when a new token makes the stations `nil`. So a
-    switch does not come and go while the page waits for a new list.
+    switch does not come and go while the page waits for a new list. For
+    EcoFlow, it has the region of the last keys (`region`), so that the
+    form shows it again. The region is not a key.
   - `:maker_control`: for each part of a station (`{maker, device,
     part}`), a control that waits for its end (`{:pending, on}`). Or it
     has the error of the last control (`{:error, error}`).
@@ -31,13 +35,20 @@ defmodule DIYWeb.MakerLink do
   alias DIYWeb.Format
   alias Phoenix.LiveView
 
-  @makers ~w(pecron)
-  @names %{"pecron" => "Pecron"}
+  @makers ~w(pecron ecoflow)
+  @names %{"pecron" => "Pecron", "ecoflow" => "EcoFlow"}
   @states ~w(none connecting connected offline refused)
-  @errors ~w(format storage token denied unreachable offline timeout failed)
+  @errors ~w(format storage token denied unreachable offline timeout failed crypto)
   @numbers ~w(battery input output)
-  @switches [{"ac", "AC outlets"}, {"dc", "DC outlets"}]
-  @switch_parts Enum.map(@switches, &elem(&1, 0))
+  # The switches of a station of each maker, with their names. The DC part
+  # of EcoFlow is its 12 V outlets only, as in DIYWeb.HomeAssistant.
+  @switches %{
+    "pecron" => [{"ac", "AC outlets"}, {"dc", "DC outlets"}],
+    "ecoflow" => [{"ac", "AC outlets"}, {"dc", "12 V outlets"}]
+  }
+  @switch_parts ~w(ac dc)
+  # The regions of EcoFlow, as HOSTS of assets/js/ecoflow.js.
+  @regions [{"americas", "Americas"}, {"europe", "Europe"}]
 
   # The most stations of one account, and the longest name or model, that
   # the page takes from the hook.
@@ -47,7 +58,10 @@ defmodule DIYWeb.MakerLink do
   @doc false
   def on_mount(:default, _params, _session, socket) do
     makers =
-      Map.new(@makers, &{&1, %{state: "loading", error: nil, stations: nil, switches: %{}}})
+      Map.new(
+        @makers,
+        &{&1, %{state: "loading", error: nil, stations: nil, switches: %{}, region: nil}}
+      )
 
     socket =
       socket
@@ -59,6 +73,9 @@ defmodule DIYWeb.MakerLink do
 
   @doc "The name of a maker."
   def name(maker), do: Map.fetch!(@names, maker)
+
+  @doc "The names of the makers of a list, one time each: \"Pecron and EcoFlow\"."
+  def names(makers), do: makers |> Enum.uniq() |> Enum.map_join(" and ", &name/1)
 
   @doc """
   Asks the hook to turn the AC or DC outlets of a station on or off
@@ -78,29 +95,34 @@ defmodule DIYWeb.MakerLink do
   has a link to a unit (`DIY.Build.link_unit/3`). It has the maker, the
   device, and the parts as in `DIYWeb.HomeAssistant.station/2`: the
   numbers, `known`, `online` (the link is connected) and the switches. It
-  also has the state of the link, `found` (the account has the station)
-  and `reachable` (the maker can reach the station now). It has the name
-  of the station in the account (`name`), or `nil`. Each switch has
+  also has the state of the link and its error. `found` tells that the
+  account has the station, and `reachable` that the maker can reach the
+  station now. It has the name
+  of the station in the account (`name`), or `nil`. `last_numbers` is
+  true when the station has a known number: only then the part tells
+  that these are its last numbers. Each switch has
   `link`: with the link not connected, a switch does not work. With no
   stations, the switches of the last list stay (`"none"` for a part that
   the station does not have). Before the first list, the station has no
-  switches: the page does not know them.
+  switches: the page does not know them. A switch of the last list of a
+  station that the maker cannot reach now is `"unavailable"`, also with
+  no state.
   """
   def station(%{build: build, makers: makers, maker_control: controls}, item_id) do
-    with "pecron:" <> device = unit <- build.units[item_id] do
-      maker = "pecron"
+    with unit when is_binary(unit) <- build.units[item_id],
+         [maker, device] when maker in @makers <- String.split(unit, ":", parts: 2) do
       link = makers[maker]
       online = link.state == "connected"
       parts = Enum.find(link.stations || [], &(&1["id"] == device))
       known = link.switches[device]
 
       switches =
-        for {part, name} <- @switches, known != nil do
+        for {part, name} <- @switches[maker], known != nil do
           {pending, error} = pending(controls[{maker, device, part}])
 
           state =
             cond do
-              parts -> switch_state(parts, part)
+              parts -> switch_state(parts, part, known)
               part in known -> nil
               true -> "none"
             end
@@ -123,8 +145,10 @@ defmodule DIYWeb.MakerLink do
         maker: maker,
         device: device,
         state: link.state,
+        error: link.error,
         online: online,
         known: parts != nil,
+        last_numbers: parts != nil and Enum.any?(@numbers, &(parts[&1] != nil)),
         found: link.stations == nil or parts != nil,
         name: parts && parts["name"],
         reachable: parts == nil or parts["online"] == true,
@@ -135,12 +159,13 @@ defmodule DIYWeb.MakerLink do
     end
   end
 
-  # A switch that the station does not have, or with no state: "none" and
-  # "unavailable", as in DIYWeb.HomeAssistant.station/2.
-  defp switch_state(parts, part) do
+  # A switch of a station that the maker cannot reach: "unavailable". A
+  # switch that the station does not have: "none". As in
+  # DIYWeb.HomeAssistant.station/2.
+  defp switch_state(parts, part, known) do
     cond do
-      not Map.has_key?(parts, part) or parts[part] == nil -> "none"
-      parts["online"] != true -> "unavailable"
+      parts["online"] != true and (parts[part] != nil or part in known) -> "unavailable"
+      parts[part] == nil -> "none"
       true -> parts[part]
     end
   end
@@ -168,16 +193,19 @@ defmodule DIYWeb.MakerLink do
   The model of the catalog for the station of a unit
   (`DIY.HomeAssistant.station_model/2`), or `nil`.
   """
-  def model(%{makers: makers}, "pecron:" <> device) do
-    station = Enum.find(makers["pecron"].stations || [], &(&1["id"] == device))
-    station && HomeAssistant.station_model("pecron", station["model"])
+  def model(%{makers: makers}, unit) do
+    [maker, device] = String.split(unit, ":", parts: 2)
+    station = Enum.find(makers[maker].stations || [], &(&1["id"] == device))
+    station && HomeAssistant.station_model(maker, station["model"])
   end
 
   @doc false
   def handle_event("maker:status", %{"maker" => maker, "state" => state} = params, socket)
       when maker in @makers and state in @states do
     error = if params["error"] in @errors, do: params["error"]
-    link = %{socket.assigns.makers[maker] | state: state, error: error}
+    old_link = socket.assigns.makers[maker]
+    region = if params["region"] in regions(), do: params["region"], else: old_link.region
+    link = %{old_link | state: state, error: error, region: region}
 
     # The controls are only for a generation of the link: a new token or
     # a disconnect ends them. In a different state, a control that waits
@@ -224,8 +252,7 @@ defmodule DIYWeb.MakerLink do
 
         switches =
           if stations,
-            do:
-              Map.new(stations, &{&1["id"], Enum.filter(@switch_parts, fn part -> &1[part] end)}),
+            do: Map.new(stations, &{&1["id"], station_switches(&1, old_link.switches)}),
             else: old_link.switches
 
         link = %{old_link | stations: stations, switches: switches}
@@ -265,6 +292,17 @@ defmodule DIYWeb.MakerLink do
 
   def handle_event("maker_disconnect", _params, socket), do: {:halt, socket}
   def handle_event(_event, _params, socket), do: {:cont, socket}
+
+  # The switches of a station of a new list: the parts with a state. A
+  # station that the maker cannot reach, with no state of a switch, keeps
+  # the switches of the last list. With no last list, the page does not
+  # know them (`nil`): so it tells no false "no switch".
+  defp station_switches(station, known) do
+    parts = Enum.filter(@switch_parts, &station[&1])
+    if parts == [] and not station["online"], do: known[station["id"]], else: parts
+  end
+
+  defp regions, do: Enum.map(@regions, &elem(&1, 0))
 
   @doc """
   The stations from the hook: `nil`, a list of stations, or `:error`. A
@@ -321,23 +359,35 @@ defmodule DIYWeb.MakerLink do
   def status(%{state: "connected", stations: stations}, maker),
     do: "Connected to #{name(maker)}: #{Format.count(length(stations || []), "station")}."
 
+  def status(%{state: "offline", error: "crypto"}, maker),
+    do: "The app cannot connect to #{name(maker)} in this browser."
+
   def status(%{state: "offline"}, maker),
     do: "The app cannot reach #{name(maker)} now. It tries again in 30 seconds."
 
-  def status(%{state: "refused"}, maker),
-    do: "#{name(maker)} does not accept the token. Make a new token and connect again."
+  def status(%{state: "refused"}, "pecron"),
+    do: "Pecron does not accept the token. Make a new token and connect again."
+
+  def status(%{state: "refused"}, "ecoflow"),
+    do:
+      "EcoFlow does not accept the keys. Look at the region, the keys and the clock of this device, and connect again."
 
   @doc "Why the last step did not work, in words."
   def message("format", "pecron"), do: "A token of Pecron starts with phk_. Copy all of it."
 
-  def message("storage", _maker),
-    do: "This browser cannot keep the token. Look at the settings of the site."
+  def message("format", "ecoflow"),
+    do: "Put the access key and the secret key from the developer site of EcoFlow."
 
-  def message("token", maker), do: "#{name(maker)} does not accept the token."
+  def message("storage", maker),
+    do: "This browser cannot keep the #{secret(maker)}. Look at the settings of the site."
 
-  def message("denied", maker),
+  def message("token", maker), do: "#{name(maker)} does not accept the #{secret(maker)}."
+
+  def message("denied", "pecron"),
     do:
-      "#{name(maker)} did not let the app turn the outlets on or off. On app.pecron.com, look at the option \"Allow HA to send control commands\"."
+      "Pecron did not let the app turn the outlets on or off. On app.pecron.com, look at the option \"Allow HA to send control commands\"."
+
+  def message("denied", "ecoflow"), do: "EcoFlow did not accept the keys for this control."
 
   def message("unreachable", maker), do: "#{name(maker)} does not answer now."
   def message("offline", _maker), do: "The app cannot reach its server. Look at the network."
@@ -346,6 +396,14 @@ defmodule DIYWeb.MakerLink do
     do: "The app got no answer in 20 seconds. Look at the network, and try again later."
 
   def message("failed", maker), do: "#{name(maker)} did not do it. Try again."
+
+  def message("crypto", maker),
+    do:
+      "This browser cannot sign the requests to #{name(maker)}. Open the app with an address that starts with https."
+
+  # The token of Pecron, or the keys of EcoFlow.
+  defp secret("pecron"), do: "token"
+  defp secret("ecoflow"), do: "keys"
 
   @doc """
   The state of a switch of a station of a maker (`station/2`), in words. A
@@ -379,8 +437,9 @@ defmodule DIYWeb.MakerLink do
 
   @doc """
   The card of the direct link to a maker, in Settings. It has the state of
-  the link, and the field of the token with the key Connect, or the key
-  Disconnect.
+  the link, and the key Connect or the key Disconnect. For Pecron, the
+  form has the field of the token. For EcoFlow, it has the fields of the
+  region and of the two keys.
   """
   def card(assigns) do
     assigns = assign(assigns, link: assigns.makers[assigns.maker], name: name(assigns.maker))
@@ -388,14 +447,7 @@ defmodule DIYWeb.MakerLink do
     ~H"""
     <div id={"#{@maker}-card"} lang="en" class="space-y-2">
       <h2 class="text-lg font-bold">{@name}</h2>
-      <p class="text-sm">
-        See your {@name} stations from anywhere, with no Home Assistant, and turn their outlets on and off.
-        The token stays on this device. Each request goes through the server of the app, which keeps no token.
-      </p>
-      <p class="text-sm">
-        The token has the same access as your account: it reads your stations and turns their outlets on and off.
-        On the portal, the options "Exposed devices" and "Allow HA to send control commands" choose the stations that the app sees, and the controls that it can send.
-      </p>
+      <.intro maker={@maker} name={@name} />
       <%!-- The status takes the focus after Connect and Disconnect: the
         form or the key goes. --%>
       <p id={"#{@maker}-status"} role="status" class="text-sm font-medium" tabindex="-1">
@@ -428,23 +480,126 @@ defmodule DIYWeb.MakerLink do
         phx-submit={JS.dispatch("maker:connect") |> JS.dispatch("diy:focus", to: "##{@maker}-status")}
         class="flex flex-wrap gap-2 items-end"
       >
-        <label>
-          <span class="text-sm">Your token of {@name}</span>
-          <input
-            name="token"
-            type="password"
-            autocomplete="off"
-            spellcheck="false"
-            placeholder="phk_…"
-            class="input input-sm w-72 max-w-full block"
-          />
-        </label>
+        <.fields maker={@maker} name={@name} region={@link.region} />
         <button class="btn btn-sm">Connect</button>
       </form>
       <p :if={@link.state in ~w(none refused)} class="text-xs opacity-70">
-        Make the token on app.pecron.com: sign in with the account of the Pecron app, then make a long-lived token. You can stop the token there at any time.
+        <.help maker={@maker} />
       </p>
     </div>
     """
   end
+
+  attr :maker, :string, required: true
+  attr :name, :string, required: true
+
+  # What the link gives, and where the token or the keys go.
+  defp intro(%{maker: "pecron"} = assigns) do
+    ~H"""
+    <p class="text-sm">
+      See your {@name} stations from anywhere, with no Home Assistant, and turn their outlets on and off.
+      The token stays on this device. Each request goes through the server of the app, which keeps no token.
+    </p>
+    <p class="text-sm">
+      The token has the same access as your account: it reads your stations and turns their outlets on and off.
+      On the portal, the options "Exposed devices" and "Allow HA to send control commands" choose the stations that the app sees, and the controls that it can send.
+    </p>
+    """
+  end
+
+  defp intro(%{maker: "ecoflow"} = assigns) do
+    ~H"""
+    <p class="text-sm">
+      See your {@name} stations from anywhere, with no Home Assistant, and turn their outlets on and off.
+      The keys stay on this device. This page calls EcoFlow directly: the server of the app never sees the keys.
+    </p>
+    <p class="text-sm">
+      The keys have the same access as your account: they read your stations and turn their outlets on and off.
+      The app knows the DELTA Pro, the DELTA Pro 3 and the DELTA Pro Ultra.
+    </p>
+    """
+  end
+
+  attr :maker, :string, required: true
+  attr :name, :string, required: true
+  attr :region, :string, default: nil
+
+  # The fields of the form: the token of Pecron, or the region and the two
+  # keys of EcoFlow. The hook reads them; the LiveView never gets the keys.
+  defp fields(%{maker: "pecron"} = assigns) do
+    ~H"""
+    <label>
+      <span class="text-sm">Your token of {@name}</span>
+      <input
+        name="token"
+        type="password"
+        autocomplete="off"
+        spellcheck="false"
+        placeholder="phk_…"
+        class="input input-sm w-72 max-w-full block"
+      />
+    </label>
+    """
+  end
+
+  defp fields(%{maker: "ecoflow"} = assigns) do
+    ~H"""
+    <label>
+      <span class="text-sm">The region of your account</span>
+      <%!-- The region of the last keys, when the form comes again. A patch
+        does not change the choice of the person (phx-update="ignore"). --%>
+      <select
+        id="ecoflow-region"
+        name="region"
+        phx-update="ignore"
+        class="select select-sm w-72 max-w-full block"
+      >
+        <option
+          :for={{value, label} <- regions_with_names()}
+          value={value}
+          selected={value == @region}
+        >
+          {label}
+        </option>
+      </select>
+    </label>
+    <label>
+      <span class="text-sm">Access key</span>
+      <input
+        name="access_key"
+        type="password"
+        autocomplete="off"
+        spellcheck="false"
+        class="input input-sm w-72 max-w-full block"
+      />
+    </label>
+    <label>
+      <span class="text-sm">Secret key</span>
+      <input
+        name="secret_key"
+        type="password"
+        autocomplete="off"
+        spellcheck="false"
+        class="input input-sm w-72 max-w-full block"
+      />
+    </label>
+    """
+  end
+
+  attr :maker, :string, required: true
+
+  # Where the person makes the token or the keys.
+  defp help(%{maker: "pecron"} = assigns) do
+    ~H"""
+    Make the token on app.pecron.com: sign in with the account of the Pecron app, then make a long-lived token. You can stop the token there at any time.
+    """
+  end
+
+  defp help(%{maker: "ecoflow"} = assigns) do
+    ~H"""
+    Make the keys on the developer site of EcoFlow (developer.ecoflow.com, or developer-eu.ecoflow.com in Europe): sign in with the account of the EcoFlow app, ask for access as a developer, then make the access key and the secret key. Select the region of your account. If EcoFlow does not accept the keys, try the other region.
+    """
+  end
+
+  defp regions_with_names, do: @regions
 end

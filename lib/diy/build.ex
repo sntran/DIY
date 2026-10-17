@@ -62,7 +62,8 @@ defmodule DIY.Build do
   - `devices`: the device of Home Assistant of each item (its id), for the
     items with a link (`add_device/6`). A device has one item at most.
   - `units`: the unit of the cloud of a maker of each power station
-    (`"pecron:id"`), for a person with no Home Assistant (`link_unit/3`).
+    (`"pecron:id"` or `"ecoflow:sn"`), for a person with no Home Assistant
+    (`link_unit/3`).
     A unit has one item at most.
   - `wires`: the wires between the items, at most 100, and at most 24 for
     an item (`add_wire/3`). Each wire has an `id`, the item at each end
@@ -657,12 +658,13 @@ defmodule DIY.Build do
   def device_item(build, device),
     do: Enum.find_value(build.devices, fn {item, other} -> other == device && item end)
 
-  # The makers of the units (DIY.Pecron).
-  @unit ~r/\A(pecron):[A-Za-z0-9_-]{1,64}(:[A-Za-z0-9_-]{1,64})?\z/
+  # The makers of the units (DIY.Pecron, and EcoFlow in the page). The id
+  # of a device of EcoFlow is its serial number.
+  @unit ~r/\A(pecron|ecoflow):[A-Za-z0-9_-]{1,64}(:[A-Za-z0-9_-]{1,64})?\z/
 
   @doc """
   True for a unit of the cloud of a maker: the maker and the id of its
-  device, for example `"pecron:dev_1"`.
+  device, for example `"pecron:dev_1"` or `"ecoflow:MR51ZAS4PG340123"`.
   """
   def unit?(unit), do: is_binary(unit) and unit =~ @unit
 

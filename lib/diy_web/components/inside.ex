@@ -1149,7 +1149,7 @@ defmodule DIYWeb.Inside do
         <%!-- The title takes the focus after a link or its end: the key
           with the focus goes away. --%>
         <h3 id="part-maker-title" class="stage-sec-title" tabindex="-1">
-          {MakerLink.name((@unit && @unit.maker) || hd(@unit_choices).maker)}
+          {MakerLink.names((@unit && [@unit.maker]) || Enum.map(@unit_choices, & &1.maker))}
         </h3>
         <%!-- The notes of the link are in one element that stays: a note
           that comes or goes above the switches makes a switch lose the
@@ -1159,7 +1159,7 @@ defmodule DIYWeb.Inside do
             This is {@unit.name} in your account of {MakerLink.name(@unit.maker)}.
           </p>
           <p :if={@unit.state in ~w(none refused)} id="maker-closed">
-            The app has no link to {MakerLink.name(@unit.maker)} now.{if @unit.known,
+            The app has no link to {MakerLink.name(@unit.maker)} now.{if @unit.last_numbers,
               do: " These are its last numbers."}
             <.link patch={~p"/settings"} class="link">Connect it in Settings.</.link>
           </p>
@@ -1167,8 +1167,11 @@ defmodule DIYWeb.Inside do
             The app connects to {MakerLink.name(@unit.maker)}.
           </p>
           <p :if={@unit.state == "offline"} id="maker-offline">
-            The app cannot reach {MakerLink.name(@unit.maker)} now.{if @unit.known,
-              do: " These are its last numbers."}
+            <span :if={@unit.error != "crypto"}>
+              The app cannot reach {MakerLink.name(@unit.maker)} now.{if @unit.last_numbers,
+                do: " These are its last numbers."}
+            </span>
+            <span :if={@unit.error == "crypto"}>{MakerLink.message("crypto", @unit.maker)}</span>
           </p>
           <p :if={@unit.online && not @unit.found} id="maker-gone">
             Your account of {MakerLink.name(@unit.maker)} does not have this station now.
@@ -1177,7 +1180,8 @@ defmodule DIYWeb.Inside do
             connected, so that the part does not tell a state "now" with no
             link. --%>
           <p :if={@unit.online && @unit.known && not @unit.reachable} id="maker-unreachable">
-            {MakerLink.name(@unit.maker)} cannot reach the station now. These are its last numbers.
+            {MakerLink.name(@unit.maker)} cannot reach the station now.{if @unit.last_numbers,
+              do: " These are its last numbers."}
           </p>
         </div>
         <%!-- The parts of the station are in one element that stays while

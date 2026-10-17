@@ -5,24 +5,37 @@ import assert from "node:assert/strict"
 import fc from "fast-check"
 import {IDBFactory} from "fake-indexeddb"
 import {
-  MAKERS, POLL_WAIT, ANSWER_WAIT, DB, STORE, CHANNEL, MAX_TOKEN, validToken, MakerLink, tokenStore, makerLinkHook,
-  makerParts,
+  MAKERS, POLL_WAIT, ANSWER_WAIT, APPLY_WAIT, DB, STORE, CHANNEL, MAX_TOKEN, validToken, MakerLink, tokenStore,
+  makerLinkHook, makerParts,
 } from "../../assets/js/maker_link.js"
+import {ecoflowCloud, HOSTS, LIST, QUOTA, SET, signText} from "../../assets/js/ecoflow.js"
+import {createHmac} from "node:crypto"
 
 const settle = () => new Promise((resolve) => setImmediate(resolve))
+// Waits until a condition is true, for 5 seconds at most. The calls of
+// EcoFlow take more steps, and WebCrypto works on a different thread.
+const until = async (condition) => {
+  const end = Date.now() + 5_000
+  while (!condition() && Date.now() < end) await new Promise((resolve) => setTimeout(resolve, 1))
+  assert.ok(condition())
+}
 
 // A fake relay: each call waits until the test answers it. The cloud has a
 // station for each token (its account): its AC outlets are on or off. As
 // in the TLA+ model, the cloud serves a call (it reads or writes the
-// station), and later the answer comes (deliver).
-function relay() {
+// station), and later the answer comes (deliver). With abortable false,
+// a call that the signal stops still answers: the answer came before the
+// stop.
+function relay({abortable = true} = {}) {
   const fake = {calls: [], cloud: {phk_a1: "on", phk_a2: "on"}}
   fake.fetch = (url, options) => new Promise((resolve, reject) => {
     const call = {url, options, resolve, reject}
-    options.signal.addEventListener("abort", () => {
-      if (fake.calls.includes(call)) fake.calls.splice(fake.calls.indexOf(call), 1)
-      reject(new Error("aborted"))
-    })
+    if (abortable) {
+      options.signal.addEventListener("abort", () => {
+        if (fake.calls.includes(call)) fake.calls.splice(fake.calls.indexOf(call), 1)
+        reject(new Error("aborted"))
+      })
+    }
     fake.calls.push(call)
   })
   // The cloud reads or writes the station of the token now.
@@ -64,8 +77,9 @@ function parts({fetch, visible = () => true, store = null} = {}) {
   const page = {pushes: [], timers: new Map(), notes: 0, next: 1, tokens: new Map()}
   page.deps = {
     maker: "pecron",
+    // As IndexedDB, the store gives a copy of the token for each read.
     store: store ?? {
-      get: async (maker) => page.tokens.get(maker) ?? null,
+      get: async (maker) => structuredClone(page.tokens.get(maker) ?? null),
       put: async (maker, token) => { page.tokens.set(maker, token) },
       delete: async (maker) => { page.tokens.delete(maker) },
     },
@@ -94,14 +108,332 @@ const fire = (page, ms = POLL_WAIT) => {
 }
 
 test("the constants and the form of a token", () => {
-  assert.deepEqual(MAKERS, {pecron: {relay: "/relay/pecron", prefix: "phk_"}})
-  assert.deepEqual([POLL_WAIT, ANSWER_WAIT, DB, STORE, CHANNEL, MAX_TOKEN],
-    [30_000, 20_000, "diy-makers", "tokens", "diy.makers", 512])
+  assert.deepEqual(MAKERS, {
+    pecron: {relay: "/relay/pecron", prefix: "phk_"}, ecoflow: {cloud: ecoflowCloud, settle: APPLY_WAIT},
+  })
+  assert.deepEqual([POLL_WAIT, ANSWER_WAIT, APPLY_WAIT, DB, STORE, CHANNEL, MAX_TOKEN],
+    [30_000, 20_000, 3_000, "diy-makers", "tokens", "diy.makers", 512])
   assert.ok(validToken("pecron", "phk_abc.DEF-123"))
   for (const token of ["phk_", "abc", "phk_a b", "phk_é", `phk_${"a".repeat(509)}`, null, 5]) {
     assert.equal(validToken("pecron", token), false, String(token))
   }
   assert.ok(validToken("pecron", `phk_${"a".repeat(508)}`))
+
+  // The keys of EcoFlow: a region, an access key and a secret key.
+  const keys = {region: "americas", accessKey: "Ak1", secretKey: "Sk1"}
+  assert.ok(validToken("ecoflow", keys))
+  assert.ok(validToken("ecoflow", {...keys, region: "europe", secretKey: "s".repeat(MAX_TOKEN)}))
+  for (const bad of [
+    {...keys, region: "asia"}, {...keys, region: "toString"}, {...keys, accessKey: ""}, {...keys, accessKey: "a b"},
+    {...keys, secretKey: null}, {...keys, secretKey: "s".repeat(MAX_TOKEN + 1)}, null, "Ak1", 5,
+  ]) {
+    assert.equal(validToken("ecoflow", bad), false, JSON.stringify(bad))
+  }
+})
+
+// A fake cloud of EcoFlow: a DELTA Pro 3 and a Wave (not a station). Its
+// AC outlets of 240 V are on (2) or off (0). Each call gives the code of
+// the cloud, and a call of a state gives the code quota.
+function ecoflowApi() {
+  const api = {calls: [], code: "0", quota: "0", ac: 2}
+  api.fetch = async (url, options) => {
+    api.calls.push({url, options})
+    const {pathname} = new URL(url)
+    if (api.code !== "0") return json(200, {code: api.code, message: "accessKey is invalid"})
+    if (pathname === QUOTA && api.quota !== "0") return json(200, {code: api.quota, message: "no"})
+    if (pathname === LIST) {
+      return json(200, {code: "0", data: [
+        {sn: "DP3A", deviceName: "Garage battery", online: 1, productName: "Delta Pro 3"},
+        {sn: "WAVE", deviceName: "Air", online: 1, productName: "Wave 2"},
+      ]})
+    }
+    if (pathname === QUOTA) {
+      return json(200, {code: "0", data: {
+        cmsBattSoc: 57, powInSumW: 0, powOutSumW: 2310, flowInfoAcHvOut: api.ac, flowInfoAcLvOut: 0, flowInfo12v: 0,
+      }})
+    }
+    const body = JSON.parse(options.body)
+    if ("cfgHvAcOutOpen" in body.params) api.ac = body.params.cfgHvAcOutOpen ? 2 : 0
+    return json(200, {code: "0"})
+  }
+  return api
+}
+
+test("EcoFlow: the page calls the cloud directly, and the keys never go to the server", async () => {
+  const api = ecoflowApi()
+  const page = parts({fetch: api.fetch})
+  const deps = {...page.deps, maker: "ecoflow", subtle: globalThis.crypto.subtle, nonce: () => "123456", now: () => 1_700_000_000_000}
+  const link = new MakerLink(deps)
+  await link.start()
+
+  // Keys of the wrong form: an error, and no call.
+  await link.connect({region: "asia", accessKey: "AK", secretKey: "SK"})
+  assert.deepEqual(last(page, "maker:status"), {maker: "ecoflow", state: "none", error: "format", region: null})
+  await link.connect(null)
+  assert.equal(api.calls.length, 0)
+
+  // The keys go to the store with no spaces at their ends. A poll reads
+  // the list, then the state of each station of a known family.
+  await link.connect({region: "americas", accessKey: " AK ", secretKey: "SK "})
+  assert.deepEqual(page.tokens.get("ecoflow"), {region: "americas", accessKey: "AK", secretKey: "SK"})
+  await until(() => link.state === "connected")
+  assert.deepEqual(api.calls.map(({url}) => url), [`${HOSTS.americas}${LIST}`, `${HOSTS.americas}${QUOTA}?sn=DP3A`])
+  for (const {url, options} of api.calls) {
+    assert.ok(url.startsWith(HOSTS.americas))
+    assert.equal(options.credentials, "omit")
+    const query = Object.fromEntries(new URL(url).searchParams)
+    const text = signText(Object.keys(query).length ? query : null, "AK", "123456", "1700000000000")
+    assert.deepEqual(options.headers, {
+      accessKey: "AK", nonce: "123456", timestamp: "1700000000000",
+      sign: createHmac("sha256", "SK").update(text).digest("hex"),
+    })
+  }
+  assert.deepEqual(last(page, "maker:stations"), {maker: "ecoflow", stations: [{
+    id: "DP3A", name: "Garage battery", model: "Delta Pro 3", online: true,
+    battery: 57, input: 0, output: 2310, ac: "on", dc: "off",
+  }]})
+  // The status tells the region of the keys (not a key).
+  assert.deepEqual(last(page, "maker:status"), {maker: "ecoflow", state: "connected", error: null, region: "americas"})
+
+  // A control of the AC outlets: two commands (240 V and 120 V). The
+  // station can apply them later: the end waits APPLY_WAIT, with no poll.
+  // Then a poll, and the end after its stations.
+  api.calls.length = 0
+  const before = page.pushes.length
+  await link.control("DP3A", "ac", false)
+  await settle()
+  const sets = api.calls.filter(({url}) => url.endsWith(SET))
+  assert.deepEqual(sets.map(({options}) => JSON.parse(options.body).params),
+    [{cfgHvAcOutOpen: false}, {cfgLvAcOutOpen: false}])
+  assert.equal(api.calls.length, 2)
+  assert.equal(last(page, "maker:control_done"), undefined)
+  assert.equal(link.busy, false)
+  fire(page, APPLY_WAIT)
+  await until(() => last(page, "maker:control_done") !== undefined)
+  assert.deepEqual(last(page, "maker:control_done"), {maker: "ecoflow", device: "DP3A", part: "ac", error: null})
+  const events = page.pushes.slice(before).map(([event, payload]) =>
+    event === "maker:stations" ? payload.stations[0].ac : event)
+  assert.deepEqual(events, ["off", "maker:status", "maker:control_done"])
+
+  // EcoFlow does not give the state of the station: the station keeps its
+  // last parts, and it is not online.
+  api.quota = "1006"
+  link.poll()
+  await until(() => last(page, "maker:stations").stations[0].online === false)
+  assert.deepEqual(last(page, "maker:stations").stations[0], {
+    id: "DP3A", name: "Garage battery", model: "Delta Pro 3", online: false,
+    battery: 57, input: 0, output: 2310, ac: "off", dc: "off",
+  })
+  api.quota = "0"
+  await until(() => !link.busy)
+
+  // A station that the list does not have: no family, so no command.
+  api.calls.length = 0
+  await link.control("WAVE", "ac", true)
+  assert.deepEqual(last(page, "maker:control_done"), {maker: "ecoflow", device: "WAVE", part: "ac", error: "failed"})
+  assert.equal(api.calls.filter(({url}) => url.endsWith(SET)).length, 0)
+  await until(() => !link.busy)
+
+  // EcoFlow refuses the keys: the control is denied, and the poll after it
+  // shows the refused keys. The polls stop.
+  api.code = "8513"
+  await link.control("DP3A", "ac", true)
+  assert.deepEqual(last(page, "maker:control_done"), {maker: "ecoflow", device: "DP3A", part: "ac", error: "denied"})
+  await until(() => link.state === "refused")
+  assert.deepEqual(last(page, "maker:status"), {maker: "ecoflow", state: "refused", error: "token", region: "americas"})
+  assert.equal(pollTimer(page), undefined)
+
+  // The same keys from a different tab: no new generation.
+  const generation = link.generation
+  await link.news()
+  assert.equal(link.generation, generation)
+  page.tokens.set("ecoflow", {region: "europe", accessKey: "AK", secretKey: "SK"})
+  await link.news()
+  assert.equal(link.generation, generation + 1)
+  assert.equal(last(page, "maker:status").region, "europe")
+  // After a disconnect, the status keeps the region of the last keys.
+  await link.disconnect()
+  assert.deepEqual(last(page, "maker:status"), {maker: "ecoflow", state: "none", error: null, region: "europe"})
+  link.stop()
+})
+
+test("EcoFlow: the wait for the station ends with a new generation", async () => {
+  const api = ecoflowApi()
+  const page = parts({fetch: api.fetch})
+  page.tokens.set("ecoflow", {region: "americas", accessKey: "AK", secretKey: "SK"})
+  const link = new MakerLink({...page.deps, maker: "ecoflow", subtle: globalThis.crypto.subtle, nonce: () => "1", now: () => 1})
+  await link.start()
+  await until(() => link.state === "connected")
+  await link.control("DP3A", "ac", false)
+  // New keys while the end waits: the timer of the wait does nothing, and
+  // the end of the old generation never goes.
+  await link.connect({region: "americas", accessKey: "AK", secretKey: "SK"})
+  fire(page, APPLY_WAIT)
+  await until(() => link.state === "connected" && !link.busy)
+  assert.equal(last(page, "maker:control_done"), undefined)
+  assert.equal(link.ends.length, 0)
+  // A disconnect while the end waits: no poll.
+  await link.control("DP3A", "ac", true)
+  await link.disconnect()
+  const calls = api.calls.length
+  fire(page, APPLY_WAIT)
+  await settle()
+  assert.equal(api.calls.length, calls)
+  assert.equal(last(page, "maker:control_done"), undefined)
+  link.stop()
+})
+
+test("a stored value that is not a token is no token: it goes to no host", async () => {
+  for (const [maker, value] of [
+    ["ecoflow", {region: "asia", accessKey: "leak-access", secretKey: "leak-secret"}],
+    ["ecoflow", {region: "__proto__", accessKey: "AK", secretKey: "SK"}],
+    ["ecoflow", "phk_a1"],
+    ["pecron", {region: "americas", accessKey: "AK", secretKey: "SK"}],
+    ["pecron", "abc"],
+  ]) {
+    const calls = []
+    const page = parts({fetch: async (url) => { calls.push(url); return json(200, {}) }})
+    page.tokens.set(maker, value)
+    const link = new MakerLink({...page.deps, maker, subtle: globalThis.crypto.subtle, nonce: () => "1", now: () => 1})
+    await link.start()
+    await settle()
+    assert.equal(link.state, "none", JSON.stringify(value))
+    assert.equal(link.token, null)
+    // The value goes from the store.
+    assert.equal(page.tokens.has(maker), false)
+    // A different tab writes such a value: no token.
+    page.tokens.set(maker, maker === "pecron" ? "phk_a1" : {region: "europe", accessKey: "AK", secretKey: "SK"})
+    await link.news()
+    page.tokens.set(maker, value)
+    await link.news()
+    assert.equal(link.token, null)
+    link.stop()
+    await settle()
+    assert.ok(calls.every((url) => url.startsWith("/relay/pecron") || url.startsWith(HOSTS.europe)), calls.join())
+  }
+})
+
+test("EcoFlow: a poll in the wait for the station does not carry the end of the control", async () => {
+  // The station applies a command only when the test says so.
+  const api = ecoflowApi()
+  const fetch = api.fetch
+  let owed = null
+  api.fetch = async (url, options) => {
+    if (options.method !== "PUT") return fetch(url, options)
+    const ac = api.ac
+    const answer = await fetch(url, options)
+    if (api.ac !== ac) {
+      owed = api.ac
+      api.ac = ac
+    }
+    return answer
+  }
+  const page = parts({fetch: api.fetch})
+  page.tokens.set("ecoflow", {region: "americas", accessKey: "AK", secretKey: "SK"})
+  const link = new MakerLink({...page.deps, maker: "ecoflow", subtle: globalThis.crypto.subtle, nonce: () => "1", now: () => 1})
+  await link.start()
+  await until(() => link.state === "connected" && !link.busy)
+  await link.control("DP3A", "ac", false)
+  // The timer of the next poll fires in the wait. The station did not
+  // apply the command yet: the end does not go with that poll.
+  fire(page, POLL_WAIT)
+  await until(() => !link.busy)
+  assert.equal(last(page, "maker:stations").stations[0].ac, "on")
+  assert.equal(last(page, "maker:control_done"), undefined)
+  // The station applies the command, and the wait ends.
+  api.ac = owed
+  fire(page, APPLY_WAIT)
+  await until(() => last(page, "maker:control_done") !== undefined)
+  assert.equal(last(page, "maker:stations").stations[0].ac, "off")
+  link.stop()
+})
+
+test("an end with an error while a poll waits marks a poll again", async () => {
+  const fake = relay()
+  const page = parts({fetch: fake.fetch})
+  const link = new MakerLink(page.deps)
+  await link.start()
+  await link.connect("phk_a1")
+  fake.answer(fake.calls[0])
+  await settle()
+  link.poll()
+  const waiting = fake.calls[0]
+  link.control("s1", "ac", false)
+  await settle()
+  const command = fake.calls.find((call) => call.options.method === "POST")
+  fake.answer(command, json(500, {error: "failed"}))
+  await settle()
+  assert.deepEqual(last(page, "maker:control_done"), {maker: "pecron", device: "s1", part: "ac", error: "failed"})
+  assert.equal(link.again, true)
+  fake.answer(waiting)
+  await settle()
+  assert.equal(fake.calls.length, 1)
+  link.stop()
+})
+
+test("a new generation and a stopped link stop the calls that wait", async () => {
+  const signals = []
+  const page = parts({fetch: (url, options) => new Promise((resolve, reject) => {
+    signals.push(options.signal)
+    options.signal.addEventListener("abort", () => reject(new Error("aborted")))
+  })})
+  page.tokens.set("ecoflow", {region: "americas", accessKey: "AK", secretKey: "SK"})
+  const link = new MakerLink({...page.deps, maker: "ecoflow", subtle: globalThis.crypto.subtle, nonce: () => "1", now: () => 1})
+  await link.start()
+  await until(() => signals.length === 1)
+  await link.disconnect()
+  assert.equal(signals[0].aborted, true)
+  assert.equal(link.calls.size, 0)
+  await link.connect({region: "americas", accessKey: "AK", secretKey: "SK"})
+  await until(() => signals.length === 2)
+  link.stop()
+  assert.equal(signals[1].aborted, true)
+  // The stopped calls change nothing.
+  await settle()
+  assert.equal(link.state, "connecting")
+})
+
+test("EcoFlow: the wait of a poll ends after ANSWER_WAIT, and a call that throws is a failure", async () => {
+  // A cloud that never answers. As fetch, it stops when the signal stops.
+  let fetched = 0
+  const page = parts({fetch: (url, options) => new Promise((resolve, reject) => {
+    fetched += 1
+    options.signal.addEventListener("abort", () => reject(new Error("aborted")))
+  })})
+  const keys = {region: "europe", accessKey: "AK", secretKey: "SK"}
+  page.tokens.set("ecoflow", keys)
+  const deps = {...page.deps, maker: "ecoflow", subtle: globalThis.crypto.subtle, nonce: () => "1", now: () => 1}
+  const link = new MakerLink(deps)
+  await link.start()
+  await until(() => fetched === 1)
+  fire(page, ANSWER_WAIT)
+  await until(() => link.state === "offline")
+  assert.deepEqual(last(page, "maker:status"), {maker: "ecoflow", state: "offline", error: "timeout", region: "europe"})
+  link.stop()
+
+  // With no WebCrypto (a page with no https), the page cannot sign: no
+  // call, and the error "crypto".
+  let calls = 0
+  const page2 = parts({fetch: async () => { calls += 1; return json(200, {code: "0", data: []}) }})
+  page2.tokens.set("ecoflow", keys)
+  const link2 = new MakerLink({...page2.deps, maker: "ecoflow", subtle: undefined, nonce: () => "1", now: () => 1})
+  await link2.start()
+  await until(() => link2.state === "offline")
+  assert.deepEqual(last(page2, "maker:status"), {maker: "ecoflow", state: "offline", error: "crypto", region: "europe"})
+  // A new try cannot work: no timer polls again.
+  assert.equal(pollTimer(page2), undefined)
+  assert.equal(calls, 0)
+  link2.stop()
+
+  // A signature that throws: the poll fails.
+  const page3 = parts({fetch: async () => json(200, {code: "0", data: []})})
+  page3.tokens.set("ecoflow", keys)
+  const subtle = {importKey: async () => { throw new Error("no key") }}
+  const link3 = new MakerLink({...page3.deps, maker: "ecoflow", subtle, nonce: () => "1", now: () => 1})
+  await link3.start()
+  await until(() => link3.state === "offline")
+  assert.deepEqual(last(page3, "maker:status"), {maker: "ecoflow", state: "offline", error: "failed", region: "europe"})
+  link3.stop()
 })
 
 test("a token: the stations, then a poll each POLL_WAIT while the page shows", async () => {
@@ -163,6 +495,9 @@ test("a token: the stations, then a poll each POLL_WAIT while the page shows", a
   assert.equal(fake.calls.length, 1)
   fake.answer(fake.calls[0])
   await settle()
+  // The page shows with no poll that waits for it: no poll.
+  link.shown()
+  assert.equal(fake.calls.length, 0)
 
   // A new LiveView gets the state and the stations again.
   const count = page.pushes.length
@@ -173,15 +508,17 @@ test("a token: the stations, then a poll each POLL_WAIT while the page shows", a
 })
 
 test("a disconnect or a new token: the answers of the old token change nothing", async () => {
-  const fake = relay()
+  const fake = relay({abortable: false})
   const page = parts({fetch: fake.fetch})
   const link = new MakerLink(page.deps)
   await link.start()
   await link.connect("phk_a1")
   const old = fake.calls[0]
 
-  // A new token while the poll of the old token waits.
+  // A new token while the poll of the old token waits: the signal stops
+  // the old call. Its answer can still come.
   await link.connect("phk_a2")
+  assert.equal(old.options.signal.aborted, true)
   assert.equal(fake.calls.length, 2)
   fake.answer(old)
   await settle()
@@ -199,6 +536,7 @@ test("a disconnect or a new token: the answers of the old token change nothing",
   assert.deepEqual(command.options.headers, {authorization: "Bearer phk_a2", "content-type": "application/json"})
   assert.deepEqual(JSON.parse(command.options.body), {part: "ac", on: false})
   await link.disconnect()
+  assert.equal(command.options.signal.aborted, true)
   assert.equal(page.tokens.has("pecron"), false)
   assert.deepEqual(last(page, "maker:status"), {maker: "pecron", state: "none", error: null})
   const count = page.pushes.length
@@ -570,7 +908,7 @@ test("a new generation forgets the poll again and the wait for the page", async 
 })
 
 test("a stopped link does nothing: a late read of the store, or a late news", async () => {
-  const fake = relay()
+  const fake = relay({abortable: false})
   const page = parts({fetch: fake.fetch})
   page.tokens.set("pecron", "phk_a1")
   const link = new MakerLink(page.deps)
@@ -593,6 +931,7 @@ test("a stopped link does nothing: a late read of the store, or a late news", as
   assert.equal(fake.calls.length, 1)
   const count = page.pushes.length
   other.stop()
+  assert.equal(fake.calls[0].options.signal.aborted, true)
   fake.answer(fake.calls[0])
   await settle()
   assert.equal(page.pushes.length, count)
@@ -702,7 +1041,11 @@ test("the hook: the links, the events of the LiveView and of the page", async ()
   }
   self.mounted()
   await settle()
-  assert.deepEqual(pushes.at(-1), ["maker:status", {maker: "pecron", state: "none", error: null}])
+  // One link for each maker.
+  assert.deepEqual(Object.keys(self.links), ["pecron", "ecoflow"])
+  for (const maker of ["pecron", "ecoflow"]) {
+    assert.ok(pushes.some(([event, payload]) => event === "maker:status" && payload.maker === maker && payload.state === "none"))
+  }
 
   // The key Connect of the card, through the page.
   listeners.connect("pecron", "phk_a1")
@@ -736,7 +1079,7 @@ test("the hook: the links, the events of the LiveView and of the page", async ()
   listeners.shown()
   const count = pushes.length
   self.reconnected()
-  assert.equal(pushes.length, count + 2)
+  assert.equal(pushes.length, count + 4)
   await handlers["maker:disconnect"]({maker: "pecron"})
   assert.equal(page.tokens.has("pecron"), false)
   handlers["maker:disconnect"]({maker: "other"})
@@ -816,6 +1159,27 @@ test("the parts of the browser", async () => {
   lone.notify("pecron")
   lone.listen({connect: () => {}, news: () => {}, shown: () => {}})()
   lone.close()
+  assert.equal(lone.subtle, undefined)
+
+  // WebCrypto, the nonce of EcoFlow (6 digits) and the time.
+  const subtle = {}
+  const secure = makerParts({...window, crypto: {subtle, getRandomValues: (list) => { list[0] = 900_005; return list }}})
+  assert.equal(secure.subtle, subtle)
+  assert.equal(secure.nonce(), "100005")
+  assert.equal(typeof secure.now(), "number")
+
+  // The form of EcoFlow: the region and the two keys go to the hook. The
+  // fields of the keys go empty, and the region stays.
+  const fields = {region: {value: "europe"}, access_key: {value: "AK"}, secret_key: {value: "SK"}}
+  const got2 = []
+  const stop2 = secure.listen({connect: (maker, keys) => got2.push([maker, keys]), news: () => {}, shown: () => {}})
+  const form2 = {dataset: {maker: "ecoflow"}, elements: {namedItem: (name) => fields[name] ?? null}}
+  const event2 = new Event("maker:connect")
+  Object.defineProperty(event2, "target", {value: form2})
+  events.dispatchEvent(event2)
+  assert.deepEqual(got2, [["ecoflow", {region: "europe", accessKey: "AK", secretKey: "SK"}]])
+  assert.deepEqual([fields.region.value, fields.access_key.value, fields.secret_key.value], ["europe", "", ""])
+  stop2()
 
   // The page goes: the channel and the database close. Then a delete of
   // the database is not blocked by the connection of the page.

@@ -14,6 +14,7 @@ import { readFileSync } from "node:fs"
 import { createRequire } from "node:module"
 import assert from "node:assert/strict"
 import { fakeHomeAssistant } from "./fake_ha.mjs"
+import { fakeEcoFlow } from "./fake_ecoflow.mjs"
 
 const require = createRequire(import.meta.url)
 const { chromium } = await import(process.env.PLAYWRIGHT ?? "playwright-core")
@@ -896,6 +897,28 @@ async function build(context, name) {
     assert.equal(await page.evaluate(() => document.activeElement?.id), "pecron-status")
   }
   await check(page, `${name} Pecron`)
+
+  // The direct link to EcoFlow: the page calls the cloud of EcoFlow (the
+  // fake of the test, a route of the browser). Keys of the wrong form give
+  // an error. The fields of the keys go empty.
+  await page.waitForSelector("#ecoflow-status:has-text('Not connected.')")
+  await page.fill("#ecoflow-form input[name=access_key]", "walk-access")
+  await page.click("#ecoflow-form button")
+  await page.waitForSelector("#ecoflow-error:has-text('Put the access key and the secret key')")
+  // The keys are not keys of Europe: EcoFlow refuses them. The form comes
+  // again with the region of the keys.
+  await page.selectOption("#ecoflow-form select[name=region]", "europe")
+  await page.fill("#ecoflow-form input[name=access_key]", "walk-access")
+  await page.fill("#ecoflow-form input[name=secret_key]", "walk-secret")
+  await page.click("#ecoflow-form button")
+  await page.waitForSelector("#ecoflow-status:has-text('EcoFlow does not accept the keys.')")
+  assert.equal(await page.inputValue("#ecoflow-form select[name=region]"), "europe")
+  await page.selectOption("#ecoflow-form select[name=region]", "americas")
+  await page.fill("#ecoflow-form input[name=access_key]", "walk-access")
+  await page.fill("#ecoflow-form input[name=secret_key]", "walk-secret")
+  await page.click("#ecoflow-form button")
+  await page.waitForSelector("#ecoflow-status:has-text('Connected to EcoFlow: 1 station.')")
+  await check(page, `${name} EcoFlow`)
   await page.fill("#settings-price input[name=price]", "12.5")
   await page.click("#settings-price button")
   await page.waitForSelector("text=the price that you gave")
@@ -934,6 +957,23 @@ for (const colorScheme of ["light", "dark"]) {
     const name = `${colorScheme}, ${width} px`
     const reducedMotion = width > 1000 ? "reduce" : "no-preference"
     const context = await browser.newContext({ colorScheme, reducedMotion, viewport: { width, height: 900 } })
+    // The cloud of EcoFlow. The walk also records each request and each
+    // message of the socket with a key of EcoFlow to the server of the
+    // app. There must be none.
+    const ecoflow = fakeEcoFlow()
+    await context.route("https://api-a.ecoflow.com/**", ecoflow.route)
+    // The cloud of Europe does not know the keys of the walk.
+    await context.route("https://api-e.ecoflow.com/**", fakeEcoFlow({ accessKey: "walk-europe" }).route)
+    const leaks = []
+    const leaked = (text) => /walk-(access|secret)/.test(text ?? "")
+    context.on("request", (request) => {
+      if (request.url().startsWith(site) && [request.url(), request.postData(), JSON.stringify(request.headers())].some(leaked)) {
+        leaks.push(request.url())
+      }
+    })
+    context.on("page", (one) => one.on("websocket", (socket) => socket.on("framesent", ({ payload }) => {
+      if (leaked(String(payload))) leaks.push(socket.url())
+    })))
     const page = await build(context, name)
 
     // The build stays on the device: a reload shows it.
@@ -998,6 +1038,33 @@ for (const colorScheme of ["light", "dark"]) {
     await page.click("#delete-item")
     await page.waitForSelector("#item-stage", { state: "detached" })
 
+    // A new station links to the DELTA Pro 3 of the account of EcoFlow: its
+    // model, its numbers and its 12 V outlets. The keyboard turns its AC
+    // outlets off: one command for 240 V and one for 120 V. The switch
+    // waits for the station (3 seconds), then for the next poll. The keys
+    // never go to the server of the app.
+    await follow(page, 'a[id^="add-"][aria-label="Add an item to Laundry"]')
+    await page.click("#add-power_station")
+    await page.click("#maker-choices button:has-text('Garage EcoFlow (DELTA Pro 3)')")
+    await page.waitForSelector("#item-stage #item-stage-title:has-text('EcoFlow DELTA Pro 3')")
+    await page.waitForSelector("#ecoflow-battery:has-text('57%')")
+    await page.waitForSelector("#ecoflow-output:has-text('2,310 W')")
+    await page.waitForSelector("#ecoflow-dc-label:has-text('12 V outlets')")
+    await page.waitForSelector("#ecoflow-switch-ac[aria-checked=true][aria-disabled=false]")
+    await page.focus("#ecoflow-switch-ac")
+    await page.keyboard.press("Space")
+    await page.waitForSelector("#ecoflow-ac-state:has-text('EcoFlow turns it off.')")
+    await page.waitForSelector("#ecoflow-switch-ac[aria-checked=false][aria-disabled=false]")
+    assert.equal(await page.evaluate(() => document.activeElement?.id), "ecoflow-switch-ac")
+    assert.deepEqual(ecoflow.calls.filter((call) => call.method === "PUT").map((call) => call.params.params),
+      [{ cfgHvAcOutOpen: false }, { cfgLvAcOutOpen: false }])
+    await check(page, `${name} EcoFlow station`)
+    assert.deepEqual(leaks, [])
+    // The item stays while the walk links a station of Pecron: so the
+    // station of EcoFlow is not a choice there.
+    await page.click("#item-stage .stage-back")
+    await page.waitForSelector("#item-stage", { state: "detached" })
+
     // A new station links to the station of the account of Pecron: its
     // model, its numbers, and the keyboard turns its AC outlets. When the
     // relay does not answer, the switch keeps the focus.
@@ -1059,6 +1126,12 @@ for (const colorScheme of ["light", "dark"]) {
       await page.click("#delete-item")
       await page.waitForSelector("#item-stage", { state: "detached" })
     }
+
+    // The station of EcoFlow goes.
+    await follow(page, 'a[id^="item-"]:has-text("EcoFlow DELTA Pro 3")')
+    await page.click("#ask-remove")
+    await page.click("#delete-item")
+    await page.waitForSelector("#item-stage", { state: "detached" })
 
     // The power: a station in the laundry runs the fridge, and the person
     // plans panels on the roof.
