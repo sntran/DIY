@@ -56,9 +56,12 @@ defmodule DIYWeb.HomeAssistant do
   of the whole device. It has its parts (`station/2`), from the assign
   `:ha_stations` (`ha:stations`). For each station, these are its battery
   (%), its power in and out (W), and the states of the switches of its AC
-  and DC outlets.
+  and DC outlets. It also has its link (true, false or `nil`): does Home
+  Assistant get its numbers now? The page reads each part separately: a
+  part that it cannot read is `nil`, and the other parts stay.
   A switch of a part sends a control of that part only: in `:ha_control`,
-  its key is `{device, part}`. The page forgets the parts of the stations
+  its key is `{device, part}`. With no link of the station, the switches
+  do not work. The page forgets the parts of the stations
   when the link is not connected, as it forgets the states.
 
   The energy data of Home Assistant uses the assign `:ha_energy`
@@ -117,10 +120,15 @@ defmodule DIYWeb.HomeAssistant do
   @power_states ~w(on off unavailable)
 
   # The parts of a power station: the numbers of its sensors, and its
-  # switches. The names of the switches are on the panel.
+  # switches. The names of the switches are on the panel. The DC part of
+  # an EcoFlow station is its 12 V outlets only.
   @station_numbers ~w(battery input output)a
-  @station_switches [{"ac", "AC outlets"}, {"dc", "DC outlets"}]
-  @switch_parts Enum.map(@station_switches, &elem(&1, 0))
+  @switch_parts ~w(ac dc)
+  @station_switches %{
+    "pecron" => [{"ac", "AC outlets"}, {"dc", "DC outlets"}],
+    "ecoflow" => [{"ac", "AC outlets"}, {"dc", "12 V outlets"}]
+  }
+  @max_power 1_000_000
 
   @doc false
   def on_mount(:default, _params, _session, socket) do
@@ -188,7 +196,9 @@ defmodule DIYWeb.HomeAssistant do
   before the hook tells it. It is `"none"` when the station has no such
   switch. The numbers are `nil`
   before the hook tells them. When the link is not connected (`online`:
-  false), the switches stay, so that they keep the focus.
+  false), the switches stay, so that they keep the focus. The link of the
+  station (`link`) is also in each switch: with no link (false), a switch
+  does not work.
   """
   def station(%{ha: ha, build: build, ha_devices: ha_devices} = assigns, item_id) do
     with id when is_binary(id) <- build.devices[item_id],
@@ -197,17 +207,33 @@ defmodule DIYWeb.HomeAssistant do
          true <- HomeAssistant.station?(device) do
       online = ha.state == "connected"
       parts = assigns.ha_stations[id]
+      link = parts && parts.link
 
       switches =
-        for {part, name} <- @station_switches do
+        for {part, name} <- @station_switches[device.station] do
           {pending, error} = pending(assigns.ha_control[{id, part}])
           state = if parts, do: parts[part] || "none"
 
-          %{part: part, name: name, online: online, state: state, pending: pending, error: error}
+          %{
+            part: part,
+            name: name,
+            online: online,
+            link: link,
+            state: state,
+            pending: pending,
+            error: error
+          }
         end
 
       numbers = Map.new(@station_numbers, &{&1, parts && parts[&1]})
-      Map.merge(numbers, %{device: id, online: online, known: parts != nil, switches: switches})
+
+      Map.merge(numbers, %{
+        device: id,
+        online: online,
+        known: parts != nil,
+        link: link,
+        switches: switches
+      })
     else
       _ -> nil
     end
@@ -319,31 +345,31 @@ defmodule DIYWeb.HomeAssistant do
 
   def handle_event("ha:states", _params, socket), do: {:halt, socket}
 
-  # The parts of the stations count only while the link is connected. A
-  # payload that the page cannot read changes nothing.
+  # The parts of the stations count only while the link is connected. The
+  # page reads each station and each part separately. A station with an id
+  # that it cannot read does not count. A part that it cannot read is nil.
+  # A payload with too many stations changes nothing.
   def handle_event(
         "ha:stations",
         %{"stations" => stations},
         %{assigns: %{ha: %{state: "connected"}}} = socket
       )
       when is_map(stations) and map_size(stations) <= @max_devices do
-    read = for {id, parts} <- stations, do: {text(id, @max_id), read_parts(parts)}
+    stations =
+      for {id, %{} = parts} <- stations, is_binary(text(id, @max_id)), into: %{} do
+        {id, read_parts(parts)}
+      end
 
-    if Enum.all?(read, fn {id, parts} -> id && parts end) do
-      stations = Map.new(read)
-      old = socket.assigns.ha_stations
+    old = socket.assigns.ha_stations
 
-      # A new state of a part ends the error of its last control.
-      control =
-        Map.reject(socket.assigns.ha_control, fn
-          {{device, part}, {:error, _}} -> stations[device][part] != old[device][part]
-          _control -> false
-        end)
+    # A new state of a part ends the error of its last control.
+    control =
+      Map.reject(socket.assigns.ha_control, fn
+        {{device, part}, {:error, _}} -> stations[device][part] != old[device][part]
+        _control -> false
+      end)
 
-      {:halt, assign(socket, ha_stations: stations, ha_control: control)}
-    else
-      {:halt, socket}
-    end
+    {:halt, assign(socket, ha_stations: stations, ha_control: control)}
   end
 
   def handle_event("ha:stations", _params, socket), do: {:halt, socket}
@@ -628,32 +654,34 @@ defmodule DIYWeb.HomeAssistant do
   defp text(value, max) when is_binary(value) and byte_size(value) <= max, do: value
   defp text(_value, _max), do: nil
 
-  # The parts of a station from the hook, or nil. Each number is a number
-  # or nil. Each switch is a state, or nil when the station has no such
-  # switch. A battery is from 0 to 100 %.
-  defp read_parts(%{} = parts) do
+  # The parts of a station from the hook. Each number is a number or nil:
+  # a battery is from 0 to 100 %, and a power from 0 to 1,000,000 W. Each
+  # switch is a state, or nil when the station has no such switch. The
+  # link is true or false, or nil when Home Assistant does not tell it.
+  defp read_parts(parts) do
     numbers =
       for key <- @station_numbers, into: %{} do
         {key, read_number(key, parts[Atom.to_string(key)])}
       end
 
-    switches = for part <- @switch_parts, into: %{}, do: {part, parts[part]}
+    switches =
+      for part <- @switch_parts, into: %{} do
+        {part, if(parts[part] in @power_states, do: parts[part])}
+      end
 
-    if Enum.all?(numbers, fn {_key, value} -> value != :error end) and
-         Enum.all?(switches, fn {_part, state} -> is_nil(state) or state in @power_states end),
-       do: Map.merge(numbers, switches)
+    link = if is_boolean(parts["link"]), do: parts["link"]
+    numbers |> Map.merge(switches) |> Map.put(:link, link)
   end
-
-  defp read_parts(_parts), do: nil
-
-  defp read_number(_key, nil), do: nil
 
   defp read_number(:battery, value) when is_number(value) and value >= 0 and value <= 100,
     do: value
 
-  defp read_number(:battery, _value), do: :error
-  defp read_number(_key, value) when is_number(value) and abs(value) <= 1_000_000, do: value
-  defp read_number(_key, _value), do: :error
+  defp read_number(:battery, _value), do: nil
+
+  defp read_number(_key, value) when is_number(value) and value >= 0 and value <= @max_power,
+    do: value
+
+  defp read_number(_key, _value), do: nil
 
   # A floor or an area from the hook, or nil. An id has at most 255 bytes,
   # as in the build (`DIY.Build.link_area/3`). An area on a floor with a
@@ -707,12 +735,37 @@ defmodule DIYWeb.HomeAssistant do
 
   def tab_message(error), do: message(error)
 
-  @doc "The state of the switch of an item (`power/2`), in words."
+  @doc """
+  The link of a station (`station/2`), in words, or `nil` when Home
+  Assistant gets its numbers now. With no link, the numbers are the last
+  numbers of the station. With no sign of the link (pecron-monitor), a
+  number can be old.
+  """
+  def link_text(%{link: true}), do: nil
+
+  def link_text(%{link: false} = station) do
+    if Enum.any?(@station_numbers, &station[&1]),
+      do: "Home Assistant has no link to the station now. These are its last numbers.",
+      else: "Home Assistant has no link to the station now."
+  end
+
+  def link_text(%{link: nil}),
+    do: "Home Assistant does not tell if it has a link to the station now. A number can be old."
+
+  @doc """
+  The state of the switch of an item (`power/2`), or of a part of a
+  station (`station/2`), in words.
+  """
   def power_text(%{online: false}), do: "The app has no link to Home Assistant now."
   def power_text(%{pending: true}), do: "Home Assistant turns it on."
   def power_text(%{pending: false}), do: "Home Assistant turns it off."
 
   def power_text(%{state: "none"}), do: "Home Assistant has no switch for it."
+
+  def power_text(%{link: false, state: state}) when state in ~w(on off),
+    do: "Home Assistant has no link to the station now. The last state was #{state}."
+
+  def power_text(%{link: false}), do: "Home Assistant has no link to the station now."
 
   def power_text(power) do
     error =

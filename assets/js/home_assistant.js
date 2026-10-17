@@ -35,9 +35,10 @@
 // The hook watches the states of the lights, the switches and the fans
 // (watchStates()), and turns them on and off (control()). It also watches
 // the parts of the power stations of Pecron and EcoFlow (stationList()).
-// These are the battery, the power in and out, and the AC and DC
-// switches. It turns one switch of a station on or off at a time. Four rules come from the
-// TLA+ model specs/HomeAssistantStates.tla:
+// These are the battery, the power in and out, the AC and DC switches,
+// and the link of the station. It turns one switch of a station on or off
+// at a time. Four rules come from the TLA+ model
+// specs/HomeAssistantStates.tla:
 // - The socket: the hook takes the messages of its open socket only.
 // - The watch: the hook takes the events of its watch only.
 // - The old states: a new watch and a closed socket clear the states.
@@ -71,12 +72,25 @@ export const EARLY = 60_000
 export const REGISTRY_WAIT = 1_000
 // The domains of the entities that the app turns on and off.
 export const CONTROLS = ["fan", "light", "switch"]
-// The parts of a power station, and the domain of their entities. The
-// parts are its battery (%), its power in and out (W), and the switches of
-// its AC and DC outlets.
-export const STATION_PARTS = {battery: "sensor", input: "sensor", output: "sensor", ac: "switch", dc: "switch"}
+// The parts of a power station, and the domains of their entities. The
+// parts are its battery (%), its power in and out (W), and the switches
+// of its AC and DC outlets. The last part is its link: does Home
+// Assistant get its numbers now (stationStates())?
+export const STATION_PARTS = {
+  battery: ["sensor"], input: ["sensor"], output: ["sensor"], ac: ["switch"], dc: ["switch"],
+  link: ["binary_sensor", "sensor"],
+}
 // The parts of a station that the app turns on and off.
 export const STATION_SWITCHES = ["ac", "dc"]
+// The highest power of a station, in W. A power is from 0 W to MAX_POWER.
+// A power in kW becomes W. A power or a battery in a different unit is not
+// known.
+export const MAX_POWER = 1_000_000
+const WATTS = new Map([["W", 1], ["kW", 1000]])
+// The states of the link of a station. A number of its link is also a
+// link: the battery of EcoFlow BLE is its link.
+const LINKED = ["on", "online"]
+const UNLINKED = ["off", "offline", "assume_offline", "unavailable"]
 // The integrations of Home Assistant that give a power station. For each
 // part, the unique id of its entity (the form of the integration). The
 // maker is the start of the keys of its models in DIY.Catalog. A model
@@ -86,30 +100,37 @@ export const STATION_SOURCES = [
   // The integration of Pecron, from the portal of Pecron (app.pecron.com):
   // the API of Pecron for Home Assistant. "entry:device:code". It is the
   // first way of the app (docs/design.md, "The integration for Pecron").
+  // Its entities stay available when the station is not online. Its
+  // binary sensor "online" tells the link.
   {
     maker: "pecron",
     platform: "pecron",
     parts: {
       battery: /:battery_percentage$/, input: /:total_input_power$/, output: /:total_output_power$/,
-      ac: /:ac_switch_hm$/, dc: /:dc_switch_hm$/,
+      ac: /:ac_switch_hm$/, dc: /:dc_switch_hm$/, link: /:online$/,
     },
   },
   // pecron-monitor (attractify-logan/pecron-monitor), through MQTT: the
   // station by Bluetooth or by the LAN, with no cloud, else by the cloud.
-  // "pecron_key_name".
+  // "pecron_key_name". It does not tell the link. A WB12200 (a battery
+  // with no inverter) has "WB" in its name, as in pecron-monitor.
   {
     maker: "pecron",
     platform: "mqtt",
+    others: /wb/i,
     parts: {
       battery: /^pecron_[0-9a-f]+_battery$/i, input: /^pecron_[0-9a-f]+_total_input$/i,
       output: /^pecron_[0-9a-f]+_total_output$/i, ac: /^pecron_[0-9a-f]+_ac$/i, dc: /^pecron_[0-9a-f]+_dc$/i,
     },
   },
   // EcoFlow Cloud (tolwi/hassio-ecoflow-cloud): "ecoflow-sn-key", with "-"
-  // for "." and "_" in the key. Each family of stations has its keys.
+  // for "." and "_" in the key. Each family of stations has its keys. The
+  // DC part is the 12 V outlet only. Its sensor "status" tells the link.
+  // A Wave (an air conditioner) and a Glacier (a fridge) are not stations.
   {
     maker: "ecoflow",
     platform: "ecoflow_cloud",
+    others: /^(wave|glacier)/i,
     parts: {
       battery: ecoflowCloud([
         "ems-lcdShowSoc", "bms-emsStatus-lcdShowSoc", "cms-batt-soc", "cmsBattSoc", "pd-soc",
@@ -118,25 +139,28 @@ export const STATION_SOURCES = [
       input: ecoflowCloud(["pd-wattsInSum", "pow-in-sum-w", "powInSumW", "hs-yj751-pd-appshow-addr-wattsInSum"]),
       output: ecoflowCloud(["pd-wattsOutSum", "pow-out-sum-w", "powOutSumW", "hs-yj751-pd-appshow-addr-wattsOutSum"]),
       ac: ecoflowCloud([
-        "inv-cfgAcEnabled", "mppt-cfgAcEnabled", "cfg-ac-out-open", "cfgAcOutOpen", "cfgAc2OutOpen",
-        "cfg-hv-ac-out-open", "cfg-lv-ac-out-open", "cfgHvAcOutOpen", "cfgLvAcOutOpen",
+        "inv-cfgAcEnabled", "mppt-cfgAcEnabled", "cfg-ac-out-open", "cfg-hv-ac-out-open", "cfg-lv-ac-out-open",
+        "cfgHvAcOutOpen", "cfgLvAcOutOpen", "flowInfoAcOut", "flowInfoAc2Out",
       ]),
       dc: ecoflowCloud([
-        "mppt-carState", "pd-carState", "cfg-dc12v-out-open", "cfg-dc-12v-out-open", "cfgDc12vOutOpen",
-        "cfg-dc-24v-out-open", "cfgDc24vOutOpen",
+        "mppt-carState", "pd-carState", "pd-carSwitch", "cfg-dc12v-out-open", "cfg-dc-12v-out-open",
+        "cfgDc12vOutOpen", "flowInfo12v",
       ]),
+      link: /^ecoflow-(api-)?[a-z0-9]+-status$/i,
     },
   },
   // EcoFlow BLE (rabits/ha-ef-ble): the station by Bluetooth. "ef_sn_key".
-  // A Wave (an air conditioner) has a battery too.
+  // A Wave (an air conditioner) has a battery too. The DC part is the 12 V
+  // outlet only. An entity is unavailable with no Bluetooth link: so the
+  // battery tells the link.
   {
     maker: "ecoflow",
     platform: "ef_ble",
     others: /^wave/i,
     parts: {
       battery: /^ef_[a-z0-9]+_battery_level$/i, input: /^ef_[a-z0-9]+_input_power$/i,
-      output: /^ef_[a-z0-9]+_output_power$/i, ac: /^ef_[a-z0-9]+_(ac_ports|ac_lv_port|ac_hv_port)$/i,
-      dc: /^ef_[a-z0-9]+_(dc_ports|dc_12v_port)$/i,
+      output: /^ef_[a-z0-9]+_output_power$/i, ac: /^ef_[a-z0-9]+_(ac_ports|ac_ports_2|ac_lv_port|ac_hv_port)$/i,
+      dc: /^ef_[a-z0-9]+_dc_12v_port$/i, link: /^ef_[a-z0-9]+_battery_level$/i,
     },
   },
 ]
@@ -344,6 +368,7 @@ export class Link {
     this.controls = new Map()
     this.stations = new Map()
     this.stationsSent = false
+    this.units = new Map()
     this.states = new Map()
     this.statesOf = null
     this.watched = null
@@ -737,7 +762,8 @@ export class Link {
     }
     this.endStates()
     this.watched = key
-    const ids = [...this.controls.values(), ...[...this.stations.values()].flatMap(Object.values)].flat().sort()
+    // The battery of EcoFlow BLE is also its link: one id for each entity.
+    const ids = [...new Set([...this.controls.values(), ...[...this.stations.values()].flatMap(Object.values)].flat())].sort()
     // A watch with no entity gets the states of all the entities. So with
     // no entity, the hook starts no watch.
     if (ids.length === 0) return this.sendStates()
@@ -763,6 +789,7 @@ export class Link {
 
   forgetStates() {
     this.states = new Map()
+    this.units = new Map()
     this.watched = null
     this.statesReady = false
     if (this.statesTimer) this.clearTimer(this.statesTimer)
@@ -770,19 +797,35 @@ export class Link {
   }
 
   // An event of the watch: "a" adds states, "c" changes them, and "r"
-  // removes entities. A change of the attributes only has no "s": it
-  // sends nothing. The first event sends the states, also with no state.
+  // removes entities. The hook also keeps the unit of each entity (the
+  // attribute unit_of_measurement): "+" gives a new unit, and "-" removes
+  // it. A change of the other attributes only sends nothing. The first
+  // event sends the states, also with no state.
   stateEvent(event) {
     let changed = !this.statesReady
     const put = (id, state) => {
       if (this.states.get(id) !== state) changed = true
       this.states.set(id, state)
     }
-    for (const [id, state] of Object.entries(event.a ?? {})) put(id, state.s)
+    const unit = (id, value) => {
+      if (this.units.get(id) === value) return
+      changed = true
+      if (typeof value === "string") this.units.set(id, value)
+      else this.units.delete(id)
+    }
+    for (const [id, state] of Object.entries(event.a ?? {})) {
+      put(id, state.s)
+      unit(id, state.a?.unit_of_measurement)
+    }
     for (const [id, change] of Object.entries(event.c ?? {})) {
       if (change["+"] && "s" in change["+"]) put(id, change["+"].s)
+      if (change["+"]?.a && "unit_of_measurement" in change["+"].a) unit(id, change["+"].a.unit_of_measurement)
+      if (change["-"]?.a?.includes?.("unit_of_measurement")) unit(id, undefined)
     }
-    for (const id of event.r ?? []) changed = this.states.delete(id) || changed
+    for (const id of event.r ?? []) {
+      changed = this.states.delete(id) || changed
+      this.units.delete(id)
+    }
     this.statesReady = true
     if (!changed || this.statesTimer) return
     this.statesTimer = this.setTimer(() => {
@@ -797,7 +840,7 @@ export class Link {
   sendStates() {
     this.push("ha:states", {states: deviceStates(this.controls, this.states)})
     if (this.stations.size === 0 && !this.stationsSent) return
-    this.push("ha:stations", {stations: stationStates(this.stations, this.states)})
+    this.push("ha:stations", {stations: stationStates(this.stations, this.states, this.units)})
     this.stationsSent = this.stations.size > 0
   }
 
@@ -1157,7 +1200,7 @@ export function stationList(devices, entities) {
       const parts = {}
       for (const [part, unique] of Object.entries(source.parts)) {
         const ids = (own.get(device.id) ?? [])
-          .filter((entity) => entity.platform === source.platform && domainOf(entity.entity_id) === STATION_PARTS[part])
+          .filter((entity) => entity.platform === source.platform && STATION_PARTS[part].includes(domainOf(entity.entity_id)))
           .filter((entity) => unique.test(entity.unique_id ?? ""))
           .map((entity) => entity.entity_id)
         if (ids.length > 0) parts[part] = ids.sort()
@@ -1172,16 +1215,34 @@ export function stationList(devices, entities) {
 }
 
 // The state of each station. A sensor gives the first number of its
-// entities, else null. A switch is as a device of deviceStates(). A part
-// that the station does not have is null.
-export function stationStates(stations, states) {
-  const number = (ids) => ids.map((id) => Number.parseFloat(states.get(id))).find(Number.isFinite) ?? null
+// entities, in its unit (WATTS), else null. A number out of its range is
+// null: a battery is from 0 to 100 %, and a power from 0 W to MAX_POWER.
+// A switch is as a device of deviceStates(). The link is true or false
+// (LINKED and UNLINKED), else null: Home Assistant does not tell it. A
+// part that the station does not have is null.
+export function stationStates(stations, states, units = new Map()) {
+  const first = (ids) => ids.find((id) => Number.isFinite(Number.parseFloat(states.get(id))))
+  const number = (part, ids) => {
+    const id = first(ids)
+    if (id === undefined) return null
+    const value = Number.parseFloat(states.get(id))
+    const unit = units.get(id)
+    if (part === "battery") return (unit ?? "%") === "%" && value >= 0 && value <= 100 ? value : null
+    const watts = value * (WATTS.get(unit ?? "W") ?? Number.NaN)
+    return watts >= 0 && watts <= MAX_POWER ? watts : null
+  }
+  const link = (ids) => {
+    const values = ids.map((id) => states.get(id))
+    if (first(ids) !== undefined || values.some((value) => LINKED.includes(value))) return true
+    return values.some((value) => UNLINKED.includes(value)) ? false : null
+  }
   const result = {}
   for (const [device, parts] of stations) {
     result[device] = {}
     for (const part of Object.keys(STATION_PARTS)) {
       const ids = parts[part]
-      result[device][part] = !ids ? null : STATION_SWITCHES.includes(part) ? onOff(ids, states) : number(ids)
+      result[device][part] = !ids ? null : STATION_SWITCHES.includes(part) ? onOff(ids, states)
+        : part === "link" ? link(ids) : number(part, ids)
     }
   }
   return result

@@ -84,7 +84,14 @@ defmodule DIYWeb.HaStationLiveTest do
 
   defp parts(fields \\ %{}) do
     Map.merge(
-      %{"battery" => 64, "input" => 0, "output" => 1250.5, "ac" => "on", "dc" => "off"},
+      %{
+        "battery" => 64,
+        "input" => 0,
+        "output" => 1250.5,
+        "ac" => "on",
+        "dc" => "off",
+        "link" => true
+      },
       fields
     )
   end
@@ -116,14 +123,20 @@ defmodule DIYWeb.HaStationLiveTest do
            )
 
     assert has_element?(view, "#ha-ac-state[role=status]", "The app waits for its state.")
+    assert has_element?(view, "#ha-switch-ac[aria-describedby=ha-ac-state]")
+    assert has_element?(view, "#ha-switch-dc[aria-describedby=ha-dc-state]")
 
     # The numbers and the states. The numbers are not a live region.
     stations(view, %{"s1" => parts(), "s9" => parts()})
     refute has_element?(view, "#ha-station-wait")
+    assert has_element?(view, "#ha-station dt", "Battery level")
     assert has_element?(view, "#ha-battery", "64%")
     assert has_element?(view, "#ha-input", "0 W")
     assert has_element?(view, "#ha-output", "1,251 W")
     refute has_element?(view, "#ha-station[role]")
+    refute has_element?(view, "#ha-station[aria-live]")
+    refute has_element?(view, "#ha-station [aria-live]")
+    refute has_element?(view, "#ha-station-link")
     assert has_element?(view, "#ha-switch-ac[aria-checked=true][aria-disabled=false]")
     assert has_element?(view, "#ha-switch-ac[phx-value-on=false][phx-value-part=ac]")
     assert has_element?(view, "#ha-ac-state", "It is on.")
@@ -235,31 +248,128 @@ defmodule DIYWeb.HaStationLiveTest do
     assert has_element?(view, "#ha-battery", "64%")
   end
 
-  test "a payload of the stations that the page cannot read changes nothing", %{conn: conn} do
-    {view, _item} = page(conn)
-    stations(view, %{"s1" => parts()})
-    long = String.duplicate("x", 256)
+  test "the panel tells the link of the station, and with no link the switches do not work",
+       %{conn: conn} do
+    {view, item} = page(conn)
 
-    for bad <- [
-          %{"s1" => parts(%{"battery" => 101})},
-          %{"s1" => parts(%{"battery" => -1})},
-          %{"s1" => parts(%{"battery" => "64"})},
-          %{"s1" => parts(%{"input" => 2_000_000})},
-          %{"s1" => parts(%{"output" => "many"})},
-          %{"s1" => parts(%{"ac" => "maybe"})},
-          %{"s1" => parts(%{"dc" => true})},
-          %{"s1" => "parts"},
-          %{long => parts()},
-          Map.new(1..1001, &{"s#{&1}", parts()})
+    # Home Assistant does not tell the link (pecron-monitor).
+    stations(view, %{"s1" => Map.delete(parts(), "link")})
+
+    assert has_element?(
+             view,
+             "#ha-station-link",
+             "Home Assistant does not tell if it has a link to the station now. A number can be old."
+           )
+
+    assert has_element?(view, "#ha-switch-ac[aria-disabled=false]")
+
+    # No link: the last numbers, and the last states of the switches.
+    stations(view, %{"s1" => parts(%{"link" => false})})
+
+    assert has_element?(
+             view,
+             "#ha-station-link",
+             "Home Assistant has no link to the station now. These are its last numbers."
+           )
+
+    assert has_element?(view, "#ha-battery", "64%")
+    assert has_element?(view, "#ha-switch-ac[aria-checked=true][aria-disabled=true]")
+
+    assert has_element?(
+             view,
+             "#ha-ac-state",
+             "Home Assistant has no link to the station now. The last state was on."
+           )
+
+    assert has_element?(view, "#ha-dc-state", "The last state was off.")
+    view |> element("#ha-switch-ac") |> render_click()
+    render_click(view, "ha_station_switch", %{"item" => item, "part" => "dc", "on" => "true"})
+    refute_push_event(view, "ha:control", _payload)
+
+    # No link and no numbers: EcoFlow BLE with no Bluetooth link.
+    stations(view, %{
+      "s1" =>
+        parts(%{
+          "link" => false,
+          "battery" => nil,
+          "input" => nil,
+          "output" => nil,
+          "ac" => "unavailable",
+          "dc" => "unavailable"
+        })
+    })
+
+    assert has_element?(
+             view,
+             "#ha-station-link",
+             "Home Assistant has no link to the station now."
+           )
+
+    refute has_element?(view, "#ha-station-link", "last numbers")
+    assert has_element?(view, "#ha-ac-state", "Home Assistant has no link to the station now.")
+    refute has_element?(view, "#ha-ac-state", "last state")
+
+    # The link comes back.
+    stations(view, %{"s1" => parts()})
+    refute has_element?(view, "#ha-station-link")
+    view |> element("#ha-switch-ac") |> render_click()
+    assert_push_event(view, "ha:control", %{device: "s1", on: false, part: "ac"})
+  end
+
+  test "a part that the page cannot read is not known, and the other parts and stations stay",
+       %{conn: conn} do
+    {view, _item} = page(conn)
+    stations(view, %{"s1" => parts(), "e1" => parts()})
+    ha_stations = fn -> :sys.get_state(view.pid).socket.assigns.ha_stations end
+
+    # One number out of range of one station, and a new state of the other
+    # station.
+    stations(view, %{"s1" => parts(%{"battery" => 101}), "e1" => parts(%{"ac" => "off"})})
+    assert has_element?(view, "#ha-battery", "Not known")
+    assert has_element?(view, "#ha-output", "1,251 W")
+    assert has_element?(view, "#ha-ac-state", "It is on.")
+    assert ha_stations.()["e1"]["ac"] == "off"
+
+    # The page keeps a number with an atom key, and a switch with its part.
+    for {part, key, value} <- [
+          {"battery", :battery, -1},
+          {"battery", :battery, "64"},
+          {"input", :input, 1_000_001},
+          {"input", :input, -5},
+          {"output", :output, "many"},
+          {"ac", "ac", "maybe"},
+          {"dc", "dc", true},
+          {"link", :link, "yes"}
         ] do
-      stations(view, bad)
-      assert has_element?(view, "#ha-battery", "64%")
-      assert has_element?(view, "#ha-ac-state", "It is on.")
+      stations(view, %{"s1" => parts(%{part => value}), "e1" => parts(%{"battery" => 12})})
+      read = ha_stations.()
+      assert Map.fetch!(read["s1"], key) == nil
+
+      assert read["s1"]["ac"] == if(part == "ac", do: nil, else: "on")
+      assert read["e1"].battery == 12
     end
+
+    # The highest numbers.
+    stations(view, %{"s1" => parts(%{"battery" => 100, "input" => 1_000_000})})
+    assert has_element?(view, "#ha-battery", "100%")
+    assert has_element?(view, "#ha-input", "1,000,000 W")
+
+    # A station with an id or parts that the page cannot read does not
+    # count.
+    long = String.duplicate("x", 256)
+    stations(view, %{"s1" => parts(), long => parts(), "e1" => "parts"})
+    assert Map.keys(ha_stations.()) == ["s1"]
+
+    # A payload with too many stations changes nothing. 1,000 stations is
+    # the limit.
+    stations(view, Map.new(1..1001, &{"s#{&1}", parts(%{"battery" => 10})}))
+    assert has_element?(view, "#ha-battery", "64%")
+    stations(view, Map.new(1..1000, &{"s#{&1}", parts(%{"battery" => 10})}))
+    assert has_element?(view, "#ha-battery", "10%")
 
     render_hook(view, "ha:stations", %{"stations" => "none"})
     render_hook(view, "ha:stations", %{})
-    assert has_element?(view, "#ha-battery", "64%")
+    assert has_element?(view, "#ha-battery", "10%")
   end
 
   test "a station of a model that the app does not know is another station", %{conn: conn} do
@@ -276,6 +386,10 @@ defmodule DIYWeb.HaStationLiveTest do
     assert station.params["model"] == "ecoflow_delta_pro_3"
     assert station.params["kwh"] == 4.096
     assert has_element?(view, "#item-stage-title", "EcoFlow DELTA Pro 3")
+
+    # The DC part of EcoFlow is its 12 V outlets only.
+    assert has_element?(view, "#ha-ac-label", "AC outlets")
+    assert has_element?(view, "#ha-dc-label", "12 V outlets")
 
     stations(view, %{"e1" => parts(%{"battery" => 90, "dc" => nil})})
     assert has_element?(view, "#ha-battery", "90%")
@@ -303,25 +417,50 @@ defmodule DIYWeb.HaStationLiveTest do
     assert HomeAssistant.station(station, "i1") == nil
     assert HomeAssistant.station(station, "i9") == nil
     assert HomeAssistant.station(%{station | ha_devices: nil}, "i2") == nil
-    assert %{device: "s1", known: false, battery: nil} = HomeAssistant.station(station, "i2")
+
+    assert %{device: "s1", known: false, battery: nil, link: nil, switches: switches} =
+             HomeAssistant.station(station, "i2")
+
+    assert Enum.map(switches, &{&1.part, &1.name}) == [
+             {"ac", "AC outlets"},
+             {"dc", "12 V outlets"}
+           ]
 
     # A station has no switch of the whole device. A plug has one.
     refute HomeAssistant.controls?(%{domains: ["switch"], station: "pecron"})
     assert HomeAssistant.controls?(%{domains: ["switch"], station: nil})
   end
 
-  property "the page keeps the parts that it can read, and nothing else" do
-    number = one_of([constant(nil), integer(-10..1_100_000), float(min: -10.0, max: 1.0e6)])
+  property "the page keeps each part that it can read, and no other part" do
+    number =
+      one_of([
+        constant(nil),
+        integer(-10..110),
+        integer(999_990..1_000_010),
+        float(min: -10.0, max: 1.1e6),
+        member_of([0, 100, 100.5, 1_000_000, 1_000_001, -0.5, "64", true])
+      ])
+
     switch = member_of([nil, "on", "off", "unavailable", "unknown", 5])
+    link = member_of([nil, true, false, "on", 1])
 
     check all(
             battery <- number,
             input <- number,
             output <- number,
             ac <- switch,
-            dc <- switch
+            dc <- switch,
+            link <- link,
+            other <- member_of([nil, "parts", %{"battery" => 5}])
           ) do
-      sent = %{"battery" => battery, "input" => input, "output" => output, "ac" => ac, "dc" => dc}
+      sent = %{
+        "battery" => battery,
+        "input" => input,
+        "output" => output,
+        "ac" => ac,
+        "dc" => dc,
+        "link" => link
+      }
 
       socket = %Phoenix.LiveView.Socket{
         assigns: %{
@@ -332,28 +471,26 @@ defmodule DIYWeb.HaStationLiveTest do
         }
       }
 
+      payload = if other, do: %{"s1" => sent, "s2" => other}, else: %{"s1" => sent}
+
       {:halt, socket} =
-        HomeAssistant.handle_event("ha:stations", %{"stations" => %{"s1" => sent}}, socket)
+        HomeAssistant.handle_event("ha:stations", %{"stations" => payload}, socket)
 
-      valid =
-        (is_nil(battery) or battery in 0..100 or
-           (is_float(battery) and battery >= 0 and battery <= 100)) and
-          Enum.all?([input, output], &(is_nil(&1) or abs(&1) <= 1_000_000)) and
-          Enum.all?([ac, dc], &(&1 in [nil, "on", "off", "unavailable"]))
+      power = &if(is_number(&1) and &1 >= 0 and &1 <= 1_000_000, do: &1)
+      state = &if(&1 in ["on", "off", "unavailable"], do: &1)
 
-      if valid do
-        assert socket.assigns.ha_stations == %{
-                 "s1" => %{
-                   :battery => battery,
-                   :input => input,
-                   :output => output,
-                   "ac" => ac,
-                   "dc" => dc
-                 }
-               }
-      else
-        assert socket.assigns.ha_stations == %{}
-      end
+      assert socket.assigns.ha_stations["s1"] == %{
+               :battery =>
+                 if(is_number(battery) and battery >= 0 and battery <= 100, do: battery),
+               :input => power.(input),
+               :output => power.(output),
+               :link => if(is_boolean(link), do: link),
+               "ac" => state.(ac),
+               "dc" => state.(dc)
+             }
+
+      # A station with parts that are not a map does not count.
+      assert Map.has_key?(socket.assigns.ha_stations, "s2") == is_map(other)
     end
   end
 end

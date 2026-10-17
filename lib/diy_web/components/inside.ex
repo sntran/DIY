@@ -985,16 +985,23 @@ defmodule DIYWeb.Inside do
         <p :if={@power} id="ha-power-state" role="status" class="text-sm">
           {HomeAssistant.power_text(@power)}
         </p>
-        <%!-- The numbers change each 30 seconds or so: they are not a live
-          region. --%>
+        <%!-- The numbers change each 30 seconds to 20 minutes: they are not
+          a live region. --%>
         <dl :if={@station && @station.known} id="ha-station" class="stage-facts">
-          <dt>Battery</dt>
+          <dt>Battery level</dt>
           <dd id="ha-battery">{percent(@station.battery)}</dd>
           <dt>Power in</dt>
           <dd id="ha-input">{watts(@station.input)}</dd>
           <dt>Power out</dt>
           <dd id="ha-output">{watts(@station.output)}</dd>
         </dl>
+        <p
+          :if={@station && @station.known && HomeAssistant.link_text(@station)}
+          id="ha-station-link"
+          class="text-sm"
+        >
+          {HomeAssistant.link_text(@station)}
+        </p>
         <p
           :if={@station && not @station.known && @station.online}
           id="ha-station-wait"
@@ -1015,7 +1022,11 @@ defmodule DIYWeb.Inside do
               aria-labelledby={"ha-#{switch.part}-label"}
               aria-describedby={"ha-#{switch.part}-state"}
               aria-checked={to_string(switch.state == "on")}
-              aria-disabled={to_string(switch.state not in ~w(on off) or switch.pending != nil)}
+              aria-disabled={
+                to_string(
+                  switch.state not in ~w(on off) or switch.pending != nil or switch.link == false
+                )
+              }
               phx-click="ha_station_switch"
               phx-value-item={@item.id}
               phx-value-part={switch.part}

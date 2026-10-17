@@ -55,6 +55,7 @@ const station = [
   pecron("sensor.station_out", "total_output_power"),
   pecron("switch.station_ac", "ac_switch_hm"),
   pecron("switch.station_dc", "dc_switch_hm"),
+  pecron("binary_sensor.station_online", "online"),
 ]
 const devices = [
   device("lights", "Ceiling Lights", "living_room", "light.ceiling"),
@@ -77,6 +78,10 @@ const homeAssistant = await fakeHomeAssistant({
   states: {
     "light.ceiling": "on", "media_player.tv": "playing", "sensor.station_battery": "64",
     "sensor.station_out": "350", "switch.station_ac": "on", "switch.station_dc": "off",
+    "binary_sensor.station_online": "on",
+  },
+  attributes: {
+    "sensor.station_battery": { unit_of_measurement: "%" }, "sensor.station_out": { unit_of_measurement: "W" },
   },
   prefs: {
     energy_sources: [{ type: "grid", stat_energy_from: "sensor.grid_in", stat_energy_to: null }],
@@ -763,6 +768,16 @@ async function build(context, name) {
   homeAssistant.set("sensor.station_battery", "63")
   await page.waitForSelector("#ha-battery:has-text('63%')")
   homeAssistant.set("sensor.station_battery", "64")
+  // The station goes offline: the panel tells that the numbers are its
+  // last numbers, and its switches do not work.
+  assert.equal(await page.locator("#ha-station-link").count(), 0)
+  homeAssistant.set("binary_sensor.station_online", "off")
+  await page.waitForSelector("#ha-station-link:has-text('These are its last numbers.')")
+  await page.waitForSelector("#ha-switch-ac[aria-disabled=true]")
+  await page.waitForSelector("#ha-ac-state:has-text('The last state was off.')")
+  await check(page, `${name} station with no link`)
+  homeAssistant.set("binary_sensor.station_online", "on")
+  await page.waitForSelector("#ha-station-link", { state: "detached" })
   await page.click("#item-stage .stage-back")
   await page.waitForSelector("#item-stage", { state: "detached" })
   await page.waitForSelector("#ha-ghosts:has-text('1 device of Home Assistant is not in the house yet.')")

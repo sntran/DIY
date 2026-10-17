@@ -34,6 +34,7 @@ export async function fakeHomeAssistant({
   devices = [],
   entities = [],
   states = {},
+  attributes = {},
   prefs = null,
   statistics = {},
 } = {}) {
@@ -190,7 +191,8 @@ export async function fakeHomeAssistant({
         } else if (message.type === "subscribe_entities") {
           watches.add({ ws, send, id: message.id, ids: message.entity_ids })
           send({ id: message.id, type: "result", success: true, result: null })
-          const all = message.entity_ids.filter((id) => id in state).map((id) => [id, { s: state[id], a: {} }])
+          const all = message.entity_ids.filter((id) => id in state)
+            .map((id) => [id, { s: state[id], a: attributes[id] ?? {} }])
           send({ id: message.id, type: "event", event: { a: Object.fromEntries(all) } })
         } else if (message.type === "unsubscribe_events") {
           for (const watch of watches) if (watch.ws === ws && watch.id === message.subscription) watches.delete(watch)

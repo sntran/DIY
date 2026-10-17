@@ -2553,24 +2553,55 @@ to each entity:
   Pecron (`app.pecron.com`), through the cloud of Pecron:
   `entry:device:code`. The codes are `battery_percentage`,
   `total_input_power`, `total_output_power`, `ac_switch_hm` and
-  `dc_switch_hm`.
+  `dc_switch_hm`. The DC switch is for all the DC outlets: USB and 12 V
+  (`docs/E3800LFP.md` of pecron-monitor). The entities stay available
+  when the station is not online, with their last values (the property
+  `available` in `entity.py`). The binary sensor `entry:device:online`
+  (`binary_sensor.py`) tells the link of the station.
 - pecron-monitor (`attractify-logan/pecron-monitor`), through MQTT (the
   platform `mqtt`). It reads the station by Bluetooth or by the LAN, with
   no cloud, else by the cloud: `pecron_key_name`. The names are
-  `battery`, `total_input`, `total_output`, `ac` and `dc`.
+  `battery`, `total_input`, `total_output`, `ac` and `dc`. It sends its
+  states as retained messages (`ha_state.py`), with no availability and
+  no `expire_after`. So when the monitor or the station stops, Home
+  Assistant keeps the last states, and nothing tells the link. It also
+  gives a WB12200, a battery with no inverter. The app uses its rule:
+  a device with "WB" in its name is a WB12200 (`ha_discovery.py`), and it
+  is not a station.
 - EcoFlow Cloud (`tolwi/hassio-ecoflow-cloud`, the platform
   `ecoflow_cloud`): `ecoflow-sn-key`, with `-` for `.` and `_` in the
   key. Each family of stations has its keys. For example the battery of a
   DELTA Pro is `ems.lcdShowSoc`, and of a DELTA Pro 3 `cms_batt_soc`. The
-  battery is the battery of all the packs, not of the main pack.
+  battery is the battery of all the packs, not of the main pack. The DC
+  switch is the 12 V outlets only ("DC (12V) Enabled", or
+  `flowInfo12v` of a DELTA 3 Max Plus). The USB outlets have a different
+  switch. The entities keep their last values when the station is
+  offline. The sensor `status` tells the link: `online`, or `offline`.
+  It is `offline` when EcoFlow tells it, or after 15 minutes with no data
+  (three times the option `assume_offline_sec`, 300 seconds by default,
+  in `devices/status_tracker.py`).
 - EcoFlow BLE (`rabits/ha-ef-ble`, the platform `ef_ble`), by Bluetooth:
   `ef_sn_key`. The keys are `battery_level`, `input_power`,
-  `output_power`, and `ac_ports`, `ac_lv_port`, `ac_hv_port`, `dc_ports`
-  and `dc_12v_port`.
+  `output_power`, `ac_ports`, `ac_ports_2`, `ac_lv_port`, `ac_hv_port` and
+  `dc_12v_port`. With no Bluetooth link, each entity is unavailable
+  (`entity.py`). So its battery also tells the link.
 
 EcoFlow has no integration of its own for Home Assistant. Its
 integrations also give fridges, air conditioners, plugs and panels. So a
-device of an integration is not always a station.
+device of an integration is not always a station. A Wave (an air
+conditioner) and a Glacier (a fridge) are not stations, also when they
+have a battery.
+
+The limits of the keys of EcoFlow:
+
+- The app has no switch for the USB outlets. It also has no switch for
+  the 24 V outlet of a DELTA Pro 3. The DC ports of a DELTA Pro Ultra by
+  Bluetooth have no switch too. The DC part is the 12 V outlets only, so
+  that one label tells one thing.
+- A RIVER mini of EcoFlow Cloud has its battery in `inv.soc` only. It is
+  not a station in the app.
+- The public API of EcoFlow has no switch for the AC outlets of a DELTA
+  Pro Ultra.
 
 #### The integration for Pecron
 
@@ -2593,31 +2624,58 @@ The app does not use the integration of the community
   and its battery: no power. An F5000LFP gives nothing, and a write of a
   control does not change the station, with no error. For these models,
   pecron-monitor uses the cloud of the app of Pecron. That cloud
-  is not an API for other apps. The account has a limit of about 1,280
-  reads in a day, and the data comes in parts.
+  is not an API for other apps. Some accounts have a limit of about 1,280
+  reads in a day (`docs/known-pecron-api-quirks.md`), and the data comes
+  in parts.
 - pecron-monitor keeps the password of the account of Pecron, and it needs
   a computer that runs all the time, and an MQTT broker.
 - The integration of the community uses the same cloud of the app of
   Pecron, also with the password of the account. It has no way with no
-  cloud.
+  cloud. It reads the cloud each 600 seconds by default (`const.py`). Its
+  domain is also `pecron`, so Home Assistant cannot have it and the
+  integration of Pecron at the same time.
 
-The integration of Pecron has its limits too. It needs the internet: in
-an outage of the internet, the app has no numbers of the station. It is
-new (version 0.1.0, October 2026). Its numbers come each 30 seconds. With
-an extra battery, the battery of an E3800LFP can be the battery of the
-main pack only (the notes of pecron-monitor).
+The integration of Pecron has its limits too:
+
+- It needs the internet. When Home Assistant cannot reach the cloud of
+  Pecron, its entities are unavailable, and the app has no numbers. When
+  only the station is not online (a low battery, or no Wi-Fi), the
+  entities keep their last values. Then the binary sensor `online` is
+  off, and the panel tells that the numbers are the last numbers.
+- It reads the cloud each 30 seconds (`SCAN_INTERVAL` in `const.py`). But
+  the station sends its numbers to the cloud at its own rate. An E3800LFP
+  sends them about each 3 minutes, and about each 30 seconds only with
+  the setting `high_frequency_reporting` (`docs/E3800LFP.md` of
+  pecron-monitor). An E3600LFP sends one packet of each type about each
+  20 minutes (`docs/known-pecron-api-quirks.md`). The integration does not
+  set `high_frequency_reporting`. The portal of Pecron asks for it only
+  while its page is open (`POST /api/devices/high-frequency`).
+- It imports the package `async_timeout`, and its manifest has no
+  requirements. Home Assistant 2026.10.2 on Python 3.14 does not require
+  this package. The Docker image of Home Assistant (Home Assistant OS and
+  Home Assistant Container) installs the requirements of all the
+  integrations (`requirements_all.txt`). They include `async-timeout`
+  4.0.3, so the integration loads there. A Home Assistant Core in a
+  Python environment of its own does not have the package. There, the
+  integration does not load until the person installs `async-timeout`.
+  A check of its imports against Home Assistant 2026.10.2 found all the
+  other names.
+- It is new (version 0.1.0, October 2026).
+- With an extra battery, the battery of an E3800LFP can be the battery of
+  the main pack only (the notes of pecron-monitor).
 
 The steps:
 
 1. The list of the stations (`stationList`) finds the parts of each
    device (`STATION_PARTS`). These are its battery (%), its power in and
-   out (W), and the switches of its AC and DC outlets. A part is the
-   entities with the domain of the part (`sensor` or `switch`) and the
-   unique id of the part. They are of the platform of the integration. A
-   disabled entity does not count.
+   out (W), the switches of its AC and DC outlets, and its link. A part is
+   the entities with a domain of the part (`sensor`, `switch`, or
+   `binary_sensor` for the link) and the unique id of the part. They are
+   of the platform of the integration. A disabled entity does not count.
 2. A device is a station of the first integration that gives it a battery
-   and a power out. All its parts come from this integration. A Wave of
-   EcoFlow (an air conditioner) has a battery too: it is not a station.
+   and a power out. All its parts come from this integration. A model
+   that is not a station (`others`) does not count: a Wave, a Glacier or
+   a WB12200.
 3. A part can have more entities. For example a DELTA Pro 3 has AC outlets
    of 120 V and of 240 V: one switch turns on or off the two. This is the
    rule of the lights: one switch for each device, and here one switch
@@ -2638,10 +2696,16 @@ The steps:
    (`controlList`) does not have it. The watch of the states has the
    entities of the parts too. The hook sends the parts of each station
    (`ha:stations`, `stationStates`) after the states, with the same wait.
-   A sensor gives the first number of its entities, or `null`. A switch
-   gives `on`, `off` or `unavailable`, as a light. A part that the
-   station does not have is `null`. With no station, the hook sends the
-   stations only one time, to clear them.
+   A sensor gives the first number of its entities, or `null`. The watch
+   also gives the unit of each entity (`unit_of_measurement`). A power in
+   kW becomes W. A number with a different unit is `null`, and a number
+   with no unit is in W or %. A number out of its range is `null`: a
+   battery is from 0 to 100 %, and a power from 0 to 1,000,000 W
+   (`MAX_POWER`). A switch gives `on`, `off` or `unavailable`, as a light.
+   The link is `true` (`on`, `online`, or a number), `false` (`off`,
+   `offline`, `assume_offline` or `unavailable`), else `null`. A part that
+   the station does not have is `null`. With no station, the hook sends
+   the stations only one time, to clear them.
 7. A switch of a part sends a control of that part only (`ha:control`
    with `part`: `ac` or `dc`). The hook turns on or off the entities of
    the part. Its end (`ha:control_done`) has the part.
@@ -2649,24 +2713,30 @@ The steps:
 The LiveView (`DIYWeb.HomeAssistant`):
 
 - It takes the stations only while the link is connected: 1000 stations
-  at most, with ids of 255 bytes at most. A battery is from 0 to 100 %,
-  and a power is 1,000,000 W at most. A switch has the state `on`, `off`
-  or `unavailable`, or none. Else the payload changes nothing. When the
-  link is not connected, it forgets the stations, as it forgets the
-  states.
+  at most, else the payload changes nothing. It reads each station and
+  each part separately. A station with an id of more than 255 bytes does
+  not count. A part that it cannot read is `nil`, and the other parts and
+  stations stay. A battery is from 0 to 100 %, and a power from 0 to
+  1,000,000 W. A switch has the state `on`, `off` or `unavailable`, or
+  none. The link is `true`, `false` or `nil`. When the link is not
+  connected, it forgets the stations, as it forgets the states.
 - It takes only the makers that it knows (`DIY.HomeAssistant.makers/0`).
 - A control of a part has the key `{device, part}` in `:ha_control`. The
   end of a control of the whole device, or of the other part, does not
   end it. A new state of the part ends the error of its last control.
 - The part Home Assistant of the panel (`DIYWeb.HomeAssistant.station/2`)
-  shows the battery, the power in and the power out. A number that Home
-  Assistant does not give is "Not known". The numbers change each 30 to
-  70 seconds (the integration of Pecron reads the cloud each 30 seconds,
-  and pecron-monitor each 70 seconds). So they are not a live region.
+  shows the battery level, the power in and the power out. A number that
+  Home Assistant does not give is "Not known". The numbers change each 30
+  seconds to 20 minutes: each integration and each station has its own
+  rate (see "The integration for Pecron"). So they are not a live region.
+- The panel tells the link of the station (`link_text/1`). With no link,
+  it tells that the numbers are the last numbers. When Home Assistant does
+  not tell the link (pecron-monitor), it tells that a number can be old.
 - The panel has two switches, "AC outlets" and "DC outlets", as the
-  switch Power of a light. Each switch has its status. A station with no
-  such switch tells it. For example, the public API of EcoFlow has no
-  switch for the AC outlets of a DELTA Pro Ultra.
+  switch Power of a light. For EcoFlow, the second switch is "12 V
+  outlets". Each switch has its status. A station with no such switch
+  tells it. With no link of the station, the switches do not work, and
+  their status tells the last state.
 
 The TLA+ model `specs/HomeAssistantStates.tla` has one entity for each
 device. A part of a station is a device of the model, as a light is. A
@@ -2680,21 +2750,29 @@ model checks the parts too. The new rules are in the tests:
 - `test/js/home_assistant.test.js`: the stations of the five
   integrations, and the entities of their parts. Also a disabled entity, a
   key that is not a part, and a part in the wrong domain. Also an entity
-  of a different platform, a Wave, and a battery with no power out. Property
+  of a different platform, a Wave, a Glacier, a WB12200, and a battery
+  with no power out. A table of unique ids gives the part of each key of
+  each integration, and of keys that are not parts. A device with the
+  parts of two integrations is a station of the first one. Property
   tests check that each station comes from the first integration that
   gives it a battery and a power out. They also check that each part is
   an entity of its integration, and that each state is a state of the
-  page. The hook watches the parts, sends their states, and turns off
+  page. A state is the first number, in its unit and its range, or the
+  link. The hook
+  watches the parts, sends their states and units, and turns off
   the AC outlets of a station of Pecron with one call. It turns off the
   two AC outlets of a DELTA Pro 3 together. It refuses a part that the
-  station does not have, and a part that is not a switch.
+  station does not have, and a part that is not a switch. A new station
+  with the same controls starts a new watch.
 - `test/diy/home_assistant_devices_test.exs`: the kind, the models of
   Pecron and EcoFlow with a property test of their forms, the ghost and
   its item.
 - `test/diy_web/live/ha_station_live_test.exs`: the numbers and the
   switches in the panel, a DELTA Pro 3, the controls and their end, and
-  the errors. Also a link that closes, and a payload that the page
-  cannot read, with a property test.
+  the errors. Also a link that closes, a station with no link, and a
+  station that does not tell its link. Also two stations where one has a
+  number that the page cannot read. A property test sends parts of each
+  form.
 - The browser test: a station of Pecron comes in from its ghost,
   with the model of its device. It shows its numbers, and the keyboard
   turns its AC outlets off. Axe checks the panel.

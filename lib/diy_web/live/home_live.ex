@@ -267,13 +267,13 @@ defmodule DIYWeb.HomeLive do
   end
 
   # A switch of a part of a power station (its AC or DC outlets). It works
-  # only when the state of the part is known, and no control of the part
-  # waits.
+  # only when the state of the part is known and no control of the part
+  # waits. Home Assistant must also have a link to the station.
   def handle_event("ha_station_switch", %{"item" => item, "part" => part, "on" => on}, socket)
       when on in ~w(true false) do
     with %{device: device, switches: switches} <-
            DIYWeb.HomeAssistant.station(socket.assigns, item),
-         %{state: state, pending: nil} when state in ~w(on off) <-
+         %{state: state, pending: nil, link: link} when state in ~w(on off) and link != false <-
            Enum.find(switches, &(&1.part == part)) do
       {:noreply, DIYWeb.HomeAssistant.control(socket, device, on == "true", part)}
     else
