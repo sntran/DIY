@@ -892,6 +892,8 @@ async function build(context, name) {
     await page.fill("#pecron-form input[name=token]", "phk_walk")
     await page.click("#pecron-form button")
     await page.waitForSelector("#pecron-status:has-text('Connected to Pecron: 1 station.')")
+    // The form goes: the status of the card has the focus.
+    assert.equal(await page.evaluate(() => document.activeElement?.id), "pecron-status")
   }
   await check(page, `${name} Pecron`)
   await page.fill("#settings-price input[name=price]", "12.5")
@@ -1038,6 +1040,18 @@ for (const colorScheme of ["light", "dark"]) {
       release()
       await page.waitForSelector("#pecron-switch-ac")
       assert.equal(await page.evaluate(() => document.activeElement?.id), "maker-unlink")
+      await page.unroute("**/relay/pecron/stations")
+      // The relay does not answer: the item has no choices. "Remove the
+      // link" takes the part away, and the title of the panel takes the
+      // focus.
+      await page.route("**/relay/pecron/stations", (route) => route.abort())
+      await page.focus("#pecron-switch-ac")
+      await page.keyboard.press("Space")
+      await page.waitForSelector("#maker-notes #maker-offline")
+      await page.focus("#maker-unlink")
+      await page.keyboard.press("Enter")
+      await page.waitForSelector("#part-maker", { state: "detached" })
+      await page.waitForFunction(() => document.activeElement?.id === "item-stage-title")
       await page.unroute("**/relay/pecron/stations")
       await page.click("#ask-remove")
       await page.click("#delete-item")

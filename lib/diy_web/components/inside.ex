@@ -1155,6 +1155,9 @@ defmodule DIYWeb.Inside do
           that comes or goes above the switches makes a switch lose the
           focus. --%>
         <div :if={@unit} id="maker-notes" class="flex flex-col gap-2 text-sm">
+          <p :if={@unit.name} id="maker-name">
+            This is {@unit.name} in your account of {MakerLink.name(@unit.maker)}.
+          </p>
           <p :if={@unit.state in ~w(none refused)} id="maker-closed">
             The app has no link to {MakerLink.name(@unit.maker)} now.{if @unit.known,
               do: " These are its last numbers."}

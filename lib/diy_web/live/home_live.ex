@@ -306,8 +306,20 @@ defmodule DIYWeb.HomeLive do
 
   def handle_event("maker_unlink", %{"item" => item}, socket) do
     case Build.unlink_unit(socket.assigns.build, item) do
-      {:ok, build} -> {:noreply, put(socket, build)}
-      {:error, _reason} -> {:noreply, socket}
+      {:ok, build} ->
+        socket = put(socket, build)
+
+        # With no choice, the part of the maker goes with its title: the
+        # title of the panel takes the focus.
+        socket =
+          if DIYWeb.Inside.unit_choices(socket.assigns, item) == [],
+            do: push_event(socket, "diy:focus", %{to: "#item-stage-title"}),
+            else: socket
+
+        {:noreply, socket}
+
+      {:error, _reason} ->
+        {:noreply, socket}
     end
   end
 

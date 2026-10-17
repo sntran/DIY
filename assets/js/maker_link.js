@@ -6,7 +6,7 @@
 //
 // The hook reads the stations of the account (a poll) at the start, and
 // then each POLL_WAIT while the page shows. A switch of the page sends a
-// control of the AC or DC outlets of a station. Three rules come from the
+// control of the AC or DC outlets of a station. Five rules come from the
 // TLA+ model specs/MakerLink.tla:
 // - The generation: a new token or a disconnect starts a new generation.
 //   An answer of an old generation changes nothing.
@@ -16,6 +16,10 @@
 //   poll waits, it marks a poll "again" for the end of that poll.
 // - The timeout: the wait for an answer, also for its body, ends after
 //   ANSWER_WAIT. The hook never waits for ever (the property Live).
+// - The end after the poll: the end of a control with no error goes to
+//   the LiveView after the answer of the next poll (EndNew). Until then,
+//   the switch waits: it never shows the state from before the control.
+//   An end with an error goes at once.
 //
 // The hook tells the LiveView (DIYWeb.MakerLink): "maker:status" (the
 // state of the link), "maker:stations" (the stations of the account) and
@@ -57,6 +61,7 @@ export class MakerLink {
     this.error = null
     this.stations = null
     this.stopped = false
+    this.ends = []
   }
 
   // Reads the token of the store, and starts the link.
@@ -84,6 +89,7 @@ export class MakerLink {
     this.busy = false
     this.again = false
     this.waiting = false
+    this.ends = []
     this.clearTimer(this.timer)
     this.timer = null
     this.stations = null
@@ -139,6 +145,10 @@ export class MakerLink {
     this.timer = null
     this.busy = true
     const generation = this.generation
+    // The ends of the controls before this poll go after its answer. When
+    // the poll fails, they go too, and the page tells that it has no link.
+    const ends = this.ends
+    this.ends = []
     const answer = await this.call("GET", "/stations")
     if (generation !== this.generation) return
     if (answer.ok && Array.isArray(answer.body?.stations)) {
@@ -148,6 +158,7 @@ export class MakerLink {
     } else {
       this.status(answer.error === "token" ? "refused" : "offline", answer.error ?? "failed")
     }
+    ends.forEach((end) => this.push("maker:control_done", end))
     this.busy = false
     if (this.again) {
       this.again = false
@@ -170,8 +181,8 @@ export class MakerLink {
     this.poll()
   }
 
-  // Turns the AC or DC outlets of a station on or off. The end goes to the
-  // LiveView, then a poll reads the new state. The maker can refuse the
+  // Turns the AC or DC outlets of a station on or off. A poll reads the new
+  // state, and the end goes to the LiveView with it. The maker can refuse the
   // token for a control ("denied"), and the token can still read. On the
   // portal of Pecron, the person can turn off the controls (the option
   // "Allow HA to send control commands"). So the poll tells if the maker
@@ -182,7 +193,9 @@ export class MakerLink {
     const answer = await this.call("POST", `/command/${encodeURIComponent(device)}`, {part, on})
     if (generation !== this.generation) return
     const error = answer.ok ? null : answer.error === "token" ? "denied" : answer.error
-    this.push("maker:control_done", {maker: this.maker, device, part, error})
+    const end = {maker: this.maker, device, part, error}
+    if (error) this.push("maker:control_done", end)
+    else this.ends.push(end)
     if (this.busy) this.again = true
     else this.poll()
   }

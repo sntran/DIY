@@ -51,6 +51,9 @@ const liveSocket = new LiveSocket("/live", Socket, {
 // also moves it again after two frames, and then it can take the focus
 // from a key that the person uses after it.
 window.addEventListener("diy:focus", (event) => event.target.focus())
+// The LiveView moves the focus after its patch (push_event "diy:focus"),
+// for example when the key with the focus goes with its part.
+window.addEventListener("phx:diy:focus", (event) => document.querySelector(event.detail.to)?.focus())
 
 // A bar at the top of the page while a page or a form loads.
 topbar.config({barColors: {0: "#29d"}, shadowColor: "rgba(0, 0, 0, .3)"})

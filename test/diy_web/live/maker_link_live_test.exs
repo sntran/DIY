@@ -194,12 +194,15 @@ defmodule DIYWeb.MakerLinkLiveTest do
     view |> element("#pecron-switch-ac") |> render_click()
     refute_push_event(view, "maker:control", _payload)
 
-    # The rows of the switches are in one element that stays.
+    # The rows of the switches are in one element that stays. The part
+    # tells which station of the account it is.
     assert has_element?(view, "#maker-station #pecron-switches #pecron-ac")
+    assert has_element?(view, "#maker-name", "This is Cabin in your account of Pecron.")
 
     # The end of the link: the choices again. The title takes the focus.
     assert view |> element("#maker-unlink") |> render() =~ "#part-maker-title"
     view |> element("#maker-unlink") |> render_click()
+    refute_push_event(view, "diy:focus", _payload)
     assert build_of(view).units == %{id => "pecron:dev_1"}
     assert has_element?(view, "#maker-choice-0", "Cabin (X9)")
     render_click(view, "maker_unlink", %{"item" => other})
@@ -334,8 +337,10 @@ defmodule DIYWeb.MakerLinkLiveTest do
     assert has_element?(view, "#pecron-ac-state", "The app has no link to Pecron now.")
 
     # A new page: before the first list, the station has no switches. The
-    # page does not know them. They come with the list.
+    # page does not know them. They come with the list. Before the hook
+    # tells the state, the page waits for it as for a connect.
     view = open(conn, ~p"/inside?#{[item: id]}", build_of(view))
+    assert has_element?(view, "#maker-connecting", "The app connects to Pecron.")
     status(view, "connecting")
     assert has_element?(view, "#maker-connecting")
     refute has_element?(view, "#pecron-ac")
@@ -382,6 +387,14 @@ defmodule DIYWeb.MakerLinkLiveTest do
     status(view, "none")
     assert has_element?(view, "#maker-closed")
     assert build_of(view).units == %{id => "pecron:dev_1"}
+
+    # With no link, the end of the link has no choices: the part goes. The
+    # title of the panel takes the focus after the patch.
+    view |> element("#maker-unlink") |> render_click()
+    assert_push_event(view, "diy:focus", %{to: "#item-stage-title"})
+    refute has_element?(view, "#part-maker")
+    {:ok, build} = Build.link_unit(build_of(view), id, "pecron:dev_1")
+    view = open(conn, ~p"/inside?#{[item: id]}", build)
 
     # A new token that Pecron refuses: the last numbers stay, and the note
     # tells it.
@@ -449,7 +462,10 @@ defmodule DIYWeb.MakerLinkLiveTest do
     assert MakerLink.status(%{state: "loading"}, "pecron") == nil
     assert MakerLink.message("storage", "pecron") =~ "cannot keep the token"
     assert MakerLink.message("token", "pecron") == "Pecron does not accept the token."
-    assert MakerLink.message("timeout", "pecron") =~ "20 seconds"
+
+    assert MakerLink.message("timeout", "pecron") ==
+             "The app got no answer in 20 seconds. Look at the network, and try again later."
+
     assert MakerLink.message("offline", "pecron") =~ "Look at the network"
 
     # A page with no links has no choices.
@@ -537,6 +553,28 @@ defmodule DIYWeb.MakerLinkLiveTest do
     # An event of the page with a unit for this item changes nothing.
     render_click(view, "maker_link", %{"item" => id, "unit" => "pecron:dev_1"})
     assert build_of(view).units == %{}
+  end
+
+  test "a new token ends the controls that wait", %{conn: conn} do
+    {view, _id} = station_page(conn)
+    status(view, "connected")
+    stations(view, [e3800()])
+    view |> element("#maker-choice-0") |> render_click()
+    view |> element("#pecron-switch-ac") |> render_click()
+    assert :sys.get_state(view.pid).socket.assigns.maker_control != %{}
+    status(view, "connecting")
+    assert :sys.get_state(view.pid).socket.assigns.maker_control == %{}
+  end
+
+  test "the status of the card takes the focus after Connect and Disconnect", %{conn: conn} do
+    view = open(conn, ~p"/settings", preset())
+    status(view, "none")
+    assert has_element?(view, "#pecron-status[tabindex='-1']")
+    assert view |> element("#pecron-form") |> render() =~ "#pecron-status"
+    status(view, "connected")
+    assert view |> element("#pecron-disconnect") |> render() =~ "#pecron-status"
+    view |> element("#pecron-disconnect") |> render_click()
+    assert_push_event(view, "maker:disconnect", %{maker: "pecron"})
   end
 
   test "the card tells the access of the token, and a refused token one time", %{conn: conn} do

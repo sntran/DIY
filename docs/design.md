@@ -2849,7 +2849,8 @@ The token:
 - The card Pecron in Settings (`DIYWeb.MakerLink.card/1`) has the field
   of the token. The key Connect sends the DOM event `maker:connect` to
   the hook (`JS.dispatch/1`): the token never goes to the LiveView. The
-  field goes empty.
+  field goes empty. After Connect and Disconnect, the status of the card
+  takes the focus: the form or the key goes.
 - The hook keeps the token on the device (IndexedDB, the database
   `diy-makers`). A different tab gets the news (BroadcastChannel
   `diy.makers`).
@@ -2886,7 +2887,7 @@ is the option "Allow HA to send control commands" off on the portal. No source t
 control has the error (`denied`). The token can still read, so the poll
 after the control goes on. Only a poll that Pecron refuses stops the link
 (`refused`). A link that stops (a page that goes) does nothing more. The TLA+ model
-`specs/MakerLink.tla` checks four rules:
+`specs/MakerLink.tla` checks five rules:
 
 - **The generation** (`MakerLink.nogen.cfg`). A new token or a disconnect
   starts a new generation. An answer of an old generation changes
@@ -2906,6 +2907,14 @@ after the control goes on. Only a poll that Pecron refuses stops the link
   with an error, and its request can still change the station later.
   Without this rule, the hook waits for ever, and it polls no more (the
   property `Live`).
+- **The end after the poll** (`MakerLink.earlyend.cfg`). The end of a
+  control with no error goes to the page after the answer of the poll
+  after it. Until then, the switch waits. An end with an error goes at
+  once. When that poll fails, the end goes with the error of the poll,
+  and the page tells that it has no link. Without this rule, the switch
+  shows the state from before the control as its new state, until the
+  next poll (the invariant `EndNew`). The link to Home Assistant has the
+  same rule: its hook sends the states before the end of a control.
 
 When all is quiet, and a poll read the cloud after the last change of a
 person, the page shows the state of the cloud. After a disconnect, it
@@ -2916,6 +2925,7 @@ This is a command after a timeout, or a command of an old generation when
 the person connects the same account again. The next poll shows its
 change. The model has two accounts, two changes of a person, three new
 tokens or disconnects, three timers, one control and one lost message.
+TLC finds no error in 784,045 distinct states.
 
 Four rules of the hook are not in the model. They only remove steps, or
 they end a step that the model has:
@@ -2929,7 +2939,7 @@ they end a step that the model has:
   change different values, and each end starts a poll or marks a poll
   "again", as in the model. So for each value, the steps are the steps of
   the model. TLC with two controls, one after the other
-  (`MaxControls = 2`), also finds no error (2,481,115 distinct states).
+  (`MaxControls = 2`), also finds no error (9,213,679 distinct states).
 
 The station:
 
@@ -2941,10 +2951,14 @@ The station:
   a known model gets the model (`DIY.HomeAssistant.station_model/2`),
   when the person did not choose one.
 - An item of a device of Home Assistant gets no choice and no link: the
-  app uses Home Assistant when it gives the station. The build refuses
-  such a link, also in a stored build.
+  app uses Home Assistant for it. The build refuses such a link, also in
+  a stored build. The link of an item to its device does not end. So
+  when the person stops Home Assistant, or the device goes, the item
+  gets no direct link. The person then removes the item and adds a new
+  station.
 - A choice has the name of the station, which the person gave in the app
-  of Pecron. A long name wraps, so a choice fits at 320 px.
+  of Pecron. A long name wraps, so a choice fits at 320 px. After the
+  link, the part tells this name.
 - The part shows the battery level, the power in and the power out, and
   the switches of the AC and DC outlets. These are the same parts as for
   a station of Home Assistant, with the same component. The field
@@ -2964,7 +2978,10 @@ The station:
   focus: the key with the focus goes away. The page moves the focus at
   once (the event `diy:focus` of `assets/js/app.js`). `JS.focus/1` moves
   it again after two frames, and a page that is not in front gets the
-  frames late. Then the title takes the focus from the next key.
+  frames late. Then the title takes the focus from the next key. After
+  the end of a link with no choices (for example with no link), the part
+  goes with its title. Then the LiveView gives the focus to the title of
+  the panel after its patch (the event `phx:diy:focus`).
 - The page keeps the switches of each station of the last list, also
   when a new token makes the stations `nil`. So a part that the station
   does not have gets no switch while the page waits for a new list, and
@@ -2986,9 +3003,12 @@ The limits:
 - Each tab of the app polls. Two tabs make two polls each 30 seconds. The
   limit of `/api/ha` for an account is not known. On the older cloud of
   the app of Pecron, pecron-monitor tells of about 1,280 polls in a day.
-- After a control, the page shows the next poll. A station can apply a
-  write later (pecron-monitor tells it for an F5000LFP), so the switch can
-  show the old state until a later poll.
+- After a control, the page shows the poll after it. A station can apply
+  a write later (pecron-monitor tells it for an F5000LFP), so the switch
+  can show the old state until a later poll.
+- A poll can remove a switch that has the focus: a switch with no value,
+  or a list without the station. Then the focus goes to the page. This is
+  rare, and the app does not move the focus then.
 - The relay has no limit of requests for each address. A script can use
   the relay to call `/api/ha` with its own token. It gets no data that it
   cannot get from Pecron directly. But Pecron sees the address of the
@@ -3004,8 +3024,13 @@ The limits:
 - The relay reads all the body of an answer of Pecron before it reads
   the devices (100 at most).
 - No real answer of `/api/ha/devices` is in the sources of the app. The
-  codes of the parts are the codes of the official integration of Pecron.
-  A number or a switch as text (`"82"`, `"true"`) is not known.
+  codes of the parts are the codes of the TSL of Pecron. The official
+  integration takes the keys of its entities from the server, with no
+  list of codes. The portal gives each entity the key of its TSL code
+  (`tslToHaEntities`). Two sources name the codes:
+  `unofficial-pecron-api` 0.4.1 (`models.py`) and `jsight/ha-pecron`
+  (`const.py`). A number or a switch as text (`"82"`, `"true"`) is not
+  known.
 
 The tests:
 
@@ -3021,6 +3046,8 @@ The tests:
   serves a call, and its answer comes later. The page shows only the
   station of the account of the token. When all is quiet and a poll read
   the cloud after the last change of a person, the page shows the cloud.
+  The end of a control with no error comes after stations that the cloud
+  read after its command (`EndNew`).
 - `test/diy/build_units_test.exs` and
   `test/diy_web/live/maker_link_live_test.exs`: the links, the card, the
   part of the panel, the switches, and the payloads that the page

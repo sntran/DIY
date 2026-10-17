@@ -72,7 +72,8 @@ defmodule DIY.BuildUnitsTest do
     json =
       build |> Build.to_json() |> Jason.decode!() |> Map.put("units", %{ha => "pecron:dev_1"})
 
-    assert {:ok, %{units: %{}}} = json |> Jason.encode!() |> Build.from_json()
+    assert {:ok, loaded} = json |> Jason.encode!() |> Build.from_json()
+    assert loaded.units == %{}
   end
 
   test "a stored build keeps its links, and an old build has none" do
@@ -82,12 +83,14 @@ defmodule DIY.BuildUnitsTest do
     assert loaded.units == %{s1 => "pecron:dev_1"}
 
     old = linked |> Build.to_json() |> Jason.decode!() |> Map.delete("units") |> Jason.encode!()
-    assert {:ok, %{units: %{}}} = Build.from_json(old)
+    assert {:ok, loaded} = Build.from_json(old)
+    assert loaded.units == %{}
 
     bad =
       linked |> Build.to_json() |> Jason.decode!() |> Map.put("units", "none") |> Jason.encode!()
 
-    assert {:ok, %{units: %{}}} = Build.from_json(bad)
+    assert {:ok, loaded} = Build.from_json(bad)
+    assert loaded.units == %{}
   end
 
   property "a stored build keeps only the links that it can read: a station, a unit, one station for each unit" do

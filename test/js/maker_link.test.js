@@ -231,18 +231,24 @@ test("a control: its end, then a poll; while a poll waits, the poll comes again"
   await link.connect("phk_a1")
   fake.answer(fake.calls[0])
   await settle()
+  const ends = () => page.pushes.filter(([event]) => event === "maker:control_done").map(([, end]) => end)
 
-  // No poll waits: the end of the control starts a poll.
+  // No poll waits: the end of the control starts a poll. The end goes to
+  // the page after the answer of that poll, with the new state. Before
+  // it, the switch waits: it never shows the state from before the
+  // control.
   link.control("s/1", "ac", false)
   await settle()
   assert.equal(fake.calls[0].url, "/relay/pecron/command/s%2F1")
   fake.answer(fake.calls[0])
   await settle()
-  assert.deepEqual(last(page, "maker:control_done"), {maker: "pecron", device: "s/1", part: "ac", error: null})
+  assert.deepEqual(ends(), [])
   assert.equal(fake.calls.length, 1)
   fake.answer(fake.calls[0])
   await settle()
   assert.equal(last(page, "maker:stations").stations[0].ac, "off")
+  assert.deepEqual(ends(), [{maker: "pecron", device: "s/1", part: "ac", error: null}])
+  assert.deepEqual(page.pushes.slice(-2).map(([event]) => event), ["maker:status", "maker:control_done"])
 
   // A poll waits (it read the cloud before the control): the poll comes
   // again at its end, and the page shows the new state.
@@ -258,15 +264,38 @@ test("a control: its end, then a poll; while a poll waits, the poll comes again"
   fake.answer(command)
   await settle()
   assert.equal(fake.calls.length, 1)
-  // The old poll ends with the old state, then the poll comes again.
+  // The old poll ends with the old state, then the poll comes again. The
+  // end of the control waits for the poll again: the old poll read the
+  // cloud before the command.
   fake.deliver(poll)
   await settle()
   await settle()
   assert.equal(last(page, "maker:stations").stations[0].ac, "off")
+  assert.equal(ends().length, 1)
   assert.equal(fake.calls.length, 1)
   fake.answer(fake.calls[0])
   await settle()
   assert.equal(last(page, "maker:stations").stations[0].ac, "on")
+  assert.equal(ends().length, 2)
+
+  // A control with an error ends at once. A poll after a control that
+  // fails also gives the end of the control, with the error of the poll.
+  link.control("s1", "ac", false)
+  await settle()
+  fake.answer(fake.calls[0], json(502, {error: "unreachable"}))
+  await settle()
+  assert.deepEqual(ends().at(-1), {maker: "pecron", device: "s1", part: "ac", error: "unreachable"})
+  fake.answer(fake.calls[0])
+  await settle()
+  link.control("s1", "ac", false)
+  await settle()
+  fake.answer(fake.calls[0])
+  await settle()
+  assert.equal(ends().length, 3)
+  fake.fail(fake.calls[0])
+  await settle()
+  assert.deepEqual(last(page, "maker:status"), {maker: "pecron", state: "offline", error: "offline"})
+  assert.deepEqual(ends().at(-1), {maker: "pecron", device: "s1", part: "ac", error: null})
   link.stop()
 })
 
@@ -376,7 +405,10 @@ test("after any steps, the page shows only the station of the token, and the clo
   // As in the TLA+ model: the cloud serves a call, and its answer comes
   // later. "synced": a poll of this generation read the cloud after the
   // last change of a person. When all is quiet and synced, the page shows
-  // the cloud, with no new timer.
+  // the cloud, with no new timer. Also as in the model (EndNew): the end
+  // of a control with no error comes after stations that the cloud read
+  // after its command. "served" counts the commands of this generation
+  // that the cloud served, and a poll has this count (seq).
   const step = fc.oneof(
     fc.constantFrom("phk_a1", "phk_a2", null).map((token) => ({kind: "switch", token})),
     fc.constant({kind: "timer"}),
@@ -397,13 +429,38 @@ test("after any steps, the page shows only the station of the token, and the clo
     const page = parts({fetch})
     link = new MakerLink(page.deps)
     let synced = false
+    let served = 0
+    let goals = []
+    let checked = 0
+    let seq = -1
     // A command of an old generation (the person connected the same
     // account again) is as a change of a person, as in the model.
     const serve = (call) => {
-      if (!call.response && call.generation === link.generation && call.options.method === "GET") synced = true
-      if (!call.response && call.generation !== link.generation && call.options.method === "POST" &&
+      const current = call.generation === link.generation
+      if (!call.response && current && call.options.method === "GET") synced = true
+      if (!call.response && !current && call.options.method === "POST" &&
         call.options.headers.authorization === `Bearer ${link.token}`) synced = false
+      if (!call.response && current && call.options.method === "POST") served += 1
+      const fresh = !call.response && call.options.method === "GET"
       fake.serve(call)
+      if (fresh) {
+        const token = call.options.headers.authorization.slice("Bearer ".length)
+        call.response = json(200, {stations: [{id: "s1", account: token, ac: fake.cloud[token], seq: current ? served : -1}]})
+      }
+    }
+    // The answer of a command of this generation: the hook ends its control
+    // later. The end must come with a poll of this count or more.
+    const deliver = (call) => {
+      if (call.options.method === "POST" && call.generation === link.generation) goals.push(served)
+      fake.deliver(call)
+    }
+    // The pushes since the last check: the stations, and the ends.
+    const check = () => {
+      for (const [event, payload] of page.pushes.slice(checked)) {
+        if (event === "maker:stations") seq = payload.stations?.[0]?.seq ?? -1
+        if (event === "maker:control_done" && payload.error === null) assert.ok(seq >= goals.shift(), "the end of a control with an old state")
+      }
+      checked = page.pushes.length
     }
     await link.start()
     for (const one of steps) {
@@ -411,6 +468,8 @@ test("after any steps, the page shows only the station of the token, and the clo
         if (one.token) await link.connect(one.token)
         else await link.disconnect()
         synced = false
+        served = 0
+        goals = []
       } else if (one.kind === "timer") {
         if (pollTimer(page)) fire(page)
       } else if (one.kind === "control") {
@@ -418,13 +477,14 @@ test("after any steps, the page shows only the station of the token, and the clo
       } else if (one.kind === "serve" || one.kind === "deliver") {
         const call = fake.calls[one.index % Math.max(fake.calls.length, 1)]
         if (call) serve(call)
-        if (call && one.kind === "deliver") fake.deliver(call)
+        if (call && one.kind === "deliver") deliver(call)
       } else {
         fake.cloud[one.token] = fake.cloud[one.token] === "on" ? "off" : "on"
         if (one.token === link.token) synced = false
       }
       await settle()
       await settle()
+      check()
       // The page shows only the station of the account of the token.
       const shown = last(page, "maker:stations").stations
       if (shown) assert.equal(shown[0].account, link.token)
@@ -433,10 +493,13 @@ test("after any steps, the page shows only the station of the token, and the clo
     // All the answers come, in order.
     while (fake.calls.length) {
       serve(fake.calls[0])
-      fake.deliver(fake.calls[0])
+      deliver(fake.calls[0])
       await settle()
       await settle()
+      check()
     }
+    // Each end of a control came.
+    assert.equal(goals.length, 0)
     if (link.token && synced) assert.equal(last(page, "maker:stations").stations[0].ac, fake.cloud[link.token])
     link.stop()
   }), {
@@ -754,7 +817,16 @@ test("the parts of the browser", async () => {
   lone.listen({connect: () => {}, news: () => {}, shown: () => {}})()
   lone.close()
 
-  // The page goes: the channel closes.
+  // The page goes: the channel and the database close. Then a delete of
+  // the database is not blocked by the connection of the page.
   browser.close()
   assert.equal(channels[0].closed, true)
+  await settle()
+  const deleted = await new Promise((resolve) => {
+    const request = window.indexedDB.deleteDatabase(DB)
+    request.onsuccess = () => resolve("deleted")
+    // An open connection holds the delete: it does not end in one second.
+    setTimeout(() => resolve("blocked"), 1_000)
+  })
+  assert.equal(deleted, "deleted")
 })

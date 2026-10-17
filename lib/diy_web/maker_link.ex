@@ -79,7 +79,8 @@ defmodule DIYWeb.MakerLink do
   device, and the parts as in `DIYWeb.HomeAssistant.station/2`: the
   numbers, `known`, `online` (the link is connected) and the switches. It
   also has the state of the link, `found` (the account has the station)
-  and `reachable` (the maker can reach the station now). Each switch has
+  and `reachable` (the maker can reach the station now). It has the name
+  of the station in the account (`name`), or `nil`. Each switch has
   `link`: with the link not connected, a switch does not work. With no
   stations, the switches of the last list stay (`"none"` for a part that
   the station does not have). Before the first list, the station has no
@@ -125,6 +126,7 @@ defmodule DIYWeb.MakerLink do
         online: online,
         known: parts != nil,
         found: link.stations == nil or parts != nil,
+        name: parts && parts["name"],
         reachable: parts == nil or parts["online"] == true,
         switches: switches
       })
@@ -391,7 +393,9 @@ defmodule DIYWeb.MakerLink do
         The token has the same access as your account: it reads your stations and turns their outlets on and off.
         On the portal, the options "Exposed devices" and "Allow HA to send control commands" choose the stations that the app sees, and the controls that it can send.
       </p>
-      <p id={"#{@maker}-status"} role="status" class="text-sm font-medium">
+      <%!-- The status takes the focus after Connect and Disconnect: the
+        form or the key goes. --%>
+      <p id={"#{@maker}-status"} role="status" class="text-sm font-medium" tabindex="-1">
         {status(@link, @maker)}
       </p>
       <p
@@ -406,7 +410,7 @@ defmodule DIYWeb.MakerLink do
         :if={@link.state in ~w(none refused)}
         id={"#{@maker}-form"}
         data-maker={@maker}
-        phx-submit={JS.dispatch("maker:connect")}
+        phx-submit={JS.dispatch("maker:connect") |> JS.dispatch("diy:focus", to: "##{@maker}-status")}
         class="flex flex-wrap gap-2 items-end"
       >
         <label>
@@ -429,7 +433,7 @@ defmodule DIYWeb.MakerLink do
         :if={@link.state in ~w(connecting connected offline refused)}
         type="button"
         id={"#{@maker}-disconnect"}
-        phx-click="maker_disconnect"
+        phx-click={JS.push("maker_disconnect") |> JS.dispatch("diy:focus", to: "##{@maker}-status")}
         phx-value-maker={@maker}
         class="btn btn-sm"
       >
