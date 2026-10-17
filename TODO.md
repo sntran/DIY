@@ -27,9 +27,11 @@ The owner decides about each item.
 - Power stations of Pecron and EcoFlow: the person sees the activity of
   a station also away from home. When an integration of Home Assistant
   gives the station, the app uses it. Not every person has Home
-  Assistant. Then the app links to the cloud of the maker through a relay
-  on its server. The server sees the token for each call, and keeps no
-  token. The app keeps no history of a station.
+  Assistant. Then the app links to the cloud of the maker. For Pecron,
+  the calls go through a relay on its server: the server sees the token
+  for each call, and keeps no token. The page calls the cloud of EcoFlow
+  directly, so the server never sees the keys of EcoFlow. The app keeps
+  no history of a station.
 - The owner asked the app to select the most robust way to talk to
   Pecron. The integration of Pecron (from the portal of Pecron) is the
   first way of the app. pecron-monitor is the second way, with no cloud.

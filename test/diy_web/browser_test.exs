@@ -3,7 +3,8 @@ defmodule DIYWeb.BrowserTest do
   The browser test: `test/browser/house.mjs` builds a house in Chromium,
   with the checks of axe-core on each screen. The weather, Power to Choose
   and the cloud of Pecron are the stubs of the tests, for all the
-  processes of the server.
+  processes of the server. The page calls the cloud of EcoFlow directly:
+  the walk serves it in the browser (`test/browser/fake_ecoflow.mjs`).
 
   It needs the server of the tests, Node.js with the packages of
   `package.json`, a Chromium (`CHROMIUM`), and the assets:

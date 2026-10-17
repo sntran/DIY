@@ -2,14 +2,16 @@ defmodule DIYWeb.MakerLink do
   @moduledoc """
   The LiveView part of the direct link to the cloud of the maker of a
   power station, for a person with no Home Assistant. The hook `MakerLink`
-  of the page (`assets/js/maker_link.js`) keeps the token on the device. It
-  reads the stations through the relay of the app
-  (`DIYWeb.RelayController`). The LiveView never sees the token. The TLA+
-  model `specs/MakerLink.tla` checks the rules of the hook.
+  of the page (`assets/js/maker_link.js`) keeps the token of Pecron, or
+  the keys of EcoFlow, on the device. It reads the stations of Pecron
+  through the relay of the app (`DIYWeb.RelayController`). It reads the
+  stations of EcoFlow directly from the page (`assets/js/ecoflow.js`). The
+  LiveView never sees the token or the keys. The TLA+ model
+  `specs/MakerLink.tla` checks the rules of the hook.
 
   A LiveView with `on_mount DIYWeb.MakerLink` gets two assigns:
 
-  - `:makers`: for each maker (`"pecron"`), the state of the link and the
+  - `:makers`: for each maker (`"pecron"` and `"ecoflow"`), the state of the link and the
     error of the last step (`message/2`). The states are `loading`,
     `none`, `connecting`, `connected`, `offline` and `refused`. It also has
     the stations of the account (`nil` before the hook tells them). It
@@ -31,13 +33,18 @@ defmodule DIYWeb.MakerLink do
   alias DIYWeb.Format
   alias Phoenix.LiveView
 
-  @makers ~w(pecron)
-  @names %{"pecron" => "Pecron"}
+  @makers ~w(pecron ecoflow)
+  @names %{"pecron" => "Pecron", "ecoflow" => "EcoFlow"}
   @states ~w(none connecting connected offline refused)
   @errors ~w(format storage token denied unreachable offline timeout failed)
   @numbers ~w(battery input output)
-  @switches [{"ac", "AC outlets"}, {"dc", "DC outlets"}]
-  @switch_parts Enum.map(@switches, &elem(&1, 0))
+  # The switches of a station of each maker, with their names. The DC part
+  # of EcoFlow is its 12 V outlets only, as in DIYWeb.HomeAssistant.
+  @switches %{
+    "pecron" => [{"ac", "AC outlets"}, {"dc", "DC outlets"}],
+    "ecoflow" => [{"ac", "AC outlets"}, {"dc", "12 V outlets"}]
+  }
+  @switch_parts ~w(ac dc)
 
   # The most stations of one account, and the longest name or model, that
   # the page takes from the hook.
@@ -59,6 +66,9 @@ defmodule DIYWeb.MakerLink do
 
   @doc "The name of a maker."
   def name(maker), do: Map.fetch!(@names, maker)
+
+  @doc "The names of the makers of a list, one time each: \"Pecron and EcoFlow\"."
+  def names(makers), do: makers |> Enum.uniq() |> Enum.map_join(" and ", &name/1)
 
   @doc """
   Asks the hook to turn the AC or DC outlets of a station on or off
@@ -87,15 +97,15 @@ defmodule DIYWeb.MakerLink do
   switches: the page does not know them.
   """
   def station(%{build: build, makers: makers, maker_control: controls}, item_id) do
-    with "pecron:" <> device = unit <- build.units[item_id] do
-      maker = "pecron"
+    with unit when is_binary(unit) <- build.units[item_id],
+         [maker, device] when maker in @makers <- String.split(unit, ":", parts: 2) do
       link = makers[maker]
       online = link.state == "connected"
       parts = Enum.find(link.stations || [], &(&1["id"] == device))
       known = link.switches[device]
 
       switches =
-        for {part, name} <- @switches, known != nil do
+        for {part, name} <- @switches[maker], known != nil do
           {pending, error} = pending(controls[{maker, device, part}])
 
           state =
@@ -168,9 +178,10 @@ defmodule DIYWeb.MakerLink do
   The model of the catalog for the station of a unit
   (`DIY.HomeAssistant.station_model/2`), or `nil`.
   """
-  def model(%{makers: makers}, "pecron:" <> device) do
-    station = Enum.find(makers["pecron"].stations || [], &(&1["id"] == device))
-    station && HomeAssistant.station_model("pecron", station["model"])
+  def model(%{makers: makers}, unit) do
+    [maker, device] = String.split(unit, ":", parts: 2)
+    station = Enum.find(makers[maker].stations || [], &(&1["id"] == device))
+    station && HomeAssistant.station_model(maker, station["model"])
   end
 
   @doc false
@@ -324,20 +335,28 @@ defmodule DIYWeb.MakerLink do
   def status(%{state: "offline"}, maker),
     do: "The app cannot reach #{name(maker)} now. It tries again in 30 seconds."
 
-  def status(%{state: "refused"}, maker),
-    do: "#{name(maker)} does not accept the token. Make a new token and connect again."
+  def status(%{state: "refused"}, "pecron"),
+    do: "Pecron does not accept the token. Make a new token and connect again."
+
+  def status(%{state: "refused"}, "ecoflow"),
+    do: "EcoFlow does not accept the keys. Look at the region and the keys, and connect again."
 
   @doc "Why the last step did not work, in words."
   def message("format", "pecron"), do: "A token of Pecron starts with phk_. Copy all of it."
 
-  def message("storage", _maker),
-    do: "This browser cannot keep the token. Look at the settings of the site."
+  def message("format", "ecoflow"),
+    do: "Put the access key and the secret key from the developer site of EcoFlow."
 
-  def message("token", maker), do: "#{name(maker)} does not accept the token."
+  def message("storage", maker),
+    do: "This browser cannot keep the #{secret(maker)}. Look at the settings of the site."
 
-  def message("denied", maker),
+  def message("token", maker), do: "#{name(maker)} does not accept the #{secret(maker)}."
+
+  def message("denied", "pecron"),
     do:
-      "#{name(maker)} did not let the app turn the outlets on or off. On app.pecron.com, look at the option \"Allow HA to send control commands\"."
+      "Pecron did not let the app turn the outlets on or off. On app.pecron.com, look at the option \"Allow HA to send control commands\"."
+
+  def message("denied", "ecoflow"), do: "EcoFlow did not accept the keys for this control."
 
   def message("unreachable", maker), do: "#{name(maker)} does not answer now."
   def message("offline", _maker), do: "The app cannot reach its server. Look at the network."
@@ -346,6 +365,10 @@ defmodule DIYWeb.MakerLink do
     do: "The app got no answer in 20 seconds. Look at the network, and try again later."
 
   def message("failed", maker), do: "#{name(maker)} did not do it. Try again."
+
+  # The token of Pecron, or the keys of EcoFlow.
+  defp secret("pecron"), do: "token"
+  defp secret("ecoflow"), do: "keys"
 
   @doc """
   The state of a switch of a station of a maker (`station/2`), in words. A
@@ -379,8 +402,9 @@ defmodule DIYWeb.MakerLink do
 
   @doc """
   The card of the direct link to a maker, in Settings. It has the state of
-  the link, and the field of the token with the key Connect, or the key
-  Disconnect.
+  the link, and the key Connect or the key Disconnect. For Pecron, the
+  form has the field of the token. For EcoFlow, it has the fields of the
+  region and of the two keys.
   """
   def card(assigns) do
     assigns = assign(assigns, link: assigns.makers[assigns.maker], name: name(assigns.maker))
@@ -388,14 +412,7 @@ defmodule DIYWeb.MakerLink do
     ~H"""
     <div id={"#{@maker}-card"} lang="en" class="space-y-2">
       <h2 class="text-lg font-bold">{@name}</h2>
-      <p class="text-sm">
-        See your {@name} stations from anywhere, with no Home Assistant, and turn their outlets on and off.
-        The token stays on this device. Each request goes through the server of the app, which keeps no token.
-      </p>
-      <p class="text-sm">
-        The token has the same access as your account: it reads your stations and turns their outlets on and off.
-        On the portal, the options "Exposed devices" and "Allow HA to send control commands" choose the stations that the app sees, and the controls that it can send.
-      </p>
+      <.intro maker={@maker} name={@name} />
       <%!-- The status takes the focus after Connect and Disconnect: the
         form or the key goes. --%>
       <p id={"#{@maker}-status"} role="status" class="text-sm font-medium" tabindex="-1">
@@ -428,23 +445,111 @@ defmodule DIYWeb.MakerLink do
         phx-submit={JS.dispatch("maker:connect") |> JS.dispatch("diy:focus", to: "##{@maker}-status")}
         class="flex flex-wrap gap-2 items-end"
       >
-        <label>
-          <span class="text-sm">Your token of {@name}</span>
-          <input
-            name="token"
-            type="password"
-            autocomplete="off"
-            spellcheck="false"
-            placeholder="phk_…"
-            class="input input-sm w-72 max-w-full block"
-          />
-        </label>
+        <.fields maker={@maker} name={@name} />
         <button class="btn btn-sm">Connect</button>
       </form>
       <p :if={@link.state in ~w(none refused)} class="text-xs opacity-70">
-        Make the token on app.pecron.com: sign in with the account of the Pecron app, then make a long-lived token. You can stop the token there at any time.
+        <.help maker={@maker} />
       </p>
     </div>
+    """
+  end
+
+  attr :maker, :string, required: true
+  attr :name, :string, required: true
+
+  # What the link gives, and where the token or the keys go.
+  defp intro(%{maker: "pecron"} = assigns) do
+    ~H"""
+    <p class="text-sm">
+      See your {@name} stations from anywhere, with no Home Assistant, and turn their outlets on and off.
+      The token stays on this device. Each request goes through the server of the app, which keeps no token.
+    </p>
+    <p class="text-sm">
+      The token has the same access as your account: it reads your stations and turns their outlets on and off.
+      On the portal, the options "Exposed devices" and "Allow HA to send control commands" choose the stations that the app sees, and the controls that it can send.
+    </p>
+    """
+  end
+
+  defp intro(%{maker: "ecoflow"} = assigns) do
+    ~H"""
+    <p class="text-sm">
+      See your {@name} stations from anywhere, with no Home Assistant, and turn their outlets on and off.
+      The keys stay on this device. This page calls EcoFlow directly: the server of the app never sees the keys.
+    </p>
+    <p class="text-sm">
+      The keys have the same access as your account: they read your stations and turn their outlets on and off.
+      The app knows the DELTA Pro, the DELTA Pro 3 and the DELTA Pro Ultra.
+    </p>
+    """
+  end
+
+  attr :maker, :string, required: true
+  attr :name, :string, required: true
+
+  # The fields of the form: the token of Pecron, or the region and the two
+  # keys of EcoFlow. The hook reads them; the LiveView never gets them.
+  defp fields(%{maker: "pecron"} = assigns) do
+    ~H"""
+    <label>
+      <span class="text-sm">Your token of {@name}</span>
+      <input
+        name="token"
+        type="password"
+        autocomplete="off"
+        spellcheck="false"
+        placeholder="phk_…"
+        class="input input-sm w-72 max-w-full block"
+      />
+    </label>
+    """
+  end
+
+  defp fields(%{maker: "ecoflow"} = assigns) do
+    ~H"""
+    <label>
+      <span class="text-sm">The region of your account</span>
+      <select name="region" class="select select-sm w-72 max-w-full block">
+        <option value="americas">Americas</option>
+        <option value="europe">Europe</option>
+      </select>
+    </label>
+    <label>
+      <span class="text-sm">Access key</span>
+      <input
+        name="access_key"
+        type="password"
+        autocomplete="off"
+        spellcheck="false"
+        class="input input-sm w-72 max-w-full block"
+      />
+    </label>
+    <label>
+      <span class="text-sm">Secret key</span>
+      <input
+        name="secret_key"
+        type="password"
+        autocomplete="off"
+        spellcheck="false"
+        class="input input-sm w-72 max-w-full block"
+      />
+    </label>
+    """
+  end
+
+  attr :maker, :string, required: true
+
+  # Where the person makes the token or the keys.
+  defp help(%{maker: "pecron"} = assigns) do
+    ~H"""
+    Make the token on app.pecron.com: sign in with the account of the Pecron app, then make a long-lived token. You can stop the token there at any time.
+    """
+  end
+
+  defp help(%{maker: "ecoflow"} = assigns) do
+    ~H"""
+    Make the keys on the developer site of EcoFlow (developer.ecoflow.com, or developer-eu.ecoflow.com in Europe): sign in with the account of the EcoFlow app, ask for access as a developer, then make the access key and the secret key. Select the region of your account.
     """
   end
 end

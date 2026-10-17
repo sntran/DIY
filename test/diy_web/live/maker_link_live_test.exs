@@ -69,6 +69,35 @@ defmodule DIYWeb.MakerLinkLiveTest do
     "dc" => nil
   }
 
+  # A DELTA Pro 3 of the account of EcoFlow.
+  defp dp3(fields \\ %{}) do
+    Map.merge(
+      %{
+        "id" => "DP3A",
+        "name" => "Garage EcoFlow",
+        "model" => "Delta Pro 3",
+        "online" => true,
+        "battery" => 57,
+        "input" => 0,
+        "output" => 2310,
+        "ac" => "on",
+        "dc" => "off"
+      },
+      fields
+    )
+  end
+
+  defp ecoflow(view, state, error \\ nil),
+    do:
+      render_hook(view, "maker:status", %{
+        "maker" => "ecoflow",
+        "state" => state,
+        "error" => error
+      })
+
+  defp ecoflow_stations(view, stations),
+    do: render_hook(view, "maker:stations", %{"maker" => "ecoflow", "stations" => stations})
+
   # The page Rooms with a power station in the garage, its panel open.
   defp station_page(conn) do
     build = preset()
@@ -625,6 +654,103 @@ defmodule DIYWeb.MakerLinkLiveTest do
     status(view, "connected")
     stations(view, [e3800(%{"name" => ""})])
     assert has_element?(view, "#maker-choice-0", "Pecron (E3800LFP)")
+  end
+
+  test "EcoFlow: the card has the region and the two keys, and they do not go to the LiveView",
+       %{conn: conn} do
+    view = open(conn, ~p"/settings", preset())
+    ecoflow(view, "none")
+    status(view, "none")
+    assert has_element?(view, "#ecoflow-card h2", "EcoFlow")
+    assert has_element?(view, "#ecoflow-card", "This page calls EcoFlow directly")
+    assert has_element?(view, "#ecoflow-card", "developer.ecoflow.com")
+
+    assert has_element?(
+             view,
+             ~s(#ecoflow-form[data-maker=ecoflow] select[name=region] option[value=americas])
+           )
+
+    assert has_element?(view, ~s(#ecoflow-form option[value=europe]))
+
+    for name <- ~w(access_key secret_key) do
+      assert has_element?(
+               view,
+               ~s(#ecoflow-form input[name=#{name}][type=password][autocomplete=off])
+             )
+    end
+
+    refute has_element?(view, ~s(#ecoflow-form input[name=token]))
+    form = view |> element("#ecoflow-form") |> render()
+    assert form =~ "maker:connect"
+    refute form =~ ~s(phx-submit="maker)
+
+    # The card of Pecron keeps its token.
+    assert has_element?(view, ~s(#pecron-form input[name=token]))
+
+    ecoflow(view, "none", "format")
+    assert has_element?(view, "#ecoflow-error", "Put the access key and the secret key")
+    ecoflow(view, "refused", "token")
+    assert has_element?(view, "#ecoflow-status", "EcoFlow does not accept the keys.")
+    refute has_element?(view, "#ecoflow-error")
+    ecoflow(view, "connected")
+    ecoflow_stations(view, [dp3()])
+    assert has_element?(view, "#ecoflow-status", "Connected to EcoFlow: 1 station.")
+
+    assert MakerLink.message("storage", "ecoflow") =~ "cannot keep the keys"
+    assert MakerLink.message("token", "ecoflow") == "EcoFlow does not accept the keys."
+  end
+
+  test "EcoFlow: a station links with its model, and its switches send a control", %{conn: conn} do
+    {view, id} = station_page(conn)
+    ecoflow(view, "connected")
+    ecoflow_stations(view, [dp3()])
+    assert has_element?(view, "#part-maker-title", "EcoFlow")
+    assert has_element?(view, "#maker-choice-0", "Garage EcoFlow (Delta Pro 3)")
+
+    # With the stations of the two makers, the title names the two.
+    status(view, "connected")
+    stations(view, [e3800()])
+    assert has_element?(view, "#part-maker-title", "Pecron and EcoFlow")
+    assert has_element?(view, "#maker-choice-1", "Garage EcoFlow (Delta Pro 3)")
+
+    # The link: the model of the DELTA Pro 3, its numbers, and the 12 V
+    # outlets.
+    view |> element("#maker-choice-1") |> render_click()
+    assert build_of(view).units == %{id => "ecoflow:DP3A"}
+    {:ok, station} = Build.item(build_of(view), id)
+    assert station.params["model"] == "ecoflow_delta_pro_3"
+    assert has_element?(view, "#part-maker-title", "EcoFlow")
+    refute has_element?(view, "#part-maker-title", "Pecron")
+    assert has_element?(view, "#ecoflow-battery", "57%")
+    assert has_element?(view, "#ecoflow-output", "2,310 W")
+    assert has_element?(view, "#ecoflow-ac-label", "AC outlets")
+    assert has_element?(view, "#ecoflow-dc-label", "12 V outlets")
+
+    view |> element("#ecoflow-switch-ac") |> render_click()
+
+    assert_push_event(view, "maker:control", %{
+      maker: "ecoflow",
+      device: "DP3A",
+      part: "ac",
+      on: false
+    })
+
+    render_hook(view, "maker:control_done", %{
+      "maker" => "ecoflow",
+      "device" => "DP3A",
+      "part" => "ac",
+      "error" => "denied"
+    })
+
+    assert has_element?(
+             view,
+             "#ecoflow-ac-state",
+             "EcoFlow did not accept the keys for this control. It is on."
+           )
+
+    # The link of the other maker changes nothing here.
+    status(view, "none")
+    assert has_element?(view, "#ecoflow-switch-ac[aria-disabled=false]")
   end
 
   property "the page keeps the stations that it can read, and nothing else" do

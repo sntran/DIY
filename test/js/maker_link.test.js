@@ -8,8 +8,17 @@ import {
   MAKERS, POLL_WAIT, ANSWER_WAIT, DB, STORE, CHANNEL, MAX_TOKEN, validToken, MakerLink, tokenStore, makerLinkHook,
   makerParts,
 } from "../../assets/js/maker_link.js"
+import {ecoflowCloud, HOSTS, LIST, QUOTA, SET, signText} from "../../assets/js/ecoflow.js"
+import {createHmac} from "node:crypto"
 
 const settle = () => new Promise((resolve) => setImmediate(resolve))
+// Waits until a condition is true, for 5 seconds at most. The calls of
+// EcoFlow take more steps, and WebCrypto works on a different thread.
+const until = async (condition) => {
+  const end = Date.now() + 5_000
+  while (!condition() && Date.now() < end) await new Promise((resolve) => setTimeout(resolve, 1))
+  assert.ok(condition())
+}
 
 // A fake relay: each call waits until the test answers it. The cloud has a
 // station for each token (its account): its AC outlets are on or off. As
@@ -94,7 +103,7 @@ const fire = (page, ms = POLL_WAIT) => {
 }
 
 test("the constants and the form of a token", () => {
-  assert.deepEqual(MAKERS, {pecron: {relay: "/relay/pecron", prefix: "phk_"}})
+  assert.deepEqual(MAKERS, {pecron: {relay: "/relay/pecron", prefix: "phk_"}, ecoflow: {cloud: ecoflowCloud}})
   assert.deepEqual([POLL_WAIT, ANSWER_WAIT, DB, STORE, CHANNEL, MAX_TOKEN],
     [30_000, 20_000, "diy-makers", "tokens", "diy.makers", 512])
   assert.ok(validToken("pecron", "phk_abc.DEF-123"))
@@ -102,6 +111,145 @@ test("the constants and the form of a token", () => {
     assert.equal(validToken("pecron", token), false, String(token))
   }
   assert.ok(validToken("pecron", `phk_${"a".repeat(508)}`))
+
+  // The keys of EcoFlow: a region, an access key and a secret key.
+  const keys = {region: "americas", accessKey: "Ak1", secretKey: "Sk1"}
+  assert.ok(validToken("ecoflow", keys))
+  assert.ok(validToken("ecoflow", {...keys, region: "europe", secretKey: "s".repeat(MAX_TOKEN)}))
+  for (const bad of [
+    {...keys, region: "asia"}, {...keys, region: "toString"}, {...keys, accessKey: ""}, {...keys, accessKey: "a b"},
+    {...keys, secretKey: null}, {...keys, secretKey: "s".repeat(MAX_TOKEN + 1)}, null, "Ak1", 5,
+  ]) {
+    assert.equal(validToken("ecoflow", bad), false, JSON.stringify(bad))
+  }
+})
+
+// A fake cloud of EcoFlow: a DELTA Pro 3 and a Wave (not a station). Its
+// AC outlets of 240 V are on (2) or off (0). Each call gives the code of
+// the cloud.
+function ecoflowApi() {
+  const api = {calls: [], code: "0", ac: 2}
+  api.fetch = async (url, options) => {
+    api.calls.push({url, options})
+    const {pathname} = new URL(url)
+    if (api.code !== "0") return json(200, {code: api.code, message: "accessKey is invalid"})
+    if (pathname === LIST) {
+      return json(200, {code: "0", data: [
+        {sn: "DP3A", deviceName: "Garage battery", online: 1, productName: "Delta Pro 3"},
+        {sn: "WAVE", deviceName: "Air", online: 1, productName: "Wave 2"},
+      ]})
+    }
+    if (pathname === QUOTA) {
+      return json(200, {code: "0", data: {
+        cmsBattSoc: 57, powInSumW: 0, powOutSumW: 2310, flowInfoAcHvOut: api.ac, flowInfoAcLvOut: 0, flowInfo12v: 0,
+      }})
+    }
+    const body = JSON.parse(options.body)
+    if ("cfgHvAcOutOpen" in body.params) api.ac = body.params.cfgHvAcOutOpen ? 2 : 0
+    return json(200, {code: "0"})
+  }
+  return api
+}
+
+test("EcoFlow: the page calls the cloud directly, and the keys never go to the server", async () => {
+  const api = ecoflowApi()
+  const page = parts({fetch: api.fetch})
+  const deps = {...page.deps, maker: "ecoflow", subtle: globalThis.crypto.subtle, nonce: () => "123456", now: () => 1_700_000_000_000}
+  const link = new MakerLink(deps)
+  await link.start()
+
+  // Keys of the wrong form: an error, and no call.
+  await link.connect({region: "asia", accessKey: "AK", secretKey: "SK"})
+  assert.deepEqual(last(page, "maker:status"), {maker: "ecoflow", state: "none", error: "format"})
+  await link.connect(null)
+  assert.equal(api.calls.length, 0)
+
+  // The keys go to the store with no spaces at their ends. A poll reads
+  // the list, then the state of each station of a known family.
+  await link.connect({region: "americas", accessKey: " AK ", secretKey: "SK "})
+  assert.deepEqual(page.tokens.get("ecoflow"), {region: "americas", accessKey: "AK", secretKey: "SK"})
+  await until(() => link.state === "connected")
+  assert.deepEqual(api.calls.map(({url}) => url), [`${HOSTS.americas}${LIST}`, `${HOSTS.americas}${QUOTA}?sn=DP3A`])
+  for (const {url, options} of api.calls) {
+    assert.ok(url.startsWith(HOSTS.americas))
+    assert.equal(options.credentials, "omit")
+    const query = Object.fromEntries(new URL(url).searchParams)
+    const text = signText(Object.keys(query).length ? query : null, "AK", "123456", "1700000000000")
+    assert.deepEqual(options.headers, {
+      accessKey: "AK", nonce: "123456", timestamp: "1700000000000",
+      sign: createHmac("sha256", "SK").update(text).digest("hex"),
+    })
+  }
+  assert.deepEqual(last(page, "maker:stations"), {maker: "ecoflow", stations: [{
+    id: "DP3A", name: "Garage battery", model: "Delta Pro 3", online: true,
+    battery: 57, input: 0, output: 2310, ac: "on", dc: "off",
+  }]})
+  assert.deepEqual(last(page, "maker:status"), {maker: "ecoflow", state: "connected", error: null})
+
+  // A control of the AC outlets: two commands (240 V and 120 V), then a
+  // poll.
+  api.calls.length = 0
+  await link.control("DP3A", "ac", false)
+  await settle()
+  assert.deepEqual(last(page, "maker:control_done"), {maker: "ecoflow", device: "DP3A", part: "ac", error: null})
+  const sets = api.calls.filter(({url}) => url.endsWith(SET))
+  assert.deepEqual(sets.map(({options}) => JSON.parse(options.body).params),
+    [{cfgHvAcOutOpen: false}, {cfgLvAcOutOpen: false}])
+  await until(() => last(page, "maker:stations").stations[0].ac === "off")
+
+  // A station that the list does not have: no family, so no command.
+  api.calls.length = 0
+  await link.control("WAVE", "ac", true)
+  assert.deepEqual(last(page, "maker:control_done"), {maker: "ecoflow", device: "WAVE", part: "ac", error: "failed"})
+  assert.equal(api.calls.filter(({url}) => url.endsWith(SET)).length, 0)
+  await until(() => !link.busy)
+
+  // EcoFlow refuses the keys: the control is denied, and the poll after it
+  // shows the refused keys. The polls stop.
+  api.code = "8513"
+  await link.control("DP3A", "ac", true)
+  assert.deepEqual(last(page, "maker:control_done"), {maker: "ecoflow", device: "DP3A", part: "ac", error: "denied"})
+  await until(() => link.state === "refused")
+  assert.deepEqual(last(page, "maker:status"), {maker: "ecoflow", state: "refused", error: "token"})
+  assert.equal(pollTimer(page), undefined)
+
+  // The same keys from a different tab: no new generation.
+  const generation = link.generation
+  await link.news()
+  assert.equal(link.generation, generation)
+  page.tokens.set("ecoflow", {region: "europe", accessKey: "AK", secretKey: "SK"})
+  await link.news()
+  assert.equal(link.generation, generation + 1)
+  link.stop()
+})
+
+test("EcoFlow: the wait of a poll ends after ANSWER_WAIT, and a call that throws is a failure", async () => {
+  // A cloud that never answers. As fetch, it stops when the signal stops.
+  let fetched = 0
+  const page = parts({fetch: (url, options) => new Promise((resolve, reject) => {
+    fetched += 1
+    options.signal.addEventListener("abort", () => reject(new Error("aborted")))
+  })})
+  const keys = {region: "europe", accessKey: "AK", secretKey: "SK"}
+  page.tokens.set("ecoflow", keys)
+  const deps = {...page.deps, maker: "ecoflow", subtle: globalThis.crypto.subtle, nonce: () => "1", now: () => 1}
+  const link = new MakerLink(deps)
+  await link.start()
+  await until(() => fetched === 1)
+  fire(page, ANSWER_WAIT)
+  await until(() => link.state === "offline")
+  assert.deepEqual(last(page, "maker:status"), {maker: "ecoflow", state: "offline", error: "timeout"})
+  link.stop()
+
+  // With no WebCrypto, the signature throws: the poll fails.
+  const page2 = parts({fetch: async () => json(200, {code: "0", data: []})})
+  page2.tokens.set("ecoflow", keys)
+  const link2 = new MakerLink({...page2.deps, maker: "ecoflow", subtle: undefined, nonce: () => "1", now: () => 1})
+  await link2.start()
+  await until(() => link2.state === "offline")
+  assert.deepEqual(last(page2, "maker:status"), {maker: "ecoflow", state: "offline", error: "failed"})
+  assert.equal(page2.timers.size, 1)
+  link2.stop()
 })
 
 test("a token: the stations, then a poll each POLL_WAIT while the page shows", async () => {
@@ -702,7 +850,11 @@ test("the hook: the links, the events of the LiveView and of the page", async ()
   }
   self.mounted()
   await settle()
-  assert.deepEqual(pushes.at(-1), ["maker:status", {maker: "pecron", state: "none", error: null}])
+  // One link for each maker.
+  assert.deepEqual(Object.keys(self.links), ["pecron", "ecoflow"])
+  for (const maker of ["pecron", "ecoflow"]) {
+    assert.ok(pushes.some(([event, payload]) => event === "maker:status" && payload.maker === maker && payload.state === "none"))
+  }
 
   // The key Connect of the card, through the page.
   listeners.connect("pecron", "phk_a1")
@@ -736,7 +888,7 @@ test("the hook: the links, the events of the LiveView and of the page", async ()
   listeners.shown()
   const count = pushes.length
   self.reconnected()
-  assert.equal(pushes.length, count + 2)
+  assert.equal(pushes.length, count + 4)
   await handlers["maker:disconnect"]({maker: "pecron"})
   assert.equal(page.tokens.has("pecron"), false)
   handlers["maker:disconnect"]({maker: "other"})
@@ -816,6 +968,27 @@ test("the parts of the browser", async () => {
   lone.notify("pecron")
   lone.listen({connect: () => {}, news: () => {}, shown: () => {}})()
   lone.close()
+  assert.equal(lone.subtle, undefined)
+
+  // WebCrypto, the nonce of EcoFlow (6 digits) and the time.
+  const subtle = {}
+  const secure = makerParts({...window, crypto: {subtle, getRandomValues: (list) => { list[0] = 900_005; return list }}})
+  assert.equal(secure.subtle, subtle)
+  assert.equal(secure.nonce(), "100005")
+  assert.equal(typeof secure.now(), "number")
+
+  // The form of EcoFlow: the region and the two keys go to the hook. The
+  // fields of the keys go empty, and the region stays.
+  const fields = {region: {value: "europe"}, access_key: {value: "AK"}, secret_key: {value: "SK"}}
+  const got2 = []
+  const stop2 = secure.listen({connect: (maker, keys) => got2.push([maker, keys]), news: () => {}, shown: () => {}})
+  const form2 = {dataset: {maker: "ecoflow"}, elements: {namedItem: (name) => fields[name] ?? null}}
+  const event2 = new Event("maker:connect")
+  Object.defineProperty(event2, "target", {value: form2})
+  events.dispatchEvent(event2)
+  assert.deepEqual(got2, [["ecoflow", {region: "europe", accessKey: "AK", secretKey: "SK"}]])
+  assert.deepEqual([fields.region.value, fields.access_key.value, fields.secret_key.value], ["europe", "", ""])
+  stop2()
 
   // The page goes: the channel and the database close. Then a delete of
   // the database is not blocked by the connection of the page.

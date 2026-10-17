@@ -2839,7 +2839,8 @@ invariants stay true. The new rules are in the tests:
 A person with no Home Assistant also sees a power station of Pecron from
 anywhere, and turns its outlets on and off. The app calls the cloud of
 Pecron with the API that Pecron made for Home Assistant (`DIY.Pecron`):
-the same calls as the integration of Pecron. EcoFlow comes in a next step.
+the same calls as the integration of Pecron. A person with EcoFlow uses
+the API of EcoFlow for developers ("The direct link to EcoFlow", below).
 
 The token:
 
@@ -3070,6 +3071,103 @@ The tests:
   the switch does not work and keeps the focus. Axe checks the card and
   the panel. On the Worker, the walk has no stub of the cloud of Pecron,
   so it does not connect Pecron (`DIY_STUBS`).
+
+#### The direct link to EcoFlow
+
+The page calls the API of EcoFlow for developers directly
+(`assets/js/ecoflow.js`). Its answers have CORS headers for each site:
+OPTIONS and GET on `api-a.ecoflow.com` and `api-e.ecoflow.com` give
+`access-control-allow-origin` with the origin of the request. They also
+allow the headers that the request asks for (a probe of October 2026).
+So the app needs no relay, and the keys never go to the server of the
+app.
+
+The keys:
+
+- The person asks for access as a developer on the developer site of
+  EcoFlow, then makes an access key and a secret key. The official docs
+  of the API need such an account.
+- The region of the account selects the host: `api-a.ecoflow.com` for
+  the Americas, and `api-e.ecoflow.com` for Europe (`translations/en.json`
+  of EcoFlow Cloud). A key of a different region is not valid.
+- The card EcoFlow in Settings has the region and the two keys. The key
+  Connect sends them to the hook, not to the LiveView. The hook keeps them
+  on the device (IndexedDB), as the token of Pecron. The fields of the
+  keys go empty.
+
+The calls (three clients of the community agree on them:
+`tolwi/hassio-ecoflow-cloud` for the public API,
+`TarasKhust/ecoflow-api-mqtt`, and the npm package
+`@ecoflow-api/rest-client` 0.6.0):
+
+- Each request has a signature (`signText`, `hmac`). The parameters
+  become one level: a key in a key is `a.b`, and an item of a list is
+  `a[0]`. The keys are sorted and joined as `key=value` with `&`. Then
+  come the access key, a nonce and the time in ms. The sign is
+  HMAC-SHA256 of this text with the secret key, in hex (WebCrypto). A
+  boolean signs as `true` or `false`.
+- A poll reads the list of the devices (`/iot-open/sign/device/list`),
+  then the state of each station of a known family
+  (`/iot-open/sign/device/quota/all`). The families are the DELTA Pro, the
+  DELTA Pro 3 and the DELTA Pro Ultra, by the product name of the device.
+  A different device (for example a Wave) does not count. The app reads
+  100 devices at most.
+- The parts of each family (the files of the public devices of tolwi,
+  and `@ecoflow-api/schemas` 0.7.0):
+  - DELTA Pro: the battery is `ems.lcdShowSoc`. The power in is
+    `pd.wattsInSum`, and the power out `pd.wattsOutSum`. The AC outlets
+    are `inv.cfgAcEnabled`, and the 12 V outlets `mppt.carState` (1 is
+    on).
+  - DELTA Pro 3: the battery is `cmsBattSoc`. The power in is
+    `powInSumW`, and the power out `powOutSumW`. The AC outlets are
+    `flowInfoAcHvOut` and `flowInfoAcLvOut`, and the 12 V outlets
+    `flowInfo12v` (2 is on).
+  - DELTA Pro Ultra: the battery, the power in and the power out of
+    `hs_yj751_pd_appshow_addr`. It has no switch in the app.
+- A control (`/iot-open/sign/device/quota`, PUT). A DELTA Pro gets
+  `{sn, params: {cmdSet: 32, id: 66, enabled: 1}}` for the AC outlets,
+  and the id 81 for the 12 V outlets. A DELTA Pro 3 gets `{sn, cmdId: 17,
+  dirDest: 1, dirSrc: 1, cmdFunc: 254, dest: 2, needAck: true, params:
+  {cfgHvAcOutOpen: true}}`. Its AC outlets need two commands: 240 V
+  (`cfgHvAcOutOpen`) and 120 V (`cfgLvAcOutOpen`). Its 12 V outlets use
+  `cfgDc12vOutOpen`.
+- The errors: EcoFlow refuses the keys with three codes. The code 8513
+  tells that the access key is not valid, also for a key of a different
+  region. The code 8521 tells that the signature is wrong, for a wrong
+  secret key or a wrong time. The code 8524 tells that a parameter is
+  empty. The app shows them as `token`. A different code
+  (for example 1006, a device that the API does not allow) is `failed`.
+  No answer is `unreachable`.
+
+The hook has the same rules as for Pecron: the generation, one poll at a
+time, a poll after a control, and the timeout. One wait of 20 seconds
+covers all the calls of a poll. The model `specs/MakerLink.tla` reads the
+station in one step. A poll of EcoFlow reads each station in a call of
+its own. So each station is as the station of the model, and the rules
+stay true for each station.
+
+The limits:
+
+- The AC outlets of a DELTA Pro 3 need two commands. When the second one
+  fails, the outlets of 240 V and of 120 V can be different. The control
+  then has its error, and the next poll shows the state.
+- A station with no state (its call failed) has no numbers, and it is
+  not online.
+- The time of the device signs each request. With a wrong time, EcoFlow
+  refuses the signature (8521), and the card tells that EcoFlow does not
+  accept the keys.
+- The app has no switch for the USB outlets, as through Home Assistant.
+
+The tests:
+
+- `test/js/ecoflow.test.js`: the signature against `node:crypto`, and the
+  flat parameters and their order (property tests). Also the family of a
+  product name, and the parts of each family (a property test). Also the
+  stations, the commands and the errors.
+- `test/js/maker_link.test.js`: the keys, a poll and a control from the
+  page, refused keys, the timeout, and the form of EcoFlow.
+- `test/diy_web/live/maker_link_live_test.exs`: the card of EcoFlow, the
+  link of a DELTA Pro 3 with its model, and its switches.
 
 ### The energy data
 

@@ -27,7 +27,8 @@ defmodule DIY.BuildUnitsTest do
     {build, [s1, s2]} = stations(2)
     assert Build.unit?("pecron:dev_1")
     refute Build.unit?("pecron:")
-    refute Build.unit?("ecoflow:dev_1")
+    assert Build.unit?("ecoflow:MR51ZAS4PG340123")
+    refute Build.unit?("anker:dev_1")
     refute Build.unit?("pecron:dev/1")
     refute Build.unit?(5)
 
@@ -103,7 +104,7 @@ defmodule DIY.BuildUnitsTest do
     {build, ids} = stations(3)
     fridge = Enum.find(build.items, &(&1.type == "fridge")).id
     items = ids ++ [fridge, "no such item"]
-    units = ["pecron:a", "pecron:b", "pecron:", "ecoflow:a", 5, nil]
+    units = ["pecron:a", "pecron:b", "pecron:", "ecoflow:a", "anker:a", 5, nil]
 
     check all(links <- map(list_of(tuple({member_of(items), member_of(units)})), &Map.new/1)) do
       json =

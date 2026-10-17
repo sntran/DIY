@@ -1149,7 +1149,7 @@ defmodule DIYWeb.Inside do
         <%!-- The title takes the focus after a link or its end: the key
           with the focus goes away. --%>
         <h3 id="part-maker-title" class="stage-sec-title" tabindex="-1">
-          {MakerLink.name((@unit && @unit.maker) || hd(@unit_choices).maker)}
+          {MakerLink.names((@unit && [@unit.maker]) || Enum.map(@unit_choices, & &1.maker))}
         </h3>
         <%!-- The notes of the link are in one element that stays: a note
           that comes or goes above the switches makes a switch lose the
