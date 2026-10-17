@@ -20,6 +20,10 @@ const { chromium } = await import(process.env.PLAYWRIGHT ?? "playwright-core")
 const axe = readFileSync(require.resolve("axe-core/axe.min.js"), "utf8")
 const tags = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"]
 const site = process.argv[2] ?? "http://localhost:4002"
+// The server of the tests has a stub of the cloud of Pecron
+// (DIY.Stubs.pecron/0). On the Worker, there is no stub: the walk does not
+// connect Pecron there.
+const stubs = process.env.DIY_STUBS === "1"
 
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM })
 let faults = 0
@@ -876,6 +880,22 @@ async function build(context, name) {
   await page.click("nav >> text=Settings")
   await page.waitForSelector("#settings")
   await check(page, `${name} settings`)
+
+  // The direct link to Pecron, with no Home Assistant: the token stays on
+  // the device, and the field goes empty. The cloud of Pecron is the stub
+  // of the tests (DIY.Stubs.pecron/0).
+  await page.waitForSelector("#pecron-status:has-text('Not connected.')")
+  await page.fill("#pecron-form input[name=token]", "abc")
+  await page.click("#pecron-form button")
+  await page.waitForSelector("#pecron-error:has-text('A token of Pecron starts with phk_.')")
+  if (stubs) {
+    await page.fill("#pecron-form input[name=token]", "phk_walk")
+    await page.click("#pecron-form button")
+    await page.waitForSelector("#pecron-status:has-text('Connected to Pecron: 1 station.')")
+    // The form goes: the status of the card has the focus.
+    assert.equal(await page.evaluate(() => document.activeElement?.id), "pecron-status")
+  }
+  await check(page, `${name} Pecron`)
   await page.fill("#settings-price input[name=price]", "12.5")
   await page.click("#settings-price button")
   await page.waitForSelector("text=the price that you gave")
@@ -967,14 +987,78 @@ for (const colorScheme of ["light", "dark"]) {
     await page.click("nav >> text=House")
     assert.match(await page.textContent("#real-average"), /\$\d+/)
 
-    // The station of Pecron goes: the walk checks the power with a station
-    // of its own.
+    // The station of Pecron from Home Assistant goes: the app uses Home
+    // Assistant for it, so it has no direct link. The walk checks the
+    // power with a station of its own.
     await page.click("nav >> text=Rooms")
     await page.waitForSelector("#inside")
     await follow(page, 'a[id^="item-"]:has-text("Pecron E3800LFP")')
+    assert.equal(await page.locator("#maker-choices").count(), 0)
     await page.click("#ask-remove")
     await page.click("#delete-item")
     await page.waitForSelector("#item-stage", { state: "detached" })
+
+    // A new station links to the station of the account of Pecron: its
+    // model, its numbers, and the keyboard turns its AC outlets. When the
+    // relay does not answer, the switch keeps the focus.
+    if (stubs) {
+      await follow(page, 'a[id^="add-"][aria-label="Add an item to Laundry"]')
+      await page.click("#add-power_station")
+      await page.waitForSelector("#maker-choice-0:has-text('Backup battery (E3800LFP)')")
+      // A long name of a station wraps at 320 px.
+      assert.equal(await page.$eval("#maker-choice-0", (choice) => getComputedStyle(choice).whiteSpace), "normal")
+      await page.click("#maker-choice-0")
+      // The key goes away: the title of the part takes the focus.
+      assert.equal(await page.evaluate(() => document.activeElement?.id), "part-maker-title")
+      await page.waitForSelector("#item-stage #item-stage-title:has-text('Pecron E3800LFP')")
+      // A long name of the station wraps in the notes of the part too.
+      assert.equal(await page.$eval("#maker-notes", (notes) => getComputedStyle(notes).overflowWrap), "anywhere")
+      await page.waitForSelector("#pecron-battery:has-text('82%')")
+      await page.waitForSelector("#pecron-output:has-text('350 W')")
+      const outlets = await page.getAttribute("#pecron-switch-ac", "aria-checked")
+      await page.focus("#pecron-switch-ac")
+      await page.keyboard.press("Space")
+      await page.waitForSelector(`#pecron-switch-ac[aria-checked=${outlets === "true" ? "false" : "true"}][aria-disabled=false]`)
+      assert.equal(await page.evaluate(() => document.activeElement?.id), "pecron-switch-ac")
+      await check(page, `${name} Pecron station`)
+      await page.route("**/relay/pecron/stations", (route) => route.abort())
+      await page.keyboard.press("Space")
+      await page.waitForSelector("#maker-notes #maker-offline")
+      await page.waitForSelector("#pecron-switch-ac[aria-disabled=true]")
+      assert.equal(await page.evaluate(() => document.activeElement?.id), "pecron-switch-ac")
+      await check(page, `${name} Pecron station offline`)
+      await page.unroute("**/relay/pecron/stations")
+      // The page opens again with the panel of the station. Before the first
+      // list, the key "Remove the link" has the focus. The list comes, and
+      // the switches come above the key: the key keeps the focus.
+      let release = null
+      const held = new Promise((resolve) => { release = resolve })
+      await page.route("**/relay/pecron/stations", async (route) => { await held; await route.continue() })
+      await page.reload()
+      await connected(page)
+      await page.waitForSelector("#maker-unlink")
+      assert.equal(await page.locator("#pecron-switch-ac").count(), 0)
+      await page.focus("#maker-unlink")
+      release()
+      await page.waitForSelector("#pecron-switch-ac")
+      assert.equal(await page.evaluate(() => document.activeElement?.id), "maker-unlink")
+      await page.unroute("**/relay/pecron/stations")
+      // The relay does not answer: the item has no choices. "Remove the
+      // link" takes the part away, and the title of the panel takes the
+      // focus.
+      await page.route("**/relay/pecron/stations", (route) => route.abort())
+      await page.focus("#pecron-switch-ac")
+      await page.keyboard.press("Space")
+      await page.waitForSelector("#maker-notes #maker-offline")
+      await page.focus("#maker-unlink")
+      await page.keyboard.press("Enter")
+      await page.waitForSelector("#part-maker", { state: "detached" })
+      await page.waitForFunction(() => document.activeElement?.id === "item-stage-title")
+      await page.unroute("**/relay/pecron/stations")
+      await page.click("#ask-remove")
+      await page.click("#delete-item")
+      await page.waitForSelector("#item-stage", { state: "detached" })
+    }
 
     // The power: a station in the laundry runs the fridge, and the person
     // plans panels on the roof.

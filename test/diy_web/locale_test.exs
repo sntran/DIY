@@ -219,6 +219,9 @@ defmodule DIYWeb.LocaleTest do
 
     view = open(put_req_cookie(conn, "diy_language", "vi"), ~p"/settings", build)
     assert has_element?(view, "nav[aria-label='Các phần của mô hình'] .dock-label", "Cài đặt")
+    # The weather and the prices of the ZIP code change the build. The
+    # status waits for them, also on a busy computer.
+    render_async(view, 5_000)
     assert has_element?(view, "#device-status", "Chưa lưu")
     assert has_element?(view, "#settings h1", "Cài đặt")
     assert has_element?(view, "#languages h2", "Ngôn ngữ")

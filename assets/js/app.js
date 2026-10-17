@@ -12,6 +12,7 @@ import {topHook} from "./top.js"
 import {usageHook} from "./usage.js"
 import {eflHook, eflLinksHook} from "./efl.js"
 import {homeAssistantHook, browserParts, signInHook, signInParts} from "./home_assistant.js"
+import {makerLinkHook, makerParts} from "./maker_link.js"
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {
@@ -39,8 +40,20 @@ const liveSocket = new LiveSocket("/live", Socket, {
     HomeAssistant: homeAssistantHook(() => browserParts(window)),
     // The sign-in page of Home Assistant, in its own tab.
     HomeAssistantSignIn: signInHook(() => signInParts(window)),
+    // The direct link to the cloud of the maker of a power station, with
+    // the token on the device (assets/js/maker_link.js).
+    MakerLink: makerLinkHook(() => makerParts(window)),
   },
 })
+
+// A key that goes away gives the focus to an element of the page with the
+// event "diy:focus" (JS.dispatch/2). The focus moves at once. JS.focus/1
+// also moves it again after two frames, and then it can take the focus
+// from a key that the person uses after it.
+window.addEventListener("diy:focus", (event) => event.target.focus())
+// The LiveView moves the focus after its patch (push_event "diy:focus"),
+// for example when the key with the focus goes with its part.
+window.addEventListener("phx:diy:focus", (event) => document.querySelector(event.detail.to)?.focus())
 
 // A bar at the top of the page while a page or a form loads.
 topbar.config({barColors: {0: "#29d"}, shadowColor: "rgba(0, 0, 0, .3)"})

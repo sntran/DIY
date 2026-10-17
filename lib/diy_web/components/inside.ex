@@ -16,7 +16,7 @@ defmodule DIYWeb.Inside do
   use DIYWeb, :html
 
   alias DIY.{Build, Catalog, Estimate, Layout, Prices, Solar}
-  alias DIYWeb.{Camera, Cutaway, Format, HomeAssistant, Icon, Stage, Wires}
+  alias DIYWeb.{Camera, Cutaway, Format, HomeAssistant, Icon, MakerLink, Stage, Wires}
 
   @place_names %{indoor: "Inside", outdoor: "Outside", roof: "On the roof"}
 
@@ -72,6 +72,14 @@ defmodule DIYWeb.Inside do
     default: %{},
     doc: "the parts of each power station (`DIYWeb.HomeAssistant`)"
 
+  attr :makers, :map,
+    default: %{},
+    doc: "the direct links to the clouds of the makers (`DIYWeb.MakerLink`)"
+
+  attr :maker_control, :map,
+    default: %{},
+    doc: "the controls of the stations of the makers that wait, and their errors"
+
   attr :ghosts, :list,
     default: [],
     doc: "the ghosts of the devices of Home Assistant (`DIY.HomeAssistant.ghosts/4`)"
@@ -119,6 +127,8 @@ defmodule DIYWeb.Inside do
         item_states: HomeAssistant.item_states(assigns),
         power: HomeAssistant.power(assigns, assigns.item),
         station: HomeAssistant.station(assigns, assigns.item),
+        unit: assigns.makers != %{} && MakerLink.station(assigns, assigns.item),
+        unit_choices: unit_choices(assigns, assigns.item),
         energy: HomeAssistant.item_energy(assigns, assigns.item),
         ha_meter: HomeAssistant.meter_offer(assigns)
       )
@@ -239,6 +249,8 @@ defmodule DIYWeb.Inside do
         ha_devices={@ha_devices}
         power={@power}
         station={@station}
+        unit={@unit || nil}
+        unit_choices={@unit_choices}
         energy={@energy}
         ha_meter={@ha_meter}
       />
@@ -560,7 +572,118 @@ defmodule DIYWeb.Inside do
       |> Enum.map(&Enum.at(by_month, String.to_integer(String.slice(&1, 5, 2)) - 1))
       |> Enum.sum()
 
-  # A number of a power station from Home Assistant, or "Not known".
+  @doc """
+  The stations of the accounts of the makers that an item can link to: only
+  for a power station with no link (`DIYWeb.MakerLink.choices/1`). An item
+  of a device of Home Assistant has none: the app uses Home Assistant when
+  it gives the station.
+  """
+  def unit_choices(%{makers: makers} = assigns, item_id) when makers != %{} do
+    case item_id && Build.item(assigns.build, item_id) do
+      {:ok, %{type: "power_station", id: id}} ->
+        if Map.has_key?(assigns.build.units, id) or Map.has_key?(assigns.build.devices, id),
+          do: [],
+          else: MakerLink.choices(assigns)
+
+      _other ->
+        []
+    end
+  end
+
+  def unit_choices(_assigns, _item_id), do: []
+
+  attr :station, :map,
+    required: true,
+    doc: "the parts of a station (`DIYWeb.HomeAssistant.station/2`)"
+
+  attr :prefix, :string, required: true, doc: "the start of the ids: `ha` or a maker"
+  attr :item, :string, required: true
+  attr :event, :string, required: true, doc: "the event of a switch"
+  attr :maker, :string, default: nil
+  attr :text, :any, required: true, doc: "the words of the state of a switch"
+
+  attr :link_text, :any,
+    default: nil,
+    doc: "the words of the link of the station, or `nil` (`DIYWeb.HomeAssistant.link_text/1`)"
+
+  # The numbers and the switches of a power station, from Home Assistant
+  # or from the cloud of its maker.
+  defp station_parts(assigns) do
+    ~H"""
+    <%!-- The numbers change each 5 seconds to 20 minutes: they are not
+      a live region. Their texts are in one element that stays: an element
+      that comes or goes above the switches makes a switch lose the
+      focus. --%>
+    <div id={"#{@prefix}-station-info"} class="flex flex-col gap-2">
+      <dl :if={@station.known} id={"#{@prefix}-station"} class="stage-facts">
+        <dt>Battery level</dt>
+        <dd id={"#{@prefix}-battery"}>{percent(@station.battery)}</dd>
+        <dt>Power in</dt>
+        <dd id={"#{@prefix}-input"}>{watts(@station.input)}</dd>
+        <dt>Power out</dt>
+        <dd id={"#{@prefix}-output"}>{watts(@station.output)}</dd>
+      </dl>
+      <p
+        :if={@station.known && @link_text && @link_text.(@station)}
+        id={"#{@prefix}-station-link"}
+        class="text-sm"
+      >
+        {@link_text.(@station)}
+      </p>
+      <p
+        :if={not @station.known and @station.online}
+        id={"#{@prefix}-station-wait"}
+        class="text-sm"
+      >
+        The app waits for the numbers of the station.
+      </p>
+    </div>
+    <%!-- A part that the station does not have has no switch: only its
+      name and its status. The rows are in one element that stays: a row
+      that comes moves no key below it. --%>
+    <div id={"#{@prefix}-switches"} class="contents">
+      <div :for={switch <- @station.switches} class="flex flex-col gap-1">
+        <div id={"#{@prefix}-#{switch.part}"} class="stage-switch-row stage-row-plain">
+          <span :if={switch.state == "none"} id={"#{@prefix}-#{switch.part}-label"}>
+            {switch.name}
+          </span>
+          <label
+            :if={switch.state != "none"}
+            for={"#{@prefix}-switch-#{switch.part}"}
+            id={"#{@prefix}-#{switch.part}-label"}
+          >
+            {switch.name}
+          </label>
+          <button
+            :if={switch.state != "none"}
+            type="button"
+            id={"#{@prefix}-switch-#{switch.part}"}
+            role="switch"
+            class="stage-switch"
+            aria-labelledby={"#{@prefix}-#{switch.part}-label"}
+            aria-describedby={"#{@prefix}-#{switch.part}-state"}
+            aria-checked={to_string(switch.state == "on")}
+            aria-disabled={
+              to_string(
+                switch.state not in ~w(on off) or switch.pending != nil or switch.link == false
+              )
+            }
+            phx-click={@event}
+            phx-value-item={@item}
+            phx-value-maker={@maker}
+            phx-value-part={switch.part}
+            phx-value-on={to_string(switch.state != "on")}
+          ></button>
+        </div>
+        <p id={"#{@prefix}-#{switch.part}-state"} role="status" class="text-sm">
+          {@text.(switch)}
+        </p>
+      </div>
+    </div>
+    """
+  end
+
+  # A number of a power station, or "Not known".
   defp percent(nil), do: "Not known"
   defp percent(value), do: "#{round(value)}%"
 
@@ -759,6 +882,15 @@ defmodule DIYWeb.Inside do
   attr :station, :map,
     default: nil,
     doc: "the parts of a power station (`DIYWeb.HomeAssistant.station/2`), or `nil`"
+
+  attr :unit, :map,
+    default: nil,
+    doc:
+      "the unit of the cloud of a maker of the station (`DIYWeb.MakerLink.station/2`), or `nil`"
+
+  attr :unit_choices, :list,
+    default: [],
+    doc: "the stations of the account of a maker that the item can link to"
 
   attr :energy, :map,
     default: nil,
@@ -960,7 +1092,7 @@ defmodule DIYWeb.Inside do
         aria-labelledby="part-link-title"
       >
         <h3 id="part-link-title" class="stage-sec-title">Home Assistant</h3>
-        <p id="ha-device" class="text-sm">{device_text(@device)}</p>
+        <p id="ha-device" class="text-sm wrap-anywhere">{device_text(@device)}</p>
         <%!-- A station with a device that is not a station now: for
           example, the person disabled its battery in Home Assistant. --%>
         <p
@@ -994,69 +1126,98 @@ defmodule DIYWeb.Inside do
         <p :if={@power} id="ha-power-state" role="status" class="text-sm">
           {HomeAssistant.power_text(@power)}
         </p>
-        <%!-- The numbers change each 5 seconds to 20 minutes: they are not
-          a live region. Their texts are in one element that stays while
-          there is a station: an element that comes or goes above the
-          switches makes a switch lose the focus. --%>
-        <div :if={@station} id="ha-station-info" class="flex flex-col gap-2">
-          <dl :if={@station.known} id="ha-station" class="stage-facts">
-            <dt>Battery level</dt>
-            <dd id="ha-battery">{percent(@station.battery)}</dd>
-            <dt>Power in</dt>
-            <dd id="ha-input">{watts(@station.input)}</dd>
-            <dt>Power out</dt>
-            <dd id="ha-output">{watts(@station.output)}</dd>
-          </dl>
-          <p
-            :if={@station.known && HomeAssistant.link_text(@station)}
-            id="ha-station-link"
-            class="text-sm"
-          >
-            {HomeAssistant.link_text(@station)}
-          </p>
-          <p :if={not @station.known and @station.online} id="ha-station-wait" class="text-sm">
-            The app waits for the numbers of the station.
-          </p>
-        </div>
-        <%!-- A part that the station does not have has no switch: only its
-          name and its status. --%>
-        <div :for={switch <- (@station && @station.switches) || []} class="flex flex-col gap-1">
-          <div id={"ha-#{switch.part}"} class="stage-switch-row stage-row-plain">
-            <span :if={switch.state == "none"} id={"ha-#{switch.part}-label"}>{switch.name}</span>
-            <label
-              :if={switch.state != "none"}
-              for={"ha-switch-#{switch.part}"}
-              id={"ha-#{switch.part}-label"}
-            >
-              {switch.name}
-            </label>
-            <button
-              :if={switch.state != "none"}
-              type="button"
-              id={"ha-switch-#{switch.part}"}
-              role="switch"
-              class="stage-switch"
-              aria-labelledby={"ha-#{switch.part}-label"}
-              aria-describedby={"ha-#{switch.part}-state"}
-              aria-checked={to_string(switch.state == "on")}
-              aria-disabled={
-                to_string(
-                  switch.state not in ~w(on off) or switch.pending != nil or switch.link == false
-                )
-              }
-              phx-click="ha_station_switch"
-              phx-value-item={@item.id}
-              phx-value-part={switch.part}
-              phx-value-on={to_string(switch.state != "on")}
-            ></button>
-          </div>
-          <p id={"ha-#{switch.part}-state"} role="status" class="text-sm">
-            {HomeAssistant.power_text(switch)}
-          </p>
-        </div>
+        <.station_parts
+          :if={@station}
+          station={@station}
+          prefix="ha"
+          item={@item.id}
+          event="ha_station_switch"
+          text={&HomeAssistant.power_text/1}
+          link_text={&HomeAssistant.link_text/1}
+        />
         <p :if={@twin} id="ha-twin" class="text-sm">
           The house also has {@twin.name} in {@twin.room}, with no link to Home Assistant. If it is the same {@twin.kind}, remove one of them.
         </p>
+      </section>
+
+      <section
+        :if={@unit || @unit_choices != []}
+        id="part-maker"
+        class="stage-sec"
+        aria-labelledby="part-maker-title"
+      >
+        <%!-- The title takes the focus after a link or its end: the key
+          with the focus goes away. --%>
+        <h3 id="part-maker-title" class="stage-sec-title" tabindex="-1">
+          {MakerLink.name((@unit && @unit.maker) || hd(@unit_choices).maker)}
+        </h3>
+        <%!-- The notes of the link are in one element that stays: a note
+          that comes or goes above the switches makes a switch lose the
+          focus. --%>
+        <div :if={@unit} id="maker-notes" class="flex flex-col gap-2 text-sm wrap-anywhere">
+          <p :if={@unit.name} id="maker-name">
+            This is {@unit.name} in your account of {MakerLink.name(@unit.maker)}.
+          </p>
+          <p :if={@unit.state in ~w(none refused)} id="maker-closed">
+            The app has no link to {MakerLink.name(@unit.maker)} now.{if @unit.known,
+              do: " These are its last numbers."}
+            <.link patch={~p"/settings"} class="link">Connect it in Settings.</.link>
+          </p>
+          <p :if={@unit.state in ~w(loading connecting)} id="maker-connecting">
+            The app connects to {MakerLink.name(@unit.maker)}.
+          </p>
+          <p :if={@unit.state == "offline"} id="maker-offline">
+            The app cannot reach {MakerLink.name(@unit.maker)} now.{if @unit.known,
+              do: " These are its last numbers."}
+          </p>
+          <p :if={@unit.online && not @unit.found} id="maker-gone">
+            Your account of {MakerLink.name(@unit.maker)} does not have this station now.
+          </p>
+          <%!-- The station of the last list: only while the link is
+            connected, so that the part does not tell a state "now" with no
+            link. --%>
+          <p :if={@unit.online && @unit.known && not @unit.reachable} id="maker-unreachable">
+            {MakerLink.name(@unit.maker)} cannot reach the station now. These are its last numbers.
+          </p>
+        </div>
+        <%!-- The parts of the station are in one element that stays while
+          the item has a unit: a part that comes or goes moves the key below
+          it, and that key loses the focus. --%>
+        <div :if={@unit} id="maker-station" class="contents">
+          <.station_parts
+            :if={@unit.found}
+            station={@unit}
+            prefix={@unit.maker}
+            item={@item.id}
+            event="maker_switch"
+            maker={@unit.maker}
+            text={&MakerLink.switch_text(&1, @unit.maker)}
+          />
+        </div>
+        <button
+          :if={@unit}
+          type="button"
+          id="maker-unlink"
+          class="stage-link self-start"
+          phx-click={JS.push("maker_unlink") |> JS.dispatch("diy:focus", to: "#part-maker-title")}
+          phx-value-item={@item.id}
+        >
+          Remove the link to {MakerLink.name(@unit.maker)}
+        </button>
+        <div :if={is_nil(@unit)} id="maker-choices" class="flex flex-col gap-2">
+          <p class="text-sm">Link it to a station of your account:</p>
+          <button
+            :for={{choice, index} <- Enum.with_index(@unit_choices)}
+            type="button"
+            id={"maker-choice-#{index}"}
+            class="stage-btn stage-btn-wrap self-start"
+            phx-click={JS.push("maker_link") |> JS.dispatch("diy:focus", to: "#part-maker-title")}
+            phx-value-item={@item.id}
+            phx-value-unit={choice.unit}
+          >
+            {choice.name}{if choice.model, do: " (#{choice.model})"}
+          </button>
+        </div>
       </section>
 
       <section

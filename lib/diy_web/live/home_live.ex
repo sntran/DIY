@@ -281,6 +281,63 @@ defmodule DIYWeb.HomeLive do
     end
   end
 
+  # A link of a power station to a station of the account of a maker
+  # (DIYWeb.MakerLink): only to a station that the page offers. A station of
+  # a known model gets the model, when the person did not choose one.
+  def handle_event("maker_link", %{"item" => item, "unit" => unit}, socket) do
+    with true <- unit in Enum.map(DIYWeb.MakerLink.choices(socket.assigns), & &1.unit),
+         {:ok, build} <- Build.link_unit(socket.assigns.build, item, unit) do
+      model = DIYWeb.MakerLink.model(socket.assigns, unit)
+      {:ok, station} = Build.item(build, item)
+
+      build =
+        with true <- model != nil and station.params["model"] == "other",
+             {:ok, build} <- Build.update_item(build, item, %{"model" => model}) do
+          build
+        else
+          _ -> build
+        end
+
+      {:noreply, put(socket, build)}
+    else
+      _ -> {:noreply, socket}
+    end
+  end
+
+  def handle_event("maker_unlink", %{"item" => item}, socket) do
+    case Build.unlink_unit(socket.assigns.build, item) do
+      {:ok, build} ->
+        socket = put(socket, build)
+
+        # With no choice, the part of the maker goes with its title: the
+        # title of the panel takes the focus.
+        socket =
+          if DIYWeb.Inside.unit_choices(socket.assigns, item) == [],
+            do: push_event(socket, "diy:focus", %{to: "#item-stage-title"}),
+            else: socket
+
+        {:noreply, socket}
+
+      {:error, _reason} ->
+        {:noreply, socket}
+    end
+  end
+
+  # A switch of the outlets of a station of a maker. It works only when the
+  # link is connected, the state of the part is known, and no control of
+  # the part waits.
+  def handle_event("maker_switch", %{"item" => item, "part" => part, "on" => on}, socket)
+      when on in ~w(true false) do
+    with %{maker: maker, device: device, switches: switches} <-
+           DIYWeb.MakerLink.station(socket.assigns, item),
+         %{state: state, pending: nil, link: true} when state in ~w(on off) <-
+           Enum.find(switches, &(&1.part == part)) do
+      {:noreply, DIYWeb.MakerLink.control(socket, maker, device, part, on == "true")}
+    else
+      _station -> {:noreply, socket}
+    end
+  end
+
   # A new model of a van or of a station gets a status: what changed.
   def handle_event("item", %{"item_id" => id, "item" => values}, socket) when is_map(values) do
     with {:ok, before} <- Build.item(socket.assigns.build, id),
@@ -1519,6 +1576,7 @@ defmodule DIYWeb.HomeLive do
     >
       <div id="device" phx-hook="Device" class="hidden"></div>
       <div id="home-assistant" phx-hook="HomeAssistant" class="hidden"></div>
+      <div id="maker-link" phx-hook="MakerLink" class="hidden"></div>
       <div id="top" phx-hook="Top" data-page={page_key(assigns)} class="hidden"></div>
       <noscript>
         <p class="alert alert-warning">
@@ -1563,6 +1621,8 @@ defmodule DIYWeb.HomeLive do
                 ha_states={@ha_states}
                 ha_control={@ha_control}
                 ha_stations={@ha_stations}
+                makers={@makers}
+                maker_control={@maker_control}
                 ha_energy={@ha_energy}
                 ghosts={@ghosts}
                 ha_count={@ha_count}
@@ -1627,6 +1687,8 @@ defmodule DIYWeb.HomeLive do
                 estimate={@full}
                 price={@price}
                 ha={@ha}
+                makers={@makers}
+                maker_control={@maker_control}
                 scene={@van_scene}
                 view={@van_view}
                 room={@room}
@@ -1642,6 +1704,7 @@ defmodule DIYWeb.HomeLive do
               market={@market}
               uploads={@uploads}
               ha={@ha}
+              makers={@makers}
               zip_error={@zip_error}
               zip_text={@zip_text}
             />

@@ -61,6 +61,9 @@ defmodule DIY.Build do
     id), for the rooms with a link (`link_area/3`).
   - `devices`: the device of Home Assistant of each item (its id), for the
     items with a link (`add_device/6`). A device has one item at most.
+  - `units`: the unit of the cloud of a maker of each power station
+    (`"pecron:id"`), for a person with no Home Assistant (`link_unit/3`).
+    A unit has one item at most.
   - `wires`: the wires between the items, at most 100, and at most 24 for
     an item (`add_wire/3`). Each wire has an `id`, the item at each end
     (`from` gives the current, `to`), and its numbers (`DIY.Wire`). A
@@ -107,6 +110,7 @@ defmodule DIY.Build do
             hints: [],
             areas: %{},
             devices: %{},
+            units: %{},
             wires: []
 
   @type plan :: %{x: integer(), y: integer(), w: pos_integer(), d: pos_integer()}
@@ -166,6 +170,7 @@ defmodule DIY.Build do
           hints: [String.t()],
           areas: %{String.t() => String.t()},
           devices: %{String.t() => String.t()},
+          units: %{String.t() => String.t()},
           wires: [wire()]
         }
 
@@ -202,11 +207,19 @@ defmodule DIY.Build do
   def change(%__MODULE__{revision: revision} = build, fun) do
     %__MODULE__{} = changed = fun.(build)
     %__MODULE__{} = changed = Layout.fill(changed)
-    # An item that went away takes its link to a device and its wires with
-    # it.
-    devices = Map.take(changed.devices, Enum.map(changed.items, & &1.id))
+    # An item that went away takes its links and its wires with it.
+    ids = Enum.map(changed.items, & &1.id)
+    devices = Map.take(changed.devices, ids)
+    units = Map.take(changed.units, ids)
     %__MODULE__{} = changed = fit_wires(changed)
-    %__MODULE__{changed | revision: revision + 1, stamp: new_stamp(), devices: devices}
+
+    %__MODULE__{
+      changed
+      | revision: revision + 1,
+        stamp: new_stamp(),
+        devices: devices,
+        units: units
+    }
   end
 
   # The items of a node of DC: a battery and a busbar.
@@ -379,7 +392,7 @@ defmodule DIY.Build do
   @spec put_house(t(), house(), [map()], [map()]) :: t()
   def put_house(build, house, rooms, items) do
     change(build, fn build ->
-      build = %{build | house: house, rooms: [], items: [], areas: %{}, devices: %{}}
+      build = %{build | house: house, rooms: [], items: [], areas: %{}, devices: %{}, units: %{}}
 
       {build, ids} =
         Enum.reduce(rooms, {build, %{}}, fn room, {build, ids} ->
@@ -643,6 +656,46 @@ defmodule DIY.Build do
   @doc "The id of the item of a device of Home Assistant, or `nil`."
   def device_item(build, device),
     do: Enum.find_value(build.devices, fn {item, other} -> other == device && item end)
+
+  # The makers of the units (DIY.Pecron).
+  @unit ~r/\A(pecron):[A-Za-z0-9_-]{1,64}(:[A-Za-z0-9_-]{1,64})?\z/
+
+  @doc """
+  True for a unit of the cloud of a maker: the maker and the id of its
+  device, for example `"pecron:dev_1"`.
+  """
+  def unit?(unit), do: is_binary(unit) and unit =~ @unit
+
+  @doc """
+  Links a power station to a unit of the cloud of its maker. A unit has
+  one item at most: a unit of a different item is an error (`:taken`).
+  An item of a device of Home Assistant gets no unit (`:device`): the app
+  uses Home Assistant for it.
+  """
+  @spec link_unit(t(), String.t(), String.t()) :: {:ok, t()} | {:error, atom()}
+  def link_unit(build, id, unit) do
+    with {:ok, %{type: "power_station"}} <- item(build, id),
+         true <- not Map.has_key?(build.devices, id) || {:error, :device},
+         true <- unit?(unit) || {:error, :unit},
+         true <- unit_item(build, unit) in [nil, id] || {:error, :taken} do
+      {:ok, change(build, &%{&1 | units: Map.put(&1.units, id, unit)})}
+    else
+      {:ok, _item} -> {:error, :item}
+      error -> error
+    end
+  end
+
+  @doc "Ends the link of an item to a unit."
+  @spec unlink_unit(t(), String.t()) :: {:ok, t()} | {:error, :item}
+  def unlink_unit(build, id) do
+    if Map.has_key?(build.units, id),
+      do: {:ok, change(build, &%{&1 | units: Map.delete(&1.units, id)})},
+      else: {:error, :item}
+  end
+
+  @doc "The id of the item of a unit, or `nil`."
+  def unit_item(build, unit),
+    do: Enum.find_value(build.units, fn {item, other} -> other == unit && item end)
 
   # A camper van gets its zones. Its numbers are the numbers of its model:
   # typical, until the user checks them on the label of the van.
@@ -1163,6 +1216,7 @@ defmodule DIY.Build do
       "hints" => build.hints,
       "areas" => build.areas,
       "devices" => build.devices,
+      "units" => build.units,
       "wires" => build.wires
     })
   end
@@ -1202,6 +1256,7 @@ defmodule DIY.Build do
          {:ok, hints} <- hints(map["hints"]),
          {:ok, areas} <- areas(map["areas"], rooms),
          {:ok, devices} <- devices(map["devices"], items, rooms),
+         {:ok, units} <- units(map["units"], items, devices),
          {:ok, wires} <- wires(map["wires"], items) do
       seq = last_id(seq, rooms ++ items ++ plans ++ wires)
 
@@ -1226,6 +1281,7 @@ defmodule DIY.Build do
          hints: hints,
          areas: areas,
          devices: devices,
+         units: units,
          wires: wires
        }
        |> repair_vans()
@@ -1736,6 +1792,27 @@ defmodule DIY.Build do
   end
 
   defp devices(_devices, _items, _rooms), do: {:error, :devices}
+
+  # The links of the power stations to the units of a maker. A build of an
+  # older version has none. A link that the app cannot read goes away: a
+  # link must not stop the build from loading. A unit has one item at
+  # most: the first station keeps it. An item of a device of Home
+  # Assistant has no unit.
+  defp units(units, items, devices) when is_map(units) do
+    {links, _used} =
+      Enum.reduce(items, {%{}, MapSet.new()}, fn item, {links, used} ->
+        unit = units[item.id]
+
+        if item.type == "power_station" and unit?(unit) and not MapSet.member?(used, unit) and
+             not Map.has_key?(devices, item.id),
+           do: {Map.put(links, item.id, unit), MapSet.put(used, unit)},
+           else: {links, used}
+      end)
+
+    {:ok, links}
+  end
+
+  defp units(_units, _items, _devices), do: {:ok, %{}}
 
   # The wires. A build of an older version has none. A wire that the app
   # cannot read goes away: a wire must not stop the build from loading. A
