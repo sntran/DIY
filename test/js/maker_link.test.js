@@ -223,7 +223,7 @@ test("a disconnect or a new token: the answers of the old token change nothing",
   other.stop()
 })
 
-test("a control: its end, then a poll; while a poll waits, the poll comes again", async () => {
+test("a control: its end goes after the poll after it; while a poll waits, the poll comes again", async () => {
   const fake = relay()
   const page = parts({fetch: fake.fetch})
   const link = new MakerLink(page.deps)

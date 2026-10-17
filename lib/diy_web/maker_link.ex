@@ -307,7 +307,10 @@ defmodule DIYWeb.MakerLink do
   defp number(_part, value) when is_number(value) and value >= 0 and value <= 1_000_000, do: value
   defp number(_part, _value), do: nil
 
-  defp text(value) when is_binary(value) and byte_size(value) <= @max_text, do: value
+  # An empty name is no name: the page then tells the maker or the model.
+  defp text(value) when is_binary(value) and byte_size(value) <= @max_text,
+    do: if(String.trim(value) == "", do: nil, else: value)
+
   defp text(_value), do: nil
 
   @doc "The state of the link to a maker, in words."
@@ -398,6 +401,18 @@ defmodule DIYWeb.MakerLink do
       <p id={"#{@maker}-status"} role="status" class="text-sm font-medium" tabindex="-1">
         {status(@link, @maker)}
       </p>
+      <%!-- The key Disconnect comes before the error and the form: an
+        element that comes above a key makes the key lose the focus. --%>
+      <button
+        :if={@link.state in ~w(connecting connected offline refused)}
+        type="button"
+        id={"#{@maker}-disconnect"}
+        phx-click={JS.push("maker_disconnect") |> JS.dispatch("diy:focus", to: "##{@maker}-status")}
+        phx-value-maker={@maker}
+        class="btn btn-sm"
+      >
+        Disconnect
+      </button>
       <p
         :if={@link.error && @link.error != "token"}
         id={"#{@maker}-error"}
@@ -429,16 +444,6 @@ defmodule DIYWeb.MakerLink do
       <p :if={@link.state in ~w(none refused)} class="text-xs opacity-70">
         Make the token on app.pecron.com: sign in with the account of the Pecron app, then make a long-lived token. You can stop the token there at any time.
       </p>
-      <button
-        :if={@link.state in ~w(connecting connected offline refused)}
-        type="button"
-        id={"#{@maker}-disconnect"}
-        phx-click={JS.push("maker_disconnect") |> JS.dispatch("diy:focus", to: "##{@maker}-status")}
-        phx-value-maker={@maker}
-        class="btn btn-sm"
-      >
-        Disconnect
-      </button>
     </div>
     """
   end

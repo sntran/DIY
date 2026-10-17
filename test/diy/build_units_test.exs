@@ -68,12 +68,18 @@ defmodule DIY.BuildUnitsTest do
     build = house()
     {:ok, build, ha} = Build.add_device(build, garage(build), "power_station", "ha_dev_1")
     assert Build.link_unit(build, ha, "pecron:dev_1") == {:error, :device}
+    {:ok, build, other} = Build.add_item(build, garage(build), "power_station")
 
+    # The item of the device loses its unit. A different station keeps its
+    # unit: the device of one item does not end the links of the others.
     json =
-      build |> Build.to_json() |> Jason.decode!() |> Map.put("units", %{ha => "pecron:dev_1"})
+      build
+      |> Build.to_json()
+      |> Jason.decode!()
+      |> Map.put("units", %{ha => "pecron:dev_1", other => "pecron:dev_2"})
 
     assert {:ok, loaded} = json |> Jason.encode!() |> Build.from_json()
-    assert loaded.units == %{}
+    assert loaded.units == %{other => "pecron:dev_2"}
   end
 
   test "a stored build keeps its links, and an old build has none" do

@@ -2850,7 +2850,9 @@ The token:
   of the token. The key Connect sends the DOM event `maker:connect` to
   the hook (`JS.dispatch/1`): the token never goes to the LiveView. The
   field goes empty. After Connect and Disconnect, the status of the card
-  takes the focus: the form or the key goes.
+  takes the focus: the form or the key goes. The key Disconnect comes
+  just after the status. An error or a form that comes goes below it, so
+  the key keeps the focus.
 - The hook keeps the token on the device (IndexedDB, the database
   `diy-makers`). A different tab gets the news (BroadcastChannel
   `diy.makers`).
@@ -2883,8 +2885,9 @@ The relay (`DIYWeb.RelayController`, `/relay/pecron/…`):
 The hook (`assets/js/maker_link.js`) reads the stations at the start, and
 then each 30 seconds while the page shows. A hidden page reads them again
 when it shows. Pecron can refuse a control (a 401 or a 403). An example
-is the option "Allow HA to send control commands" off on the portal. No source tells the answer of Pecron in that case. Then only the
-control has the error (`denied`). The token can still read, so the poll
+is the option "Allow HA to send control commands" off on the portal. No
+source tells the answer of Pecron in that case. Then only the control
+has the error (`denied`). The token can still read, so the poll
 after the control goes on. Only a poll that Pecron refuses stops the link
 (`refused`). A link that stops (a page that goes) does nothing more. The TLA+ model
 `specs/MakerLink.tla` checks five rules:
@@ -2910,8 +2913,9 @@ after the control goes on. Only a poll that Pecron refuses stops the link
 - **The end after the poll** (`MakerLink.earlyend.cfg`). The end of a
   control with no error goes to the page after the answer of the poll
   after it. Until then, the switch waits. An end with an error goes at
-  once. When that poll fails, the end goes with the error of the poll,
-  and the page tells that it has no link. Without this rule, the switch
+  once. When that poll fails, the end goes too, with no error. The
+  status of the link has the error, and the page tells that it has no
+  link. Without this rule, the switch
   shows the state from before the control as its new state, until the
   next poll (the invariant `EndNew`). The link to Home Assistant has the
   same rule: its hook sends the states before the end of a control.
@@ -2958,14 +2962,15 @@ The station:
   station.
 - A choice has the name of the station, which the person gave in the app
   of Pecron. A long name wraps, so a choice fits at 320 px. After the
-  link, the part tells this name.
+  link, the part tells this name, and it wraps there too. An empty name
+  is no name: the choice then tells the maker and the model.
 - The part shows the battery level, the power in and the power out, and
   the switches of the AC and DC outlets. These are the same parts as for
   a station of Home Assistant, with the same component. The field
   `online` of the device tells if Pecron can reach the station. When it
   cannot, the part tells it and shows its last numbers, and the switches
-  do not work. When the account does not have the station now, the part
-  tells it too.
+  do not work. The part tells this only while the link is connected.
+  When the account does not have the station now, the part tells it too.
 - The part tells the state of the link. While the link connects, it tells
   that the app connects. With no link, it asks the person to connect in
   Settings. When the app cannot reach Pecron, it tells that these are the
@@ -3009,6 +3014,12 @@ The limits:
 - A poll can remove a switch that has the focus: a switch with no value,
   or a list without the station. Then the focus goes to the page. This is
   rare, and the app does not move the focus then.
+- When a poll fails, the part with its choices goes, also when its title
+  or a choice has the focus. Then the focus goes to the page. The choices
+  come back with the next list.
+- After the LiveView connects again (for example after a short loss of
+  the network), the page has no control that waits. Until the next poll,
+  a switch can show the state from before its control.
 - The relay has no limit of requests for each address. A script can use
   the relay to call `/api/ha` with its own token. It gets no data that it
   cannot get from Pecron directly. But Pecron sees the address of the
@@ -3027,10 +3038,11 @@ The limits:
   codes of the parts are the codes of the TSL of Pecron. The official
   integration takes the keys of its entities from the server, with no
   list of codes. The portal gives each entity the key of its TSL code
-  (`tslToHaEntities`). Two sources name the codes:
-  `unofficial-pecron-api` 0.4.1 (`models.py`) and `jsight/ha-pecron`
-  (`const.py`). A number or a switch as text (`"82"`, `"true"`) is not
-  known.
+  (`tslToHaEntities`). `unofficial-pecron-api` 0.4.1 (`models.py`) names
+  the codes of the numbers and of the switches (`ac_switch_hm` and
+  `dc_switch_hm`), and so does pecron-monitor (`protocol.py`).
+  `jsight/ha-pecron` names the codes of the numbers (`const.py`). A
+  number or a switch as text (`"82"`, `"true"`) is not known.
 
 The tests:
 

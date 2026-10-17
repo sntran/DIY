@@ -1011,6 +1011,8 @@ for (const colorScheme of ["light", "dark"]) {
       // The key goes away: the title of the part takes the focus.
       assert.equal(await page.evaluate(() => document.activeElement?.id), "part-maker-title")
       await page.waitForSelector("#item-stage #item-stage-title:has-text('Pecron E3800LFP')")
+      // A long name of the station wraps in the notes of the part too.
+      assert.equal(await page.$eval("#maker-notes", (notes) => getComputedStyle(notes).overflowWrap), "anywhere")
       await page.waitForSelector("#pecron-battery:has-text('82%')")
       await page.waitForSelector("#pecron-output:has-text('350 W')")
       const outlets = await page.getAttribute("#pecron-switch-ac", "aria-checked")

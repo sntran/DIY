@@ -1092,7 +1092,7 @@ defmodule DIYWeb.Inside do
         aria-labelledby="part-link-title"
       >
         <h3 id="part-link-title" class="stage-sec-title">Home Assistant</h3>
-        <p id="ha-device" class="text-sm">{device_text(@device)}</p>
+        <p id="ha-device" class="text-sm wrap-anywhere">{device_text(@device)}</p>
         <%!-- A station with a device that is not a station now: for
           example, the person disabled its battery in Home Assistant. --%>
         <p
@@ -1154,7 +1154,7 @@ defmodule DIYWeb.Inside do
         <%!-- The notes of the link are in one element that stays: a note
           that comes or goes above the switches makes a switch lose the
           focus. --%>
-        <div :if={@unit} id="maker-notes" class="flex flex-col gap-2 text-sm">
+        <div :if={@unit} id="maker-notes" class="flex flex-col gap-2 text-sm wrap-anywhere">
           <p :if={@unit.name} id="maker-name">
             This is {@unit.name} in your account of {MakerLink.name(@unit.maker)}.
           </p>
@@ -1173,7 +1173,10 @@ defmodule DIYWeb.Inside do
           <p :if={@unit.online && not @unit.found} id="maker-gone">
             Your account of {MakerLink.name(@unit.maker)} does not have this station now.
           </p>
-          <p :if={@unit.known && not @unit.reachable} id="maker-unreachable">
+          <%!-- The station of the last list: only while the link is
+            connected, so that the part does not tell a state "now" with no
+            link. --%>
+          <p :if={@unit.online && @unit.known && not @unit.reachable} id="maker-unreachable">
             {MakerLink.name(@unit.maker)} cannot reach the station now. These are its last numbers.
           </p>
         </div>

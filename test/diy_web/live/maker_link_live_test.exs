@@ -194,6 +194,14 @@ defmodule DIYWeb.MakerLinkLiveTest do
     view |> element("#pecron-switch-ac") |> render_click()
     refute_push_event(view, "maker:control", _payload)
 
+    # With no link, the part does not tell the state of the station now:
+    # one note tells the last numbers.
+    status(view, "offline", "offline")
+    assert has_element?(view, "#maker-offline", "These are its last numbers.")
+    refute has_element?(view, "#maker-unreachable")
+    status(view, "connected")
+    assert has_element?(view, "#maker-unreachable")
+
     # The rows of the switches are in one element that stays. The part
     # tells which station of the account it is.
     assert has_element?(view, "#maker-station #pecron-switches #pecron-ac")
@@ -284,6 +292,9 @@ defmodule DIYWeb.MakerLinkLiveTest do
     assert %{{"pecron", "dev_1", "ac"} => {:pending, true}} =
              :sys.get_state(view.pid).socket.assigns.maker_control
 
+    # With no link, the switch tells it, also while its control waits.
+    assert has_element?(view, "#pecron-ac-state", "The app has no link to Pecron now.")
+
     render_hook(view, "maker:control_done", %{
       "maker" => "pecron",
       "device" => "dev_1",
@@ -341,6 +352,7 @@ defmodule DIYWeb.MakerLinkLiveTest do
     # tells the state, the page waits for it as for a connect.
     view = open(conn, ~p"/inside?#{[item: id]}", build_of(view))
     assert has_element?(view, "#maker-connecting", "The app connects to Pecron.")
+    refute has_element?(view, "#maker-name")
     status(view, "connecting")
     assert has_element?(view, "#maker-connecting")
     refute has_element?(view, "#pecron-ac")
@@ -602,6 +614,17 @@ defmodule DIYWeb.MakerLinkLiveTest do
     view |> element("#maker-choice-0") |> render_click()
     assert build_of(view).units == %{id => "pecron:dev_1"}
     assert has_element?(view, "#pecron-battery", "82%")
+  end
+
+  test "an empty name is no name: the choice tells the maker", %{conn: conn} do
+    for name <- ["", "  "] do
+      assert [%{"name" => nil}] = MakerLink.read_stations([e3800(%{"name" => name})])
+    end
+
+    {view, _id} = station_page(conn)
+    status(view, "connected")
+    stations(view, [e3800(%{"name" => ""})])
+    assert has_element?(view, "#maker-choice-0", "Pecron (E3800LFP)")
   end
 
   property "the page keeps the stations that it can read, and nothing else" do

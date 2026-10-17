@@ -18,7 +18,7 @@
 //   ANSWER_WAIT. The hook never waits for ever (the property Live).
 // - The end after the poll: the end of a control with no error goes to
 //   the LiveView after the answer of the next poll (EndNew). Until then,
-//   the switch waits: it never shows the state from before the control.
+//   the switch waits: it does not show the state from before the control.
 //   An end with an error goes at once.
 //
 // The hook tells the LiveView (DIYWeb.MakerLink): "maker:status" (the
