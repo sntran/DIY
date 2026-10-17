@@ -6,10 +6,11 @@
 //
 // Each request has a signature: HMAC-SHA256 with the secret key
 // (signText()). A poll reads the list of the devices, then the state of
-// each station of a known family (cloud.stations()). A control sets one
-// part of a station (cloud.control()).
+// each station of a known family, all at the same time (cloud.stations()).
+// A control sets one part of a station (cloud.control()).
 
-// The hosts of the regions of EcoFlow.
+// The hosts of the regions of EcoFlow for the API for developers, as the
+// options of EcoFlow Cloud (config_flow.py).
 export const HOSTS = {americas: "https://api-a.ecoflow.com", europe: "https://api-e.ecoflow.com"}
 export const LIST = "/iot-open/sign/device/list"
 export const QUOTA = "/iot-open/sign/device/quota/all"
@@ -21,9 +22,14 @@ export const MAX_DEVICES = 100
 // The codes of EcoFlow for keys that it refuses. The code 8513 is
 // "accessKey is invalid", also for a key of a different region. The code
 // 8521 is "signature is wrong", for a wrong secret key or a wrong time.
-// The code 8524 is "some parameter is empty". The design tells the
-// sources.
-export const KEY_ERRORS = ["8513", "8521", "8524"]
+// The design tells the sources. The code 8524 ("invalid parameter") comes
+// with no keys, and also for a command that EcoFlow does not accept. The
+// app always sends the keys, so 8524 is a failure.
+export const KEY_ERRORS = ["8513", "8521"]
+// The parts of a station.
+export const PARTS = ["battery", "input", "output", "ac", "dc"]
+// A serial number that the page can read (as DIY.Pecron.id?/1).
+const SN = /^[A-Za-z0-9_-]{1,64}$/
 
 // A value of a switch: on or off.
 const ON_OFF = (on, off) => (value) => (value === on ? "on" : value === off ? "off" : null)
@@ -118,8 +124,11 @@ export function stationParts(name, quota) {
 // Pecron: "token" (EcoFlow refuses the keys), "unreachable" (no answer),
 // or "failed".
 export function ecoflowCloud(deps, keys) {
-  const host = HOSTS[keys.region]
+  // A region that is not in HOSTS sends no request: the keys go to no
+  // other host.
+  const host = Object.hasOwn(HOSTS, keys?.region) ? HOSTS[keys.region] : null
   const call = async (method, path, params, signal) => {
+    if (!host) return {ok: false, error: "failed"}
     const nonce = deps.nonce()
     const timestamp = String(deps.now())
     const sign = await hmac(deps.subtle, keys.secretKey, signText(params, keys.accessKey, nonce, timestamp))
@@ -146,26 +155,29 @@ export function ecoflowCloud(deps, keys) {
 
   return {
     // The stations of the account: the devices of a known family, with
-    // their parts. A station with no state has its last parts null.
-    async stations(signal) {
+    // their parts. The calls of the states go at the same time, so one
+    // wait covers a poll of many stations. When EcoFlow does not give the
+    // state of a station, the station keeps its parts of the last poll
+    // (last), and it is not online.
+    async stations(signal, last = null) {
       const list = await call("GET", LIST, null, signal)
       if (!list.ok) return list
       if (!Array.isArray(list.body)) return {ok: false, error: "failed"}
       const devices = list.body.slice(0, MAX_DEVICES)
-        .filter((device) => typeof device?.sn === "string" && family(device.productName))
-      const stations = []
-      for (const device of devices) {
-        const name = family(device.productName)
-        const quota = await call("GET", QUOTA, {sn: device.sn}, signal)
-        if (quota.error === "token") return quota
-        const parts = quota.ok && quota.body && typeof quota.body === "object"
-          ? stationParts(name, quota.body)
-          : {battery: null, input: null, output: null, ac: null, dc: null}
-        stations.push({
+        .filter((device) => typeof device?.sn === "string" && SN.test(device.sn) && family(device.productName))
+      const quotas = await Promise.all(devices.map((device) => call("GET", QUOTA, {sn: device.sn}, signal)))
+      if (quotas.some((quota) => quota.error === "token")) return {ok: false, error: "token"}
+      const stations = devices.map((device, index) => {
+        const quota = quotas[index]
+        const read = quota.ok && quota.body !== null && typeof quota.body === "object"
+        const before = Array.isArray(last) ? last.find((station) => station?.id === device.sn) : null
+        const parts = read ? stationParts(family(device.productName), quota.body)
+          : Object.fromEntries(PARTS.map((part) => [part, before?.model === device.productName ? before[part] ?? null : null]))
+        return {
           id: device.sn, name: typeof device.deviceName === "string" ? device.deviceName : null,
-          model: device.productName, online: device.online === 1 && quota.ok, ...parts,
-        })
-      }
+          model: device.productName, online: device.online === 1 && read, ...parts,
+        }
+      })
       return {ok: true, body: {stations}}
     },
 

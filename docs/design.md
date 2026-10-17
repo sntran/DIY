@@ -2890,8 +2890,10 @@ is the option "Allow HA to send control commands" off on the portal. No
 source tells the answer of Pecron in that case. Then only the control
 has the error (`denied`). The token can still read, so the poll
 after the control goes on. Only a poll that Pecron refuses stops the link
-(`refused`). A link that stops (a page that goes) does nothing more. The TLA+ model
-`specs/MakerLink.tla` checks five rules:
+(`refused`). A link that stops (a page that goes) does nothing more. A
+new token, a disconnect and a page that goes stop the calls that wait
+(the signal of their wait). The TLA+ model `specs/MakerLink.tla` checks
+six rules:
 
 - **The generation** (`MakerLink.nogen.cfg`). A new token or a disconnect
   starts a new generation. An answer of an old generation changes
@@ -2920,6 +2922,8 @@ after the control goes on. Only a poll that Pecron refuses stops the link
   shows the state from before the control as its new state, until the
   next poll (the invariant `EndNew`). The link to Home Assistant has the
   same rule: its hook sends the states before the end of a control.
+- **The wait for the station** (`MakerLink.nosettle.cfg`), for EcoFlow
+  only ("The direct link to EcoFlow", below).
 
 When all is quiet, and a poll read the cloud after the last change of a
 person, the page shows the state of the cloud. After a disconnect, it
@@ -2930,7 +2934,9 @@ This is a command after a timeout, or a command of an old generation when
 the person connects the same account again. The next poll shows its
 change. The model has two accounts, two changes of a person, three new
 tokens or disconnects, three timers, one control and one lost message.
-TLC finds no error in 784,045 distinct states.
+TLC finds no error in 784,045 distinct states. With a station that
+applies a command after its answer (`MakerLink.lag.cfg`), TLC finds no
+error in 1,040,463 distinct states.
 
 Four rules of the hook are not in the model. They only remove steps, or
 they end a step that the model has:
@@ -3088,74 +3094,128 @@ The keys:
   EcoFlow, then makes an access key and a secret key. The official docs
   of the API need such an account.
 - The region of the account selects the host: `api-a.ecoflow.com` for
-  the Americas, and `api-e.ecoflow.com` for Europe (`translations/en.json`
-  of EcoFlow Cloud). A key of a different region is not valid.
+  the Americas, and `api-e.ecoflow.com` for Europe. For the API for
+  developers, EcoFlow Cloud gives only these two hosts (`config_flow.py`).
+  Its text of the error 8513 names them for these regions
+  (`translations/en.json`). A key of a different region is not valid. No
+  source names a host for a different region (for example Asia). So the
+  card tells the person to try the other region when EcoFlow does not
+  accept the keys.
 - The card EcoFlow in Settings has the region and the two keys. The key
   Connect sends them to the hook, not to the LiveView. The hook keeps them
   on the device (IndexedDB), as the token of Pecron. The fields of the
   keys go empty.
+- The status of the link tells the LiveView the region of the last keys
+  (not a key). So after a refused answer, the form comes again with that
+  region. A patch of the page does not change the choice of the person
+  (`phx-update="ignore"`).
+- A value of the store that is not a token (for example a region of a
+  different version of the app) is no token. A region that is not in
+  `HOSTS` sends no request. So the keys go to no other host.
 
-The calls (three clients of the community agree on them:
-`tolwi/hassio-ecoflow-cloud` for the public API,
-`TarasKhust/ecoflow-api-mqtt`, and the npm package
-`@ecoflow-api/rest-client` 0.6.0):
+The calls (the clients of the community:
+`tolwi/hassio-ecoflow-cloud` (EcoFlow Cloud) for the public API,
+`TarasKhust/ecoflow-api-mqtt`, and the npm packages
+`@ecoflow-api/rest-client` 0.6.0 and `@ecoflow-api/schemas` 0.7.0):
 
 - Each request has a signature (`signText`, `hmac`). The parameters
   become one level: a key in a key is `a.b`, and an item of a list is
   `a[0]`. The keys are sorted and joined as `key=value` with `&`. Then
   come the access key, a nonce and the time in ms. The sign is
   HMAC-SHA256 of this text with the secret key, in hex (WebCrypto). A
-  boolean signs as `true` or `false`.
+  boolean signs as `true` or `false`. The three clients agree on this
+  form. The nonce is 6 random digits, as ecoflow-api-mqtt sends.
+  EcoFlow Cloud sends 5 to 7 digits, and the npm client sends a UUID.
 - A poll reads the list of the devices (`/iot-open/sign/device/list`),
   then the state of each station of a known family
-  (`/iot-open/sign/device/quota/all`). The families are the DELTA Pro, the
-  DELTA Pro 3 and the DELTA Pro Ultra, by the product name of the device.
-  A different device (for example a Wave) does not count. The app reads
-  100 devices at most.
-- The parts of each family (the files of the public devices of tolwi,
-  and `@ecoflow-api/schemas` 0.7.0):
-  - DELTA Pro: the battery is `ems.lcdShowSoc`. The power in is
-    `pd.wattsInSum`, and the power out `pd.wattsOutSum`. The AC outlets
-    are `inv.cfgAcEnabled`, and the 12 V outlets `mppt.carState` (1 is
-    on).
-  - DELTA Pro 3: the battery is `cmsBattSoc`. The power in is
-    `powInSumW`, and the power out `powOutSumW`. The AC outlets are
-    `flowInfoAcHvOut` and `flowInfoAcLvOut`, and the 12 V outlets
-    `flowInfo12v` (2 is on).
+  (`/iot-open/sign/device/quota/all`). The calls of the states go at the
+  same time, so one wait of 20 seconds covers a poll of many stations.
+  The families are the DELTA Pro, the DELTA Pro 3 and the DELTA Pro
+  Ultra, by the product name of the device. A different device (for
+  example a Wave) does not count. Nor does a device with a serial number
+  that the page cannot read (as `DIY.Pecron.id?/1`). The app reads 100
+  devices at most.
+- The parts of each family:
+  - DELTA Pro (the files of the public devices of EcoFlow Cloud): the
+    battery is `ems.lcdShowSoc`. The power in is `pd.wattsInSum`, and the
+    power out `pd.wattsOutSum`. The AC outlets are `inv.cfgAcEnabled`,
+    and the 12 V outlets `mppt.carState` (1 is on).
+  - DELTA Pro 3 (`@ecoflow-api/schemas` and ecoflow-api-mqtt): the
+    battery is `cmsBattSoc`. The power in is `powInSumW`, and the power
+    out `powOutSumW`. The AC outlets are `flowInfoAcHvOut` (240 V) and
+    `flowInfoAcLvOut` (120 V), and the 12 V outlets `flowInfo12v` (2 is
+    on). EcoFlow Cloud reads `cfgHvAcOutOpen`, `cfgLvAcOutOpen` and
+    `cfgDc12vOutOpen` (1 is on) instead.
   - DELTA Pro Ultra: the battery, the power in and the power out of
-    `hs_yj751_pd_appshow_addr`. It has no switch in the app.
+    `hs_yj751_pd_appshow_addr`. The app has no switch for it. EcoFlow
+    Cloud has a command for its DC outlets, and ecoflow-api-mqtt has
+    commands for its AC and DC outlets. The schemas have none, and the
+    sources do not agree, so the app does not send them yet.
 - A control (`/iot-open/sign/device/quota`, PUT). A DELTA Pro gets
-  `{sn, params: {cmdSet: 32, id: 66, enabled: 1}}` for the AC outlets,
-  and the id 81 for the 12 V outlets. A DELTA Pro 3 gets `{sn, cmdId: 17,
+  `{sn, params: {cmdSet: 32, id: 66, enabled: 1}}` for the AC outlets.
+  The 12 V outlets use the id 81. EcoFlow Cloud and ecoflow-api-mqtt send
+  these commands. The schemas also send `xboost` with the id 66;
+  the app follows the two clients. A DELTA Pro 3 gets `{sn, cmdId: 17,
   dirDest: 1, dirSrc: 1, cmdFunc: 254, dest: 2, needAck: true, params:
-  {cfgHvAcOutOpen: true}}`. Its AC outlets need two commands: 240 V
-  (`cfgHvAcOutOpen`) and 120 V (`cfgLvAcOutOpen`). Its 12 V outlets use
-  `cfgDc12vOutOpen`.
-- The errors: EcoFlow refuses the keys with three codes. The code 8513
+  {cfgHvAcOutOpen: true}}` (the schemas and ecoflow-api-mqtt). Its AC
+  outlets need two commands: 240 V (`cfgHvAcOutOpen`) and 120 V
+  (`cfgLvAcOutOpen`). Its 12 V outlets use `cfgDc12vOutOpen`.
+- The errors: EcoFlow refuses the keys with two codes. The code 8513
   tells that the access key is not valid, also for a key of a different
   region. The code 8521 tells that the signature is wrong, for a wrong
-  secret key or a wrong time. The code 8524 tells that a parameter is
-  empty. The app shows them as `token`. A different code
-  (for example 1006, a device that the API does not allow) is `failed`.
-  No answer is `unreachable`.
+  secret key or a wrong time. The app shows them as `token`. The code
+  8524 ("invalid parameter") comes with no keys, and also for a command
+  that EcoFlow does not accept. The app always sends the keys, so it is
+  `failed`, as a different code (for example 1006, a device that the API
+  does not allow). No answer is `unreachable`. A page with no WebCrypto
+  (an address with no https) cannot sign a request (`crypto`).
 
-The hook has the same rules as for Pecron: the generation, one poll at a
-time, a poll after a control, and the timeout. One wait of 20 seconds
-covers all the calls of a poll. The model `specs/MakerLink.tla` reads the
-station in one step. A poll of EcoFlow reads each station in a call of
-its own. So each station is as the station of the model, and the rules
-stay true for each station.
+The hook has the same rules as for Pecron. These are the generation, one
+poll at a time, a poll after a control, the timeout, and the end after
+the poll.
+The model `specs/MakerLink.tla` reads the station in one step. A poll of
+EcoFlow reads each station in a call of its own. So each station is as
+the station of the model, and the rules stay true for each station.
+
+A station of EcoFlow can apply a command after its answer:
+ecoflow-api-mqtt waits 3 seconds after a command before it reads the
+state again (`switch.py`). It also tells that a station that sleeps can
+give an old state through the REST API (`hybrid_coordinator.py`). So the
+hook has one more rule, **the
+wait for the station**. The end of a control with no error waits 3
+seconds (`APPLY_WAIT`). Then it goes with the next poll. Until then, the
+switch waits. The model has a station that applies a command in a later
+step (`Lag`, the step `Apply`). It takes that the station applies the
+command in the wait (the step `Settle` comes after `Apply`). Without this
+rule (`MakerLink.nosettle.cfg`), the page shows the state from before the
+control as its new state (`EndNew`).
+
+EcoFlow can fail to give the state of a station (an error of that call).
+Then the station keeps its parts of the last poll, and it is not online. The part tells that EcoFlow cannot reach the station, and shows
+these last numbers. A switch of the last list stays, and it does not
+work. With no last list, the page does not know the switches of the
+station: it shows none, and it does not tell "no switch".
 
 The limits:
 
 - The AC outlets of a DELTA Pro 3 need two commands. When the second one
   fails, the outlets of 240 V and of 120 V can be different. The control
   then has its error, and the next poll shows the state.
-- A station with no state (its call failed) has no numbers, and it is
-  not online.
-- The time of the device signs each request. With a wrong time, EcoFlow
-  refuses the signature (8521), and the card tells that EcoFlow does not
-  accept the keys.
+- The two AC commands are for a DELTA Pro 3 of the Americas (240 V and
+  120 V). No source tells of a DELTA Pro 3 of Europe. There, the command
+  of 120 V can fail.
+- A station that is slower than the wait shows its change with a later
+  poll.
+- The time of the device signs each request. A time of about 60 seconds
+  or more before the time of EcoFlow gives 8521 (a probe with random
+  keys). Then the card tells the person to look at the region, the keys
+  and the clock of the device.
+- The fields of the keys are password fields. A password manager of the
+  browser can offer to keep them (`autocomplete="off"` does not stop
+  it). Then they are also in that manager, and it can sync them.
+- The app has no Content-Security-Policy. A `connect-src` cannot list
+  the hosts of the links: the address of Home Assistant can be any
+  address.
 - The app has no switch for the USB outlets, as through Home Assistant.
 
 The tests:
@@ -3163,11 +3223,17 @@ The tests:
 - `test/js/ecoflow.test.js`: the signature against `node:crypto`, and the
   flat parameters and their order (property tests). Also the family of a
   product name, and the parts of each family (a property test). Also the
-  stations, the commands and the errors.
+  stations, the host of each region, the commands and the errors. Also a
+  region that is not in `HOSTS` (no request), and the calls of the states
+  at the same time. Also a station with no state (its last parts).
 - `test/js/maker_link.test.js`: the keys, a poll and a control from the
-  page, refused keys, the timeout, and the form of EcoFlow.
+  page, the wait for the station, refused keys, the timeout, and the form
+  of EcoFlow. Also a stored value that is not a token, and the stop of the
+  calls that wait. Also the region in the status, and a page with no
+  WebCrypto.
 - `test/diy_web/live/maker_link_live_test.exs`: the card of EcoFlow, the
-  link of a DELTA Pro 3 with its model, and its switches.
+  region after a refused answer, the link of a DELTA Pro 3 with its
+  model, and its switches. Also a station that EcoFlow cannot reach.
 
 ### The energy data
 

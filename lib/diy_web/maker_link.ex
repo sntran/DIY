@@ -17,7 +17,9 @@ defmodule DIYWeb.MakerLink do
     the stations of the account (`nil` before the hook tells them). It
     also keeps the switches of each station of the last list
     (`switches`), also when a new token makes the stations `nil`. So a
-    switch does not come and go while the page waits for a new list.
+    switch does not come and go while the page waits for a new list. For
+    EcoFlow, it has the region of the last keys (`region`), so that the
+    form shows it again. The region is not a key.
   - `:maker_control`: for each part of a station (`{maker, device,
     part}`), a control that waits for its end (`{:pending, on}`). Or it
     has the error of the last control (`{:error, error}`).
@@ -36,7 +38,7 @@ defmodule DIYWeb.MakerLink do
   @makers ~w(pecron ecoflow)
   @names %{"pecron" => "Pecron", "ecoflow" => "EcoFlow"}
   @states ~w(none connecting connected offline refused)
-  @errors ~w(format storage token denied unreachable offline timeout failed)
+  @errors ~w(format storage token denied unreachable offline timeout failed crypto)
   @numbers ~w(battery input output)
   # The switches of a station of each maker, with their names. The DC part
   # of EcoFlow is its 12 V outlets only, as in DIYWeb.HomeAssistant.
@@ -45,6 +47,8 @@ defmodule DIYWeb.MakerLink do
     "ecoflow" => [{"ac", "AC outlets"}, {"dc", "12 V outlets"}]
   }
   @switch_parts ~w(ac dc)
+  # The regions of EcoFlow, as HOSTS of assets/js/ecoflow.js.
+  @regions [{"americas", "Americas"}, {"europe", "Europe"}]
 
   # The most stations of one account, and the longest name or model, that
   # the page takes from the hook.
@@ -54,7 +58,10 @@ defmodule DIYWeb.MakerLink do
   @doc false
   def on_mount(:default, _params, _session, socket) do
     makers =
-      Map.new(@makers, &{&1, %{state: "loading", error: nil, stations: nil, switches: %{}}})
+      Map.new(
+        @makers,
+        &{&1, %{state: "loading", error: nil, stations: nil, switches: %{}, region: nil}}
+      )
 
     socket =
       socket
@@ -94,7 +101,9 @@ defmodule DIYWeb.MakerLink do
   `link`: with the link not connected, a switch does not work. With no
   stations, the switches of the last list stay (`"none"` for a part that
   the station does not have). Before the first list, the station has no
-  switches: the page does not know them.
+  switches: the page does not know them. A switch of the last list of a
+  station that the maker cannot reach now is `"unavailable"`, also with
+  no state.
   """
   def station(%{build: build, makers: makers, maker_control: controls}, item_id) do
     with unit when is_binary(unit) <- build.units[item_id],
@@ -110,7 +119,7 @@ defmodule DIYWeb.MakerLink do
 
           state =
             cond do
-              parts -> switch_state(parts, part)
+              parts -> switch_state(parts, part, known)
               part in known -> nil
               true -> "none"
             end
@@ -145,12 +154,13 @@ defmodule DIYWeb.MakerLink do
     end
   end
 
-  # A switch that the station does not have, or with no state: "none" and
-  # "unavailable", as in DIYWeb.HomeAssistant.station/2.
-  defp switch_state(parts, part) do
+  # A switch of a station that the maker cannot reach: "unavailable". A
+  # switch that the station does not have: "none". As in
+  # DIYWeb.HomeAssistant.station/2.
+  defp switch_state(parts, part, known) do
     cond do
-      not Map.has_key?(parts, part) or parts[part] == nil -> "none"
-      parts["online"] != true -> "unavailable"
+      parts["online"] != true and (parts[part] != nil or part in known) -> "unavailable"
+      parts[part] == nil -> "none"
       true -> parts[part]
     end
   end
@@ -188,7 +198,9 @@ defmodule DIYWeb.MakerLink do
   def handle_event("maker:status", %{"maker" => maker, "state" => state} = params, socket)
       when maker in @makers and state in @states do
     error = if params["error"] in @errors, do: params["error"]
-    link = %{socket.assigns.makers[maker] | state: state, error: error}
+    old_link = socket.assigns.makers[maker]
+    region = if params["region"] in regions(), do: params["region"], else: old_link.region
+    link = %{old_link | state: state, error: error, region: region}
 
     # The controls are only for a generation of the link: a new token or
     # a disconnect ends them. In a different state, a control that waits
@@ -235,8 +247,7 @@ defmodule DIYWeb.MakerLink do
 
         switches =
           if stations,
-            do:
-              Map.new(stations, &{&1["id"], Enum.filter(@switch_parts, fn part -> &1[part] end)}),
+            do: Map.new(stations, &{&1["id"], station_switches(&1, old_link.switches)}),
             else: old_link.switches
 
         link = %{old_link | stations: stations, switches: switches}
@@ -276,6 +287,17 @@ defmodule DIYWeb.MakerLink do
 
   def handle_event("maker_disconnect", _params, socket), do: {:halt, socket}
   def handle_event(_event, _params, socket), do: {:cont, socket}
+
+  # The switches of a station of a new list: the parts with a state. A
+  # station that the maker cannot reach, with no state of a switch, keeps
+  # the switches of the last list. With no last list, the page does not
+  # know them (`nil`): so it tells no false "no switch".
+  defp station_switches(station, known) do
+    parts = Enum.filter(@switch_parts, &station[&1])
+    if parts == [] and not station["online"], do: known[station["id"]], else: parts
+  end
+
+  defp regions, do: Enum.map(@regions, &elem(&1, 0))
 
   @doc """
   The stations from the hook: `nil`, a list of stations, or `:error`. A
@@ -339,7 +361,8 @@ defmodule DIYWeb.MakerLink do
     do: "Pecron does not accept the token. Make a new token and connect again."
 
   def status(%{state: "refused"}, "ecoflow"),
-    do: "EcoFlow does not accept the keys. Look at the region and the keys, and connect again."
+    do:
+      "EcoFlow does not accept the keys. Look at the region, the keys and the clock of this device, and connect again."
 
   @doc "Why the last step did not work, in words."
   def message("format", "pecron"), do: "A token of Pecron starts with phk_. Copy all of it."
@@ -365,6 +388,10 @@ defmodule DIYWeb.MakerLink do
     do: "The app got no answer in 20 seconds. Look at the network, and try again later."
 
   def message("failed", maker), do: "#{name(maker)} did not do it. Try again."
+
+  def message("crypto", maker),
+    do:
+      "This browser cannot sign the requests to #{name(maker)}. Open the app with an address that starts with https."
 
   # The token of Pecron, or the keys of EcoFlow.
   defp secret("pecron"), do: "token"
@@ -445,7 +472,7 @@ defmodule DIYWeb.MakerLink do
         phx-submit={JS.dispatch("maker:connect") |> JS.dispatch("diy:focus", to: "##{@maker}-status")}
         class="flex flex-wrap gap-2 items-end"
       >
-        <.fields maker={@maker} name={@name} />
+        <.fields maker={@maker} name={@name} region={@link.region} />
         <button class="btn btn-sm">Connect</button>
       </form>
       <p :if={@link.state in ~w(none refused)} class="text-xs opacity-70">
@@ -487,9 +514,10 @@ defmodule DIYWeb.MakerLink do
 
   attr :maker, :string, required: true
   attr :name, :string, required: true
+  attr :region, :string, default: nil
 
   # The fields of the form: the token of Pecron, or the region and the two
-  # keys of EcoFlow. The hook reads them; the LiveView never gets them.
+  # keys of EcoFlow. The hook reads them; the LiveView never gets the keys.
   defp fields(%{maker: "pecron"} = assigns) do
     ~H"""
     <label>
@@ -510,9 +538,21 @@ defmodule DIYWeb.MakerLink do
     ~H"""
     <label>
       <span class="text-sm">The region of your account</span>
-      <select name="region" class="select select-sm w-72 max-w-full block">
-        <option value="americas">Americas</option>
-        <option value="europe">Europe</option>
+      <%!-- The region of the last keys, when the form comes again. A patch
+        does not change the choice of the person (phx-update="ignore"). --%>
+      <select
+        id="ecoflow-region"
+        name="region"
+        phx-update="ignore"
+        class="select select-sm w-72 max-w-full block"
+      >
+        <option
+          :for={{value, label} <- regions_with_names()}
+          value={value}
+          selected={value == @region}
+        >
+          {label}
+        </option>
       </select>
     </label>
     <label>
@@ -549,7 +589,9 @@ defmodule DIYWeb.MakerLink do
 
   defp help(%{maker: "ecoflow"} = assigns) do
     ~H"""
-    Make the keys on the developer site of EcoFlow (developer.ecoflow.com, or developer-eu.ecoflow.com in Europe): sign in with the account of the EcoFlow app, ask for access as a developer, then make the access key and the secret key. Select the region of your account.
+    Make the keys on the developer site of EcoFlow (developer.ecoflow.com, or developer-eu.ecoflow.com in Europe): sign in with the account of the EcoFlow app, ask for access as a developer, then make the access key and the secret key. Select the region of your account. If EcoFlow does not accept the keys, try the other region.
     """
   end
+
+  defp regions_with_names, do: @regions
 end

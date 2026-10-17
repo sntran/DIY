@@ -87,12 +87,13 @@ defmodule DIYWeb.MakerLinkLiveTest do
     )
   end
 
-  defp ecoflow(view, state, error \\ nil),
+  defp ecoflow(view, state, error \\ nil, region \\ nil),
     do:
       render_hook(view, "maker:status", %{
         "maker" => "ecoflow",
         "state" => state,
-        "error" => error
+        "error" => error,
+        "region" => region
       })
 
   defp ecoflow_stations(view, stations),
@@ -664,6 +665,7 @@ defmodule DIYWeb.MakerLinkLiveTest do
     assert has_element?(view, "#ecoflow-card h2", "EcoFlow")
     assert has_element?(view, "#ecoflow-card", "This page calls EcoFlow directly")
     assert has_element?(view, "#ecoflow-card", "developer.ecoflow.com")
+    assert has_element?(view, "#ecoflow-card", "developer-eu.ecoflow.com in Europe")
 
     assert has_element?(
              view,
@@ -689,12 +691,50 @@ defmodule DIYWeb.MakerLinkLiveTest do
 
     ecoflow(view, "none", "format")
     assert has_element?(view, "#ecoflow-error", "Put the access key and the secret key")
-    ecoflow(view, "refused", "token")
-    assert has_element?(view, "#ecoflow-status", "EcoFlow does not accept the keys.")
+    assert has_element?(view, "#ecoflow-card", "try the other region")
+
+    # Before the first keys, no region is selected: the browser shows the
+    # first one. A patch does not change the choice of the person.
+    refute has_element?(view, "#ecoflow-region option[selected]")
+    assert has_element?(view, ~s(#ecoflow-region[phx-update=ignore]))
+
+    # The person connects with keys of Europe, and EcoFlow refuses them.
+    # The form comes again with the region of the keys.
+    ecoflow(view, "connecting", nil, "europe")
+    refute has_element?(view, "#ecoflow-form")
+    ecoflow(view, "refused", "token", "europe")
+    assert has_element?(view, "#ecoflow-region option[value=europe][selected]")
+    refute has_element?(view, "#ecoflow-region option[value=americas][selected]")
+
+    assert has_element?(
+             view,
+             "#ecoflow-status",
+             "EcoFlow does not accept the keys. Look at the region, the keys and the clock of this device"
+           )
+
     refute has_element?(view, "#ecoflow-error")
+
+    # A region that the page does not know keeps the last region.
+    ecoflow(view, "connecting", nil, "asia")
+    ecoflow(view, "none", nil, "asia")
+    assert has_element?(view, "#ecoflow-region option[value=europe][selected]")
+
+    # With no WebCrypto, the page cannot sign a request.
+    ecoflow(view, "offline", "crypto", "europe")
+
+    assert has_element?(
+             view,
+             "#ecoflow-error",
+             "This browser cannot sign the requests to EcoFlow. Open the app with an address that starts with https."
+           )
+
     ecoflow(view, "connected")
     ecoflow_stations(view, [dp3()])
     assert has_element?(view, "#ecoflow-status", "Connected to EcoFlow: 1 station.")
+
+    # The names of the makers of a list, one time each.
+    assert MakerLink.names(~w(pecron pecron ecoflow ecoflow)) == "Pecron and EcoFlow"
+    assert MakerLink.names(~w(ecoflow)) == "EcoFlow"
 
     assert MakerLink.message("storage", "ecoflow") =~ "cannot keep the keys"
     assert MakerLink.message("token", "ecoflow") == "EcoFlow does not accept the keys."
@@ -751,6 +791,46 @@ defmodule DIYWeb.MakerLinkLiveTest do
     # The link of the other maker changes nothing here.
     status(view, "none")
     assert has_element?(view, "#ecoflow-switch-ac[aria-disabled=false]")
+  end
+
+  test "EcoFlow: a station that EcoFlow cannot reach keeps its switches, and tells no false text",
+       %{conn: conn} do
+    {view, id} = station_page(conn)
+    ecoflow(view, "connected")
+    ecoflow_stations(view, [dp3()])
+    view |> element("#maker-choice-0") |> render_click()
+    assert has_element?(view, "#ecoflow-switch-ac[aria-checked=true]")
+
+    # EcoFlow does not give the state of the station now: the station
+    # has no state of a switch. The switches stay, and they do not work.
+    unreachable = dp3(%{"online" => false, "ac" => nil, "dc" => nil})
+    ecoflow_stations(view, [unreachable])
+    assert has_element?(view, "#maker-unreachable", "EcoFlow cannot reach the station now.")
+
+    for part <- ~w(ac dc) do
+      assert has_element?(view, "#ecoflow-switch-#{part}[aria-disabled=true]")
+      assert has_element?(view, "#ecoflow-#{part}-state", "EcoFlow cannot reach the station now.")
+      refute has_element?(view, "#ecoflow-#{part}-state", "no switch")
+    end
+
+    # A new page whose first list has such a station: the page does not
+    # know its switches, so it shows none, and no "no switch".
+    view = open(conn, ~p"/inside?#{[item: id]}", build_of(view))
+    ecoflow(view, "connected")
+    ecoflow_stations(view, [unreachable])
+    assert has_element?(view, "#maker-unreachable")
+    refute has_element?(view, "#ecoflow-ac")
+    refute has_element?(view, "#ecoflow-dc")
+
+    # The state comes: the switches come.
+    ecoflow_stations(view, [dp3()])
+    assert has_element?(view, "#ecoflow-switch-ac[aria-checked=true]")
+    assert has_element?(view, "#ecoflow-switch-dc[aria-checked=false]")
+
+    # A station that the maker can reach, with no state of a switch: it
+    # has no such switch.
+    ecoflow_stations(view, [dp3(%{"dc" => nil})])
+    assert has_element?(view, "#ecoflow-dc-state", "EcoFlow has no switch for it.")
   end
 
   property "the page keeps the stations that it can read, and nothing else" do

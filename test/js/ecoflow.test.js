@@ -6,7 +6,7 @@ import assert from "node:assert/strict"
 import {createHmac} from "node:crypto"
 import fc from "fast-check"
 import {
-  HOSTS, LIST, QUOTA, SET, MAX_POWER, MAX_DEVICES, KEY_ERRORS, FAMILIES, family, flatten, signText, hmac,
+  HOSTS, LIST, QUOTA, SET, MAX_POWER, MAX_DEVICES, KEY_ERRORS, PARTS, FAMILIES, family, flatten, signText, hmac,
   stationParts, ecoflowCloud,
 } from "../../assets/js/ecoflow.js"
 
@@ -20,7 +20,8 @@ test("the hosts, the paths and the limits", () => {
   assert.equal(SET, "/iot-open/sign/device/quota")
   assert.equal(MAX_POWER, 1_000_000)
   assert.equal(MAX_DEVICES, 100)
-  assert.deepEqual(KEY_ERRORS, ["8513", "8521", "8524"])
+  assert.deepEqual(KEY_ERRORS, ["8513", "8521"])
+  assert.deepEqual(PARTS, ["battery", "input", "output", "ac", "dc"])
 })
 
 test("the parameters become one level, and the text of the signature has their order", () => {
@@ -80,7 +81,9 @@ test("the parts of each family from the state of a station", () => {
     cmsBattSoc: 57.5, powInSumW: 0, powOutSumW: 2310, flowInfoAcHvOut: 0, flowInfoAcLvOut: 2, flowInfo12v: 0,
   }), {battery: 57.5, input: 0, output: 2310, ac: "on", dc: "off"})
   assert.equal(stationParts("deltapro3", {flowInfoAcHvOut: 0, flowInfoAcLvOut: 0}).ac, "off")
-  // The public API has no switch of a DELTA Pro Ultra.
+  // The app has no switch of a DELTA Pro Ultra. EcoFlow Cloud and
+  // ecoflow-api-mqtt have commands for it, but @ecoflow-api/schemas 0.7.0
+  // does not, and the three do not agree.
   assert.deepEqual(stationParts("deltaproultra", {
     "hs_yj751_pd_appshow_addr.soc": 40, "hs_yj751_pd_appshow_addr.wattsInSum": 10,
     "hs_yj751_pd_appshow_addr.wattsOutSum": 20,
@@ -109,13 +112,19 @@ test("each part is null or in its range, for any state", () => {
 })
 
 // A fake EcoFlow: it checks the signature of each request with the secret
-// key, and answers with the list and the states of the account.
-function fakeEcoflow({devices = [], quotas = {}, answer = null, secret = "SK1"} = {}) {
+// key, and answers with the list and the states of the account. The host
+// of each request must be the host of the region.
+function fakeEcoflow({devices = [], quotas = {}, answer = null, secret = "SK1", host = HOSTS.americas} = {}) {
   const ecoflow = {requests: [], commands: []}
   ecoflow.fetch = async (url, options) => {
     const parsed = new URL(url)
+    assert.equal(parsed.origin, host)
+    // A GET has its parameters in the query, and no body.
+    if (options.method === "GET") assert.equal(options.body, undefined)
     const params = options.method === "PUT" ? JSON.parse(options.body) : Object.fromEntries(parsed.searchParams)
     const {accessKey, nonce, timestamp, sign} = options.headers
+    // The time is in ms.
+    assert.match(timestamp, /^\d{13}$/)
     const expected = createHmac("sha256", secret)
       .update(signText(Object.keys(params).length ? params : null, accessKey, nonce, timestamp)).digest("hex")
     ecoflow.requests.push({method: options.method, path: parsed.pathname, params, options})
@@ -144,6 +153,8 @@ const DEVICES = [
   {sn: "Y711Z3", productName: "DELTA Pro Ultra", online: 0},
   {sn: "HW51Z4", deviceName: "Plug", productName: "Smart Plug", online: 1},
   {sn: 5, productName: "DELTA Pro"},
+  // A serial number that the page cannot read: the device does not count.
+  {sn: "DC/AB 6", productName: "DELTA Pro", online: 1},
   null,
 ]
 const QUOTAS = {
@@ -163,10 +174,10 @@ test("the stations of the account: the devices of a known family, with their par
     {id: "Y711Z3", name: null, model: "DELTA Pro Ultra", online: false, battery: null, input: null, output: null, ac: null, dc: null},
   ]}})
   // A GET signs its query. The keys go only in the headers, with no
-  // cookie and no cache.
-  assert.deepEqual(ecoflow.requests.map(({method, path, params}) => [method, path, params]), [
-    ["GET", LIST, {}], ["GET", QUOTA, {sn: "DCABZ1"}], ["GET", QUOTA, {sn: "MR51Z2"}], ["GET", QUOTA, {sn: "Y711Z3"}],
-  ])
+  // cookie and no cache. The calls of the states go in any order.
+  const calls = ecoflow.requests.map(({method, path, params}) => [method, path, params.sn ?? ""])
+  assert.deepEqual(calls[0], ["GET", LIST, ""])
+  assert.deepEqual(calls.slice(1).sort(), [["GET", QUOTA, "DCABZ1"], ["GET", QUOTA, "MR51Z2"], ["GET", QUOTA, "Y711Z3"]])
   const first = ecoflow.requests[0].options
   assert.deepEqual(first.headers, {accessKey: "AK1", nonce: "100", timestamp: "1700000000000", sign: first.headers.sign})
   assert.equal(first.credentials, "omit")
@@ -174,9 +185,87 @@ test("the stations of the account: the devices of a known family, with their par
   assert.equal(first.body, undefined)
 
   // The region of Europe.
-  const europe = fakeEcoflow()
+  const europe = fakeEcoflow({host: HOSTS.europe})
   await ecoflowCloud(deps(europe), {...KEYS, region: "europe"}).stations()
   assert.equal(europe.requests.length, 1)
+})
+
+test("a region that is not in HOSTS sends no request", async () => {
+  for (const region of ["asia", "__proto__", "toString", undefined]) {
+    const ecoflow = fakeEcoflow({devices: DEVICES, quotas: QUOTAS})
+    const cloud = ecoflowCloud(deps(ecoflow), {...KEYS, region})
+    assert.deepEqual(await cloud.stations(), {ok: false, error: "failed"})
+    assert.deepEqual(await cloud.control("DCABZ1", "deltapro", "ac", true), {ok: false, error: "failed"})
+    assert.deepEqual(ecoflow.requests, [])
+  }
+})
+
+test("the calls of the states go at the same time", async () => {
+  // EcoFlow answers the states when the three calls came, or after one
+  // second.
+  const waiting = []
+  let most = 0
+  const ecoflow = fakeEcoflow({devices: DEVICES, quotas: QUOTAS, answer: (_method, path) => {
+    if (path !== QUOTA) return undefined
+    return new Promise((resolve) => {
+      waiting.push(resolve)
+      most = Math.max(most, waiting.length)
+      const go = () => waiting.splice(0).forEach((one) => one())
+      if (waiting.length === 3) go()
+      else setTimeout(go, 1_000)
+    }).then(() => ({ok: true, json: async () => ({code: "0", data: {}})}))
+  }})
+  const answer = await ecoflowCloud(deps(ecoflow), KEYS).stations()
+  assert.equal(answer.body.stations.length, 3)
+  assert.equal(most, 3)
+})
+
+test("a station with no state keeps its parts of the last poll, and it is not online", async () => {
+  // The last poll of the first station has no DC part.
+  const last = [
+    {id: "DCABZ1", model: "DELTA Pro", online: true, battery: 82, input: 640, output: 350, ac: "on"},
+    // A different model with the same serial number: its parts do not
+    // count.
+    {id: "MR51Z2", model: "DELTA Pro", online: true, battery: 9, input: 9, output: 9, ac: "on", dc: "on"},
+    null,
+  ]
+  const failing = (_method, path) => (path === QUOTA ? {ok: true, json: async () => ({code: "1006"})} : undefined)
+  const ecoflow = fakeEcoflow({devices: DEVICES, answer: failing})
+  const answer = await ecoflowCloud(deps(ecoflow), KEYS).stations(undefined, last)
+  assert.deepEqual(answer.body.stations.map(({id, online, battery, ac, dc}) => [id, online, battery, ac, dc]), [
+    ["DCABZ1", false, 82, "on", null],
+    ["MR51Z2", false, null, null, null],
+    ["Y711Z3", false, null, null, null],
+  ])
+  // A state of a station: the new parts, also with a last poll.
+  const fresh = await ecoflowCloud(deps(fakeEcoflow({devices: DEVICES, quotas: QUOTAS})), KEYS).stations(undefined, last)
+  assert.deepEqual(fresh.body.stations[0], {
+    id: "DCABZ1", name: "Garage", model: "DELTA Pro", online: true, battery: 82, input: 640, output: 350, ac: "on", dc: "off",
+  })
+  assert.equal(fresh.body.stations[1].battery, 57)
+  // A last poll that is not a list.
+  const odd = await ecoflowCloud(deps(fakeEcoflow({devices: DEVICES, answer: failing})), KEYS).stations(undefined, {})
+  assert.equal(odd.body.stations[0].battery, null)
+  // A device that EcoFlow cannot reach (online 0), with a state: its
+  // parts, and it is not online.
+  const asleep = [{sn: "DCABZ1", productName: "DELTA Pro", online: 0}]
+  const away = await ecoflowCloud(deps(fakeEcoflow({devices: asleep, quotas: QUOTAS})), KEYS).stations()
+  assert.equal(away.body.stations[0].online, false)
+  assert.equal(away.body.stations[0].battery, 82)
+})
+
+test("the signal of the wait also stops a call of a state", {timeout: 5_000}, async () => {
+  // EcoFlow gives the list, and never answers the state. Only the signal
+  // stops that call.
+  const ecoflow = fakeEcoflow({devices: DEVICES.slice(0, 1)})
+  const fetch = (url, options) => new URL(url).pathname === QUOTA
+    ? new Promise((_resolve, reject) => options.signal?.addEventListener("abort", () => reject(new Error("aborted"))))
+    : ecoflow.fetch(url, options)
+  const abort = new AbortController()
+  const answer = ecoflowCloud({...deps(ecoflow), fetch}, KEYS).stations(abort.signal)
+  await new Promise((resolve) => setTimeout(resolve, 50))
+  abort.abort()
+  assert.equal((await answer).body.stations[0].online, false)
 })
 
 test("the account has at most MAX_DEVICES devices that the app reads", async () => {
@@ -198,6 +287,11 @@ test("the errors: refused keys, no answer, a timeout, and an answer that the app
   }
   // A number as the code is a code too.
   assert.deepEqual(await stations({answer: () => ({ok: true, json: async () => ({code: 8513})})}), {ok: false, error: "token"})
+  assert.deepEqual(await stations({answer: () => ({ok: true, json: async () => ({code: 0, data: []})})}),
+    {ok: true, body: {stations: []}})
+  // The code 8524 ("invalid parameter") is a failure: the app always sends
+  // the keys.
+  assert.deepEqual(await stations({answer: () => ({ok: true, json: async () => ({code: "8524"})})}), {ok: false, error: "failed"})
   // A different code, an HTTP error, a body that is not JSON, a body with
   // no code, and a list that is not a list.
   const fail = (body, ok = true) => ({ok, json: async () => body})
