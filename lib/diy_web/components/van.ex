@@ -39,6 +39,8 @@ defmodule DIYWeb.VanPage do
   attr :estimate, :map, required: true
   attr :price, :map, required: true
   attr :ha, :map, required: true
+  attr :makers, :map, default: %{}, doc: "the direct links to the makers (`DIYWeb.MakerLink`)"
+  attr :maker_control, :map, default: %{}, doc: "the controls of the stations of the makers"
   attr :scene, :map, required: true, doc: "the parts of the picture (`DIYWeb.Scene.van_parts/2`)"
   attr :view, :map, default: nil, doc: "the van cut open (`DIYWeb.VanCutaway.view/2`)"
   attr :room, :string, default: nil, doc: "the zone that the person chose"
@@ -138,6 +140,8 @@ defmodule DIYWeb.VanPage do
           error={@item_error}
           said={@item_said}
           ha={@ha}
+          unit={@makers != %{} && DIYWeb.MakerLink.station(assigns, @item)}
+          unit_choices={Inside.unit_choices(assigns, @item)}
         />
         <.add_sheet
           :if={@add && match?(%{}, Enum.find(Build.zones(@build, @van.id), &(&1.id == @add)))}

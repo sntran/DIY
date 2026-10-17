@@ -21,10 +21,11 @@ config :phoenix_live_view,
 config :phoenix,
   sort_verified_routes_query_params: true
 
-# The HTTP of the weather and of Power to Choose goes to the stubs of the
-# tests (Req.Test).
+# The HTTP of the weather, of Power to Choose and of Pecron goes to the
+# stubs of the tests (Req.Test).
 config :diy, DIY.Weather, req: [plug: {Req.Test, DIY.Weather}, retry: false]
 config :diy, DIY.Market, req: [plug: {Req.Test, DIY.Market}, retry: false]
+config :diy, DIY.Pecron, req: [plug: {Req.Test, DIY.Pecron}]
 
 # The tests keep nothing in the cache of the weather and of the markets.
 # So a test gets the answer of its own stub, not a value of a different

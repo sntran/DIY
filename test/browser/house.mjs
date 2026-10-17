@@ -876,6 +876,18 @@ async function build(context, name) {
   await page.click("nav >> text=Settings")
   await page.waitForSelector("#settings")
   await check(page, `${name} settings`)
+
+  // The direct link to Pecron, with no Home Assistant: the token stays on
+  // the device, and the field goes empty. The cloud of Pecron is the stub
+  // of the tests (DIY.Stubs.pecron/0).
+  await page.waitForSelector("#pecron-status:has-text('Not connected.')")
+  await page.fill("#pecron-form input[name=token]", "abc")
+  await page.click("#pecron-form button")
+  await page.waitForSelector("#pecron-error:has-text('A token of Pecron starts with phk_.')")
+  await page.fill("#pecron-form input[name=token]", "phk_walk")
+  await page.click("#pecron-form button")
+  await page.waitForSelector("#pecron-status:has-text('Connected to Pecron: 1 station.')")
+  await check(page, `${name} Pecron`)
   await page.fill("#settings-price input[name=price]", "12.5")
   await page.click("#settings-price button")
   await page.waitForSelector("text=the price that you gave")
@@ -967,11 +979,24 @@ for (const colorScheme of ["light", "dark"]) {
     await page.click("nav >> text=House")
     assert.match(await page.textContent("#real-average"), /\$\d+/)
 
-    // The station of Pecron goes: the walk checks the power with a station
-    // of its own.
+    // The station of Pecron links to the station of the account of
+    // Pecron: its numbers, and the keyboard turns its AC outlets.
     await page.click("nav >> text=Rooms")
     await page.waitForSelector("#inside")
     await follow(page, 'a[id^="item-"]:has-text("Pecron E3800LFP")')
+    await page.waitForSelector("#maker-choice-0:has-text('Backup battery (E3800LFP)')")
+    await page.click("#maker-choice-0")
+    await page.waitForSelector("#pecron-battery:has-text('82%')")
+    await page.waitForSelector("#pecron-output:has-text('350 W')")
+    const outlets = await page.getAttribute("#pecron-switch-ac", "aria-checked")
+    await page.focus("#pecron-switch-ac")
+    await page.keyboard.press("Space")
+    await page.waitForSelector(`#pecron-switch-ac[aria-checked=${outlets === "true" ? "false" : "true"}][aria-disabled=false]`)
+    assert.equal(await page.evaluate(() => document.activeElement?.id), "pecron-switch-ac")
+    await check(page, `${name} Pecron station`)
+
+    // The station of Pecron goes: the walk checks the power with a station
+    // of its own.
     await page.click("#ask-remove")
     await page.click("#delete-item")
     await page.waitForSelector("#item-stage", { state: "detached" })

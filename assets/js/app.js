@@ -12,6 +12,7 @@ import {topHook} from "./top.js"
 import {usageHook} from "./usage.js"
 import {eflHook, eflLinksHook} from "./efl.js"
 import {homeAssistantHook, browserParts, signInHook, signInParts} from "./home_assistant.js"
+import {makerLinkHook, makerParts} from "./maker_link.js"
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {
@@ -39,6 +40,9 @@ const liveSocket = new LiveSocket("/live", Socket, {
     HomeAssistant: homeAssistantHook(() => browserParts(window)),
     // The sign-in page of Home Assistant, in its own tab.
     HomeAssistantSignIn: signInHook(() => signInParts(window)),
+    // The direct link to the cloud of the maker of a power station, with
+    // the token on the device (assets/js/maker_link.js).
+    MakerLink: makerLinkHook(() => makerParts(window)),
   },
 })
 

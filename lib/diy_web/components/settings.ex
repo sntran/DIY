@@ -7,7 +7,7 @@ defmodule DIYWeb.Settings do
   use DIYWeb, :html
 
   alias DIY.{Build, House, Zip}
-  alias DIYWeb.{Format, HomeAssistant}
+  alias DIYWeb.{Format, HomeAssistant, MakerLink}
 
   attr :locale, :string, default: "en", doc: "the language of the page"
   attr :build, :map, required: true
@@ -15,6 +15,7 @@ defmodule DIYWeb.Settings do
   attr :market, :map, required: true
   attr :uploads, :map, required: true
   attr :ha, :map, required: true, doc: "the link to Home Assistant (`DIYWeb.HomeAssistant`)"
+  attr :makers, :map, default: %{}, doc: "the direct links to the makers (`DIYWeb.MakerLink`)"
   attr :zip_error, :string, default: nil, doc: "the error of the last ZIP code"
   attr :zip_text, :string, default: nil, doc: "the text that the person typed, after an error"
 
@@ -202,6 +203,7 @@ defmodule DIYWeb.Settings do
       </div>
 
       <HomeAssistant.card ha={@ha} hub={hub(@build)} />
+      <MakerLink.card :for={maker <- Map.keys(@makers)} makers={@makers} maker={maker} />
 
       <div class="space-y-2">
         <h2 class="text-lg font-bold">{gettext("The file of your build")}</h2>

@@ -28,7 +28,8 @@ The owner decides about each item.
   a station also away from home. When an integration of Home Assistant
   gives the station, the app uses it. Not every person has Home
   Assistant. Then the app links to the cloud of the maker through a relay
-  on its server (a next step).
+  on its server. The server sees the token for each call, and keeps no
+  token. The app keeps no history of a station.
 - The owner asked the app to select the most robust way to talk to
   Pecron. The integration of Pecron (from the portal of Pecron) is the
   first way of the app. pecron-monitor is the second way, with no cloud.

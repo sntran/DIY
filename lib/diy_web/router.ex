@@ -11,6 +11,19 @@ defmodule DIYWeb.Router do
     plug :put_secure_browser_headers
   end
 
+  # The relay to the cloud of the maker of a power station
+  # (DIYWeb.RelayController): no session, no cookie.
+  pipeline :relay do
+    plug :accepts, ["json"]
+  end
+
+  scope "/relay", DIYWeb do
+    pipe_through :relay
+
+    get "/pecron/stations", RelayController, :pecron_stations
+    post "/pecron/command/:id", RelayController, :pecron_command
+  end
+
   scope "/", DIYWeb do
     pipe_through :browser
 
@@ -22,7 +35,7 @@ defmodule DIYWeb.Router do
     # (DIYWeb.Locale.live_session/1).
     live_session :build,
       session: {DIYWeb.Locale, :live_session, []},
-      on_mount: [DIYWeb.Locale, DIYWeb.Device, DIYWeb.HomeAssistant] do
+      on_mount: [DIYWeb.Locale, DIYWeb.Device, DIYWeb.HomeAssistant, DIYWeb.MakerLink] do
       live "/", HomeLive, :front
       live "/inside", HomeLive, :inside
       live "/estimate", HomeLive, :estimate

@@ -2533,8 +2533,8 @@ The person can see a power station of Pecron or EcoFlow in the app, also
 away from home, and turn its outlets on and off. This is a decision of
 the owner (October 2026): when an integration of Home Assistant gives the
 station, the app uses it. Not every person has Home Assistant. Then the
-app links to the cloud of the maker through a relay on its server (a next
-step). Here, the app reads the station through Home
+app links to the cloud of the maker through a relay on its server (see
+"The direct link to a maker"). Here, the app reads the station through Home
 Assistant, with no link of its own to the cloud of a maker:
 
 - A page of the app cannot call the cloud of Pecron
@@ -2833,6 +2833,107 @@ invariants stay true. The new rules are in the tests:
   The link to Home Assistant closes and comes back while the AC switch
   has the focus. The AC switch keeps the focus, and the DC outlets get no
   switch. Axe checks the panel.
+
+### The direct link to a maker
+
+A person with no Home Assistant also sees a power station of Pecron from
+anywhere, and turns its outlets on and off. The app calls the cloud of
+Pecron with the API that Pecron made for Home Assistant (`DIY.Pecron`):
+the same calls as the integration of Pecron. EcoFlow comes in a next step.
+
+The token:
+
+- The person makes a long-lived token on the portal of Pecron
+  (`app.pecron.com`). It starts with `phk_`, and the person can stop it
+  there at any time.
+- The card Pecron in Settings (`DIYWeb.MakerLink.card/1`) has the field
+  of the token. The key Connect sends the DOM event `maker:connect` to
+  the hook (`JS.dispatch/1`): the token never goes to the LiveView. The
+  field goes empty.
+- The hook keeps the token on the device (IndexedDB, the database
+  `diy-makers`). A different tab gets the news (BroadcastChannel
+  `diy.makers`).
+
+The relay (`DIYWeb.RelayController`, `/relay/pecron/…`):
+
+- A page of the app cannot call the cloud of Pecron: its answers have no
+  CORS headers. So the hook calls the relay of the app, and the relay
+  calls the cloud.
+- The token comes in each request (`authorization: Bearer …`). The relay
+  keeps no token and writes no token to a log. This is a decision of the
+  owner (October 2026): the server sees the token for each call.
+- It takes a request of a page of the app only (`sec-fetch-site:
+  same-origin`). A page of a different site cannot use it.
+- It sends only two requests to the cloud: the list of the stations, and
+  a control of the AC or DC outlets of one station. It gives back only the
+  parts that the app reads, with no cache (`cache-control: no-store`).
+- Its answers: the stations, or an error (`token`: Pecron refuses the
+  token; `unreachable`: Pecron does not answer; `failed`).
+
+The hook (`assets/js/maker_link.js`) reads the stations at the start, and
+then each 30 seconds while the page shows. A hidden page reads them again
+when it shows. The TLA+ model `specs/MakerLink.tla` checks three rules:
+
+- **The generation** (`MakerLink.nogen.cfg`). A new token or a disconnect
+  starts a new generation. An answer of an old generation changes
+  nothing. Without this rule, a late answer of the old account shows on
+  the page.
+- **One poll at a time** (`MakerLink.overlap.cfg`). A timer while a poll
+  waits does nothing: the next timer polls. Without this rule, the answer
+  of an older poll can come last, and the page shows the old state.
+- **A poll after a control** (`MakerLink.nopoll.cfg` and
+  `MakerLink.noagain.cfg`). The end of a control starts a poll. While a
+  poll waits, it marks a poll "again" for the end of that poll. Without
+  this rule, the page keeps the state from before the control.
+
+When all is quiet, and a poll read the cloud after the last change of a
+person, the page shows the state of the cloud. After a disconnect, it
+shows no station. The model has two accounts, two changes of a person,
+two new tokens or disconnects, three timers and one control.
+
+The station:
+
+- The build keeps the link of a power station to its unit (`units`:
+  `"pecron:id"`, `DIY.Build.link_unit/3`). A unit has one station at
+  most. A link that the app cannot read goes away when the build loads.
+- The panel of a power station with no link has the part Pecron: the
+  stations of the account that no item has. A tap links one. A station of
+  a known model gets the model (`DIY.HomeAssistant.station_model/2`),
+  when the person did not choose one.
+- The part shows the battery level, the power in and the power out, and
+  the switches of the AC and DC outlets. These are the same parts as for
+  a station of Home Assistant. The field `online` of the device tells if
+  Pecron can reach the station. When it cannot, the part tells it and
+  shows its last numbers, and the switches do not work. When the account
+  does not have the station now, or the link is not connected, the part
+  tells it too.
+- The relay and the page read each number on its own. A battery is from
+  0 to 100 %, and a power from 0 to 1,000,000 W. Else the number is not
+  known, and the other numbers and stations stay.
+- A station in a van links too.
+
+The limits: the app shows the station only while a page of the app is
+open. It keeps no history: a history needs a server that reads the cloud
+when the page is closed, and keeps the numbers of the person.
+
+The tests:
+
+- `test/diy/pecron_test.exs` and
+  `test/diy_web/controllers/relay_controller_test.exs`: the calls of the
+  cloud, the parts, the errors, and each request that the relay refuses.
+  Property tests check the parts of any answer of the cloud.
+- `test/js/maker_link.test.js`: the token, the polls, the generation, the
+  controls, the errors, the store and the hook. A property test does many
+  steps in any order: new tokens, disconnects, timers, controls, answers
+  and changes of a person. The page shows only the station of the
+  account of the token, and the cloud when all is quiet.
+- `test/diy/build_units_test.exs` and
+  `test/diy_web/live/maker_link_live_test.exs`: the links, the card, the
+  part of the panel, the switches, and the payloads that the page
+  refuses.
+- The browser test connects Pecron with a token, links a station, and
+  turns its AC outlets with the keyboard. Axe checks the card and the
+  panel.
 
 ### The energy data
 
