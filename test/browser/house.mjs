@@ -1003,7 +1003,11 @@ for (const colorScheme of ["light", "dark"]) {
       await follow(page, 'a[id^="add-"][aria-label="Add an item to Laundry"]')
       await page.click("#add-power_station")
       await page.waitForSelector("#maker-choice-0:has-text('Backup battery (E3800LFP)')")
+      // A long name of a station wraps at 320 px.
+      assert.equal(await page.$eval("#maker-choice-0", (choice) => getComputedStyle(choice).whiteSpace), "normal")
       await page.click("#maker-choice-0")
+      // The key goes away: the title of the part takes the focus.
+      assert.equal(await page.evaluate(() => document.activeElement?.id), "part-maker-title")
       await page.waitForSelector("#item-stage #item-stage-title:has-text('Pecron E3800LFP')")
       await page.waitForSelector("#pecron-battery:has-text('82%')")
       await page.waitForSelector("#pecron-output:has-text('350 W')")
@@ -1019,6 +1023,21 @@ for (const colorScheme of ["light", "dark"]) {
       await page.waitForSelector("#pecron-switch-ac[aria-disabled=true]")
       assert.equal(await page.evaluate(() => document.activeElement?.id), "pecron-switch-ac")
       await check(page, `${name} Pecron station offline`)
+      await page.unroute("**/relay/pecron/stations")
+      // The page opens again with the panel of the station. Before the first
+      // list, the key "Remove the link" has the focus. The list comes, and
+      // the switches come above the key: the key keeps the focus.
+      let release = null
+      const held = new Promise((resolve) => { release = resolve })
+      await page.route("**/relay/pecron/stations", async (route) => { await held; await route.continue() })
+      await page.reload()
+      await connected(page)
+      await page.waitForSelector("#maker-unlink")
+      assert.equal(await page.locator("#pecron-switch-ac").count(), 0)
+      await page.focus("#maker-unlink")
+      release()
+      await page.waitForSelector("#pecron-switch-ac")
+      assert.equal(await page.evaluate(() => document.activeElement?.id), "maker-unlink")
       await page.unroute("**/relay/pecron/stations")
       await page.click("#ask-remove")
       await page.click("#delete-item")

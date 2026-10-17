@@ -64,6 +64,17 @@ defmodule DIY.BuildUnitsTest do
     assert Build.put_house(linked, house, rooms, items).units == %{}
   end
 
+  test "an item of a device of Home Assistant gets no unit, also in a stored build" do
+    build = house()
+    {:ok, build, ha} = Build.add_device(build, garage(build), "power_station", "ha_dev_1")
+    assert Build.link_unit(build, ha, "pecron:dev_1") == {:error, :device}
+
+    json =
+      build |> Build.to_json() |> Jason.decode!() |> Map.put("units", %{ha => "pecron:dev_1"})
+
+    assert {:ok, %{units: %{}}} = json |> Jason.encode!() |> Build.from_json()
+  end
+
   test "a stored build keeps its links, and an old build has none" do
     {build, [s1, _s2]} = stations(2)
     {:ok, linked} = Build.link_unit(build, s1, "pecron:dev_1")

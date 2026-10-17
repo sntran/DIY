@@ -2881,8 +2881,8 @@ The relay (`DIYWeb.RelayController`, `/relay/pecron/…`):
 
 The hook (`assets/js/maker_link.js`) reads the stations at the start, and
 then each 30 seconds while the page shows. A hidden page reads them again
-when it shows. Pecron can refuse the token for a control: the option
-"Allow HA to send control commands" is off on the portal. Then only the
+when it shows. Pecron can refuse a control (a 401 or a 403). An example
+is the option "Allow HA to send control commands" off on the portal. No source tells the answer of Pecron in that case. Then only the
 control has the error (`denied`). The token can still read, so the poll
 after the control goes on. Only a poll that Pecron refuses stops the link
 (`refused`). A link that stops (a page that goes) does nothing more. The TLA+ model
@@ -2917,6 +2917,20 @@ the person connects the same account again. The next poll shows its
 change. The model has two accounts, two changes of a person, three new
 tokens or disconnects, three timers, one control and one lost message.
 
+Four rules of the hook are not in the model. They only remove steps, or
+they end a step that the model has:
+
+- A poll that the maker refuses (`refused`) stops the polls, until a new
+  token comes.
+- A hidden page does not poll. It polls when it shows again.
+- An answer with an error ends a poll or a control as a timeout does.
+- The model has one value and one control at a time. A control of the AC
+  outlets and a control of the DC outlets can wait at the same time. They
+  change different values, and each end starts a poll or marks a poll
+  "again", as in the model. So for each value, the steps are the steps of
+  the model. TLC with two controls, one after the other
+  (`MaxControls = 2`), also finds no error (2,481,115 distinct states).
+
 The station:
 
 - The build keeps the link of a power station to its unit (`units`:
@@ -2926,8 +2940,11 @@ The station:
   stations of the account that no item has. A tap links one. A station of
   a known model gets the model (`DIY.HomeAssistant.station_model/2`),
   when the person did not choose one.
-- An item of a device of Home Assistant gets no choice: the app uses Home
-  Assistant when it gives the station.
+- An item of a device of Home Assistant gets no choice and no link: the
+  app uses Home Assistant when it gives the station. The build refuses
+  such a link, also in a stored build.
+- A choice has the name of the station, which the person gave in the app
+  of Pecron. A long name wraps, so a choice fits at 320 px.
 - The part shows the battery level, the power in and the power out, and
   the switches of the AC and DC outlets. These are the same parts as for
   a station of Home Assistant, with the same component. The field
@@ -2940,13 +2957,20 @@ The station:
   Settings. When the app cannot reach Pecron, it tells that these are the
   last numbers. With the link not connected, the switches do not work.
   The notes of the link are in one element that stays. A note that comes
-  or goes above the switches makes a switch lose the focus.
+  or goes above the switches makes a switch lose the focus. The parts of
+  the station, and the rows of its switches, are in elements that stay
+  too. So the key "Remove the link" keeps the focus when the switches
+  come. After a link, or after its end, the title of the part takes the
+  focus: the key with the focus goes away. The page moves the focus at
+  once (the event `diy:focus` of `assets/js/app.js`). `JS.focus/1` moves
+  it again after two frames, and a page that is not in front gets the
+  frames late. Then the title takes the focus from the next key.
 - The page keeps the switches of each station of the last list, also
   when a new token makes the stations `nil`. So a part that the station
   does not have gets no switch while the page waits for a new list, and
   the other switch stays. Before the first list, the station has no
   switches: the page does not know them, and they come with the list. A
-  switch that comes does not move the focus.
+  switch that comes does not move the focus, and no key below it moves.
 - A control that waits stays while a poll fails: the hook ends it with
   its error. Only a new token or a disconnect ends it.
 - The relay and the page read each number on its own. A battery is from
@@ -2966,8 +2990,15 @@ The limits:
   write later (pecron-monitor tells it for an F5000LFP), so the switch can
   show the old state until a later poll.
 - The relay has no limit of requests for each address. A script can use
-  the relay to call `/api/ha` with its own token: this gives nothing that
-  the script cannot get from Pecron directly.
+  the relay to call `/api/ha` with its own token. It gets no data that it
+  cannot get from Pecron directly. But Pecron sees the address of the
+  server of the app, not of the script. If Pecron limits or blocks that
+  address, the direct link stops for all persons. Each call also holds
+  the server for up to 15 seconds.
+- A switch that Pecron gives with no value, or with a value that the app
+  cannot read, is "no switch" for that list. The official integration
+  makes its switches from the entities of the device. A real answer of
+  `/api/ha/devices` can show if the relay must read them too.
 - A browser with no Fetch Metadata (`sec-fetch-site`, Safari before 16.4)
   cannot use the direct link.
 - The relay reads all the body of an answer of Pecron before it reads

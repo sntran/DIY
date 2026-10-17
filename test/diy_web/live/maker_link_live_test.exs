@@ -114,6 +114,7 @@ defmodule DIYWeb.MakerLinkLiveTest do
     status(view, "offline", "unreachable")
     assert has_element?(view, "#pecron-status", "The app cannot reach Pecron now.")
     assert has_element?(view, "#pecron-error", "Pecron does not answer now.")
+    refute has_element?(view, "#pecron-form")
 
     status(view, "refused", "token")
     assert has_element?(view, "#pecron-status", "Pecron does not accept the token.")
@@ -172,6 +173,12 @@ defmodule DIYWeb.MakerLinkLiveTest do
     stations(view, [e3800(), @cabin])
     assert has_element?(view, "#maker-choice-0", "Cabin (X9)")
     refute has_element?(view, "#maker-choice-1")
+    # A long name wraps. After a choice, the title of the part takes the
+    # focus: the key goes away.
+    assert has_element?(view, "#maker-choice-0.stage-btn-wrap")
+    assert has_element?(view, "#part-maker-title[tabindex='-1']")
+    choice = view |> element("#maker-choice-0") |> render()
+    assert choice =~ "maker_link" and choice =~ "#part-maker-title"
 
     # A model that the person chose stays.
     view |> element("#maker-choice-0") |> render_click()
@@ -187,7 +194,11 @@ defmodule DIYWeb.MakerLinkLiveTest do
     view |> element("#pecron-switch-ac") |> render_click()
     refute_push_event(view, "maker:control", _payload)
 
-    # The end of the link: the choices again.
+    # The rows of the switches are in one element that stays.
+    assert has_element?(view, "#maker-station #pecron-switches #pecron-ac")
+
+    # The end of the link: the choices again. The title takes the focus.
+    assert view |> element("#maker-unlink") |> render() =~ "#part-maker-title"
     view |> element("#maker-unlink") |> render_click()
     assert build_of(view).units == %{id => "pecron:dev_1"}
     assert has_element?(view, "#maker-choice-0", "Cabin (X9)")
@@ -350,7 +361,10 @@ defmodule DIYWeb.MakerLinkLiveTest do
            )
 
     refute has_element?(view, "#pecron-switch-ac")
+    refute has_element?(view, "#pecron-station-wait")
     assert has_element?(view, "#maker-unlink")
+    # The element of the parts stays, so the key below it keeps the focus.
+    assert has_element?(view, "#part-maker #maker-station")
 
     # The page waits for the stations of a new token. The last list did
     # not have the station, so the page does not know its switches.
@@ -368,6 +382,14 @@ defmodule DIYWeb.MakerLinkLiveTest do
     status(view, "none")
     assert has_element?(view, "#maker-closed")
     assert build_of(view).units == %{id => "pecron:dev_1"}
+
+    # A new token that Pecron refuses: the last numbers stay, and the note
+    # tells it.
+    status(view, "connected")
+    stations(view, [e3800()])
+    status(view, "refused", "token")
+    assert has_element?(view, "#maker-closed", "These are its last numbers.")
+    assert has_element?(view, "#pecron-battery", "82%")
   end
 
   test "a payload that the page cannot read changes nothing", %{conn: conn} do
@@ -488,7 +510,7 @@ defmodule DIYWeb.MakerLinkLiveTest do
     assert has_element?(
              view,
              "#pecron-ac-state",
-             "Pecron does not let this token turn the outlets on or off."
+             "Pecron did not let the app turn the outlets on or off."
            )
   end
 
@@ -511,6 +533,10 @@ defmodule DIYWeb.MakerLinkLiveTest do
     stations(view, [e3800()])
     refute has_element?(view, "#maker-choices")
     refute has_element?(view, "#part-maker")
+
+    # An event of the page with a unit for this item changes nothing.
+    render_click(view, "maker_link", %{"item" => id, "unit" => "pecron:dev_1"})
+    assert build_of(view).units == %{}
   end
 
   test "the card tells the access of the token, and a refused token one time", %{conn: conn} do

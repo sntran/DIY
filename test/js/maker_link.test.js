@@ -520,6 +520,20 @@ test("a stopped link does nothing: a late read of the store, or a late news", as
   assert.equal(fake.calls.length, 0)
   assert.equal(page.timers.size, 0)
   assert.deepEqual(page.pushes.filter(([event]) => event === "maker:stations"), [])
+
+  // A poll waits when the link stops: its answer changes nothing, and no
+  // timer polls again.
+  page.tokens.set("pecron", "phk_a1")
+  const other = new MakerLink(page.deps)
+  await other.start()
+  await settle()
+  assert.equal(fake.calls.length, 1)
+  const count = page.pushes.length
+  other.stop()
+  fake.answer(fake.calls[0])
+  await settle()
+  assert.equal(page.pushes.length, count)
+  assert.equal(pollTimer(page), undefined)
 })
 
 test("the store of the tokens in IndexedDB", async () => {
@@ -539,7 +553,7 @@ test("the store of the tokens in IndexedDB", async () => {
     opens += 1
     const request = {}
     setImmediate(() => {
-      const db = {transaction: () => {
+      const db = {close: () => { db.closed = true }, transaction: () => {
         const tx = {}
         const done = (result) => {
           setImmediate(() => tx.oncomplete())
@@ -564,6 +578,15 @@ test("the store of the tokens in IndexedDB", async () => {
   assert.equal(await counting.get("pecron"), "phk_a2")
   assert.equal(opens, 2)
 
+  // The page goes: the store closes its connection. A next call opens it
+  // again. A store with no connection closes too.
+  counting.close()
+  await settle()
+  assert.equal(dbs[1].closed, true)
+  assert.equal(await counting.get("pecron"), "phk_a2")
+  assert.equal(opens, 3)
+  tokenStore(factory).close()
+
   // A database that does not open, and a transaction that fails.
   const failing = tokenStore({open: () => {
     const request = {}
@@ -571,6 +594,10 @@ test("the store of the tokens in IndexedDB", async () => {
     return request
   }})
   await assert.rejects(failing.get("pecron"))
+  // The store closes while its database does not open.
+  const read = failing.get("pecron")
+  failing.close()
+  await assert.rejects(read)
   const aborts = tokenStore({open: () => {
     const request = {}
     setImmediate(() => {
@@ -591,9 +618,11 @@ test("the hook: the links, the events of the LiveView and of the page", async ()
   const page = parts({fetch: fake.fetch})
   let listeners = null
   let unlistened = false
+  let closed = false
   const notes = []
   const deps = () => ({
     ...page.deps,
+    close: () => { closed = true },
     notify: (maker) => notes.push(maker),
     listen: (handlers) => {
       listeners = handlers
@@ -652,6 +681,9 @@ test("the hook: the links, the events of the LiveView and of the page", async ()
   listeners.news("other")
   self.destroyed()
   assert.ok(unlistened)
+  assert.ok(closed)
+  // The links stop: the answer of a poll that waits changes nothing.
+  assert.ok(Object.values(self.links).every((one) => one.stopped))
 })
 
 test("the parts of the browser", async () => {
@@ -665,6 +697,7 @@ test("the parts of the browser", async () => {
       channels.push(this)
     }
     postMessage(data) { this.sent.push(data) }
+    close() { this.closed = true }
   }
   const window = {
     BroadcastChannel: FakeChannel,
@@ -719,4 +752,9 @@ test("the parts of the browser", async () => {
   const lone = makerParts({...window, BroadcastChannel: undefined})
   lone.notify("pecron")
   lone.listen({connect: () => {}, news: () => {}, shown: () => {}})()
+  lone.close()
+
+  // The page goes: the channel closes.
+  browser.close()
+  assert.equal(channels[0].closed, true)
 })

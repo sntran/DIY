@@ -639,41 +639,46 @@ defmodule DIYWeb.Inside do
       </p>
     </div>
     <%!-- A part that the station does not have has no switch: only its
-      name and its status. --%>
-    <div :for={switch <- @station.switches} class="flex flex-col gap-1">
-      <div id={"#{@prefix}-#{switch.part}"} class="stage-switch-row stage-row-plain">
-        <span :if={switch.state == "none"} id={"#{@prefix}-#{switch.part}-label"}>
-          {switch.name}
-        </span>
-        <label
-          :if={switch.state != "none"}
-          for={"#{@prefix}-switch-#{switch.part}"}
-          id={"#{@prefix}-#{switch.part}-label"}
-        >
-          {switch.name}
-        </label>
-        <button
-          :if={switch.state != "none"}
-          type="button"
-          id={"#{@prefix}-switch-#{switch.part}"}
-          role="switch"
-          class="stage-switch"
-          aria-labelledby={"#{@prefix}-#{switch.part}-label"}
-          aria-describedby={"#{@prefix}-#{switch.part}-state"}
-          aria-checked={to_string(switch.state == "on")}
-          aria-disabled={
-            to_string(switch.state not in ~w(on off) or switch.pending != nil or switch.link == false)
-          }
-          phx-click={@event}
-          phx-value-item={@item}
-          phx-value-maker={@maker}
-          phx-value-part={switch.part}
-          phx-value-on={to_string(switch.state != "on")}
-        ></button>
+      name and its status. The rows are in one element that stays: a row
+      that comes moves no key below it. --%>
+    <div id={"#{@prefix}-switches"} class="contents">
+      <div :for={switch <- @station.switches} class="flex flex-col gap-1">
+        <div id={"#{@prefix}-#{switch.part}"} class="stage-switch-row stage-row-plain">
+          <span :if={switch.state == "none"} id={"#{@prefix}-#{switch.part}-label"}>
+            {switch.name}
+          </span>
+          <label
+            :if={switch.state != "none"}
+            for={"#{@prefix}-switch-#{switch.part}"}
+            id={"#{@prefix}-#{switch.part}-label"}
+          >
+            {switch.name}
+          </label>
+          <button
+            :if={switch.state != "none"}
+            type="button"
+            id={"#{@prefix}-switch-#{switch.part}"}
+            role="switch"
+            class="stage-switch"
+            aria-labelledby={"#{@prefix}-#{switch.part}-label"}
+            aria-describedby={"#{@prefix}-#{switch.part}-state"}
+            aria-checked={to_string(switch.state == "on")}
+            aria-disabled={
+              to_string(
+                switch.state not in ~w(on off) or switch.pending != nil or switch.link == false
+              )
+            }
+            phx-click={@event}
+            phx-value-item={@item}
+            phx-value-maker={@maker}
+            phx-value-part={switch.part}
+            phx-value-on={to_string(switch.state != "on")}
+          ></button>
+        </div>
+        <p id={"#{@prefix}-#{switch.part}-state"} role="status" class="text-sm">
+          {@text.(switch)}
+        </p>
       </div>
-      <p id={"#{@prefix}-#{switch.part}-state"} role="status" class="text-sm">
-        {@text.(switch)}
-      </p>
     </div>
     """
   end
@@ -1141,7 +1146,9 @@ defmodule DIYWeb.Inside do
         class="stage-sec"
         aria-labelledby="part-maker-title"
       >
-        <h3 id="part-maker-title" class="stage-sec-title">
+        <%!-- The title takes the focus after a link or its end: the key
+          with the focus goes away. --%>
+        <h3 id="part-maker-title" class="stage-sec-title" tabindex="-1">
           {MakerLink.name((@unit && @unit.maker) || hd(@unit_choices).maker)}
         </h3>
         <%!-- The notes of the link are in one element that stays: a note
@@ -1149,7 +1156,8 @@ defmodule DIYWeb.Inside do
           focus. --%>
         <div :if={@unit} id="maker-notes" class="flex flex-col gap-2 text-sm">
           <p :if={@unit.state in ~w(none refused)} id="maker-closed">
-            The app has no link to {MakerLink.name(@unit.maker)} now.
+            The app has no link to {MakerLink.name(@unit.maker)} now.{if @unit.known,
+              do: " These are its last numbers."}
             <.link patch={~p"/settings"} class="link">Connect it in Settings.</.link>
           </p>
           <p :if={@unit.state in ~w(loading connecting)} id="maker-connecting">
@@ -1166,21 +1174,26 @@ defmodule DIYWeb.Inside do
             {MakerLink.name(@unit.maker)} cannot reach the station now. These are its last numbers.
           </p>
         </div>
-        <.station_parts
-          :if={@unit && @unit.found}
-          station={@unit}
-          prefix={@unit.maker}
-          item={@item.id}
-          event="maker_switch"
-          maker={@unit.maker}
-          text={&MakerLink.switch_text(&1, @unit.maker)}
-        />
+        <%!-- The parts of the station are in one element that stays while
+          the item has a unit: a part that comes or goes moves the key below
+          it, and that key loses the focus. --%>
+        <div :if={@unit} id="maker-station" class="contents">
+          <.station_parts
+            :if={@unit.found}
+            station={@unit}
+            prefix={@unit.maker}
+            item={@item.id}
+            event="maker_switch"
+            maker={@unit.maker}
+            text={&MakerLink.switch_text(&1, @unit.maker)}
+          />
+        </div>
         <button
           :if={@unit}
           type="button"
           id="maker-unlink"
           class="stage-link self-start"
-          phx-click="maker_unlink"
+          phx-click={JS.push("maker_unlink") |> JS.dispatch("diy:focus", to: "#part-maker-title")}
           phx-value-item={@item.id}
         >
           Remove the link to {MakerLink.name(@unit.maker)}
@@ -1191,8 +1204,8 @@ defmodule DIYWeb.Inside do
             :for={{choice, index} <- Enum.with_index(@unit_choices)}
             type="button"
             id={"maker-choice-#{index}"}
-            class="stage-btn self-start"
-            phx-click="maker_link"
+            class="stage-btn stage-btn-wrap self-start"
+            phx-click={JS.push("maker_link") |> JS.dispatch("diy:focus", to: "#part-maker-title")}
             phx-value-item={@item.id}
             phx-value-unit={choice.unit}
           >

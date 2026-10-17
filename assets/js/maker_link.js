@@ -173,8 +173,9 @@ export class MakerLink {
   // Turns the AC or DC outlets of a station on or off. The end goes to the
   // LiveView, then a poll reads the new state. The maker can refuse the
   // token for a control ("denied"), and the token can still read. On the
-  // portal of Pecron, the person can turn off the controls of a token. So
-  // the poll tells if the maker refuses the token.
+  // portal of Pecron, the person can turn off the controls (the option
+  // "Allow HA to send control commands"). So the poll tells if the maker
+  // refuses the token.
   async control(device, part, on) {
     const generation = this.generation
     if (!this.token) return this.push("maker:control_done", {maker: this.maker, device, part, error: "failed"})
@@ -252,6 +253,12 @@ export function tokenStore(factory) {
     get: (maker) => run("readonly", (store) => store.get(maker)),
     put: (maker, token) => run("readwrite", (store) => store.put(token, maker)),
     delete: (maker) => run("readwrite", (store) => store.delete(maker)),
+    // Closes the connection, when the page goes.
+    close: () => {
+      const open = connection
+      connection = null
+      open?.then((db) => db.close(), () => {})
+    },
   }
 }
 
@@ -262,6 +269,7 @@ export function makerLinkHook(deps) {
   return {
     mounted() {
       const parts = deps()
+      this.parts = parts
       const push = (event, payload) => this.pushEvent(event, payload, () => {})
       this.links = Object.fromEntries(Object.keys(MAKERS).map((maker) =>
         [maker, new MakerLink({...parts, maker, push, notify: () => parts.notify(maker)})]))
@@ -281,6 +289,7 @@ export function makerLinkHook(deps) {
     destroyed() {
       this.unlisten()
       Object.values(this.links).forEach((one) => one.stop())
+      this.parts.close()
     },
   }
 }
@@ -288,8 +297,14 @@ export function makerLinkHook(deps) {
 // The parts of the browser for the hook.
 export function makerParts(window) {
   const channel = typeof window.BroadcastChannel === "function" ? new window.BroadcastChannel(CHANNEL) : null
+  const store = tokenStore(window.indexedDB)
   return {
-    store: tokenStore(window.indexedDB),
+    store,
+    // The page goes: the channel and the database close.
+    close: () => {
+      channel?.close()
+      store.close()
+    },
     fetch: (...args) => window.fetch(...args),
     notify: (maker) => channel?.postMessage(maker),
     visible: () => window.document.visibilityState !== "hidden",

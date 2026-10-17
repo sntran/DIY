@@ -669,10 +669,13 @@ defmodule DIY.Build do
   @doc """
   Links a power station to a unit of the cloud of its maker. A unit has
   one item at most: a unit of a different item is an error (`:taken`).
+  An item of a device of Home Assistant gets no unit (`:device`): the app
+  uses Home Assistant for it.
   """
   @spec link_unit(t(), String.t(), String.t()) :: {:ok, t()} | {:error, atom()}
   def link_unit(build, id, unit) do
     with {:ok, %{type: "power_station"}} <- item(build, id),
+         true <- not Map.has_key?(build.devices, id) || {:error, :device},
          true <- unit?(unit) || {:error, :unit},
          true <- unit_item(build, unit) in [nil, id] || {:error, :taken} do
       {:ok, change(build, &%{&1 | units: Map.put(&1.units, id, unit)})}
@@ -1253,7 +1256,7 @@ defmodule DIY.Build do
          {:ok, hints} <- hints(map["hints"]),
          {:ok, areas} <- areas(map["areas"], rooms),
          {:ok, devices} <- devices(map["devices"], items, rooms),
-         {:ok, units} <- units(map["units"], items),
+         {:ok, units} <- units(map["units"], items, devices),
          {:ok, wires} <- wires(map["wires"], items) do
       seq = last_id(seq, rooms ++ items ++ plans ++ wires)
 
@@ -1793,21 +1796,23 @@ defmodule DIY.Build do
   # The links of the power stations to the units of a maker. A build of an
   # older version has none. A link that the app cannot read goes away: a
   # link must not stop the build from loading. A unit has one item at
-  # most: the first station keeps it.
-  defp units(units, items) when is_map(units) do
+  # most: the first station keeps it. An item of a device of Home
+  # Assistant has no unit.
+  defp units(units, items, devices) when is_map(units) do
     {links, _used} =
       Enum.reduce(items, {%{}, MapSet.new()}, fn item, {links, used} ->
         unit = units[item.id]
 
-        if item.type == "power_station" and unit?(unit) and not MapSet.member?(used, unit),
-          do: {Map.put(links, item.id, unit), MapSet.put(used, unit)},
-          else: {links, used}
+        if item.type == "power_station" and unit?(unit) and not MapSet.member?(used, unit) and
+             not Map.has_key?(devices, item.id),
+           do: {Map.put(links, item.id, unit), MapSet.put(used, unit)},
+           else: {links, used}
       end)
 
     {:ok, links}
   end
 
-  defp units(_units, _items), do: {:ok, %{}}
+  defp units(_units, _items, _devices), do: {:ok, %{}}
 
   # The wires. A build of an older version has none. A wire that the app
   # cannot read goes away: a wire must not stop the build from loading. A

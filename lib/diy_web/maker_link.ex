@@ -332,11 +332,14 @@ defmodule DIYWeb.MakerLink do
 
   def message("denied", maker),
     do:
-      "#{name(maker)} does not let this token turn the outlets on or off. Look at the options of the token on app.pecron.com."
+      "#{name(maker)} did not let the app turn the outlets on or off. On app.pecron.com, look at the option \"Allow HA to send control commands\"."
 
   def message("unreachable", maker), do: "#{name(maker)} does not answer now."
   def message("offline", _maker), do: "The app cannot reach its server. Look at the network."
-  def message("timeout", maker), do: "#{name(maker)} did not answer in 20 seconds."
+
+  def message("timeout", _maker),
+    do: "The app got no answer in 20 seconds. Look at the network, and try again later."
+
   def message("failed", maker), do: "#{name(maker)} did not do it. Try again."
 
   @doc """

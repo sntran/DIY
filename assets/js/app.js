@@ -46,6 +46,12 @@ const liveSocket = new LiveSocket("/live", Socket, {
   },
 })
 
+// A key that goes away gives the focus to an element of the page with the
+// event "diy:focus" (JS.dispatch/2). The focus moves at once. JS.focus/1
+// also moves it again after two frames, and then it can take the focus
+// from a key that the person uses after it.
+window.addEventListener("diy:focus", (event) => event.target.focus())
+
 // A bar at the top of the page while a page or a form loads.
 topbar.config({barColors: {0: "#29d"}, shadowColor: "rgba(0, 0, 0, .3)"})
 window.addEventListener("phx:page-loading-start", _info => topbar.show(300))
