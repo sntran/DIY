@@ -1159,7 +1159,7 @@ defmodule DIYWeb.Inside do
             This is {@unit.name} in your account of {MakerLink.name(@unit.maker)}.
           </p>
           <p :if={@unit.state in ~w(none refused)} id="maker-closed">
-            The app has no link to {MakerLink.name(@unit.maker)} now.{if @unit.known,
+            The app has no link to {MakerLink.name(@unit.maker)} now.{if @unit.last_numbers,
               do: " These are its last numbers."}
             <.link patch={~p"/settings"} class="link">Connect it in Settings.</.link>
           </p>
@@ -1167,7 +1167,7 @@ defmodule DIYWeb.Inside do
             The app connects to {MakerLink.name(@unit.maker)}.
           </p>
           <p :if={@unit.state == "offline"} id="maker-offline">
-            The app cannot reach {MakerLink.name(@unit.maker)} now.{if @unit.known,
+            The app cannot reach {MakerLink.name(@unit.maker)} now.{if @unit.last_numbers,
               do: " These are its last numbers."}
           </p>
           <p :if={@unit.online && not @unit.found} id="maker-gone">
@@ -1177,7 +1177,8 @@ defmodule DIYWeb.Inside do
             connected, so that the part does not tell a state "now" with no
             link. --%>
           <p :if={@unit.online && @unit.known && not @unit.reachable} id="maker-unreachable">
-            {MakerLink.name(@unit.maker)} cannot reach the station now. These are its last numbers.
+            {MakerLink.name(@unit.maker)} cannot reach the station now.{if @unit.last_numbers,
+              do: " These are its last numbers."}
           </p>
         </div>
         <%!-- The parts of the station are in one element that stays while

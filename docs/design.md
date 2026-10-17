@@ -2976,7 +2976,8 @@ The station:
   a station of Home Assistant, with the same component. The field
   `online` of the device tells if Pecron can reach the station. When it
   cannot, the part tells it and shows its last numbers, and the switches
-  do not work. The part tells this only while the link is connected.
+  do not work. The part tells this only while the link is connected. It
+  tells that these are its last numbers only when it has a known number.
   When the account does not have the station now, the part tells it too.
 - The part tells the state of the link. While the link connects, it tells
   that the app connects. With no link, it asks the person to connect in
@@ -3095,12 +3096,15 @@ The keys:
   of the API need such an account.
 - The region of the account selects the host: `api-a.ecoflow.com` for
   the Americas, and `api-e.ecoflow.com` for Europe. For the API for
-  developers, EcoFlow Cloud gives only these two hosts (`config_flow.py`).
-  Its text of the error 8513 names them for these regions
-  (`translations/en.json`). A key of a different region is not valid. No
-  source names a host for a different region (for example Asia). So the
-  card tells the person to try the other region when EcoFlow does not
-  accept the keys.
+  developers, EcoFlow Cloud gives only these two hosts
+  (`config_flow.py`). Its text of the error 8513 names them for these
+  regions (`translations/en.json`). A key of a different region is not
+  valid. No source names a host for a different region (for example
+  Asia). So the card tells the person to try the other region when
+  EcoFlow does not accept the keys. The client ecoflow-api-mqtt also
+  names `api.ecoflow.com` for the United States (`const.py`). It has the
+  same CORS headers (a probe), but no source tells which accounts of
+  developers it serves. So the app does not offer it.
 - The card EcoFlow in Settings has the region and the two keys. The key
   Connect sends them to the hook, not to the LiveView. The hook keeps them
   on the device (IndexedDB), as the token of Pecron. The fields of the
@@ -3109,9 +3113,10 @@ The keys:
   (not a key). So after a refused answer, the form comes again with that
   region. A patch of the page does not change the choice of the person
   (`phx-update="ignore"`).
-- A value of the store that is not a token (for example a region of a
-  different version of the app) is no token. A region that is not in
-  `HOSTS` sends no request. So the keys go to no other host.
+- A value of the store that is not a token is no token, and it goes
+  from the store. An example is a region of a different version of the
+  app. A region that is not in `HOSTS` sends no request. So the keys go
+  to no other host.
 
 The calls (the clients of the community:
 `tolwi/hassio-ecoflow-cloud` (EcoFlow Cloud) for the public API,
@@ -3124,7 +3129,10 @@ The calls (the clients of the community:
   come the access key, a nonce and the time in ms. The sign is
   HMAC-SHA256 of this text with the secret key, in hex (WebCrypto). A
   boolean signs as `true` or `false`. The three clients agree on this
-  form. The nonce is 6 random digits, as ecoflow-api-mqtt sends.
+  form, with one difference. The npm client puts `sn` in the query of
+  `quota/all`, but it signs no parameters. EcoFlow Cloud
+  (`public_api.py`) and ecoflow-api-mqtt sign `sn` too, and the app does
+  the same. The nonce is 6 random digits, as ecoflow-api-mqtt sends.
   EcoFlow Cloud sends 5 to 7 digits, and the npm client sends a UUID.
 - A poll reads the list of the devices (`/iot-open/sign/device/list`),
   then the state of each station of a known family
@@ -3168,33 +3176,38 @@ The calls (the clients of the community:
   that EcoFlow does not accept. The app always sends the keys, so it is
   `failed`, as a different code (for example 1006, a device that the API
   does not allow). No answer is `unreachable`. A page with no WebCrypto
-  (an address with no https) cannot sign a request (`crypto`).
+  (an address with no https) cannot sign a request (`crypto`). Then the
+  polls stop, because a new try cannot work.
 
 The hook has the same rules as for Pecron. These are the generation, one
 poll at a time, a poll after a control, the timeout, and the end after
-the poll.
-The model `specs/MakerLink.tla` reads the station in one step. A poll of
-EcoFlow reads each station in a call of its own. So each station is as
-the station of the model, and the rules stay true for each station.
+the poll. The model `specs/MakerLink.tla` reads the station in one step.
+A poll of EcoFlow reads each station in a call of its own. So each
+station is as the station of the model, and the rules stay true for each
+station.
 
 A station of EcoFlow can apply a command after its answer:
 ecoflow-api-mqtt waits 3 seconds after a command before it reads the
 state again (`switch.py`). It also tells that a station that sleeps can
 give an old state through the REST API (`hybrid_coordinator.py`). So the
-hook has one more rule, **the
-wait for the station**. The end of a control with no error waits 3
-seconds (`APPLY_WAIT`). Then it goes with the next poll. Until then, the
-switch waits. The model has a station that applies a command in a later
-step (`Lag`, the step `Apply`). It takes that the station applies the
-command in the wait (the step `Settle` comes after `Apply`). Without this
-rule (`MakerLink.nosettle.cfg`), the page shows the state from before the
-control as its new state (`EndNew`).
+hook has one more rule, **the wait for the station**. The end of a
+control with no error waits 3 seconds (`APPLY_WAIT`). Then it goes with
+the next poll. Until then, the switch waits. The model has a station
+that applies a command in a later step (`Lag`, the step `Apply`). It
+takes that the station applies the command in the wait (the step
+`Settle` comes after `Apply`). Without this rule
+(`MakerLink.nosettle.cfg`), the page shows the state from before the
+control as its new state (`EndNew`). With `Lag`, the model has one
+command at a time: the cloud answers no new command while the station
+must still apply one.
 
 EcoFlow can fail to give the state of a station (an error of that call).
-Then the station keeps its parts of the last poll, and it is not online. The part tells that EcoFlow cannot reach the station, and shows
-these last numbers. A switch of the last list stays, and it does not
-work. With no last list, the page does not know the switches of the
-station: it shows none, and it does not tell "no switch".
+Then the station keeps its parts of the last poll, and it is not online.
+The part tells that EcoFlow cannot reach the station, and shows these
+last numbers. A switch of the last list stays, and it does not work.
+With no last list, the station has no numbers and no switches. The part
+tells that EcoFlow cannot reach the station, with no "last numbers". It
+shows no switch, and it does not tell "no switch".
 
 The limits:
 
@@ -3205,7 +3218,12 @@ The limits:
   120 V). No source tells of a DELTA Pro 3 of Europe. There, the command
   of 120 V can fail.
 - A station that is slower than the wait shows its change with a later
-  poll.
+  poll. Until then, the switch shows the state from before the control
+  as its state (up to 30 seconds), and a screen reader reads it.
+- One poll has one wait of 20 seconds. The call of the state of one
+  station can get no answer. Then the poll ends with a timeout, and the
+  page tells that it cannot reach EcoFlow. This is so also for the other
+  stations of the account.
 - The time of the device signs each request. A time of about 60 seconds
   or more before the time of EcoFlow gives 8521 (a probe with random
   keys). Then the card tells the person to look at the region, the keys
@@ -3227,13 +3245,14 @@ The tests:
   region that is not in `HOSTS` (no request), and the calls of the states
   at the same time. Also a station with no state (its last parts).
 - `test/js/maker_link.test.js`: the keys, a poll and a control from the
-  page, the wait for the station, refused keys, the timeout, and the form
-  of EcoFlow. Also a stored value that is not a token, and the stop of the
+  page, and the wait for the station (also with a poll in the wait). Also
+  refused keys, the timeout, and the form of EcoFlow. Also a stored value that is not a token, and the stop of the
   calls that wait. Also the region in the status, and a page with no
   WebCrypto.
 - `test/diy_web/live/maker_link_live_test.exs`: the card of EcoFlow, the
   region after a refused answer, the link of a DELTA Pro 3 with its
-  model, and its switches. Also a station that EcoFlow cannot reach.
+  model, and its switches. Also a station that EcoFlow cannot reach, with
+  and with no last numbers.
 
 ### The energy data
 

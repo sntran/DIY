@@ -299,6 +299,8 @@ test("a stored value that is not a token is no token: it goes to no host", async
     await settle()
     assert.equal(link.state, "none", JSON.stringify(value))
     assert.equal(link.token, null)
+    // The value goes from the store.
+    assert.equal(page.tokens.has(maker), false)
     // A different tab writes such a value: no token.
     page.tokens.set(maker, maker === "pecron" ? "phk_a1" : {region: "europe", accessKey: "AK", secretKey: "SK"})
     await link.news()
@@ -309,6 +311,64 @@ test("a stored value that is not a token is no token: it goes to no host", async
     await settle()
     assert.ok(calls.every((url) => url.startsWith("/relay/pecron") || url.startsWith(HOSTS.europe)), calls.join())
   }
+})
+
+test("EcoFlow: a poll in the wait for the station does not carry the end of the control", async () => {
+  // The station applies a command only when the test says so.
+  const api = ecoflowApi()
+  const fetch = api.fetch
+  let owed = null
+  api.fetch = async (url, options) => {
+    if (options.method !== "PUT") return fetch(url, options)
+    const ac = api.ac
+    const answer = await fetch(url, options)
+    if (api.ac !== ac) {
+      owed = api.ac
+      api.ac = ac
+    }
+    return answer
+  }
+  const page = parts({fetch: api.fetch})
+  page.tokens.set("ecoflow", {region: "americas", accessKey: "AK", secretKey: "SK"})
+  const link = new MakerLink({...page.deps, maker: "ecoflow", subtle: globalThis.crypto.subtle, nonce: () => "1", now: () => 1})
+  await link.start()
+  await until(() => link.state === "connected" && !link.busy)
+  await link.control("DP3A", "ac", false)
+  // The timer of the next poll fires in the wait. The station did not
+  // apply the command yet: the end does not go with that poll.
+  fire(page, POLL_WAIT)
+  await until(() => !link.busy)
+  assert.equal(last(page, "maker:stations").stations[0].ac, "on")
+  assert.equal(last(page, "maker:control_done"), undefined)
+  // The station applies the command, and the wait ends.
+  api.ac = owed
+  fire(page, APPLY_WAIT)
+  await until(() => last(page, "maker:control_done") !== undefined)
+  assert.equal(last(page, "maker:stations").stations[0].ac, "off")
+  link.stop()
+})
+
+test("an end with an error while a poll waits marks a poll again", async () => {
+  const fake = relay()
+  const page = parts({fetch: fake.fetch})
+  const link = new MakerLink(page.deps)
+  await link.start()
+  await link.connect("phk_a1")
+  fake.answer(fake.calls[0])
+  await settle()
+  link.poll()
+  const waiting = fake.calls[0]
+  link.control("s1", "ac", false)
+  await settle()
+  const command = fake.calls.find((call) => call.options.method === "POST")
+  fake.answer(command, json(500, {error: "failed"}))
+  await settle()
+  assert.deepEqual(last(page, "maker:control_done"), {maker: "pecron", device: "s1", part: "ac", error: "failed"})
+  assert.equal(link.again, true)
+  fake.answer(waiting)
+  await settle()
+  assert.equal(fake.calls.length, 1)
+  link.stop()
 })
 
 test("a new generation and a stopped link stop the calls that wait", async () => {
@@ -360,7 +420,8 @@ test("EcoFlow: the wait of a poll ends after ANSWER_WAIT, and a call that throws
   await link2.start()
   await until(() => link2.state === "offline")
   assert.deepEqual(last(page2, "maker:status"), {maker: "ecoflow", state: "offline", error: "crypto", region: "europe"})
-  assert.equal(page2.timers.size, 1)
+  // A new try cannot work: no timer polls again.
+  assert.equal(pollTimer(page2), undefined)
   assert.equal(calls, 0)
   link2.stop()
 

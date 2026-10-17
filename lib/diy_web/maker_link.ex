@@ -97,7 +97,9 @@ defmodule DIYWeb.MakerLink do
   numbers, `known`, `online` (the link is connected) and the switches. It
   also has the state of the link, `found` (the account has the station)
   and `reachable` (the maker can reach the station now). It has the name
-  of the station in the account (`name`), or `nil`. Each switch has
+  of the station in the account (`name`), or `nil`. `last_numbers` is
+  true when the station has a known number: only then the part tells
+  that these are its last numbers. Each switch has
   `link`: with the link not connected, a switch does not work. With no
   stations, the switches of the last list stay (`"none"` for a part that
   the station does not have). Before the first list, the station has no
@@ -144,6 +146,7 @@ defmodule DIYWeb.MakerLink do
         state: link.state,
         online: online,
         known: parts != nil,
+        last_numbers: parts != nil and Enum.any?(@numbers, &(parts[&1] != nil)),
         found: link.stations == nil or parts != nil,
         name: parts && parts["name"],
         reachable: parts == nil or parts["online"] == true,
@@ -353,6 +356,9 @@ defmodule DIYWeb.MakerLink do
 
   def status(%{state: "connected", stations: stations}, maker),
     do: "Connected to #{name(maker)}: #{Format.count(length(stations || []), "station")}."
+
+  def status(%{state: "offline", error: "crypto"}, maker),
+    do: "The app cannot connect to #{name(maker)} in this browser."
 
   def status(%{state: "offline"}, maker),
     do: "The app cannot reach #{name(maker)} now. It tries again in 30 seconds."

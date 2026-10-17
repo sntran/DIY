@@ -24,7 +24,9 @@
 //   An end with an error goes at once.
 // - The wait for the station (EcoFlow): a station of EcoFlow can apply a
 //   command after its answer. The end of a control with no error waits
-//   APPLY_WAIT, and then goes with the next poll.
+//   APPLY_WAIT, and then goes with the next poll. The model takes that the
+//   station applies the command in this wait. A slower station shows the
+//   state from before the control until a later poll.
 //
 // The hook tells the LiveView (DIYWeb.MakerLink): "maker:status" (the
 // state of the link), "maker:stations" (the stations of the account) and
@@ -109,12 +111,15 @@ export class MakerLink {
     if (generation === this.generation) this.use(token)
   }
 
-  // The token of the store. A value that is not a token (for example of a
-  // different version of the app) is no token: it goes to no host.
+  // The token of the store. A value that is not a token is no token (for
+  // example a value of a different version of the app). It goes to no
+  // host, and it goes from the store.
   async read() {
     try {
       const token = await this.store.get(this.maker)
-      return validToken(this.maker, token) ? token : null
+      if (token === null || validToken(this.maker, token)) return token
+      await this.store.delete(this.maker)
+      return null
     } catch {
       return null
     }
@@ -217,7 +222,9 @@ export class MakerLink {
       this.again = false
       return this.poll()
     }
-    if (this.state !== "refused") this.timer = this.setTimer(() => this.tick(), POLL_WAIT)
+    // A refused token, and a page that cannot sign ("crypto"), stop the
+    // polls: a new try cannot work.
+    if (this.state !== "refused" && this.error !== "crypto") this.timer = this.setTimer(() => this.tick(), POLL_WAIT)
   }
 
   // The timer: a poll when the page shows. Else the poll waits for the

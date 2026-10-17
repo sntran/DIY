@@ -669,6 +669,15 @@ defmodule DIYWeb.MakerLinkLiveTest do
 
     assert has_element?(
              view,
+             "#ecoflow-card",
+             "The app knows the DELTA Pro, the DELTA Pro 3 and the DELTA Pro Ultra."
+           )
+
+    # The first region is the region that the browser shows first.
+    assert has_element?(view, "#ecoflow-region option:first-child[value=americas]")
+
+    assert has_element?(
+             view,
              ~s(#ecoflow-form[data-maker=ecoflow] select[name=region] option[value=americas])
            )
 
@@ -719,8 +728,15 @@ defmodule DIYWeb.MakerLinkLiveTest do
     ecoflow(view, "none", nil, "asia")
     assert has_element?(view, "#ecoflow-region option[value=europe][selected]")
 
-    # With no WebCrypto, the page cannot sign a request.
+    # With no WebCrypto, the page cannot sign a request. The status does
+    # not tell of a new try.
     ecoflow(view, "offline", "crypto", "europe")
+
+    assert has_element?(
+             view,
+             "#ecoflow-status",
+             "The app cannot connect to EcoFlow in this browser."
+           )
 
     assert has_element?(
              view,
@@ -805,7 +821,12 @@ defmodule DIYWeb.MakerLinkLiveTest do
     # has no state of a switch. The switches stay, and they do not work.
     unreachable = dp3(%{"online" => false, "ac" => nil, "dc" => nil})
     ecoflow_stations(view, [unreachable])
-    assert has_element?(view, "#maker-unreachable", "EcoFlow cannot reach the station now.")
+
+    assert has_element?(
+             view,
+             "#maker-unreachable",
+             "EcoFlow cannot reach the station now. These are its last numbers."
+           )
 
     for part <- ~w(ac dc) do
       assert has_element?(view, "#ecoflow-switch-#{part}[aria-disabled=true]")
@@ -813,14 +834,26 @@ defmodule DIYWeb.MakerLinkLiveTest do
       refute has_element?(view, "#ecoflow-#{part}-state", "no switch")
     end
 
-    # A new page whose first list has such a station: the page does not
-    # know its switches, so it shows none, and no "no switch".
+    # A new page whose first list has such a station: the hook has no
+    # last parts, so all the parts are nil. The page does not know its
+    # switches: it shows none, and no "no switch". It has no numbers, so
+    # it does not tell "These are its last numbers."
+    no_parts = Map.new(~w(battery input output ac dc), &{&1, nil})
     view = open(conn, ~p"/inside?#{[item: id]}", build_of(view))
     ecoflow(view, "connected")
-    ecoflow_stations(view, [unreachable])
-    assert has_element?(view, "#maker-unreachable")
+    ecoflow_stations(view, [dp3(Map.put(no_parts, "online", false))])
+    assert has_element?(view, "#maker-unreachable", "EcoFlow cannot reach the station now.")
+    refute has_element?(view, "#maker-notes", "These are its last numbers.")
+    assert has_element?(view, "#ecoflow-battery", "Not known")
     refute has_element?(view, "#ecoflow-ac")
     refute has_element?(view, "#ecoflow-dc")
+    ecoflow(view, "offline", "timeout")
+    assert has_element?(view, "#maker-offline", "The app cannot reach EcoFlow now.")
+    refute has_element?(view, "#maker-notes", "These are its last numbers.")
+    ecoflow(view, "none")
+    assert has_element?(view, "#maker-closed", "The app has no link to EcoFlow now.")
+    refute has_element?(view, "#maker-notes", "These are its last numbers.")
+    ecoflow(view, "connected")
 
     # The state comes: the switches come.
     ecoflow_stations(view, [dp3()])
@@ -831,6 +864,15 @@ defmodule DIYWeb.MakerLinkLiveTest do
     # has no such switch.
     ecoflow_stations(view, [dp3(%{"dc" => nil})])
     assert has_element?(view, "#ecoflow-dc-state", "EcoFlow has no switch for it.")
+
+    # A station that the maker can reach, with no state of any switch, has
+    # no switch. When EcoFlow then cannot reach it, it still has none.
+    ecoflow_stations(view, [dp3(%{"ac" => nil, "dc" => nil})])
+    ecoflow_stations(view, [unreachable])
+
+    for part <- ~w(ac dc) do
+      assert has_element?(view, "#ecoflow-#{part}-state", "EcoFlow has no switch for it.")
+    end
   end
 
   property "the page keeps the stations that it can read, and nothing else" do

@@ -243,6 +243,10 @@ test("a station with no state keeps its parts of the last poll, and it is not on
     id: "DCABZ1", name: "Garage", model: "DELTA Pro", online: true, battery: 82, input: 640, output: 350, ac: "on", dc: "off",
   })
   assert.equal(fresh.body.stations[1].battery, 57)
+  // A state with the code 0 and no data: the last parts too.
+  const nothing = (_method, path) => (path === QUOTA ? {ok: true, json: async () => ({code: "0", data: null})} : undefined)
+  const empty = await ecoflowCloud(deps(fakeEcoflow({devices: DEVICES, answer: nothing})), KEYS).stations(undefined, last)
+  assert.deepEqual([empty.body.stations[0].online, empty.body.stations[0].battery], [false, 82])
   // A last poll that is not a list.
   const odd = await ecoflowCloud(deps(fakeEcoflow({devices: DEVICES, answer: failing})), KEYS).stations(undefined, {})
   assert.equal(odd.body.stations[0].battery, null)

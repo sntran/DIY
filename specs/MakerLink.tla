@@ -229,7 +229,9 @@ Control ==
 \* ("late") changes the station with no answer. For the hook, it is as a
 \* change of a person. So is a command of an old generation: the person
 \* connected the same account again. With Lag, the cloud answers a
-\* command, and the station applies it later (owed, Apply).
+\* command, and the station applies it later (owed, Apply). The model has
+\* one command at a time: the cloud answers no new command while the
+\* station must still apply one.
 Serve(m) ==
   /\ m \in net
   /\ m.stage \in {"req", "late"}
