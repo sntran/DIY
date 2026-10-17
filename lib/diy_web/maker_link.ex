@@ -95,8 +95,9 @@ defmodule DIYWeb.MakerLink do
   has a link to a unit (`DIY.Build.link_unit/3`). It has the maker, the
   device, and the parts as in `DIYWeb.HomeAssistant.station/2`: the
   numbers, `known`, `online` (the link is connected) and the switches. It
-  also has the state of the link, `found` (the account has the station)
-  and `reachable` (the maker can reach the station now). It has the name
+  also has the state of the link and its error. `found` tells that the
+  account has the station, and `reachable` that the maker can reach the
+  station now. It has the name
   of the station in the account (`name`), or `nil`. `last_numbers` is
   true when the station has a known number: only then the part tells
   that these are its last numbers. Each switch has
@@ -144,6 +145,7 @@ defmodule DIYWeb.MakerLink do
         maker: maker,
         device: device,
         state: link.state,
+        error: link.error,
         online: online,
         known: parts != nil,
         last_numbers: parts != nil and Enum.any?(@numbers, &(parts[&1] != nil)),

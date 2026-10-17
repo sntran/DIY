@@ -495,6 +495,9 @@ test("a token: the stations, then a poll each POLL_WAIT while the page shows", a
   assert.equal(fake.calls.length, 1)
   fake.answer(fake.calls[0])
   await settle()
+  // The page shows with no poll that waits for it: no poll.
+  link.shown()
+  assert.equal(fake.calls.length, 0)
 
   // A new LiveView gets the state and the stations again.
   const count = page.pushes.length

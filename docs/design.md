@@ -2938,11 +2938,13 @@ TLC finds no error in 784,045 distinct states. With a station that
 applies a command after its answer (`MakerLink.lag.cfg`), TLC finds no
 error in 1,040,463 distinct states.
 
-Four rules of the hook are not in the model. They only remove steps, or
+Five rules of the hook are not in the model. They only remove steps, or
 they end a step that the model has:
 
 - A poll that the maker refuses (`refused`) stops the polls, until a new
   token comes.
+- A page that cannot sign a request to EcoFlow (`crypto`) stops the
+  polls too.
 - A hidden page does not poll. It polls when it shows again.
 - An answer with an error ends a poll or a control as a timeout does.
 - The model has one value and one control at a time. A control of the AC
@@ -2982,7 +2984,8 @@ The station:
 - The part tells the state of the link. While the link connects, it tells
   that the app connects. With no link, it asks the person to connect in
   Settings. When the app cannot reach Pecron, it tells that these are the
-  last numbers. With the link not connected, the switches do not work.
+  last numbers, if the station has a known number. With the link not
+  connected, the switches do not work.
   The notes of the link are in one element that stays. A note that comes
   or goes above the switches makes a switch lose the focus. The parts of
   the station, and the rows of its switches, are in elements that stay
@@ -3115,8 +3118,9 @@ The keys:
   (`phx-update="ignore"`).
 - A value of the store that is not a token is no token, and it goes
   from the store. An example is a region of a different version of the
-  app. A region that is not in `HOSTS` sends no request. So the keys go
-  to no other host.
+  app. So a tab of an older version deletes keys of a region that only a
+  newer version knows. A region that is not in `HOSTS` sends no request.
+  So the keys go to no other host.
 
 The calls (the clients of the community:
 `tolwi/hassio-ecoflow-cloud` (EcoFlow Cloud) for the public API,
@@ -3246,9 +3250,9 @@ The tests:
   at the same time. Also a station with no state (its last parts).
 - `test/js/maker_link.test.js`: the keys, a poll and a control from the
   page, and the wait for the station (also with a poll in the wait). Also
-  refused keys, the timeout, and the form of EcoFlow. Also a stored value that is not a token, and the stop of the
-  calls that wait. Also the region in the status, and a page with no
-  WebCrypto.
+  refused keys, the timeout, and the form of EcoFlow. Also a stored value
+  that is not a token, and the stop of the calls that wait. Also the
+  region in the status, and a page with no WebCrypto.
 - `test/diy_web/live/maker_link_live_test.exs`: the card of EcoFlow, the
   region after a refused answer, the link of a DELTA Pro 3 with its
   model, and its switches. Also a station that EcoFlow cannot reach, with

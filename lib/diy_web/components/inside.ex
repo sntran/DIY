@@ -1167,8 +1167,11 @@ defmodule DIYWeb.Inside do
             The app connects to {MakerLink.name(@unit.maker)}.
           </p>
           <p :if={@unit.state == "offline"} id="maker-offline">
-            The app cannot reach {MakerLink.name(@unit.maker)} now.{if @unit.last_numbers,
-              do: " These are its last numbers."}
+            <span :if={@unit.error != "crypto"}>
+              The app cannot reach {MakerLink.name(@unit.maker)} now.{if @unit.last_numbers,
+                do: " These are its last numbers."}
+            </span>
+            <span :if={@unit.error == "crypto"}>{MakerLink.message("crypto", @unit.maker)}</span>
           </p>
           <p :if={@unit.online && not @unit.found} id="maker-gone">
             Your account of {MakerLink.name(@unit.maker)} does not have this station now.

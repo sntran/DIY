@@ -853,7 +853,22 @@ defmodule DIYWeb.MakerLinkLiveTest do
     ecoflow(view, "none")
     assert has_element?(view, "#maker-closed", "The app has no link to EcoFlow now.")
     refute has_element?(view, "#maker-notes", "These are its last numbers.")
+
+    # With no WebCrypto, the part tells why.
+    ecoflow(view, "offline", "crypto")
+
+    assert has_element?(
+             view,
+             "#maker-offline",
+             "This browser cannot sign the requests to EcoFlow."
+           )
+
+    refute has_element?(view, "#maker-offline", "The app cannot reach EcoFlow now.")
     ecoflow(view, "connected")
+
+    # One known number is enough for "These are its last numbers."
+    ecoflow_stations(view, [dp3(Map.merge(no_parts, %{"online" => false, "battery" => 40}))])
+    assert has_element?(view, "#maker-unreachable", "These are its last numbers.")
 
     # The state comes: the switches come.
     ecoflow_stations(view, [dp3()])
