@@ -438,13 +438,27 @@ defmodule DIYWeb.HaStationLiveTest do
           else: device
       end
 
+    refute has_element?(view, "#ha-not-station")
     render_hook(view, "ha:devices", %{"devices" => devices, "areas" => @areas})
     render_hook(view, "ha:states", %{"states" => %{"s1" => "on"}})
     refute has_element?(view, "#ha-switch")
     refute has_element?(view, "#ha-switch-ac")
     render_click(view, "ha_switch", %{"item" => item, "on" => "false"})
     refute_push_event(view, "ha:control", _payload)
-    assert HomeAssistant.power(:sys.get_state(view.pid).socket.assigns, item) == nil
+    assigns = :sys.get_state(view.pid).socket.assigns
+    assert HomeAssistant.power(assigns, item) == nil
+
+    # The plan shows no state of the device: it is "on" when one of its
+    # modes is on. The panel tells why the numbers and the switches went.
+    assert HomeAssistant.item_states(assigns) == %{}
+    assert has_element?(view, "#plan-item-#{item}")
+    refute has_element?(view, ~s(#plan-item-#{item}[data-ha]))
+
+    assert has_element?(
+             view,
+             "#ha-not-station",
+             "Home Assistant does not give the battery and the power out of this station now."
+           )
   end
 
   test "the page reads the switches that a station has, and no other part", %{conn: conn} do

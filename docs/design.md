@@ -2553,8 +2553,10 @@ to each entity:
   Pecron (`app.pecron.com`), through the cloud of Pecron:
   `entry:device:code`. The codes are `battery_percentage`,
   `total_input_power`, `total_output_power`, `ac_switch_hm` and
-  `dc_switch_hm`. The DC switch is for all the DC outlets: USB and 12 V
-  (`docs/E3800LFP.md` of pecron-monitor). The entities stay available
+  `dc_switch_hm`. `docs/E3800LFP.md` of pecron-monitor calls this switch
+  "DC Output", and it lists the USB and 12 V outlets as DC outputs. No
+  source tells if the switch also turns off the USB outlets. The entities
+  stay available
   when the station is not online, with their last values (the property
   `available` in `entity.py`). The binary sensor `entry:device:online`
   (`binary_sensor.py`) tells the link of the station. A device with "WB"
@@ -2609,7 +2611,10 @@ The limits of the keys of EcoFlow:
 - A RIVER mini of EcoFlow Cloud has its battery in `inv.soc` only. It is
   not a station in the app.
 - The public API of EcoFlow has no switch for the AC outlets of a DELTA
-  Pro Ultra.
+  Pro Ultra. It has a switch "DC Mode"
+  (`hs_yj751_pd_appshow_addr.showFlag.6`, `devices/public/delta_pro_ultra.py`),
+  but no source tells which outlets it turns off. So it is not a part in
+  the app.
 
 #### The integration for Pecron
 
@@ -2737,9 +2742,12 @@ The LiveView (`DIYWeb.HomeAssistant`):
   end it. A new state of the part ends the error of its last control.
 - The part Home Assistant of the panel (`DIYWeb.HomeAssistant.station/2`)
   shows the battery level, the power in and the power out. A number that
-  Home Assistant does not give is "Not known". The numbers change each 10
+  Home Assistant does not give is "Not known". The numbers change each 5
   seconds to 20 minutes: each integration and each station has its own
-  rate. The station sends its data to EcoFlow BLE. EcoFlow BLE gives it
+  rate. EcoFlow Cloud gives new data to Home Assistant each 5 seconds by
+  default (`DEFAULT_REFRESH_PERIOD_SEC` in `__init__.py`, and
+  `update_interval` in `devices/data_coordinator.py`). The station sends
+  its data to EcoFlow BLE. EcoFlow BLE gives it
   to Home Assistant at most each 10 seconds by default
   (`DEFAULT_UPDATE_PERIOD` in `const.py`). `devicebase.py` uses it as the
   shortest time between two updates. EcoFlow Cloud gets the data
@@ -2766,7 +2774,10 @@ The LiveView (`DIYWeb.HomeAssistant`):
   a station now. For example, the person disables the battery of the
   station in Home Assistant. Then the device has switches for its outlets
   and its modes, and one switch Power would turn all of them on or off
-  together (`DIYWeb.HomeAssistant.power/2`).
+  together (`DIYWeb.HomeAssistant.power/2`). The plan also shows no state
+  of that device for the item (`item_states/1`): the device is "on" when
+  one of its modes is on. The panel tells that Home Assistant does not
+  give the battery and the power out of the station now.
 
 The TLA+ model `specs/HomeAssistantStates.tla` has one entity for each
 device. A part of a station is a device of the model, as a light is. A

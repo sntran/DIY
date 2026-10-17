@@ -961,6 +961,15 @@ defmodule DIYWeb.Inside do
       >
         <h3 id="part-link-title" class="stage-sec-title">Home Assistant</h3>
         <p id="ha-device" class="text-sm">{device_text(@device)}</p>
+        <%!-- A station with a device that is not a station now: for
+          example, the person disabled its battery in Home Assistant. --%>
+        <p
+          :if={@item.type == "power_station" and match?({:known, _}, @device) and is_nil(@station)}
+          id="ha-not-station"
+          class="text-sm"
+        >
+          Home Assistant does not give the battery and the power out of this station now. Look at its entities in Home Assistant.
+        </p>
         <p :if={@energy} id="ha-energy" class="text-sm">
           {energy_text(@energy, @estimate, @item)}
         </p>
@@ -985,7 +994,7 @@ defmodule DIYWeb.Inside do
         <p :if={@power} id="ha-power-state" role="status" class="text-sm">
           {HomeAssistant.power_text(@power)}
         </p>
-        <%!-- The numbers change each 10 seconds to 20 minutes: they are not
+        <%!-- The numbers change each 5 seconds to 20 minutes: they are not
           a live region. Their texts are in one element that stays while
           there is a station: an element that comes or goes above the
           switches makes a switch lose the focus. --%>

@@ -279,10 +279,15 @@ defmodule DIYWeb.HomeAssistant do
 
   @doc """
   The state of each item of a device, for the plan: `%{item => state}`.
-  Only while the link is connected.
+  Only while the link is connected. The item of a power station has no
+  such state, as it has no switch Power (`power/2`).
   """
   def item_states(%{ha: %{state: "connected"}, build: build, ha_states: states}) do
-    for {item, device} <- build.devices, Map.has_key?(states, device), into: %{} do
+    stations = for %{type: "power_station", id: id} <- build.items, into: MapSet.new(), do: id
+
+    for {item, device} <- build.devices,
+        Map.has_key?(states, device) and not MapSet.member?(stations, item),
+        into: %{} do
       {item, states[device]}
     end
   end
