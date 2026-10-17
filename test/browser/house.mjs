@@ -783,6 +783,35 @@ async function build(context, name) {
   homeAssistant.set("binary_sensor.station_online", "on")
   await page.waitForSelector("#ha-station-link", { state: "detached" })
   assert.equal(await page.evaluate(() => document.activeElement?.id), "ha-switch-ac")
+  // The person disables the switch of the DC outlets in Home Assistant,
+  // and Home Assistant restarts. The station has no DC switch now: only
+  // the name of the part and its status.
+  const dc = homeAssistant.registry.entities.find((entity) => entity.entity_id === "switch.station_dc")
+  dc.disabled_by = "user"
+  homeAssistant.disconnect()
+  await page.waitForSelector("#ha-ac-state:has-text('The app has no link to Home Assistant now.')")
+  homeAssistant.connect()
+  await page.waitForSelector("#ha-switch-dc", { state: "detached" })
+  await page.waitForSelector("#ha-dc-state:has-text('The app has no switch for it.')")
+  await page.waitForSelector("#ha-ac-state:has-text('It is off.')")
+  // The link to Home Assistant closes while the AC switch has the focus.
+  // The DC outlets get no switch, and the AC switch keeps the focus. When
+  // the link comes back, it keeps the focus again.
+  await page.focus("#ha-switch-ac")
+  homeAssistant.disconnect()
+  await page.waitForSelector("#ha-ac-state:has-text('The app has no link to Home Assistant now.')")
+  await page.waitForSelector("#ha-switch-ac[aria-disabled=true]")
+  assert.equal(await page.locator("#ha-switch-dc").count(), 0)
+  assert.equal(await page.locator("#ha-dc-state:has-text('The app has no switch for it.')").count(), 1)
+  assert.equal(await page.evaluate(() => document.activeElement?.id), "ha-switch-ac")
+  await check(page, `${name} station with no link to Home Assistant`)
+  await page.focus("#ha-switch-ac")
+  homeAssistant.connect()
+  await page.waitForSelector("#ha-ac-state:has-text('It is off.')")
+  await page.waitForSelector("#ha-switch-ac[aria-disabled=false]")
+  assert.equal(await page.locator("#ha-switch-dc").count(), 0)
+  assert.equal(await page.evaluate(() => document.activeElement?.id), "ha-switch-ac")
+  dc.disabled_by = null
   await page.click("#item-stage .stage-back")
   await page.waitForSelector("#item-stage", { state: "detached" })
   await page.waitForSelector("#ha-ghosts:has-text('1 device of Home Assistant is not in the house yet.')")

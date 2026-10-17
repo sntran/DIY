@@ -1133,7 +1133,7 @@ const channelOf = (window) =>
   typeof window.BroadcastChannel === "function" ? new window.BroadcastChannel(CHANNEL) : null
 
 // The devices of Home Assistant for the ghosts: {id, name, area, domains,
-// model}. A device of a service (for example, the sun or a backup), or a
+// station, switches, model}. A device of a service (for example, the sun or a backup), or a
 // device that the person disabled, does not count. The main entities of a
 // device give its domains (light, fan, switch...). The entities of its
 // configuration or of its diagnostics are not main entities, and the
@@ -1141,7 +1141,9 @@ const channelOf = (window) =>
 // count. The area of a device is its own area, else the area of its first
 // main entity with an area. A device in no area does not count: it can be
 // no ghost. With no name, a device has the name of its model. A power
-// station (stationList()) has its maker (station), else null.
+// station (stationList()) has its maker (station), else null. It also has
+// the parts of STATION_SWITCHES that it has (switches), so that the page
+// knows its switches before their states come.
 export function deviceList(devices, entities, stations = stationList(devices, entities)) {
   const main = new Map()
   for (const entity of entities.filter(isMain)) {
@@ -1158,6 +1160,7 @@ export function deviceList(devices, entities, stations = stationList(devices, en
         area: device.area_id ?? own.find((entity) => entity.area_id)?.area_id ?? null,
         domains: [...new Set(own.map((entity) => domainOf(entity.entity_id)))].sort(),
         station: stations.get(device.id)?.maker ?? null,
+        switches: STATION_SWITCHES.filter((part) => stations.get(device.id)?.parts[part]),
         model: device.model ?? null,
       }
     })

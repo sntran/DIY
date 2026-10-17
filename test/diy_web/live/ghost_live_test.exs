@@ -278,15 +278,27 @@ defmodule DIYWeb.GhostLiveTest do
               ok,
               %{ok | "name" => "Second"},
               %{ok | "id" => "d2", "model" => long},
-              Map.merge(ok, %{"id" => "d3", "station" => "pecron", "model" => "E3800LFP"})
+              Map.merge(ok, %{
+                "id" => "d3",
+                "station" => "pecron",
+                "switches" => ["ac"],
+                "model" => "E3800LFP"
+              })
             ],
         "areas" => [%{"id" => "a", "name" => "A", "floor" => nil}, %{"id" => 5}]
       })
 
     # The first device with an id counts. A model that is too long is nil.
     # The page reads the kind of each device one time. A device with the
-    # maker of a power station is a power station.
-    light = %{name: "Lamp", area: nil, domains: ["light"], station: nil, kind: "lights"}
+    # maker of a power station is a power station, with its switches.
+    light = %{
+      name: "Lamp",
+      area: nil,
+      domains: ["light"],
+      station: nil,
+      switches: [],
+      kind: "lights"
+    }
 
     assert devices == [
              Map.merge(light, %{id: "d1", model: nil}),
@@ -295,6 +307,7 @@ defmodule DIYWeb.GhostLiveTest do
                id: "d3",
                model: "E3800LFP",
                station: "pecron",
+               switches: ["ac"],
                kind: "power_station"
              })
            ]

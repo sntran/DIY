@@ -1601,10 +1601,10 @@ test("the devices for the ghosts: the main entities give the domains and the are
   // A device in no area can be no ghost: it is not in the list. With no
   // name, a device has the name of its model.
   assert.deepEqual(deviceList(devices, entities), [
-    {id: "lamp", name: "Lamp", area: "living", domains: ["light", "sensor"], station: null, model: "Bulb 2"},
-    {id: "tv", name: "Den TV", area: "den", domains: ["media_player"], station: null, model: null},
-    {id: "plug", name: "", area: "hall", domains: ["switch"], station: null, model: null},
-    {id: "strip", name: "LED strip", area: "hall", domains: ["light"], station: null, model: "LED strip"},
+    {id: "lamp", name: "Lamp", area: "living", domains: ["light", "sensor"], station: null, switches: [], model: "Bulb 2"},
+    {id: "tv", name: "Den TV", area: "den", domains: ["media_player"], station: null, switches: [], model: null},
+    {id: "plug", name: "", area: "hall", domains: ["switch"], station: null, switches: [], model: null},
+    {id: "strip", name: "LED strip", area: "hall", domains: ["light"], station: null, switches: [], model: "LED strip"},
   ])
 })
 
@@ -1667,7 +1667,7 @@ test("the hook reads the devices, the entities and the areas of Home Assistant",
     ["subscribe_events", "area_registry_updated"], ["subscribe_entities", undefined],
   ])
   assert.deepEqual(page.pushes.at(-1), ["ha:devices", {
-    devices: [{id: "lamp", name: "Lamp", area: "living", domains: ["light"], station: null, model: null}],
+    devices: [{id: "lamp", name: "Lamp", area: "living", domains: ["light"], station: null, switches: [], model: null}],
     areas: [{id: "living", name: "Living Room", floor: "ground"}, {id: "yard", name: "Yard", floor: null}],
   }])
   assert.equal(link.watching, true)
@@ -2203,11 +2203,13 @@ test("the power stations of each integration, and the entities of their parts", 
     }}],
     ["both", {maker: "pecron", parts: {battery: ["sensor.both_battery"], output: ["sensor.both_out"]}}],
   ])
-  // The list of the devices has the maker of each station.
-  assert.deepEqual(deviceList(devices, entities).map((device) => [device.id, device.station]), [
-    ["e3800", "pecron"], ["f5000", null], ["monitor", "pecron"], ["dp3", "ecoflow"], ["ultra", "ecoflow"],
-    ["dpro", "ecoflow"], ["wave", null], ["half", null], ["plug", null], ["glacier", null], ["wave2", null],
-    ["wb", null], ["both", "pecron"], ["wbp", null],
+  // The list of the devices has the maker of each station, and the
+  // switches that it has.
+  assert.deepEqual(deviceList(devices, entities).map((device) => [device.id, device.station, device.switches]), [
+    ["e3800", "pecron", ["ac", "dc"]], ["f5000", null, []], ["monitor", "pecron", ["ac", "dc"]],
+    ["dp3", "ecoflow", ["ac", "dc"]], ["ultra", "ecoflow", []], ["dpro", "ecoflow", ["ac", "dc"]],
+    ["wave", null, []], ["half", null, []], ["plug", null, []], ["glacier", null, []], ["wave2", null, []],
+    ["wb", null, []], ["both", "pecron", []], ["wbp", null, []],
   ])
 
   // The numbers of the sensors, and the states of the switches. A part
