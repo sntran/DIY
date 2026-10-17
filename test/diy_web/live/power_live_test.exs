@@ -158,6 +158,12 @@ defmodule DIYWeb.PowerLiveTest do
     build = Build.set_power(build, %{build.power | night_cents: 5.0})
     view = open(conn, ~p"/estimate", build)
     assert has_element?(view, "#bill-math", "at night (22:00 to 6:00)")
+    # On a narrow screen, the table scrolls: the keyboard can scroll it too.
+    assert has_element?(
+             view,
+             ~s(#bill-math [role=region][tabindex="0"][aria-label="The bill of each month with your equipment"] #bill-months)
+           )
+
     assert render(view) =~ "kWh × price"
     assert render_patch(view, ~p"/") =~ "At night (22:00 to 6:00)"
 

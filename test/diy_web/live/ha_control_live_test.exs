@@ -276,12 +276,16 @@ defmodule DIYWeb.HaControlLiveTest do
 
     assert HomeAssistant.item_states(%{ha: %{state: "offline"}}) == %{}
 
-    build = %{devices: %{"i1" => "d1", "i2" => "d2"}}
+    build = %{
+      devices: %{"i1" => "d1", "i2" => "d2", "i3" => "d3"},
+      items: [%{id: "i1", type: "lights"}, %{id: "i3", type: "power_station"}]
+    }
 
+    # The item of a power station has no state of its whole device.
     assert HomeAssistant.item_states(%{
              ha: %{state: "connected"},
              build: build,
-             ha_states: %{"d1" => "on"}
+             ha_states: %{"d1" => "on", "d3" => "on"}
            }) == %{"i1" => "on"}
 
     assert HomeAssistant.controls?(%{domains: ["sensor", "fan"]})

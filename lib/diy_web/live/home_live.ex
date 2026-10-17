@@ -239,7 +239,14 @@ defmodule DIYWeb.HomeLive do
   def handle_event("ha_add_device", %{"id" => device}, socket) do
     with %{} = ghost <- Enum.find(socket.assigns.ghosts, &(&1.device == device)),
          {:ok, build, id} <-
-           Build.add_device(socket.assigns.build, ghost.room, ghost.type, ghost.device, ghost.at) do
+           Build.add_device(
+             socket.assigns.build,
+             ghost.room,
+             ghost.type,
+             ghost.device,
+             ghost.at,
+             ghost.values
+           ) do
       {:noreply, socket |> put(build) |> push_patch(to: item_path(socket, build, id))}
     else
       _ -> {:noreply, socket}
@@ -256,6 +263,21 @@ defmodule DIYWeb.HomeLive do
 
       _power ->
         {:noreply, socket}
+    end
+  end
+
+  # A switch of a part of a power station (its AC or DC outlets). It works
+  # only when the state of the part is known and no control of the part
+  # waits. Home Assistant must also have a link to the station.
+  def handle_event("ha_station_switch", %{"item" => item, "part" => part, "on" => on}, socket)
+      when on in ~w(true false) do
+    with %{device: device, switches: switches} <-
+           DIYWeb.HomeAssistant.station(socket.assigns, item),
+         %{state: state, pending: nil, link: link} when state in ~w(on off) and link != false <-
+           Enum.find(switches, &(&1.part == part)) do
+      {:noreply, DIYWeb.HomeAssistant.control(socket, device, on == "true", part)}
+    else
+      _station -> {:noreply, socket}
     end
   end
 
@@ -1540,6 +1562,7 @@ defmodule DIYWeb.HomeLive do
                 ha_devices={@ha_devices}
                 ha_states={@ha_states}
                 ha_control={@ha_control}
+                ha_stations={@ha_stations}
                 ha_energy={@ha_energy}
                 ghosts={@ghosts}
                 ha_count={@ha_count}

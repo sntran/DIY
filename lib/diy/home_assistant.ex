@@ -16,7 +16,11 @@ defmodule DIY.HomeAssistant do
   The devices of Home Assistant come into the house as ghosts
   (`ghosts/4`). A ghost is a device in an area of a room, with a kind of
   the catalog (`kind_of/1`). It has no item. A tap on a ghost adds its item
-  (`DIY.Build.add_device/5`).
+  (`DIY.Build.add_device/6`).
+
+  A power station of Pecron or EcoFlow (`station?/1`) is a ghost of the
+  kind `power_station`. When the app knows its model (`station_model/2`),
+  its item gets the model, and so the numbers of the model.
   """
 
   alias DIY.{Build, Catalog, Layout}
@@ -28,6 +32,7 @@ defmodule DIY.HomeAssistant do
           name: String.t(),
           area: String.t() | nil,
           domains: [String.t()],
+          station: String.t() | nil,
           model: String.t() | nil
         }
 
@@ -94,6 +99,11 @@ defmodule DIY.HomeAssistant do
   # The domains of the entities of a device with no word of a kind. A
   # thermostat, a speaker or a plug can be many things: no kind.
   @domains [{"light", "lights"}, {"fan", "ceiling_fan"}, {"water_heater", "water_heater"}]
+
+  # The makers of the power stations that the hook finds
+  # (STATION_SOURCES in assets/js/home_assistant.js). Each is the start of
+  # the keys of its models in the catalog.
+  @makers ~w(pecron ecoflow)
 
   # The most ghosts on the plan in one room, and in the house. A large
   # Home Assistant can have hundreds of devices: the plan shows the first
@@ -234,9 +244,55 @@ defmodule DIY.HomeAssistant do
   kind: a light, a fan or a water heater.
   """
   def kind_of(%{name: name, domains: domains} = device) do
-    by_words(name) || by_words(device[:model]) ||
-      Enum.find_value(@domains, fn {domain, type} -> domain in domains && type end)
+    if station?(device),
+      do: "power_station",
+      else:
+        by_words(name) || by_words(device[:model]) ||
+          Enum.find_value(@domains, fn {domain, type} -> domain in domains && type end)
   end
+
+  @doc "The makers of the power stations that the hook finds: `pecron` and `ecoflow`."
+  def makers, do: @makers
+
+  @doc """
+  True for a power station: the hook found its battery and its power out
+  (`station` is its maker). Its kind is `power_station`, whatever its
+  name.
+  """
+  def station?(device), do: Map.get(device, :station) in @makers
+
+  @doc """
+  The key of the model of a power station of a maker
+  (`DIY.Catalog.station_models/0`), from the model of its device, or
+  `nil`. The match has no case, no spaces and no signs. The name of the
+  maker can come first. For example "E3800LFP" and "PECRON E3800LFP" are
+  the E3800LFP. "DELTA_PRO_3" and "EcoFlow DELTA Pro 3" are the DELTA Pro
+  3.
+  """
+  def station_model(maker, model) when maker in @makers and is_binary(model) do
+    code = model |> String.downcase() |> String.replace(~r/[^a-z0-9]/, "")
+    prefix = maker <> "_"
+
+    Enum.find_value(Catalog.station_models(), fn {key, _name, _numbers, _size, _source} ->
+      own = key |> String.replace_prefix(prefix, "") |> String.replace("_", "")
+      String.starts_with?(key, prefix) and code in [own, maker <> own] and key
+    end)
+  end
+
+  def station_model(_maker, _model), do: nil
+
+  @doc """
+  The numbers of the item of a ghost, for `DIY.Build.add_device/6`: the
+  model of a power station, when the app knows it. Else none.
+  """
+  def device_values(device, "power_station") do
+    case station_model(device[:station], device[:model]) do
+      key when is_binary(key) -> %{"model" => key}
+      nil -> %{}
+    end
+  end
+
+  def device_values(_device, _type), do: %{}
 
   defp by_words(nil), do: nil
 
@@ -275,7 +331,8 @@ defmodule DIY.HomeAssistant do
   of all the ghosts: `{ghosts, count}`. A ghost is a device with no item,
   in the area of a room of the house (`match/2`). It has a kind that can go
   in the room. A ghost has its device, the name of the device, its room,
-  its kind, and a free place in its room (`at`). A device with no name
+  its kind. It also has the numbers of its item (`device_values/2`), and a
+  free place in its room (`at`). A device with no name
   gives the name of its kind. The plan shows 8 ghosts in a room and 60 in
   the house at most.
 
@@ -297,7 +354,13 @@ defmodule DIY.HomeAssistant do
           room != nil and room.plan != nil,
           type = Map.get_lazy(device, :kind, fn -> kind_of(device) end),
           type != nil and room.place in Catalog.kind(type).places,
-          do: %{device: device.id, name: name(device.name, type), room: room.id, type: type}
+          do: %{
+            device: device.id,
+            name: name(device.name, type),
+            room: room.id,
+            type: type,
+            values: device_values(device, type)
+          }
 
     shown =
       all

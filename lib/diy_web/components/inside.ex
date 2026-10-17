@@ -68,6 +68,10 @@ defmodule DIYWeb.Inside do
     default: %{},
     doc: "the controls of the devices that wait, and their errors (`DIYWeb.HomeAssistant`)"
 
+  attr :ha_stations, :map,
+    default: %{},
+    doc: "the parts of each power station (`DIYWeb.HomeAssistant`)"
+
   attr :ghosts, :list,
     default: [],
     doc: "the ghosts of the devices of Home Assistant (`DIY.HomeAssistant.ghosts/4`)"
@@ -114,6 +118,7 @@ defmodule DIYWeb.Inside do
           ),
         item_states: HomeAssistant.item_states(assigns),
         power: HomeAssistant.power(assigns, assigns.item),
+        station: HomeAssistant.station(assigns, assigns.item),
         energy: HomeAssistant.item_energy(assigns, assigns.item),
         ha_meter: HomeAssistant.meter_offer(assigns)
       )
@@ -233,6 +238,7 @@ defmodule DIYWeb.Inside do
         ha={@ha}
         ha_devices={@ha_devices}
         power={@power}
+        station={@station}
         energy={@energy}
         ha_meter={@ha_meter}
       />
@@ -554,6 +560,13 @@ defmodule DIYWeb.Inside do
       |> Enum.map(&Enum.at(by_month, String.to_integer(String.slice(&1, 5, 2)) - 1))
       |> Enum.sum()
 
+  # A number of a power station from Home Assistant, or "Not known".
+  defp percent(nil), do: "Not known"
+  defp percent(value), do: "#{round(value)}%"
+
+  defp watts(nil), do: "Not known"
+  defp watts(value), do: "#{Format.int(value)} W"
+
   defp device_text({:known, name}), do: "This is #{name} in Home Assistant."
   defp device_text(:gone), do: "Its device is not in Home Assistant now."
   defp device_text(:linked), do: "It has a link to a device of Home Assistant."
@@ -742,6 +755,10 @@ defmodule DIYWeb.Inside do
   attr :power, :map,
     default: nil,
     doc: "the switch of the item of a device (`DIYWeb.HomeAssistant.power/2`), or `nil`"
+
+  attr :station, :map,
+    default: nil,
+    doc: "the parts of a power station (`DIYWeb.HomeAssistant.station/2`), or `nil`"
 
   attr :energy, :map,
     default: nil,
@@ -944,6 +961,15 @@ defmodule DIYWeb.Inside do
       >
         <h3 id="part-link-title" class="stage-sec-title">Home Assistant</h3>
         <p id="ha-device" class="text-sm">{device_text(@device)}</p>
+        <%!-- A station with a device that is not a station now: for
+          example, the person disabled its battery in Home Assistant. --%>
+        <p
+          :if={@item.type == "power_station" and match?({:known, _}, @device) and is_nil(@station)}
+          id="ha-not-station"
+          class="text-sm"
+        >
+          Home Assistant does not give the battery and the power out of this station now. Look at its entities in Home Assistant.
+        </p>
         <p :if={@energy} id="ha-energy" class="text-sm">
           {energy_text(@energy, @estimate, @item)}
         </p>
@@ -968,6 +994,66 @@ defmodule DIYWeb.Inside do
         <p :if={@power} id="ha-power-state" role="status" class="text-sm">
           {HomeAssistant.power_text(@power)}
         </p>
+        <%!-- The numbers change each 5 seconds to 20 minutes: they are not
+          a live region. Their texts are in one element that stays while
+          there is a station: an element that comes or goes above the
+          switches makes a switch lose the focus. --%>
+        <div :if={@station} id="ha-station-info" class="flex flex-col gap-2">
+          <dl :if={@station.known} id="ha-station" class="stage-facts">
+            <dt>Battery level</dt>
+            <dd id="ha-battery">{percent(@station.battery)}</dd>
+            <dt>Power in</dt>
+            <dd id="ha-input">{watts(@station.input)}</dd>
+            <dt>Power out</dt>
+            <dd id="ha-output">{watts(@station.output)}</dd>
+          </dl>
+          <p
+            :if={@station.known && HomeAssistant.link_text(@station)}
+            id="ha-station-link"
+            class="text-sm"
+          >
+            {HomeAssistant.link_text(@station)}
+          </p>
+          <p :if={not @station.known and @station.online} id="ha-station-wait" class="text-sm">
+            The app waits for the numbers of the station.
+          </p>
+        </div>
+        <%!-- A part that the station does not have has no switch: only its
+          name and its status. --%>
+        <div :for={switch <- (@station && @station.switches) || []} class="flex flex-col gap-1">
+          <div id={"ha-#{switch.part}"} class="stage-switch-row stage-row-plain">
+            <span :if={switch.state == "none"} id={"ha-#{switch.part}-label"}>{switch.name}</span>
+            <label
+              :if={switch.state != "none"}
+              for={"ha-switch-#{switch.part}"}
+              id={"ha-#{switch.part}-label"}
+            >
+              {switch.name}
+            </label>
+            <button
+              :if={switch.state != "none"}
+              type="button"
+              id={"ha-switch-#{switch.part}"}
+              role="switch"
+              class="stage-switch"
+              aria-labelledby={"ha-#{switch.part}-label"}
+              aria-describedby={"ha-#{switch.part}-state"}
+              aria-checked={to_string(switch.state == "on")}
+              aria-disabled={
+                to_string(
+                  switch.state not in ~w(on off) or switch.pending != nil or switch.link == false
+                )
+              }
+              phx-click="ha_station_switch"
+              phx-value-item={@item.id}
+              phx-value-part={switch.part}
+              phx-value-on={to_string(switch.state != "on")}
+            ></button>
+          </div>
+          <p id={"ha-#{switch.part}-state"} role="status" class="text-sm">
+            {HomeAssistant.power_text(switch)}
+          </p>
+        </div>
         <p :if={@twin} id="ha-twin" class="text-sm">
           The house also has {@twin.name} in {@twin.room}, with no link to Home Assistant. If it is the same {@twin.kind}, remove one of them.
         </p>

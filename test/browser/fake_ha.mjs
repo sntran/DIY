@@ -8,7 +8,8 @@
 // the energy settings and the statistics of their sensors. The sign-in
 // page has a link "Log in" that sends the tab back with a code. The token
 // endpoint checks the client, the way back and the PKCE verifier, as Home
-// Assistant does.
+// Assistant does. A call of disconnect() closes the sockets. Then the fake
+// refuses new sockets until connect(), as when Home Assistant restarts.
 
 import http from "node:http"
 import { createHash, randomBytes } from "node:crypto"
@@ -34,6 +35,7 @@ export async function fakeHomeAssistant({
   devices = [],
   entities = [],
   states = {},
+  attributes = {},
   prefs = null,
   statistics = {},
 } = {}) {
@@ -45,6 +47,7 @@ export async function fakeHomeAssistant({
   const state = { ...states }
   const watches = new Set()
   const calls = []
+  let refused = false
 
   // A new state of an entity: an event for each watch of it.
   const set = (id, value) => {
@@ -169,7 +172,7 @@ export async function fakeHomeAssistant({
 
   const sockets = new WebSocketServer({ noServer: true })
   server.on("upgrade", (request, socket, head) => {
-    if (request.url !== "/api/websocket") return socket.destroy()
+    if (request.url !== "/api/websocket" || refused) return socket.destroy()
     sockets.handleUpgrade(request, socket, head, (ws) => {
       const send = (message) => ws.send(JSON.stringify(message))
       send({ type: "auth_required", ha_version: version })
@@ -190,7 +193,8 @@ export async function fakeHomeAssistant({
         } else if (message.type === "subscribe_entities") {
           watches.add({ ws, send, id: message.id, ids: message.entity_ids })
           send({ id: message.id, type: "result", success: true, result: null })
-          const all = message.entity_ids.filter((id) => id in state).map((id) => [id, { s: state[id], a: {} }])
+          const all = message.entity_ids.filter((id) => id in state)
+            .map((id) => [id, { s: state[id], a: attributes[id] ?? {} }])
           send({ id: message.id, type: "event", event: { a: Object.fromEntries(all) } })
         } else if (message.type === "unsubscribe_events") {
           for (const watch of watches) if (watch.ws === ws && watch.id === message.subscription) watches.delete(watch)
@@ -214,6 +218,13 @@ export async function fakeHomeAssistant({
     registry,
     calls,
     set,
+    disconnect: () => {
+      refused = true
+      for (const ws of sockets.clients) ws.terminate()
+    },
+    connect: () => {
+      refused = false
+    },
     close: () => {
       for (const ws of sockets.clients) ws.terminate()
       server.close()

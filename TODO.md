@@ -24,6 +24,15 @@ The owner decides about each item.
   and Y. Today the name is "Small Steps Home".
 - Home Assistant: one switch for each device. For a ceiling fan with a
   light, the switch turns both on or off.
+- Power stations of Pecron and EcoFlow: the person sees the activity of
+  a station also away from home. When an integration of Home Assistant
+  gives the station, the app uses it. Not every person has Home
+  Assistant. Then the app links to the cloud of the maker through a relay
+  on its server (a next step).
+- The owner asked the app to select the most robust way to talk to
+  Pecron. The integration of Pecron (from the portal of Pecron) is the
+  first way of the app. pecron-monitor is the second way, with no cloud.
+  The design document tells the reasons.
 - Controls for most kinds of devices come later. Today most persons do
   not need controls. A person who connects Home Assistant can need them.
   The goal: the person sets automation rules, and the app shows the use

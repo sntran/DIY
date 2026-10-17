@@ -76,6 +76,136 @@ defmodule DIY.HomeAssistantDevicesTest do
     assert kind(many) == nil
   end
 
+  test "a power station of Pecron or EcoFlow: its kind, its model, and the numbers of its item" do
+    station = fn maker, name, model ->
+      Map.put(device("s", name, "garage", ["sensor", "switch"], model), :station, maker)
+    end
+
+    # The maker gives the kind, whatever the name. A device with no maker
+    # is not a station.
+    assert HomeAssistant.makers() == ["pecron", "ecoflow"]
+    assert HomeAssistant.kind_of(station.("pecron", "Kitchen fridge", nil)) == "power_station"
+    assert HomeAssistant.station?(station.("ecoflow", "A", nil))
+    refute HomeAssistant.station?(device("p", "Plug", nil, ["switch"]))
+    refute HomeAssistant.station?(station.(nil, "Plug", nil))
+    assert kind("Kitchen fridge") == "fridge"
+
+    # The model of the device gives the model of the catalog of its maker:
+    # no case, no spaces, no signs. The name of the maker can come first.
+    for text <- ["E3800LFP", "e3800lfp", "PECRON E3800LFP", "Pecron-E3800 LFP"] do
+      assert HomeAssistant.station_model("pecron", text) == "pecron_e3800lfp", text
+    end
+
+    assert HomeAssistant.station_model("pecron", "F5000LFP") == "pecron_f5000lfp"
+
+    # The names of EcoFlow Cloud and of EcoFlow BLE. The DELTA Pro Ultra X
+    # is a different station.
+    for {text, key} <- [
+          {"DELTA_PRO", "ecoflow_delta_pro"},
+          {"DELTA Pro", "ecoflow_delta_pro"},
+          {"DELTA_PRO_3", "ecoflow_delta_pro_3"},
+          {"Delta Pro 3", "ecoflow_delta_pro_3"},
+          {"EcoFlow DELTA Pro 3", "ecoflow_delta_pro_3"},
+          {"DELTA Pro Ultra", "ecoflow_delta_pro_ultra"},
+          {"Delta Pro Ultra", "ecoflow_delta_pro_ultra"},
+          {"DELTA_PRO_ULTRA_X", nil},
+          {"Delta 2", nil},
+          {"E3800LFP", nil}
+        ] do
+      assert HomeAssistant.station_model("ecoflow", text) == key, text
+    end
+
+    for {maker, text} <- [
+          {"pecron", "E3800"},
+          {"pecron", "E1500LFP"},
+          {"pecron", "DELTA Pro"},
+          {"pecron", "ecoflow_delta_pro"},
+          {"pecron", ""},
+          {"pecron", "pecron"},
+          {"pecron", nil},
+          {"pecron", 5},
+          {"anker", "SOLIX F3800"},
+          {nil, "E3800LFP"}
+        ] do
+      assert HomeAssistant.station_model(maker, text) == nil, inspect({maker, text})
+    end
+
+    # The numbers of the item of a ghost: the model of a known station only.
+    assert HomeAssistant.device_values(station.("pecron", "A", "E3800LFP"), "power_station") ==
+             %{"model" => "pecron_e3800lfp"}
+
+    assert HomeAssistant.device_values(station.("ecoflow", "A", "DELTA_PRO_3"), "power_station") ==
+             %{"model" => "ecoflow_delta_pro_3"}
+
+    assert HomeAssistant.device_values(station.("pecron", "A", "E9"), "power_station") == %{}
+
+    assert HomeAssistant.device_values(device("x", "A", nil, [], "E3800LFP"), "power_station") ==
+             %{}
+
+    assert HomeAssistant.device_values(station.("pecron", "A", "E3800LFP"), "lights") == %{}
+
+    # The ghost has the numbers, and its item gets the model, its numbers
+    # and its size.
+    build = preset()
+    garage = room_named(build, "Garage")
+    areas = [%{id: "garage", name: "Garage", floor: nil}]
+    ghost_of = %{station.("ecoflow", "Backup", "DELTA Pro Ultra") | id: "s1"}
+    {[ghost], 1} = HomeAssistant.ghosts(build, [ghost_of], areas)
+
+    assert {ghost.type, ghost.values} ==
+             {"power_station", %{"model" => "ecoflow_delta_pro_ultra"}}
+
+    {:ok, added, id} =
+      Build.add_device(build, garage.id, ghost.type, ghost.device, ghost.at, ghost.values)
+
+    {:ok, item} = Build.item(added, id)
+
+    {_key, _name, numbers, _size, _source} =
+      List.keyfind(Catalog.station_models(), "ecoflow_delta_pro_ultra", 0)
+
+    assert Map.take(item.params, Map.keys(numbers)) == numbers
+    assert item.params["model"] == "ecoflow_delta_pro_ultra"
+    assert added.devices[id] == "s1"
+    assert Layout.size(item) == Catalog.station_size("ecoflow_delta_pro_ultra")
+
+    # With no values, the build has one change. A value that the kind does
+    # not take adds nothing.
+    {:ok, plain, _id} = Build.add_device(build, garage.id, "power_station", "s2")
+    assert plain.revision == build.revision + 1
+    assert added.revision == build.revision + 2
+
+    assert Build.add_device(build, garage.id, "power_station", "s3", nil, %{"model" => "x"}) ==
+             {:error, {:param, "model"}}
+  end
+
+  property "each form of the name of a model of Pecron or EcoFlow gives that model" do
+    keys =
+      for {key, _, _, _, _} <- Catalog.station_models(),
+          maker <- HomeAssistant.makers(),
+          String.starts_with?(key, maker <> "_"),
+          do: {maker, key}
+
+    assert length(keys) == 5
+
+    check all(
+            {maker, key} <- member_of(keys),
+            prefix <- boolean(),
+            upper <- list_of(boolean(), length: 16),
+            sign <- member_of(["", " ", "-", "_", "."])
+          ) do
+      code = key |> String.replace_prefix(maker <> "_", "") |> String.replace("_", "")
+
+      text =
+        code
+        |> String.graphemes()
+        |> Enum.zip(Stream.cycle(upper))
+        |> Enum.map_join(sign, fn {char, up} -> if up, do: String.upcase(char), else: char end)
+
+      text = if prefix, do: maker <> " " <> text, else: text
+      assert HomeAssistant.station_model(maker, text) == key
+    end
+  end
+
   test "a ghost keeps its place while that place is free" do
     build = preset()
     kitchen = room_named(build, "Kitchen")
