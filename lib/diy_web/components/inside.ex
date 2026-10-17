@@ -574,12 +574,16 @@ defmodule DIYWeb.Inside do
 
   @doc """
   The stations of the accounts of the makers that an item can link to: only
-  for a power station with no link (`DIYWeb.MakerLink.choices/1`).
+  for a power station with no link (`DIYWeb.MakerLink.choices/1`). An item
+  of a device of Home Assistant has none: the app uses Home Assistant when
+  it gives the station.
   """
   def unit_choices(%{makers: makers} = assigns, item_id) when makers != %{} do
     case item_id && Build.item(assigns.build, item_id) do
       {:ok, %{type: "power_station", id: id}} ->
-        if Map.has_key?(assigns.build.units, id), do: [], else: MakerLink.choices(assigns)
+        if Map.has_key?(assigns.build.units, id) or Map.has_key?(assigns.build.devices, id),
+          do: [],
+          else: MakerLink.choices(assigns)
 
       _other ->
         []
@@ -658,10 +662,7 @@ defmodule DIYWeb.Inside do
           aria-describedby={"#{@prefix}-#{switch.part}-state"}
           aria-checked={to_string(switch.state == "on")}
           aria-disabled={
-            to_string(
-              switch.state not in ~w(on off) or switch.pending != nil or
-                Map.get(switch, :link) == false
-            )
+            to_string(switch.state not in ~w(on off) or switch.pending != nil or switch.link == false)
           }
           phx-click={@event}
           phx-value-item={@item}
@@ -1143,16 +1144,28 @@ defmodule DIYWeb.Inside do
         <h3 id="part-maker-title" class="stage-sec-title">
           {MakerLink.name((@unit && @unit.maker) || hd(@unit_choices).maker)}
         </h3>
-        <p :if={@unit && not @unit.online} id="maker-closed" class="text-sm">
-          The app has no link to {MakerLink.name(@unit.maker)} now.
-          <.link patch={~p"/settings"} class="link">Connect it in Settings.</.link>
-        </p>
-        <p :if={@unit && @unit.online && not @unit.found} id="maker-gone" class="text-sm">
-          Your account of {MakerLink.name(@unit.maker)} does not have this station now.
-        </p>
-        <p :if={@unit && @unit.known && not @unit.reachable} id="maker-unreachable" class="text-sm">
-          {MakerLink.name(@unit.maker)} cannot reach the station now. These are its last numbers.
-        </p>
+        <%!-- The notes of the link are in one element that stays: a note
+          that comes or goes above the switches makes a switch lose the
+          focus. --%>
+        <div :if={@unit} id="maker-notes" class="flex flex-col gap-2 text-sm">
+          <p :if={@unit.state in ~w(none refused)} id="maker-closed">
+            The app has no link to {MakerLink.name(@unit.maker)} now.
+            <.link patch={~p"/settings"} class="link">Connect it in Settings.</.link>
+          </p>
+          <p :if={@unit.state in ~w(loading connecting)} id="maker-connecting">
+            The app connects to {MakerLink.name(@unit.maker)}.
+          </p>
+          <p :if={@unit.state == "offline"} id="maker-offline">
+            The app cannot reach {MakerLink.name(@unit.maker)} now.{if @unit.known,
+              do: " These are its last numbers."}
+          </p>
+          <p :if={@unit.online && not @unit.found} id="maker-gone">
+            Your account of {MakerLink.name(@unit.maker)} does not have this station now.
+          </p>
+          <p :if={@unit.known && not @unit.reachable} id="maker-unreachable">
+            {MakerLink.name(@unit.maker)} cannot reach the station now. These are its last numbers.
+          </p>
+        </div>
         <.station_parts
           :if={@unit && @unit.found}
           station={@unit}

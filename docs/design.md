@@ -2859,20 +2859,34 @@ The relay (`DIYWeb.RelayController`, `/relay/pecron/…`):
 - A page of the app cannot call the cloud of Pecron: its answers have no
   CORS headers. So the hook calls the relay of the app, and the relay
   calls the cloud.
-- The token comes in each request (`authorization: Bearer …`). The relay
-  keeps no token and writes no token to a log. This is a decision of the
-  owner (October 2026): the server sees the token for each call.
+- The token comes in each request (`authorization: Bearer phk_…`): only
+  a token of the portal of Pecron. The relay keeps no token and writes no
+  token to a log. This is a decision of the owner (October 2026): the
+  server sees the token for each call.
 - It takes a request of a page of the app only (`sec-fetch-site:
   same-origin`). A page of a different site cannot use it.
 - It sends only two requests to the cloud: the list of the stations, and
-  a control of the AC or DC outlets of one station. It gives back only the
+  a control of the AC or DC outlets of one station. It follows no
+  redirect, so the token goes to no other path. It gives back only the
   parts that the app reads, with no cache (`cache-control: no-store`).
-- Its answers: the stations, or an error (`token`: Pecron refuses the
-  token; `unreachable`: Pecron does not answer; `failed`).
+- Each call to the cloud has one deadline of 15 seconds, and 10 seconds
+  for each part of the answer. A body that is not JSON is `failed`.
+- Its answers: the stations, or an error. `token`: Pecron refuses the
+  token. `unreachable`: Pecron does not answer. `failed`: a different
+  answer. `origin` (403): the request is not of a page of the app.
+  `request` (400): the request is not one that the relay knows.
+- An id of a device has letters, digits, `-` and `_`, or the form
+  `productKey:deviceKey` that the portal of Pecron knows
+  (`matchesDeviceId`).
 
 The hook (`assets/js/maker_link.js`) reads the stations at the start, and
 then each 30 seconds while the page shows. A hidden page reads them again
-when it shows. The TLA+ model `specs/MakerLink.tla` checks three rules:
+when it shows. Pecron can refuse the token for a control: the option
+"Allow HA to send control commands" is off on the portal. Then only the
+control has the error (`denied`). The token can still read, so the poll
+after the control goes on. Only a poll that Pecron refuses stops the link
+(`refused`). A link that stops (a page that goes) does nothing more. The TLA+ model
+`specs/MakerLink.tla` checks four rules:
 
 - **The generation** (`MakerLink.nogen.cfg`). A new token or a disconnect
   starts a new generation. An answer of an old generation changes
@@ -2885,11 +2899,23 @@ when it shows. The TLA+ model `specs/MakerLink.tla` checks three rules:
   `MakerLink.noagain.cfg`). The end of a control starts a poll. While a
   poll waits, it marks a poll "again" for the end of that poll. Without
   this rule, the page keeps the state from before the control.
+- **The timeout** (`MakerLink.notimeout.cfg`). The network can lose a
+  request or an answer, also the body of an answer. The wait for an
+  answer ends after 20 seconds (`ANSWER_WAIT`): the signal of the wait
+  also stops the body. A poll then ends with no new state. A control ends
+  with an error, and its request can still change the station later.
+  Without this rule, the hook waits for ever, and it polls no more (the
+  property `Live`).
 
 When all is quiet, and a poll read the cloud after the last change of a
 person, the page shows the state of the cloud. After a disconnect, it
-shows no station. The model has two accounts, two changes of a person,
-two new tokens or disconnects, three timers and one control.
+shows no station. A poll and a control always end (`Live`, with the
+fairness of the network and of the timers). For the hook, a command that
+the cloud gets after the end of its control is as a change of a person.
+This is a command after a timeout, or a command of an old generation when
+the person connects the same account again. The next poll shows its
+change. The model has two accounts, two changes of a person, three new
+tokens or disconnects, three timers, one control and one lost message.
 
 The station:
 
@@ -2900,21 +2926,49 @@ The station:
   stations of the account that no item has. A tap links one. A station of
   a known model gets the model (`DIY.HomeAssistant.station_model/2`),
   when the person did not choose one.
+- An item of a device of Home Assistant gets no choice: the app uses Home
+  Assistant when it gives the station.
 - The part shows the battery level, the power in and the power out, and
   the switches of the AC and DC outlets. These are the same parts as for
-  a station of Home Assistant. The field `online` of the device tells if
-  Pecron can reach the station. When it cannot, the part tells it and
-  shows its last numbers, and the switches do not work. When the account
-  does not have the station now, or the link is not connected, the part
+  a station of Home Assistant, with the same component. The field
+  `online` of the device tells if Pecron can reach the station. When it
+  cannot, the part tells it and shows its last numbers, and the switches
+  do not work. When the account does not have the station now, the part
   tells it too.
+- The part tells the state of the link. While the link connects, it tells
+  that the app connects. With no link, it asks the person to connect in
+  Settings. When the app cannot reach Pecron, it tells that these are the
+  last numbers. With the link not connected, the switches do not work.
+  The notes of the link are in one element that stays. A note that comes
+  or goes above the switches makes a switch lose the focus.
+- A control that waits stays while a poll fails: the hook ends it with
+  its error. Only a new token or a disconnect ends it.
 - The relay and the page read each number on its own. A battery is from
   0 to 100 %, and a power from 0 to 1,000,000 W. Else the number is not
   known, and the other numbers and stations stay.
 - A station in a van links too.
 
-The limits: the app shows the station only while a page of the app is
-open. It keeps no history: a history needs a server that reads the cloud
-when the page is closed, and keeps the numbers of the person.
+The limits:
+
+- The app shows the station only while a page of the app is open. It
+  keeps no history: a history needs a server that reads the cloud when
+  the page is closed, and keeps the numbers of the person.
+- Each tab of the app polls. Two tabs make two polls each 30 seconds. The
+  limit of `/api/ha` for an account is not known. On the older cloud of
+  the app of Pecron, pecron-monitor tells of about 1,280 polls in a day.
+- After a control, the page shows the next poll. A station can apply a
+  write later (pecron-monitor tells it for an F5000LFP), so the switch can
+  show the old state until a later poll.
+- The relay has no limit of requests for each address. A script can use
+  the relay to call `/api/ha` with its own token: this gives nothing that
+  the script cannot get from Pecron directly.
+- A browser with no Fetch Metadata (`sec-fetch-site`, Safari before 16.4)
+  cannot use the direct link.
+- The relay reads all the body of an answer of Pecron before it reads
+  the devices (100 at most).
+- No real answer of `/api/ha/devices` is in the sources of the app. The
+  codes of the parts are the codes of the official integration of Pecron.
+  A number or a switch as text (`"82"`, `"true"`) is not known.
 
 The tests:
 
@@ -2923,17 +2977,22 @@ The tests:
   cloud, the parts, the errors, and each request that the relay refuses.
   Property tests check the parts of any answer of the cloud.
 - `test/js/maker_link.test.js`: the token, the polls, the generation, the
-  controls, the errors, the store and the hook. A property test does many
-  steps in any order: new tokens, disconnects, timers, controls, answers
-  and changes of a person. The page shows only the station of the
-  account of the token, and the cloud when all is quiet.
+  controls, the errors, the store and the hook. Also a body that never
+  ends, a control that Pecron refuses for the token, and a stopped link.
+  A property test does many steps in any order: new tokens, disconnects,
+  timers, controls and changes of a person. As in the model, the cloud
+  serves a call, and its answer comes later. The page shows only the
+  station of the account of the token. When all is quiet and a poll read
+  the cloud after the last change of a person, the page shows the cloud.
 - `test/diy/build_units_test.exs` and
   `test/diy_web/live/maker_link_live_test.exs`: the links, the card, the
   part of the panel, the switches, and the payloads that the page
   refuses.
 - The browser test connects Pecron with a token, links a station, and
-  turns its AC outlets with the keyboard. Axe checks the card and the
-  panel.
+  turns its AC outlets with the keyboard. Then the relay does not answer:
+  the switch does not work and keeps the focus. Axe checks the card and
+  the panel. On the Worker, the walk has no stub of the cloud of Pecron,
+  so it does not connect Pecron (`DIY_STUBS`).
 
 ### The energy data
 
@@ -3331,8 +3390,9 @@ Settings. The frame is the bar of the parts, the state of the save, and
 the notices. The next steps translate the other pages, one group at a
 time. Until then, those pages are in English, and their main part has
 `lang="en"` (WCAG 3.1.2): a screen reader reads them with an English
-voice. The card of Home Assistant on the page Settings and the page of
-its sign-in also have `lang="en"` for now.
+voice. The cards of Home Assistant and of Pecron on the page Settings
+also have `lang="en"` for now. So does the page of the sign-in of Home
+Assistant.
 
 ### The tests of the languages
 

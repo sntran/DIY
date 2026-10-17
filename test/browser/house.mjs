@@ -20,6 +20,10 @@ const { chromium } = await import(process.env.PLAYWRIGHT ?? "playwright-core")
 const axe = readFileSync(require.resolve("axe-core/axe.min.js"), "utf8")
 const tags = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"]
 const site = process.argv[2] ?? "http://localhost:4002"
+// The server of the tests has a stub of the cloud of Pecron
+// (DIY.Stubs.pecron/0). On the Worker, there is no stub: the walk does not
+// connect Pecron there.
+const stubs = process.env.DIY_STUBS === "1"
 
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM })
 let faults = 0
@@ -884,9 +888,11 @@ async function build(context, name) {
   await page.fill("#pecron-form input[name=token]", "abc")
   await page.click("#pecron-form button")
   await page.waitForSelector("#pecron-error:has-text('A token of Pecron starts with phk_.')")
-  await page.fill("#pecron-form input[name=token]", "phk_walk")
-  await page.click("#pecron-form button")
-  await page.waitForSelector("#pecron-status:has-text('Connected to Pecron: 1 station.')")
+  if (stubs) {
+    await page.fill("#pecron-form input[name=token]", "phk_walk")
+    await page.click("#pecron-form button")
+    await page.waitForSelector("#pecron-status:has-text('Connected to Pecron: 1 station.')")
+  }
   await check(page, `${name} Pecron`)
   await page.fill("#settings-price input[name=price]", "12.5")
   await page.click("#settings-price button")
@@ -979,27 +985,45 @@ for (const colorScheme of ["light", "dark"]) {
     await page.click("nav >> text=House")
     assert.match(await page.textContent("#real-average"), /\$\d+/)
 
-    // The station of Pecron links to the station of the account of
-    // Pecron: its numbers, and the keyboard turns its AC outlets.
+    // The station of Pecron from Home Assistant goes: the app uses Home
+    // Assistant for it, so it has no direct link. The walk checks the
+    // power with a station of its own.
     await page.click("nav >> text=Rooms")
     await page.waitForSelector("#inside")
     await follow(page, 'a[id^="item-"]:has-text("Pecron E3800LFP")')
-    await page.waitForSelector("#maker-choice-0:has-text('Backup battery (E3800LFP)')")
-    await page.click("#maker-choice-0")
-    await page.waitForSelector("#pecron-battery:has-text('82%')")
-    await page.waitForSelector("#pecron-output:has-text('350 W')")
-    const outlets = await page.getAttribute("#pecron-switch-ac", "aria-checked")
-    await page.focus("#pecron-switch-ac")
-    await page.keyboard.press("Space")
-    await page.waitForSelector(`#pecron-switch-ac[aria-checked=${outlets === "true" ? "false" : "true"}][aria-disabled=false]`)
-    assert.equal(await page.evaluate(() => document.activeElement?.id), "pecron-switch-ac")
-    await check(page, `${name} Pecron station`)
-
-    // The station of Pecron goes: the walk checks the power with a station
-    // of its own.
+    assert.equal(await page.locator("#maker-choices").count(), 0)
     await page.click("#ask-remove")
     await page.click("#delete-item")
     await page.waitForSelector("#item-stage", { state: "detached" })
+
+    // A new station links to the station of the account of Pecron: its
+    // model, its numbers, and the keyboard turns its AC outlets. When the
+    // relay does not answer, the switch keeps the focus.
+    if (stubs) {
+      await follow(page, 'a[id^="add-"][aria-label="Add an item to Laundry"]')
+      await page.click("#add-power_station")
+      await page.waitForSelector("#maker-choice-0:has-text('Backup battery (E3800LFP)')")
+      await page.click("#maker-choice-0")
+      await page.waitForSelector("#item-stage #item-stage-title:has-text('Pecron E3800LFP')")
+      await page.waitForSelector("#pecron-battery:has-text('82%')")
+      await page.waitForSelector("#pecron-output:has-text('350 W')")
+      const outlets = await page.getAttribute("#pecron-switch-ac", "aria-checked")
+      await page.focus("#pecron-switch-ac")
+      await page.keyboard.press("Space")
+      await page.waitForSelector(`#pecron-switch-ac[aria-checked=${outlets === "true" ? "false" : "true"}][aria-disabled=false]`)
+      assert.equal(await page.evaluate(() => document.activeElement?.id), "pecron-switch-ac")
+      await check(page, `${name} Pecron station`)
+      await page.route("**/relay/pecron/stations", (route) => route.abort())
+      await page.keyboard.press("Space")
+      await page.waitForSelector("#maker-notes #maker-offline")
+      await page.waitForSelector("#pecron-switch-ac[aria-disabled=true]")
+      assert.equal(await page.evaluate(() => document.activeElement?.id), "pecron-switch-ac")
+      await check(page, `${name} Pecron station offline`)
+      await page.unroute("**/relay/pecron/stations")
+      await page.click("#ask-remove")
+      await page.click("#delete-item")
+      await page.waitForSelector("#item-stage", { state: "detached" })
+    }
 
     // The power: a station in the laundry runs the fridge, and the person
     // plans panels on the roof.

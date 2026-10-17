@@ -89,7 +89,8 @@ defmodule DIYWeb.RelayControllerTest do
       assert json_response(conn, 403) == %{"error" => "origin"}
     end
 
-    # No token, a token with a space, and a token that is too long.
+    # No token, a token with a space, and a token that is too long. Also a
+    # token that is not a token of the portal of Pecron (no "phk_").
     no_token =
       build_conn()
       |> put_req_header("sec-fetch-site", "same-origin")
@@ -97,7 +98,7 @@ defmodule DIYWeb.RelayControllerTest do
 
     assert json_response(no_token, 401) == %{"error" => "token"}
 
-    for token <- ["phk test", String.duplicate("a", 513), ""] do
+    for token <- ["phk test", "phk_" <> String.duplicate("a", 509), "", "x", "phk_"] do
       conn = build_conn() |> page(token) |> get("/relay/pecron/stations")
       assert json_response(conn, 401) == %{"error" => "token"}
     end

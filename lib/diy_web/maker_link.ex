@@ -31,7 +31,7 @@ defmodule DIYWeb.MakerLink do
   @makers ~w(pecron)
   @names %{"pecron" => "Pecron"}
   @states ~w(none connecting connected offline refused)
-  @errors ~w(format storage token unreachable offline timeout failed)
+  @errors ~w(format storage token denied unreachable offline timeout failed)
   @numbers ~w(battery input output)
   @switches [{"ac", "AC outlets"}, {"dc", "DC outlets"}]
   @switch_parts Enum.map(@switches, &elem(&1, 0))
@@ -74,8 +74,9 @@ defmodule DIYWeb.MakerLink do
   has a link to a unit (`DIY.Build.link_unit/3`). It has the maker, the
   device, and the parts as in `DIYWeb.HomeAssistant.station/2`: the
   numbers, `known`, `online` (the link is connected) and the switches. It
-  also has `found` (the account has the station) and `reachable` (the
-  maker can reach the station now).
+  also has the state of the link, `found` (the account has the station)
+  and `reachable` (the maker can reach the station now). Each switch has
+  `link`: with the link not connected, a switch does not work.
   """
   def station(%{build: build, makers: makers, maker_control: controls}, item_id) do
     with "pecron:" <> device = unit <- build.units[item_id] do
@@ -89,7 +90,15 @@ defmodule DIYWeb.MakerLink do
           {pending, error} = pending(controls[{maker, device, part}])
           state = if parts, do: switch_state(parts, part)
 
-          %{part: part, name: name, online: online, state: state, pending: pending, error: error}
+          %{
+            part: part,
+            name: name,
+            online: online,
+            link: online,
+            state: state,
+            pending: pending,
+            error: error
+          }
         end
 
       numbers = Map.new(@numbers, &{String.to_atom(&1), parts && parts[&1]})
@@ -98,6 +107,7 @@ defmodule DIYWeb.MakerLink do
         unit: unit,
         maker: maker,
         device: device,
+        state: link.state,
         online: online,
         known: parts != nil,
         found: link.stations == nil or parts != nil,
@@ -153,11 +163,13 @@ defmodule DIYWeb.MakerLink do
     error = if params["error"] in @errors, do: params["error"]
     link = %{socket.assigns.makers[maker] | state: state, error: error}
 
-    # The controls are only for a connected link.
+    # The controls are only for a generation of the link: a new token or
+    # a disconnect ends them. In a different state, a control that waits
+    # gets its end from the hook, with its error.
     controls =
-      if state == "connected",
-        do: socket.assigns.maker_control,
-        else: Map.reject(socket.assigns.maker_control, fn {{m, _d, _p}, _v} -> m == maker end)
+      if state in ~w(none connecting),
+        do: Map.reject(socket.assigns.maker_control, fn {{m, _d, _p}, _v} -> m == maker end),
+        else: socket.assigns.maker_control
 
     {:halt,
      assign(socket, makers: Map.put(socket.assigns.makers, maker, link), maker_control: controls)}
@@ -293,6 +305,11 @@ defmodule DIYWeb.MakerLink do
     do: "This browser cannot keep the token. Look at the settings of the site."
 
   def message("token", maker), do: "#{name(maker)} does not accept the token."
+
+  def message("denied", maker),
+    do:
+      "#{name(maker)} does not let this token turn the outlets on or off. Look at the options of the token on app.pecron.com."
+
   def message("unreachable", maker), do: "#{name(maker)} does not answer now."
   def message("offline", _maker), do: "The app cannot reach its server. Look at the network."
   def message("timeout", maker), do: "#{name(maker)} did not answer in 20 seconds."
@@ -338,10 +355,19 @@ defmodule DIYWeb.MakerLink do
         See your {@name} stations from anywhere, with no Home Assistant, and turn their outlets on and off.
         The token stays on this device. Each request goes through the server of the app, which keeps no token.
       </p>
+      <p class="text-sm">
+        The token has the same access as your account: it reads your stations and turns their outlets on and off.
+        On the portal, the options "Exposed devices" and "Allow HA to send control commands" choose the stations that the app sees, and the controls that it can send.
+      </p>
       <p id={"#{@maker}-status"} role="status" class="text-sm font-medium">
         {status(@link, @maker)}
       </p>
-      <p :if={@link.error} id={"#{@maker}-error"} role="alert" class="text-sm text-error">
+      <p
+        :if={@link.error && @link.error != "token"}
+        id={"#{@maker}-error"}
+        role="alert"
+        class="text-sm text-error"
+      >
         {message(@link.error, @maker)}
       </p>
       <form

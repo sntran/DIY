@@ -25,7 +25,7 @@ config :phoenix,
 # stubs of the tests (Req.Test).
 config :diy, DIY.Weather, req: [plug: {Req.Test, DIY.Weather}, retry: false]
 config :diy, DIY.Market, req: [plug: {Req.Test, DIY.Market}, retry: false]
-config :diy, DIY.Pecron, req: [plug: {Req.Test, DIY.Pecron}]
+config :diy, DIY.Pecron, req: [plug: {Req.Test, DIY.Pecron}], call_wait: 2_000
 
 # The tests keep nothing in the cache of the weather and of the markets.
 # So a test gets the answer of its own stub, not a value of a different

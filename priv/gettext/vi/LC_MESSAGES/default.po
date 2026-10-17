@@ -459,37 +459,37 @@ msgstr "giá do bạn nhập"
 msgid "A different tab changed this build. This page shows that build now."
 msgstr "Một thẻ khác đã thay đổi mô hình này. Trang này hiện đang hiển thị mô hình đó."
 
-#: lib/diy_web/live/home_live.ex:1084
+#: lib/diy_web/live/home_live.ex:1085
 #, elixir-autogen, elixir-format
 msgid "A room or a zone cannot go over a different one."
 msgstr "Một phòng hoặc một khu vực không thể chồng lên phòng khác."
 
-#: lib/diy_web/live/home_live.ex:1082
+#: lib/diy_web/live/home_live.ex:1083
 #, elixir-autogen, elixir-format
 msgid "A wall of a room is from 2 to 200 feet long, and a room stays near the house."
 msgstr "Mỗi bức tường của phòng dài từ 2 đến 200 feet, và phòng phải ở gần ngôi nhà."
 
-#: lib/diy_web/live/home_live.ex:1086
+#: lib/diy_web/live/home_live.ex:1087
 #, elixir-autogen, elixir-format
 msgid "A zone stays in the van."
 msgstr "Khu vực phải ở trong xe van."
 
-#: lib/diy_web/live/home_live.ex:1220
+#: lib/diy_web/live/home_live.ex:1221
 #, elixir-autogen, elixir-format
 msgid "Choose a floor of the house."
 msgstr "Chọn một tầng của ngôi nhà."
 
-#: lib/diy_web/live/home_live.ex:1222
+#: lib/diy_web/live/home_live.ex:1223
 #, elixir-autogen, elixir-format
 msgid "Choose a house first."
 msgstr "Hãy chọn một ngôi nhà trước."
 
-#: lib/diy_web/live/home_live.ex:1221
+#: lib/diy_web/live/home_live.ex:1222
 #, elixir-autogen, elixir-format
 msgid "Choose a place: inside, outside or the roof."
 msgstr "Chọn một vị trí: bên trong, bên ngoài hoặc trên mái."
 
-#: lib/diy_web/live/home_live.ex:1217
+#: lib/diy_web/live/home_live.ex:1218
 #, elixir-autogen, elixir-format
 msgid "Choose how you use the batteries."
 msgstr "Chọn cách bạn dùng pin."
@@ -504,32 +504,32 @@ msgstr "Chọn một mục cho mỗi phần: diện tích, tuổi nhà, số t�
 msgid "Close"
 msgstr "Đóng"
 
-#: lib/diy_web/live/home_live.ex:1216
+#: lib/diy_web/live/home_live.ex:1217
 #, elixir-autogen, elixir-format
 msgid "Give a part from 0 to 100%."
 msgstr "Nhập một phần từ 0 đến 100%."
 
-#: lib/diy_web/live/home_live.ex:1212
+#: lib/diy_web/live/home_live.ex:1213
 #, elixir-autogen, elixir-format
 msgid "Give an hour from 0 to 23."
 msgstr "Nhập một giờ từ 0 đến 23."
 
-#: lib/diy_web/live/home_live.ex:1026
+#: lib/diy_web/live/home_live.ex:1027
 #, elixir-autogen, elixir-format
 msgid "Give each number of the plan in the limits: dollars, cents or kWh."
 msgstr "Nhập mỗi con số của gói điện trong giới hạn: đô la, xu hoặc kWh."
 
-#: lib/diy_web/live/home_live.ex:831
+#: lib/diy_web/live/home_live.ex:832
 #, elixir-autogen, elixir-format
 msgid "Give numbers in the limits of each field."
 msgstr "Nhập các con số trong giới hạn của mỗi ô."
 
-#: lib/diy_web/live/home_live.ex:1020
+#: lib/diy_web/live/home_live.ex:1021
 #, elixir-autogen, elixir-format
 msgid "Give the delivery charges of your utility: its EFL gives them."
 msgstr "Nhập phí phân phối của công ty điện: EFL của gói có ghi các phí này."
 
-#: lib/diy_web/live/home_live.ex:1023
+#: lib/diy_web/live/home_live.ex:1024
 #, elixir-autogen, elixir-format
 msgid "Give the kWh of the minimum usage fee: the fee is for a month under that kWh."
 msgstr "Nhập số kWh của phí dùng tối thiểu: phí này áp dụng cho tháng dùng ít hơn số kWh đó."
@@ -539,67 +539,67 @@ msgstr "Nhập số kWh của phí dùng tối thiểu: phí này áp dụng cho
 msgid "Give the lot in square feet, from 100 to 100,000,000, or leave it empty."
 msgstr "Nhập diện tích lô đất theo feet vuông, từ 100 đến 100,000,000, hoặc để trống."
 
-#: lib/diy_web/live/home_live.ex:1017
+#: lib/diy_web/live/home_live.ex:1018
 #, elixir-autogen, elixir-format
 msgid "Give the plan a name."
 msgstr "Đặt tên cho gói điện."
 
-#: lib/diy_web/live/home_live.ex:1209
+#: lib/diy_web/live/home_live.ex:1210
 #, elixir-autogen, elixir-format
 msgid "Give the price at night in cents, from 0 to 200, or leave it empty."
 msgstr "Nhập giá ban đêm theo xu, từ 0 đến 200, hoặc để trống."
 
-#: lib/diy_web/live/home_live.ex:745
+#: lib/diy_web/live/home_live.ex:746
 #, elixir-autogen, elixir-format
 msgid "Give the price in cents for one kWh, for example 14.5."
 msgstr "Nhập giá theo xu cho mỗi kWh, ví dụ 14.5."
 
-#: lib/diy_web/live/home_live.ex:1215
+#: lib/diy_web/live/home_live.ex:1216
 #, elixir-autogen, elixir-format
 msgid "Give the price in cents, from 0 to 200."
 msgstr "Nhập giá theo xu, từ 0 đến 200."
 
-#: lib/diy_web/live/home_live.ex:1219
+#: lib/diy_web/live/home_live.ex:1220
 #, elixir-autogen, elixir-format
 msgid "Give the room a name."
 msgstr "Đặt tên cho phòng."
 
-#: lib/diy_web/live/home_live.ex:807
+#: lib/diy_web/live/home_live.ex:808
 #, elixir-autogen, elixir-format
 msgid "Give the total of the bill in dollars and its kWh, for example 150 and 1,100."
 msgstr "Nhập tổng tiền hóa đơn theo đô la và số kWh, ví dụ 150 và 1,100."
 
-#: lib/diy_web/live/home_live.ex:827
+#: lib/diy_web/live/home_live.ex:828
 #, elixir-autogen, elixir-format
 msgid "Remove the rooms of the top floor first."
 msgstr "Hãy xóa các phòng ở tầng trên cùng trước."
 
-#: lib/diy_web/live/home_live.ex:1003
+#: lib/diy_web/live/home_live.ex:1004
 #, elixir-autogen, elixir-format
 msgid "The app cannot keep this plan. A number of the plan is not in the range that the app accepts."
 msgstr "Ứng dụng không thể lưu gói điện này. Một con số của gói nằm ngoài khoảng mà ứng dụng chấp nhận."
 
-#: lib/diy_web/live/home_live.ex:927
+#: lib/diy_web/live/home_live.ex:928
 #, elixir-autogen, elixir-format
 msgid "The app cannot read the text of this file."
 msgstr "Ứng dụng không đọc được nội dung của tệp này."
 
-#: lib/diy_web/live/home_live.ex:401
+#: lib/diy_web/live/home_live.ex:402
 #, elixir-autogen, elixir-format
 msgid "The app cannot read the usage of this file."
 msgstr "Ứng dụng không đọc được mức tiêu thụ trong tệp này."
 
-#: lib/diy_web/live/home_live.ex:921
+#: lib/diy_web/live/home_live.ex:922
 #, elixir-autogen, elixir-format
 msgid "The app cannot read this EFL: it has no average prices."
 msgstr "Ứng dụng không đọc được EFL này: nó không có giá trung bình."
 
-#: lib/diy_web/live/home_live.ex:936
+#: lib/diy_web/live/home_live.ex:937
 #, elixir-autogen, elixir-format
 msgid "The app cannot read this file. Open the PDF of an EFL."
 msgstr "Ứng dụng không đọc được tệp này. Hãy mở tệp PDF của một EFL."
 
-#: lib/diy_web/live/home_live.ex:786
+#: lib/diy_web/live/home_live.ex:787
 #, elixir-autogen, elixir-format
 msgid "The app now uses the price of your bill: %{price} for each kWh."
 msgstr "Ứng dụng hiện dùng giá trong hóa đơn của bạn: %{price} cho mỗi kWh."
@@ -614,17 +614,17 @@ msgstr "Mô hình quá lớn cho thiết bị này. Hãy xóa bớt một số t
 msgid "The build on this device comes from a newer version of the app. Load the page again."
 msgstr "Mô hình trên thiết bị này đến từ phiên bản mới hơn của ứng dụng. Hãy tải lại trang."
 
-#: lib/diy_web/live/home_live.ex:1087
+#: lib/diy_web/live/home_live.ex:1088
 #, elixir-autogen, elixir-format
 msgid "The cab and the roof of the van stay where they are."
 msgstr "Cabin và mái của xe van giữ nguyên vị trí."
 
-#: lib/diy_web/live/home_live.ex:1170
+#: lib/diy_web/live/home_live.ex:1171
 #, elixir-autogen, elixir-format
 msgid "The file is not a build of this app."
 msgstr "Tệp này không phải là mô hình của ứng dụng này."
 
-#: lib/diy_web/live/home_live.ex:1214
+#: lib/diy_web/live/home_live.ex:1215
 #, elixir-autogen, elixir-format
 msgid "The night must start and end at different hours."
 msgstr "Ban đêm phải bắt đầu và kết thúc ở hai giờ khác nhau."
@@ -634,54 +634,54 @@ msgstr "Ban đêm phải bắt đầu và kết thúc ở hai giờ khác nhau."
 msgid "The page cannot read the build on this device. It starts a new build, and keeps a copy of the old one."
 msgstr "Trang không đọc được mô hình trên thiết bị này. Trang bắt đầu một mô hình mới và giữ một bản sao của mô hình cũ."
 
-#: lib/diy_web/live/home_live.ex:424
+#: lib/diy_web/live/home_live.ex:425
 #, elixir-autogen, elixir-format
 msgid "The page has 1 month of your usage from Home Assistant."
 msgid_plural "The page has %{count} months of your usage from Home Assistant."
 msgstr[0] "Trang có %{count} tháng tiêu thụ của bạn từ Home Assistant."
 
-#: lib/diy_web/live/home_live.ex:392
+#: lib/diy_web/live/home_live.ex:393
 #, elixir-autogen, elixir-format
 msgid "The page has 1 month of your usage. The file stayed on this device."
 msgid_plural "The page has %{count} months of your usage. The file stayed on this device."
 msgstr[0] "Trang có %{count} tháng tiêu thụ của bạn. Tệp vẫn chỉ ở trên thiết bị này."
 
-#: lib/diy_web/live/home_live.ex:1575
+#: lib/diy_web/live/home_live.ex:1576
 #, elixir-autogen, elixir-format
 msgid "The page reads your build from this device."
 msgstr "Trang đang đọc mô hình của bạn từ thiết bị này."
 
-#: lib/diy_web/live/home_live.ex:1167
+#: lib/diy_web/live/home_live.ex:1168
 #, elixir-autogen, elixir-format
 msgid "The page shows the build of the file now."
 msgstr "Trang hiện đang hiển thị mô hình từ tệp."
 
-#: lib/diy_web/live/home_live.ex:856
+#: lib/diy_web/live/home_live.ex:857
 #, elixir-autogen, elixir-format
 msgid "The planned items are part of your house now."
 msgstr "Các thiết bị dự kiến giờ là một phần của ngôi nhà."
 
-#: lib/diy_web/live/home_live.ex:521
+#: lib/diy_web/live/home_live.ex:522
 #, elixir-autogen, elixir-format
 msgid "The power station is at home now."
 msgstr "Trạm sạc dự phòng giờ đã ở nhà."
 
-#: lib/diy_web/live/home_live.ex:992
+#: lib/diy_web/live/home_live.ex:993
 #, elixir-autogen, elixir-format
 msgid "The worksheet has %{plan} now."
 msgstr "Bảng tính giờ đã có %{plan}."
 
-#: lib/diy_web/live/home_live.ex:996
+#: lib/diy_web/live/home_live.ex:997
 #, elixir-autogen, elixir-format
 msgid "The worksheet has 10 plans. Remove a plan first."
 msgstr "Bảng tính có 10 gói điện. Hãy xóa một gói trước."
 
-#: lib/diy_web/live/home_live.ex:795
+#: lib/diy_web/live/home_live.ex:796
 #, elixir-autogen, elixir-format
 msgid "These numbers give %{price} for each kWh. Check the total and the kWh of the bill."
 msgstr "Các con số này cho ra %{price} mỗi kWh. Hãy kiểm tra tổng tiền và số kWh của hóa đơn."
 
-#: lib/diy_web/live/home_live.ex:1570
+#: lib/diy_web/live/home_live.ex:1571
 #, elixir-autogen, elixir-format
 msgid "This app needs JavaScript. Turn on JavaScript in the browser."
 msgstr "Ứng dụng này cần JavaScript. Hãy bật JavaScript trong trình duyệt."
@@ -691,12 +691,12 @@ msgstr "Ứng dụng này cần JavaScript. Hãy bật JavaScript trong trình d
 msgid "This device did not save the build: %{error}"
 msgstr "Thiết bị này chưa lưu được mô hình: %{error}"
 
-#: lib/diy_web/live/home_live.ex:1085
+#: lib/diy_web/live/home_live.ex:1086
 #, elixir-autogen, elixir-format
 msgid "This item cannot go in that room."
 msgstr "Thiết bị này không thể đặt trong phòng đó."
 
-#: lib/diy_web/live/home_live.ex:1091
+#: lib/diy_web/live/home_live.ex:1092
 #, elixir-autogen, elixir-format
 msgid "This item or this room is not on the plan now."
 msgstr "Thiết bị hoặc phòng này hiện không còn trên mặt bằng."

@@ -35,6 +35,13 @@ defmodule DIY.Pecron do
   @max_devices 100
   @max_text 200
 
+  # The longest wait for a call: for each part of the answer, and for all
+  # of it. The hook of the page waits 20 seconds.
+  @part_wait 10_000
+  @call_wait 15_000
+
+  defp config, do: Application.get_env(:diy, __MODULE__, [])
+
   @type station :: %{String.t() => String.t() | number() | boolean() | nil}
 
   @doc "The parts of a station that the app turns on and off."
@@ -77,25 +84,35 @@ defmodule DIY.Pecron do
     end
   end
 
+  # One call to the cloud: no new try, no redirect, and one deadline for
+  # all the call. A redirect could send the token to a different path.
   defp request(method, path, token, body) do
     options =
       [
         method: method,
         url: @url <> path,
         headers: [{"authorization", "Bearer " <> token}],
-        receive_timeout: 15_000,
-        retry: false
+        receive_timeout: @part_wait,
+        retry: false,
+        redirect: false
       ]
       |> then(&if body, do: Keyword.put(&1, :json, body), else: &1)
-      |> Keyword.merge(Application.get_env(:diy, __MODULE__, [])[:req] || [])
+      |> Keyword.merge(config()[:req] || [])
 
-    case Req.request(options) do
-      {:ok, %{status: status, body: body}} when status in 200..299 -> {:ok, body}
-      {:ok, %{status: status}} when status in [401, 403] -> {:error, :token}
-      {:ok, _response} -> {:error, :failed}
-      {:error, _error} -> {:error, :unreachable}
+    task = Task.async(fn -> Req.request(options) end)
+
+    case Task.yield(task, config()[:call_wait] || @call_wait) || Task.shutdown(task, :brutal_kill) do
+      {:ok, answer} -> read_answer(answer)
+      _no_answer -> {:error, :unreachable}
     end
   end
+
+  # A body that is not JSON is an answer that the app cannot read.
+  defp read_answer({:ok, %{status: status, body: body}}) when status in 200..299, do: {:ok, body}
+  defp read_answer({:ok, %{status: status}}) when status in [401, 403], do: {:error, :token}
+  defp read_answer({:ok, _response}), do: {:error, :failed}
+  defp read_answer({:error, %Jason.DecodeError{}}), do: {:error, :failed}
+  defp read_answer({:error, _error}), do: {:error, :unreachable}
 
   @doc """
   The stations of an answer of `/api/ha/devices`, or `nil`. Each station
@@ -133,8 +150,12 @@ defmodule DIY.Pecron do
 
   defp read_station(_device), do: nil
 
-  @doc "True for an id of a device of Pecron: letters, digits, `-` and `_`."
-  def id?(id), do: is_binary(id) and id =~ ~r/\A[A-Za-z0-9_-]{1,64}\z/
+  @doc """
+  True for an id of a device of Pecron: letters, digits, `-` and `_`. The
+  portal of Pecron also knows the form `productKey:deviceKey`
+  (`matchesDeviceId`).
+  """
+  def id?(id), do: is_binary(id) and id =~ ~r/\A[A-Za-z0-9_-]{1,64}(:[A-Za-z0-9_-]{1,64})?\z/
 
   defp id(id), do: if(id?(id), do: id)
 

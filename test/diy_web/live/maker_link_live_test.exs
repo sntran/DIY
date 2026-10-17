@@ -260,14 +260,39 @@ defmodule DIYWeb.MakerLinkLiveTest do
     render_click(view, "maker_switch", %{"item" => id, "part" => "ac", "on" => "yes"})
     refute_push_event(view, "maker:control", _payload)
 
-    # A control that waits ends when the link is not connected.
+    # A control that waits stays when a poll fails: its end comes from the
+    # hook, with its error. With the link not connected, a switch does not
+    # work, and the panel keeps the last numbers.
     render_click(view, "maker_switch", %{"item" => id, "part" => "ac", "on" => "true"})
     assert_push_event(view, "maker:control", %{part: "ac"})
     status(view, "offline", "offline")
+
+    assert %{{"pecron", "dev_1", "ac"} => {:pending, true}} =
+             :sys.get_state(view.pid).socket.assigns.maker_control
+
+    render_hook(view, "maker:control_done", %{
+      "maker" => "pecron",
+      "device" => "dev_1",
+      "part" => "ac",
+      "error" => "offline"
+    })
+
+    assert has_element?(view, "#maker-notes #maker-offline", "The app cannot reach Pecron now.")
+    assert has_element?(view, "#maker-offline", "These are its last numbers.")
+    refute has_element?(view, "#maker-closed")
+    assert has_element?(view, "#pecron-switch-ac[aria-disabled=true]")
+    assert has_element?(view, "#pecron-ac-state", "The app has no link to Pecron now.")
+    render_click(view, "maker_switch", %{"item" => id, "part" => "dc", "on" => "false"})
+    refute_push_event(view, "maker:control", _payload)
+    assert has_element?(view, "#pecron-battery", "82%")
+
+    # A disconnect ends the controls that wait.
+    status(view, "connected")
+    render_click(view, "maker_switch", %{"item" => id, "part" => "dc", "on" => "false"})
+    assert_push_event(view, "maker:control", %{part: "dc"})
+    status(view, "none")
     assert :sys.get_state(view.pid).socket.assigns.maker_control == %{}
     assert has_element?(view, "#maker-closed", "The app has no link to Pecron now.")
-    assert has_element?(view, "#pecron-ac-state", "The app has no link to Pecron now.")
-    assert has_element?(view, "#pecron-battery", "82%")
   end
 
   test "a station that the account does not have now, and a link that closes", %{conn: conn} do
@@ -360,11 +385,103 @@ defmodule DIYWeb.MakerLinkLiveTest do
     assert %{"name" => nil, "model" => nil, "ac" => nil, "dc" => "off"} = station
     assert MakerLink.status(%{state: "loading"}, "pecron") == nil
     assert MakerLink.message("storage", "pecron") =~ "cannot keep the token"
+    assert MakerLink.message("token", "pecron") == "Pecron does not accept the token."
     assert MakerLink.message("timeout", "pecron") =~ "20 seconds"
     assert MakerLink.message("offline", "pecron") =~ "Look at the network"
 
     # A page with no links has no choices.
     assert DIYWeb.Inside.unit_choices(%{makers: %{}}, "x") == []
+  end
+
+  test "the states of the link in the panel and in the card, and the controls that the page refuses",
+       %{conn: conn} do
+    {view, _id} = station_page(conn)
+
+    # While the link loads or connects: no choice, and no text of a link
+    # that is not there.
+    status(view, "connecting")
+    stations(view, [e3800()])
+    refute has_element?(view, "#maker-choices")
+    status(view, "connected")
+    view |> element("#maker-choice-0") |> render_click()
+    status(view, "connecting")
+    assert has_element?(view, "#maker-notes #maker-connecting", "The app connects to Pecron.")
+    refute has_element?(view, "#maker-closed")
+
+    # The page does not say "gone" while the link is not connected.
+    status(view, "offline", "unreachable")
+    stations(view, [@cabin])
+    refute has_element?(view, "#maker-gone")
+    assert has_element?(view, "#maker-offline", "The app cannot reach Pecron now.")
+    refute has_element?(view, "#maker-offline", "last numbers")
+    status(view, "connected")
+    assert has_element?(view, "#maker-gone")
+
+    # An error that the page does not know is no error.
+    status(view, "offline", "<b>other</b>")
+    assert :sys.get_state(view.pid).socket.assigns.makers["pecron"].error == nil
+
+    # The end of a control that does not wait changes nothing.
+    status(view, "connected")
+    stations(view, [e3800()])
+
+    render_hook(view, "maker:control_done", %{
+      "maker" => "pecron",
+      "device" => "dev_1",
+      "part" => "ac",
+      "error" => "failed"
+    })
+
+    assert :sys.get_state(view.pid).socket.assigns.maker_control == %{}
+
+    # A control that Pecron refuses for the token: its own text.
+    view |> element("#pecron-switch-ac") |> render_click()
+
+    render_hook(view, "maker:control_done", %{
+      "maker" => "pecron",
+      "device" => "dev_1",
+      "part" => "ac",
+      "error" => "denied"
+    })
+
+    assert has_element?(
+             view,
+             "#pecron-ac-state",
+             "Pecron does not let this token turn the outlets on or off."
+           )
+  end
+
+  test "a model that the person chose stays when the station links", %{conn: conn} do
+    {view, id} = station_page(conn)
+    render_change(view, "item", %{"item_id" => id, "item" => %{"model" => "anker_solix_f3800"}})
+    status(view, "connected")
+    stations(view, [e3800()])
+    view |> element("#maker-choice-0") |> render_click()
+    {:ok, station} = Build.item(build_of(view), id)
+    assert station.params["model"] == "anker_solix_f3800"
+  end
+
+  test "an item of a device of Home Assistant has no choice of a maker", %{conn: conn} do
+    build = preset()
+    garage = Enum.find(build.rooms, &(&1.name == "Garage")).id
+    {:ok, build, id} = Build.add_device(build, garage, "power_station", "ha_1")
+    view = open(conn, ~p"/inside?#{[item: id]}", build)
+    status(view, "connected")
+    stations(view, [e3800()])
+    refute has_element?(view, "#maker-choices")
+    refute has_element?(view, "#part-maker")
+  end
+
+  test "the card tells the access of the token, and a refused token one time", %{conn: conn} do
+    view = open(conn, ~p"/settings", preset())
+    status(view, "none")
+    assert has_element?(view, "#pecron-card", "The token has the same access as your account")
+    assert has_element?(view, "#pecron-card", "Allow HA to send control commands")
+    status(view, "refused", "token")
+    assert has_element?(view, "#pecron-status", "Pecron does not accept the token.")
+    refute has_element?(view, "#pecron-error")
+    status(view, "refused", "format")
+    assert has_element?(view, "#pecron-error", "starts with phk_")
   end
 
   test "a station in a van links too", %{conn: conn} do

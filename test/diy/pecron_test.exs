@@ -86,12 +86,14 @@ defmodule DIY.PecronTest do
   end
 
   test "a control of the AC or DC outlets of one station" do
+    test = self()
+
     Req.Test.stub(Pecron, fn conn ->
       assert conn.method == "POST"
       assert conn.request_path == "/api/ha/command/dev_1"
       assert Plug.Conn.get_req_header(conn, "authorization") == ["Bearer phk_test"]
       {:ok, body, conn} = Plug.Conn.read_body(conn)
-      send(self(), {:body, Jason.decode!(body)})
+      send(test, {:body, Jason.decode!(body)})
       Req.Test.json(conn, %{"ok" => true})
     end)
 
@@ -103,6 +105,59 @@ defmodule DIY.PecronTest do
     Req.Test.stub(Pecron, &Plug.Conn.send_resp(&1, 401, "no"))
     assert Pecron.command("phk_test", "dev_1", "ac", true) == {:error, :token}
     assert Pecron.switches() == ["ac", "dc"]
+
+    # An id of the form productKey:deviceKey goes in one part of the path.
+    Req.Test.stub(Pecron, fn conn ->
+      send(test, {:path, conn.request_path})
+      Req.Test.json(conn, %{"ok" => true})
+    end)
+
+    assert Pecron.command("phk_test", "pk1:dev_1", "ac", true) == :ok
+    assert_received {:path, "/api/ha/command/pk1%3Adev_1"}
+  end
+
+  test "one call: no new try, no redirect, a body that is not JSON, and one deadline" do
+    test = self()
+
+    # An error of the server: one call, with no new try.
+    Req.Test.stub(Pecron, fn conn ->
+      send(test, :call)
+      Plug.Conn.send_resp(conn, 500, "no")
+    end)
+
+    assert Pecron.stations("phk_test") == {:error, :failed}
+    assert_received :call
+    refute_received :call
+
+    # A redirect: the token does not go to a different path.
+    Req.Test.stub(Pecron, fn conn ->
+      send(test, {:call, conn.request_path})
+
+      conn
+      |> Plug.Conn.put_resp_header("location", "https://app.pecron.com/api/other")
+      |> Plug.Conn.send_resp(302, "")
+    end)
+
+    assert Pecron.stations("phk_test") == {:error, :failed}
+    assert_received {:call, "/api/ha/devices"}
+    refute_received {:call, _path}
+
+    # A body that is not JSON, with the type of JSON.
+    Req.Test.stub(Pecron, fn conn ->
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.send_resp(200, "<html>")
+    end)
+
+    assert Pecron.stations("phk_test") == {:error, :failed}
+
+    # No answer before the deadline of the call.
+    Req.Test.stub(Pecron, fn conn ->
+      Process.sleep(5_000)
+      Req.Test.json(conn, %{"devices" => []})
+    end)
+
+    assert Pecron.stations("phk_test") == {:error, :unreachable}
   end
 
   test "the ids and the parts that the app takes" do
@@ -111,6 +166,10 @@ defmodule DIY.PecronTest do
     refute Pecron.id?("")
     refute Pecron.id?(String.duplicate("a", 65))
     refute Pecron.id?(5)
+    # The form productKey:deviceKey of the portal.
+    assert Pecron.id?("pk1:dev_1")
+    refute Pecron.id?("pk1:")
+    refute Pecron.id?("a:b:c")
 
     [station] =
       Pecron.read_stations(%{

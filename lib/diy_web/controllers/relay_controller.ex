@@ -12,11 +12,13 @@ defmodule DIYWeb.RelayController do
   - It takes a request of a page of the app only (`sec-fetch-site:
     same-origin`). A page of a different site cannot use it.
   - The token of the person comes in each request (`authorization:
-    Bearer …`). The relay keeps no token and writes no token to a log.
+    Bearer phk_…`): a token of the portal of Pecron only. The relay keeps
+    no token and writes no token to a log.
     This is a decision of the owner (October 2026): the server sees the
     token for each call, and keeps it for no call.
   - It sends to the cloud only two requests of the app. These are the list
     of the stations, and a control of the AC or DC outlets of one station.
+    It follows no redirect.
   - It gives back only the parts that the app reads, and no answer goes to
     a cache (`cache-control: no-store`).
   """
@@ -53,11 +55,12 @@ defmodule DIYWeb.RelayController do
 
   def pecron_command(conn, _params), do: answer(conn, 400, %{"error" => "request"})
 
-  # The token of a request of a page of the app: printable, with no space.
+  # The token of a request of a page of the app: a token of the portal of
+  # Pecron, printable, with no space.
   defp token(conn) do
     with {:site, ["same-origin"]} <- {:site, get_req_header(conn, "sec-fetch-site")},
          ["Bearer " <> token] <- get_req_header(conn, "authorization"),
-         true <- byte_size(token) <= @max_token and token =~ ~r/\A[\x21-\x7e]+\z/ do
+         true <- byte_size(token) <= @max_token and token =~ ~r/\Aphk_[\x21-\x7e]+\z/ do
       {:ok, token}
     else
       {:site, _site} -> {:error, 403, "origin"}

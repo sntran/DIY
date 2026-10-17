@@ -658,7 +658,7 @@ defmodule DIY.Build do
     do: Enum.find_value(build.devices, fn {item, other} -> other == device && item end)
 
   # The makers of the units (DIY.Pecron).
-  @unit ~r/\A(pecron):[A-Za-z0-9_-]{1,64}\z/
+  @unit ~r/\A(pecron):[A-Za-z0-9_-]{1,64}(:[A-Za-z0-9_-]{1,64})?\z/
 
   @doc """
   True for a unit of the cloud of a maker: the maker and the id of its

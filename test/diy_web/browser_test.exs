@@ -32,7 +32,8 @@ defmodule DIYWeb.BrowserTest do
 
     {output, status} =
       System.cmd("node", ["test/browser/house.mjs", DIYWeb.Endpoint.url()],
-        stderr_to_stdout: true
+        stderr_to_stdout: true,
+        env: [{"DIY_STUBS", "1"}]
       )
 
     assert status == 0, output

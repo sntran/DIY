@@ -12,27 +12,41 @@ import {
 const settle = () => new Promise((resolve) => setImmediate(resolve))
 
 // A fake relay: each call waits until the test answers it. The cloud has a
-// station for each token (its account): its AC outlets are on or off.
+// station for each token (its account): its AC outlets are on or off. As
+// in the TLA+ model, the cloud serves a call (it reads or writes the
+// station), and later the answer comes (deliver).
 function relay() {
   const fake = {calls: [], cloud: {phk_a1: "on", phk_a2: "on"}}
   fake.fetch = (url, options) => new Promise((resolve, reject) => {
     const call = {url, options, resolve, reject}
     options.signal.addEventListener("abort", () => {
-      fake.calls.splice(fake.calls.indexOf(call), 1)
+      if (fake.calls.includes(call)) fake.calls.splice(fake.calls.indexOf(call), 1)
       reject(new Error("aborted"))
     })
     fake.calls.push(call)
   })
-  // Answers a call: the cloud reads or writes the station of the token now.
-  fake.answer = (call, override = null) => {
-    fake.calls.splice(fake.calls.indexOf(call), 1)
+  // The cloud reads or writes the station of the token now.
+  fake.serve = (call) => {
+    if (call.response) return
     const token = call.options.headers.authorization.slice("Bearer ".length)
-    if (override) return call.resolve(override)
     if (call.options.method === "POST") {
       fake.cloud[token] = JSON.parse(call.options.body).on ? "on" : "off"
-      return call.resolve(json(200, {ok: true}))
+      call.response = json(200, {ok: true})
+    } else {
+      call.response = json(200, {stations: [{id: "s1", account: token, ac: fake.cloud[token]}]})
     }
-    call.resolve(json(200, {stations: [{id: "s1", account: token, ac: fake.cloud[token]}]}))
+  }
+  // The answer comes.
+  fake.deliver = (call) => {
+    fake.serve(call)
+    fake.calls.splice(fake.calls.indexOf(call), 1)
+    call.resolve(call.response)
+  }
+  // Serves a call and answers it, or answers it with a different answer.
+  fake.answer = (call, override = null) => {
+    if (!override) return fake.deliver(call)
+    fake.calls.splice(fake.calls.indexOf(call), 1)
+    call.resolve(override)
   }
   // The relay gives no answer (no network).
   fake.fail = (call) => {
@@ -72,6 +86,12 @@ function parts({fetch, visible = () => true, store = null} = {}) {
 const last = (page, event) => page.pushes.findLast(([name]) => name === event)?.[1]
 // The timer of the next poll (not the wait of an answer).
 const pollTimer = (page) => [...page.timers.entries()].find(([, timer]) => timer.ms === POLL_WAIT)
+// Fires a timer of the page: the next poll, or the wait of an answer.
+const fire = (page, ms = POLL_WAIT) => {
+  const [id, timer] = [...page.timers.entries()].find(([, one]) => one.ms === ms)
+  page.timers.delete(id)
+  timer.f()
+}
 
 test("the constants and the form of a token", () => {
   assert.deepEqual(MAKERS, {pecron: {relay: "/relay/pecron", prefix: "phk_"}})
@@ -230,13 +250,19 @@ test("a control: its end, then a poll; while a poll waits, the poll comes again"
   page.timers.delete(id)
   timer.f()
   const poll = fake.calls[0]
+  fake.serve(poll)
   link.control("s1", "ac", true)
   await settle()
   const command = fake.calls[1]
-  fake.answer(poll, json(200, {stations: [{id: "s1", account: "phk_a1", ac: "off"}]}))
+  // The control ends first, while the poll waits: no poll now.
   fake.answer(command)
   await settle()
+  assert.equal(fake.calls.length, 1)
+  // The old poll ends with the old state, then the poll comes again.
+  fake.deliver(poll)
   await settle()
+  await settle()
+  assert.equal(last(page, "maker:stations").stations[0].ac, "off")
   assert.equal(fake.calls.length, 1)
   fake.answer(fake.calls[0])
   await settle()
@@ -251,10 +277,17 @@ test("the errors of the relay and of the maker", async () => {
   await link.start()
   await link.connect("phk_a1")
 
-  // The maker does not answer, or answers with an error: the polls go on.
+  // A first poll gives the stations. Then the maker does not answer, or
+  // answers with an error: the polls go on, and the page keeps the last
+  // stations. An error that the hook does not know is "failed".
+  fake.answer(fake.calls[0])
+  await settle()
+  const shown = last(page, "maker:stations")
+  fire(page)
   for (const [answer, error] of [
     [json(502, {error: "unreachable"}), "unreachable"],
     [json(502, {error: "failed"}), "failed"],
+    [json(502, {error: "<b>other</b>"}), "failed"],
     [broken(500), "failed"],
     [json(200, {stations: "none"}), "failed"],
     [broken(200), "failed"],
@@ -262,6 +295,7 @@ test("the errors of the relay and of the maker", async () => {
     fake.answer(fake.calls[0], answer)
     await settle()
     assert.deepEqual(last(page, "maker:status"), {maker: "pecron", state: "offline", error})
+    assert.equal(last(page, "maker:stations"), shown)
     const [id, timer] = pollTimer(page)
     page.timers.delete(id)
     timer.f()
@@ -279,25 +313,29 @@ test("the errors of the relay and of the maker", async () => {
   await settle()
   assert.deepEqual(last(page, "maker:status"), {maker: "pecron", state: "offline", error: "timeout"})
 
-  // A control that the maker refuses, and a token that the maker refuses:
-  // the polls stop.
+  // A control that fails. Then a control that the maker refuses for the
+  // token ("denied"): the token can still read, so the poll after the
+  // control goes on. Then a poll that the maker refuses: the polls stop.
   link.control("s1", "dc", true)
   await settle()
   fake.answer(fake.calls[0], json(502, {error: "failed"}))
   await settle()
   assert.deepEqual(last(page, "maker:control_done"), {maker: "pecron", device: "s1", part: "dc", error: "failed"})
-  fake.answer(fake.calls[0], json(401, {error: "token"}))
+  fake.answer(fake.calls[0])
   await settle()
-  assert.deepEqual(last(page, "maker:status"), {maker: "pecron", state: "refused", error: "token"})
-  assert.equal(pollTimer(page), undefined)
+  assert.equal(last(page, "maker:status").state, "connected")
   link.control("s1", "dc", true)
   await settle()
+  fake.answer(fake.calls[0], json(403, {error: "token"}))
+  await settle()
+  assert.deepEqual(last(page, "maker:control_done"), {maker: "pecron", device: "s1", part: "dc", error: "denied"})
+  assert.equal(last(page, "maker:status").state, "connected")
+  assert.equal(fake.calls[0].options.method, "GET")
   fake.answer(fake.calls[0], json(401, {error: "token"}))
   await settle()
-  assert.deepEqual(last(page, "maker:control_done"), {maker: "pecron", device: "s1", part: "dc", error: "token"})
   assert.deepEqual(last(page, "maker:status"), {maker: "pecron", state: "refused", error: "token"})
-  assert.equal(fake.calls.length, 0)
   assert.equal(pollTimer(page), undefined)
+  assert.equal(fake.calls.length, 0)
 
   // The store fails: the link tells it, and keeps its state.
   page.deps.store.put = async () => { throw new Error("no store") }
@@ -335,34 +373,55 @@ test("the news of a different tab", async () => {
 })
 
 test("after any steps, the page shows only the station of the token, and the cloud when all is quiet", async () => {
+  // As in the TLA+ model: the cloud serves a call, and its answer comes
+  // later. "synced": a poll of this generation read the cloud after the
+  // last change of a person. When all is quiet and synced, the page shows
+  // the cloud, with no new timer.
   const step = fc.oneof(
     fc.constantFrom("phk_a1", "phk_a2", null).map((token) => ({kind: "switch", token})),
     fc.constant({kind: "timer"}),
     fc.boolean().map((on) => ({kind: "control", on})),
-    fc.nat(5).map((index) => ({kind: "answer", index})),
+    fc.nat(5).map((index) => ({kind: "serve", index})),
+    fc.nat(5).map((index) => ({kind: "deliver", index})),
     fc.constantFrom("phk_a1", "phk_a2").map((token) => ({kind: "person", token})),
   )
   await fc.assert(fc.asyncProperty(fc.array(step, {maxLength: 25}), async (steps) => {
     const fake = relay()
-    const page = parts({fetch: fake.fetch})
-    const link = new MakerLink(page.deps)
+    let link = null
+    // Each call has the generation of the hook when it starts.
+    const fetch = (url, options) => {
+      const answer = fake.fetch(url, options)
+      fake.calls.at(-1).generation = link.generation
+      return answer
+    }
+    const page = parts({fetch})
+    link = new MakerLink(page.deps)
+    let synced = false
+    // A command of an old generation (the person connected the same
+    // account again) is as a change of a person, as in the model.
+    const serve = (call) => {
+      if (!call.response && call.generation === link.generation && call.options.method === "GET") synced = true
+      if (!call.response && call.generation !== link.generation && call.options.method === "POST" &&
+        call.options.headers.authorization === `Bearer ${link.token}`) synced = false
+      fake.serve(call)
+    }
     await link.start()
     for (const one of steps) {
       if (one.kind === "switch") {
         if (one.token) await link.connect(one.token)
         else await link.disconnect()
+        synced = false
       } else if (one.kind === "timer") {
-        const found = pollTimer(page)
-        if (found) {
-          page.timers.delete(found[0])
-          found[1].f()
-        }
+        if (pollTimer(page)) fire(page)
       } else if (one.kind === "control") {
         if (link.token) link.control("s1", "ac", one.on)
-      } else if (one.kind === "answer") {
-        if (fake.calls.length) fake.answer(fake.calls[one.index % fake.calls.length])
+      } else if (one.kind === "serve" || one.kind === "deliver") {
+        const call = fake.calls[one.index % Math.max(fake.calls.length, 1)]
+        if (call) serve(call)
+        if (call && one.kind === "deliver") fake.deliver(call)
       } else {
         fake.cloud[one.token] = fake.cloud[one.token] === "on" ? "off" : "on"
+        if (one.token === link.token) synced = false
       }
       await settle()
       await settle()
@@ -371,22 +430,96 @@ test("after any steps, the page shows only the station of the token, and the clo
       if (shown) assert.equal(shown[0].account, link.token)
       if (!link.token) assert.equal(shown, null)
     }
-    // All the answers come, in order: the page shows the cloud.
+    // All the answers come, in order.
     while (fake.calls.length) {
-      fake.answer(fake.calls[0])
+      serve(fake.calls[0])
+      fake.deliver(fake.calls[0])
       await settle()
       await settle()
     }
-    if (link.token) {
-      const found = pollTimer(page)
-      page.timers.delete(found[0])
-      found[1].f()
-      fake.answer(fake.calls[0])
-      await settle()
-      assert.equal(last(page, "maker:stations").stations[0].ac, fake.cloud[link.token])
-    }
+    if (link.token && synced) assert.equal(last(page, "maker:stations").stations[0].ac, fake.cloud[link.token])
     link.stop()
-  }), {numRuns: 200})
+  }), {
+    numRuns: 1000,
+    // Always this case of the rule "again": a poll reads the cloud, then
+    // a control ends while the poll waits.
+    examples: [
+      [[
+        {kind: "switch", token: "phk_a1"}, {kind: "control", on: false}, {kind: "serve", index: 0},
+        {kind: "deliver", index: 1},
+      ]],
+      // A control of an old generation of the same account.
+      [[
+        {kind: "switch", token: "phk_a1"}, {kind: "control", on: false}, {kind: "switch", token: "phk_a1"},
+        {kind: "deliver", index: 5},
+      ]],
+    ],
+  })
+})
+
+test("a body of an answer that never ends: the wait ends after ANSWER_WAIT", async () => {
+  const fake = relay()
+  const page = parts({fetch: fake.fetch})
+  const link = new MakerLink(page.deps)
+  await link.start()
+  await link.connect("phk_a1")
+  // The headers come, and the body stops until the signal stops it.
+  const call = fake.calls[0]
+  fake.answer(call, {
+    ok: true, status: 200,
+    json: () => new Promise((_resolve, reject) => call.options.signal.addEventListener("abort", () => reject(new Error("aborted")))),
+  })
+  await settle()
+  assert.equal(link.busy, true)
+  fire(page, ANSWER_WAIT)
+  await settle()
+  await settle()
+  assert.deepEqual(last(page, "maker:status"), {maker: "pecron", state: "offline", error: "timeout"})
+  assert.equal(link.busy, false)
+  assert.ok(pollTimer(page))
+  link.stop()
+})
+
+test("a new generation forgets the poll again and the wait for the page", async () => {
+  const fake = relay()
+  let visible = true
+  const page = parts({fetch: fake.fetch, visible: () => visible})
+  const link = new MakerLink(page.deps)
+  await link.start()
+  await link.connect("phk_a1")
+  link.control("s1", "ac", false)
+  await settle()
+  fake.answer(fake.calls[1])
+  await settle()
+  assert.equal(link.again, true)
+  await link.connect("phk_a2")
+  assert.equal(link.again, false)
+  fake.answer(fake.calls.find((call) => call.options.headers.authorization === "Bearer phk_a2"))
+  await settle()
+  visible = false
+  fire(page)
+  assert.equal(link.waiting, true)
+  await link.disconnect()
+  assert.equal(link.waiting, false)
+  // The other tabs get the news of a connect and of a disconnect.
+  assert.equal(page.notes, 3)
+  link.stop()
+})
+
+test("a stopped link does nothing: a late read of the store, or a late news", async () => {
+  const fake = relay()
+  const page = parts({fetch: fake.fetch})
+  page.tokens.set("pecron", "phk_a1")
+  const link = new MakerLink(page.deps)
+  const started = link.start()
+  link.stop()
+  await started
+  await link.news()
+  await link.connect("phk_a2")
+  await link.disconnect()
+  assert.equal(fake.calls.length, 0)
+  assert.equal(page.timers.size, 0)
+  assert.deepEqual(page.pushes.filter(([event]) => event === "maker:stations"), [])
 })
 
 test("the store of the tokens in IndexedDB", async () => {

@@ -53,6 +53,11 @@ The owner decides about each item.
   that the person does not tick "it is a plan"?
 - The page Bill: the math of the model, or the parts of a real bill?
 - The link where a person buys the owner a coffee or gives money.
+- The relay of Pecron: a limit of requests for each address? Today a
+  script can use it with its own token.
+- The direct link to a maker: one tab polls and tells the other tabs, so
+  that two tabs do not make two polls? The limit of `/api/ha` is not
+  known.
 - A person who speaks Spanish, and a person who speaks Vietnamese, to
   check the texts.
 - The name of three words that start with D, I and Y, and a domain that

@@ -23,8 +23,13 @@
 (* - A poll after a control: the end of a control starts a poll. While a   *)
 (*   poll waits, it marks a poll "again" for the end of that poll. The     *)
 (*   page then shows the new state.                                        *)
+(* - The timeout: the network can lose a request or an answer (also the    *)
+(*   body of an answer). The wait of the hook for an answer ends after a   *)
+(*   time (ANSWER_WAIT). A poll then ends with no new state. A control     *)
+(*   ends with an error, and its request can still change the station      *)
+(*   later. The hook never waits for ever (the property Live).             *)
 (*                                                                         *)
-(* Four modes have a fault:                                                *)
+(* Five modes have a fault:                                                *)
 (* - "nogen": a new token does not start a new generation. A late answer   *)
 (*   of the old account then shows on the page (MakerLink.nogen.cfg).      *)
 (* - "overlap": a timer starts a second poll while one waits. The answer   *)
@@ -35,10 +40,12 @@
 (*   keeps the old state (MakerLink.noagain.cfg).                          *)
 (* - "nopoll": the end of a control starts no poll. The page keeps the old *)
 (*   state (MakerLink.nopoll.cfg).                                         *)
+(* - "notimeout": the wait for an answer has no end. When the network      *)
+(*   loses an answer, the hook waits for ever (MakerLink.notimeout.cfg).   *)
 (***************************************************************************)
 EXTENDS Naturals, FiniteSets
 
-CONSTANTS Accounts, MaxChanges, MaxSwitches, MaxPolls, MaxControls, Mode
+CONSTANTS Accounts, MaxChanges, MaxSwitches, MaxPolls, MaxControls, MaxLosses, Mode
 
 None == "none"
 \* The page with no station.
@@ -63,10 +70,11 @@ VARIABLES
   changes,  \* the count of the changes of a person (a limit)
   switches, \* the count of the new tokens and the disconnects (a limit)
   polls,    \* the count of the timers (a limit)
-  controls  \* the count of the controls (a limit)
+  controls, \* the count of the controls (a limit)
+  losses    \* the count of the messages that the network lost (a limit)
 
 vars == <<cloud, token, gen, net, busy, again, pending, page, synced,
-          changes, switches, polls, controls>>
+          changes, switches, polls, controls, losses>>
 
 TypeOK ==
   /\ cloud \in [Accounts -> Values]
@@ -92,6 +100,7 @@ Init ==
   /\ switches = 0
   /\ polls = 0
   /\ controls = 0
+  /\ losses = 0
 
 \* The hook sends a poll of its generation.
 SendPoll == net \cup {Msg("poll", gen, token, None, "req")}
@@ -102,7 +111,7 @@ Person(a) ==
   /\ cloud' = [cloud EXCEPT ![a] = Other(@)]
   /\ synced' = (synced /\ a /= token)
   /\ changes' = changes + 1
-  /\ UNCHANGED <<token, gen, net, busy, again, pending, page, switches, polls, controls>>
+  /\ UNCHANGED <<token, gen, net, busy, again, pending, page, switches, polls, controls, losses>>
 
 \* The person gives a new token, or disconnects (None). The hook clears
 \* the page, and starts a poll for a new token.
@@ -118,7 +127,7 @@ Switch(t) ==
   /\ busy' = (t /= None)
   /\ net' = IF t = None THEN net ELSE net \cup {Msg("poll", gen', t, None, "req")}
   /\ switches' = switches + 1
-  /\ UNCHANGED <<cloud, changes, polls, controls>>
+  /\ UNCHANGED <<cloud, changes, polls, controls, losses>>
 
 \* The timer of the hook: a poll, or nothing while a poll waits.
 Timer ==
@@ -129,7 +138,7 @@ Timer ==
        THEN UNCHANGED <<net, busy>>
        ELSE /\ net' = SendPoll
             /\ busy' = TRUE
-  /\ UNCHANGED <<cloud, token, gen, again, pending, page, synced, changes, switches, controls>>
+  /\ UNCHANGED <<cloud, token, gen, again, pending, page, synced, changes, switches, controls, losses>>
 
 \* A switch on the page: a control of the AC outlets, when the page shows
 \* their state and no control waits.
@@ -141,21 +150,81 @@ Control ==
   /\ net' = net \cup {Msg("cmd", gen, token, Other(page.val), "req")}
   /\ pending' = TRUE
   /\ controls' = controls + 1
-  /\ UNCHANGED <<cloud, token, gen, busy, again, page, synced, changes, switches, polls>>
+  /\ UNCHANGED <<cloud, token, gen, busy, again, page, synced, changes, switches, polls, losses>>
 
 \* The relay and the cloud: a poll reads the station, and a command
-\* changes it.
+\* changes it. The command of a control that ended with a timeout
+\* ("late") changes the station with no answer. For the hook, it is as a
+\* change of a person. So is a command of an old generation: the person
+\* connected the same account again.
 Serve(m) ==
   /\ m \in net
-  /\ m.stage = "req"
+  /\ m.stage \in {"req", "late"}
   /\ IF m.kind = "poll"
        THEN /\ net' = (net \ {m}) \cup {Msg("poll", m.gen, m.acct, cloud[m.acct], "ans")}
             /\ synced' = (synced \/ (m.gen = gen /\ m.acct = token))
             /\ UNCHANGED cloud
-       ELSE /\ cloud' = [cloud EXCEPT ![m.acct] = m.val]
-            /\ net' = (net \ {m}) \cup {Msg("cmd", m.gen, m.acct, m.val, "ans")}
-            /\ UNCHANGED synced
-  /\ UNCHANGED <<token, gen, busy, again, pending, page, changes, switches, polls, controls>>
+       ELSE IF m.stage = "late"
+         THEN /\ cloud' = [cloud EXCEPT ![m.acct] = m.val]
+              /\ net' = net \ {m}
+              /\ synced' = (synced /\ m.acct /= token)
+         ELSE /\ cloud' = [cloud EXCEPT ![m.acct] = m.val]
+              /\ net' = (net \ {m}) \cup {Msg("cmd", m.gen, m.acct, m.val, "ans")}
+              /\ synced' = (synced /\ (m.gen = gen \/ m.acct /= token))
+  /\ UNCHANGED <<token, gen, busy, again, pending, page, changes, switches, polls, controls, losses>>
+
+\* The network loses a request or an answer.
+Lose(m) ==
+  /\ m \in net
+  /\ losses < MaxLosses
+  /\ net' = net \ {m}
+  /\ losses' = losses + 1
+  /\ UNCHANGED <<cloud, token, gen, busy, again, pending, page, synced, changes, switches, polls, controls>>
+
+\* The end of a poll or of a control: a poll again, or a poll after a
+\* control, as in Deliver.
+AfterPoll(n) ==
+  IF again
+    THEN /\ net' = n \cup {Msg("poll", gen, token, None, "req")}
+         /\ again' = FALSE
+         /\ UNCHANGED busy
+    ELSE /\ net' = n
+         /\ busy' = FALSE
+         /\ UNCHANGED again
+
+AfterControl(n) ==
+  IF Mode = "nopoll"
+    THEN /\ net' = n
+         /\ UNCHANGED <<busy, again>>
+    ELSE IF busy
+      THEN /\ net' = n
+           /\ again' = (Mode /= "noagain")
+           /\ UNCHANGED busy
+      ELSE /\ net' = n \cup {Msg("poll", gen, token, None, "req")}
+           /\ busy' = TRUE
+           /\ UNCHANGED again
+
+\* The wait of the hook for the answer of a poll ends (ANSWER_WAIT): the
+\* hook stops the request. The page keeps its state, and the hook did not
+\* get the read of the cloud (synced is FALSE until the next poll).
+TimeoutPoll ==
+  /\ Mode /= "notimeout"
+  /\ busy
+  /\ token /= None
+  /\ AfterPoll({m \in net : ~(m.kind = "poll" /\ m.gen = gen)})
+  /\ synced' = FALSE
+  /\ UNCHANGED <<cloud, token, gen, pending, page, changes, switches, polls, controls, losses>>
+
+\* The wait of the hook for the end of a control ends. The control ends
+\* with an error. Its request can still reach the cloud ("late"), and its
+\* answer does not count.
+Late(m) == IF m.kind = "cmd" /\ m.gen = gen /\ m.stage = "req" THEN Msg("cmd", m.gen, m.acct, m.val, "late") ELSE m
+TimeoutControl ==
+  /\ Mode /= "notimeout"
+  /\ pending
+  /\ pending' = FALSE
+  /\ AfterControl({Late(m) : m \in {k \in net : ~(k.kind = "cmd" /\ k.gen = gen /\ k.stage = "ans")}})
+  /\ UNCHANGED <<cloud, token, gen, page, synced, changes, switches, polls, controls, losses>>
 
 \* The hook takes an answer of its generation only. The end of a poll
 \* starts the poll "again". The end of a control starts a poll, or marks
@@ -188,16 +257,26 @@ Deliver(m) ==
                           /\ busy' = TRUE
                           /\ UNCHANGED again
               /\ UNCHANGED page
-  /\ UNCHANGED <<cloud, token, gen, synced, changes, switches, polls, controls>>
+  /\ UNCHANGED <<cloud, token, gen, synced, changes, switches, polls, controls, losses>>
 
 Next ==
   \/ \E a \in Accounts : Person(a)
   \/ \E t \in Accounts \cup {None} : Switch(t)
   \/ Timer
   \/ Control
-  \/ \E m \in net : Serve(m) \/ Deliver(m)
+  \/ \E m \in net : Serve(m) \/ Deliver(m) \/ Lose(m)
+  \/ TimeoutPoll
+  \/ TimeoutControl
 
 Spec == Init /\ [][Next]_vars
+
+\* The network and the cloud answer in the end, and the timers of the
+\* waits of the hook fire.
+LSpec ==
+  /\ Spec
+  /\ WF_vars(\E m \in net : Serve(m) \/ Deliver(m))
+  /\ WF_vars(TimeoutPoll)
+  /\ WF_vars(TimeoutControl)
 
 \* The page shows only the station of the account of the token.
 PageOwn == page = NoPage \/ page.acct = token
@@ -213,4 +292,8 @@ Fresh == (token /= None /\ Quiet /\ synced) => page = [acct |-> token, val |-> c
 
 \* After a disconnect, the page shows no station and no control waits.
 Clear == token = None => (page = NoPage /\ ~pending)
+
+\* The hook never waits for ever: a poll and a control end.
+Live == /\ (busy /\ token /= None) ~> ~busy
+        /\ pending ~> ~pending
 =============================================================================

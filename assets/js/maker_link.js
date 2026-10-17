@@ -14,6 +14,8 @@
 //   timer polls.
 // - A poll after a control: the end of a control starts a poll. While a
 //   poll waits, it marks a poll "again" for the end of that poll.
+// - The timeout: the wait for an answer, also for its body, ends after
+//   ANSWER_WAIT. The hook never waits for ever (the property Live).
 //
 // The hook tells the LiveView (DIYWeb.MakerLink): "maker:status" (the
 // state of the link), "maker:stations" (the stations of the account) and
@@ -54,6 +56,7 @@ export class MakerLink {
     this.state = "loading"
     this.error = null
     this.stations = null
+    this.stopped = false
   }
 
   // Reads the token of the store, and starts the link.
@@ -72,8 +75,10 @@ export class MakerLink {
   }
 
   // A new generation, with a token or with none (a disconnect). The page
-  // forgets the stations of the old generation.
+  // forgets the stations of the old generation. A stopped link (a page
+  // that goes) does nothing.
   use(token) {
+    if (this.stopped) return
     this.generation += 1
     this.token = token
     this.busy = false
@@ -166,18 +171,17 @@ export class MakerLink {
   }
 
   // Turns the AC or DC outlets of a station on or off. The end goes to the
-  // LiveView, then a poll reads the new state.
+  // LiveView, then a poll reads the new state. The maker can refuse the
+  // token for a control ("denied"), and the token can still read. On the
+  // portal of Pecron, the person can turn off the controls of a token. So
+  // the poll tells if the maker refuses the token.
   async control(device, part, on) {
     const generation = this.generation
     if (!this.token) return this.push("maker:control_done", {maker: this.maker, device, part, error: "failed"})
     const answer = await this.call("POST", `/command/${encodeURIComponent(device)}`, {part, on})
     if (generation !== this.generation) return
-    this.push("maker:control_done", {maker: this.maker, device, part, error: answer.ok ? null : answer.error})
-    if (answer.error === "token") {
-      this.clearTimer(this.timer)
-      this.timer = null
-      return this.status("refused", "token")
-    }
+    const error = answer.ok ? null : answer.error === "token" ? "denied" : answer.error
+    this.push("maker:control_done", {maker: this.maker, device, part, error})
     if (this.busy) this.again = true
     else this.poll()
   }
@@ -186,6 +190,7 @@ export class MakerLink {
   // error}. The errors: "token" (the maker refuses the token), "unreachable"
   // (no answer of the maker), "offline" (no answer of the relay), "timeout"
   // and "failed".
+  // The wait covers the body of the answer too: the signal also stops it.
   async call(method, path, body = null) {
     const abort = new AbortController()
     const timer = this.setTimer(() => abort.abort(), ANSWER_WAIT)
@@ -197,9 +202,10 @@ export class MakerLink {
       cache: "no-store",
       signal: abort.signal,
     }).catch(() => null)
+    const json = response ? await response.json().catch(() => null) : null
     this.clearTimer(timer)
-    if (!response) return {ok: false, error: abort.signal.aborted ? "timeout" : "offline"}
-    const json = await response.json().catch(() => null)
+    if (abort.signal.aborted) return {ok: false, error: "timeout"}
+    if (!response) return {ok: false, error: "offline"}
     if (response.ok) return {ok: true, body: json}
     return {ok: false, error: ["token", "unreachable"].includes(json?.error) ? json.error : "failed"}
   }
@@ -211,6 +217,7 @@ export class MakerLink {
   }
 
   stop() {
+    this.stopped = true
     this.generation += 1
     this.clearTimer(this.timer)
     this.timer = null

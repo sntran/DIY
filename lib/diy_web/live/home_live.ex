@@ -312,12 +312,13 @@ defmodule DIYWeb.HomeLive do
   end
 
   # A switch of the outlets of a station of a maker. It works only when the
-  # state of the part is known, and no control of the part waits.
+  # link is connected, the state of the part is known, and no control of
+  # the part waits.
   def handle_event("maker_switch", %{"item" => item, "part" => part, "on" => on}, socket)
       when on in ~w(true false) do
     with %{maker: maker, device: device, switches: switches} <-
            DIYWeb.MakerLink.station(socket.assigns, item),
-         %{state: state, pending: nil} when state in ~w(on off) <-
+         %{state: state, pending: nil, link: true} when state in ~w(on off) <-
            Enum.find(switches, &(&1.part == part)) do
       {:noreply, DIYWeb.MakerLink.control(socket, maker, device, part, on == "true")}
     else
