@@ -2094,10 +2094,13 @@ test("the power stations of each integration, and the entities of their parts", 
   assert.deepEqual(STATION_SOURCES.map((source) => [source.maker, source.platform]), [
     ["pecron", "pecron"], ["pecron", "mqtt"], ["ecoflow", "ecoflow_cloud"], ["ecoflow", "ef_ble"],
   ])
-  const models = {wave: "Wave 3", glacier: "GLACIER", wave2: "WAVE_2", wb: "Pecron WB12200", both: "E3800LFP"}
+  // The names are not the models: the rule "others" reads the model.
+  const models = {
+    wave: "Wave 3", glacier: "GLACIER", wave2: "WAVE_2", wb: "Pecron WB12200", wbp: "WB12200", both: "E3800LFP",
+  }
   const devices = ["e3800", "f5000", "monitor", "dp3", "ultra", "dpro", "wave", "half", "plug", "glacier", "wave2",
-    "wb", "both"]
-    .map((id) => haDevice(id, {area_id: "garage", model: models[id] ?? null}))
+    "wb", "both", "wbp"]
+    .map((id, index) => haDevice(id, {area_id: "garage", name: `Unit ${index}`, model: models[id] ?? null}))
   const entities = [
     haEntity("sensor.e3800_battery", "e3800", official("battery_percentage")),
     // A disabled entity does not count. A different code, a part in the
@@ -2166,6 +2169,8 @@ test("the power stations of each integration, and the entities of their parts", 
     haEntity("sensor.wb_out", "wb", monitor("total_output")),
     haEntity("switch.wb_ac", "wb", monitor("ac")),
     haEntity("sensor.half_battery", "half", monitor("battery")),
+    haEntity("sensor.wbp_battery", "wbp", official("battery_percentage")),
+    haEntity("sensor.wbp_out", "wbp", official("total_output_power")),
     haEntity("switch.plug", "plug", {platform: "tplink", unique_id: "ac_switch"}),
     // A station of pecron-monitor and of the integration of Pecron: all
     // its parts come from the first source, the integration of Pecron.
@@ -2202,7 +2207,7 @@ test("the power stations of each integration, and the entities of their parts", 
   assert.deepEqual(deviceList(devices, entities).map((device) => [device.id, device.station]), [
     ["e3800", "pecron"], ["f5000", null], ["monitor", "pecron"], ["dp3", "ecoflow"], ["ultra", "ecoflow"],
     ["dpro", "ecoflow"], ["wave", null], ["half", null], ["plug", null], ["glacier", null], ["wave2", null],
-    ["wb", null], ["both", "pecron"],
+    ["wb", null], ["both", "pecron"], ["wbp", null],
   ])
 
   // The numbers of the sensors, and the states of the switches. A part
@@ -2250,6 +2255,7 @@ test("the unique id of each key of each integration gives its part, and other ke
     ["pecron", "01J:dev1:ac_switch_hm", "switch", ["ac"]],
     ["pecron", "01J:dev1:dc_switch_hm", "switch", ["dc"]],
     ["pecron", "01J:dev1:online", "binary_sensor", ["link"]],
+    ["pecron", "01J:dev1online", "binary_sensor", []],
     ["pecron", "01J:dev1:battery_voltage", "sensor", []],
     ["pecron", "01J:dev1:ac_output_power", "sensor", []],
     ["pecron", "01J:dev1:online_time", "binary_sensor", []],
@@ -2282,6 +2288,9 @@ test("the unique id of each key of each integration gives its part, and other ke
     ].map((key) => ["ecoflow_cloud", `ecoflow-MR51ZAS-${key}`, "switch", ["dc"]]),
     ["ecoflow_cloud", "ecoflow-MR51ZAS-status", "sensor", ["link"]],
     ["ecoflow_cloud", "ecoflow-api-MR51ZAS-status", "sensor", ["link"]],
+    ["ecoflow_cloud", "ecoflow-api-Y711ZAS-status-scheduled", "sensor", ["link"]],
+    ["ecoflow_cloud", "ecoflow-MR51ZAS-statusx", "sensor", []],
+    ["ecoflow_cloud", "ecoflow-MR51ZAS-status-scheduledx", "sensor", []],
     ...[
       "bms-batt-soc", "bmsMaster-soc", "inv-soc", "pd-wattsInSumX", "cfgAcOutOpen", "cfgAc2OutOpen",
       "cfg-dc-24v-out-open", "cfgDc24vOutOpen", "pd-dcOutState", "cfg-usb-open", "pd-status-x",
@@ -2452,11 +2461,11 @@ const garage = (extra = {}) => registry({
   states: {
     "light.lamp": "on", "sensor.e3800_battery": "64", "sensor.e3800_out": "350",
     "switch.e3800_ac": "on", "switch.e3800_dc": "off", "binary_sensor.e3800_online": "on",
-    "sensor.dp3_battery": "90", "sensor.dp3_out": "0", "switch.dp3_hv": "on", "switch.dp3_lv": "off",
+    "sensor.dp3_battery": "90", "sensor.dp3_out": "2.5", "switch.dp3_hv": "on", "switch.dp3_lv": "off",
   },
   attributes: {
     "light.lamp": {brightness: 200}, "sensor.e3800_battery": {unit_of_measurement: "%"},
-    "sensor.e3800_out": {unit_of_measurement: "W"}, "sensor.dp3_out": {unit_of_measurement: "W"},
+    "sensor.e3800_out": {unit_of_measurement: "W"}, "sensor.dp3_out": {unit_of_measurement: "kW"},
   },
   ...extra,
 })
@@ -2483,7 +2492,7 @@ test("the hook watches the parts of the stations, and turns their AC and DC outl
   assert.deepEqual(lastStates(page), {lamp: "on"})
   assert.deepEqual(lastStations(page), {
     e3800: {battery: 64, input: null, output: 350, ac: "on", dc: "off", link: true},
-    dp3: {battery: 90, input: null, output: 0, ac: "on", dc: null, link: null},
+    dp3: {battery: 90, input: null, output: 2500, ac: "on", dc: null, link: null},
   })
 
   // A new number of the battery.
@@ -2501,6 +2510,13 @@ test("the hook watches the parts of the stations, and turns their AC and DC outl
   ha.change("light.lamp", {"+": {a: {brightness: 3}}})
   tick(page)
   assert.equal(page.pushes.length, sent + 2)
+  // A change of a different attribute keeps the unit.
+  ha.change("sensor.e3800_out", {"+": {a: {friendly_name: "Out"}}, "-": {a: ["icon"]}})
+  ha.set("sensor.e3800_out", "0.35")
+  tick(page)
+  assert.equal(lastStations(page).e3800.output, 350)
+  ha.set("sensor.e3800_out", "350")
+  tick(page)
   ha.change("sensor.e3800_out", {"-": {a: ["unit_of_measurement"]}})
   tick(page)
   assert.equal(lastStations(page).e3800.output, 350)
@@ -2527,7 +2543,7 @@ test("the hook watches the parts of the stations, and turns their AC and DC outl
     ["ha:states", {states: {lamp: "on"}}],
     ["ha:stations", {stations: {
       e3800: {battery: 63, input: null, output: 350, ac: "off", dc: "off", link: true},
-      dp3: {battery: 90, input: null, output: 0, ac: "on", dc: null, link: null},
+      dp3: {battery: 90, input: null, output: 2500, ac: "on", dc: null, link: null},
     }}],
     ["ha:control_done", {device: "e3800", part: "ac", error: null}],
   ])

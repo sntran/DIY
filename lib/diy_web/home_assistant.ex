@@ -760,7 +760,7 @@ defmodule DIYWeb.HomeAssistant do
   def power_text(%{pending: true}), do: "Home Assistant turns it on."
   def power_text(%{pending: false}), do: "Home Assistant turns it off."
 
-  def power_text(%{state: "none"}), do: "Home Assistant has no switch for it."
+  def power_text(%{state: "none"}), do: "The app has no switch for it."
 
   def power_text(%{link: false, state: state}) when state in ~w(on off),
     do: "Home Assistant has no link to the station now. The last state was #{state}."

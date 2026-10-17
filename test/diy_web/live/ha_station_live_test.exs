@@ -111,8 +111,14 @@ defmodule DIYWeb.HaStationLiveTest do
     # No switch of the whole device: a switch for each outlet.
     refute has_element?(view, "#ha-power")
 
-    # Before the hook tells the numbers: the panel waits.
-    assert has_element?(view, "#ha-station-wait", "The app waits for the numbers of the station.")
+    # Before the hook tells the numbers: the panel waits. The texts of the
+    # station are in one element that stays, above the switches.
+    assert has_element?(
+             view,
+             "#ha-station-info #ha-station-wait",
+             "The app waits for the numbers of the station."
+           )
+
     refute has_element?(view, "#ha-station")
     assert has_element?(view, "#ha-ac-label", "AC outlets")
     assert has_element?(view, "#ha-dc-label", "DC outlets")
@@ -129,7 +135,7 @@ defmodule DIYWeb.HaStationLiveTest do
     # The numbers and the states. The numbers are not a live region.
     stations(view, %{"s1" => parts(), "s9" => parts()})
     refute has_element?(view, "#ha-station-wait")
-    assert has_element?(view, "#ha-station dt", "Battery level")
+    assert has_element?(view, "#ha-station-info #ha-station dt", "Battery level")
     assert has_element?(view, "#ha-battery", "64%")
     assert has_element?(view, "#ha-input", "0 W")
     assert has_element?(view, "#ha-output", "1,251 W")
@@ -152,8 +158,11 @@ defmodule DIYWeb.HaStationLiveTest do
     assert has_element?(view, "#ha-battery", "100%")
     assert has_element?(view, "#ha-output", "Not known")
     assert has_element?(view, "#ha-ac-state", "Home Assistant cannot reach it now.")
-    assert has_element?(view, "#ha-dc-state", "Home Assistant has no switch for it.")
-    assert has_element?(view, "#ha-switch-dc[aria-disabled=true]")
+    # A part that the station does not have has no switch: its name and
+    # its status only.
+    assert has_element?(view, "#ha-dc-state", "The app has no switch for it.")
+    refute has_element?(view, "#ha-switch-dc")
+    assert has_element?(view, "span#ha-dc-label", "DC outlets")
 
     stations(view, %{
       "s1" => parts(%{"battery" => nil, "output" => nil, "ac" => "unavailable", "dc" => nil})
@@ -161,8 +170,9 @@ defmodule DIYWeb.HaStationLiveTest do
 
     assert has_element?(view, "#ha-battery", "Not known")
 
-    # A tap on a switch with no state changes nothing.
-    view |> element("#ha-switch-dc") |> render_click()
+    # A tap on a switch with no state, or on a part that the station does
+    # not have, changes nothing.
+    render_click(view, "ha_station_switch", %{"item" => item, "part" => "dc", "on" => "true"})
     view |> element("#ha-switch-ac") |> render_click()
     refute_push_event(view, "ha:control", _payload)
   end
@@ -188,8 +198,11 @@ defmodule DIYWeb.HaStationLiveTest do
     render_hook(view, "ha:control_done", %{"device" => "s1", "part" => "dc", "error" => nil})
     assert has_element?(view, "#ha-ac-state", "Home Assistant turns it off.")
 
-    # The new state, then the end.
+    # The new state, then the end. The new state does not end the
+    # control: the switch waits for the end.
     stations(view, %{"s1" => parts(%{"ac" => "off"})})
+    assert has_element?(view, "#ha-switch-ac[aria-disabled=true]")
+    assert has_element?(view, "#ha-ac-state", "Home Assistant turns it off.")
     render_hook(view, "ha:control_done", %{"device" => "s1", "part" => "ac", "error" => nil})
     assert has_element?(view, "#ha-switch-ac[aria-checked=false][aria-disabled=false]")
     assert has_element?(view, "#ha-ac-state", "It is off.")
@@ -394,7 +407,8 @@ defmodule DIYWeb.HaStationLiveTest do
     stations(view, %{"e1" => parts(%{"battery" => 90, "dc" => nil})})
     assert has_element?(view, "#ha-battery", "90%")
     assert has_element?(view, "#ha-ac-state", "It is on.")
-    assert has_element?(view, "#ha-dc-state", "Home Assistant has no switch for it.")
+    assert has_element?(view, "#ha-dc-state", "The app has no switch for it.")
+    refute has_element?(view, "#ha-switch-dc")
 
     view |> element("#ha-switch-ac") |> render_click()
     assert_push_event(view, "ha:control", %{device: "e1", on: false, part: "ac"})

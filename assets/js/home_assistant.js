@@ -101,10 +101,12 @@ export const STATION_SOURCES = [
   // the API of Pecron for Home Assistant. "entry:device:code". It is the
   // first way of the app (docs/design.md, "The integration for Pecron").
   // Its entities stay available when the station is not online. Its
-  // binary sensor "online" tells the link.
+  // binary sensor "online" tells the link. A WB12200 (a battery with no
+  // inverter) is not a station, as for pecron-monitor.
   {
     maker: "pecron",
     platform: "pecron",
+    others: /wb/i,
     parts: {
       battery: /:battery_percentage$/, input: /:total_input_power$/, output: /:total_output_power$/,
       ac: /:ac_switch_hm$/, dc: /:dc_switch_hm$/, link: /:online$/,
@@ -125,7 +127,9 @@ export const STATION_SOURCES = [
   },
   // EcoFlow Cloud (tolwi/hassio-ecoflow-cloud): "ecoflow-sn-key", with "-"
   // for "." and "_" in the key. Each family of stations has its keys. The
-  // DC part is the 12 V outlet only. Its sensor "status" tells the link.
+  // DC part is the 12 V outlets only. Its sensor "status" tells the link
+  // ("status.scheduled" for a DELTA Pro Ultra or a DELTA 3 Max Plus of the
+  // public API).
   // A Wave (an air conditioner) and a Glacier (a fridge) are not stations.
   {
     maker: "ecoflow",
@@ -146,7 +150,7 @@ export const STATION_SOURCES = [
         "mppt-carState", "pd-carState", "pd-carSwitch", "cfg-dc12v-out-open", "cfg-dc-12v-out-open",
         "cfgDc12vOutOpen", "flowInfo12v",
       ]),
-      link: /^ecoflow-(api-)?[a-z0-9]+-status$/i,
+      link: /^ecoflow-(api-)?[a-z0-9]+-status(-scheduled)?$/i,
     },
   },
   // EcoFlow BLE (rabits/ha-ef-ble): the station by Bluetooth. "ef_sn_key".

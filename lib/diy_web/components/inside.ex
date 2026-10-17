@@ -985,36 +985,44 @@ defmodule DIYWeb.Inside do
         <p :if={@power} id="ha-power-state" role="status" class="text-sm">
           {HomeAssistant.power_text(@power)}
         </p>
-        <%!-- The numbers change each 30 seconds to 20 minutes: they are not
-          a live region. --%>
-        <dl :if={@station && @station.known} id="ha-station" class="stage-facts">
-          <dt>Battery level</dt>
-          <dd id="ha-battery">{percent(@station.battery)}</dd>
-          <dt>Power in</dt>
-          <dd id="ha-input">{watts(@station.input)}</dd>
-          <dt>Power out</dt>
-          <dd id="ha-output">{watts(@station.output)}</dd>
-        </dl>
-        <p
-          :if={@station && @station.known && HomeAssistant.link_text(@station)}
-          id="ha-station-link"
-          class="text-sm"
-        >
-          {HomeAssistant.link_text(@station)}
-        </p>
-        <p
-          :if={@station && not @station.known && @station.online}
-          id="ha-station-wait"
-          class="text-sm"
-        >
-          The app waits for the numbers of the station.
-        </p>
+        <%!-- The numbers change each 10 seconds to 20 minutes: they are not
+          a live region. Their texts are in one element that stays while
+          there is a station: an element that comes or goes above the
+          switches makes a switch lose the focus. --%>
+        <div :if={@station} id="ha-station-info" class="flex flex-col gap-2">
+          <dl :if={@station.known} id="ha-station" class="stage-facts">
+            <dt>Battery level</dt>
+            <dd id="ha-battery">{percent(@station.battery)}</dd>
+            <dt>Power in</dt>
+            <dd id="ha-input">{watts(@station.input)}</dd>
+            <dt>Power out</dt>
+            <dd id="ha-output">{watts(@station.output)}</dd>
+          </dl>
+          <p
+            :if={@station.known && HomeAssistant.link_text(@station)}
+            id="ha-station-link"
+            class="text-sm"
+          >
+            {HomeAssistant.link_text(@station)}
+          </p>
+          <p :if={not @station.known and @station.online} id="ha-station-wait" class="text-sm">
+            The app waits for the numbers of the station.
+          </p>
+        </div>
+        <%!-- A part that the station does not have has no switch: only its
+          name and its status. --%>
         <div :for={switch <- (@station && @station.switches) || []} class="flex flex-col gap-1">
           <div id={"ha-#{switch.part}"} class="stage-switch-row stage-row-plain">
-            <label for={"ha-switch-#{switch.part}"} id={"ha-#{switch.part}-label"}>
+            <span :if={switch.state == "none"} id={"ha-#{switch.part}-label"}>{switch.name}</span>
+            <label
+              :if={switch.state != "none"}
+              for={"ha-switch-#{switch.part}"}
+              id={"ha-#{switch.part}-label"}
+            >
               {switch.name}
             </label>
             <button
+              :if={switch.state != "none"}
               type="button"
               id={"ha-switch-#{switch.part}"}
               role="switch"

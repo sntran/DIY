@@ -769,15 +769,20 @@ async function build(context, name) {
   await page.waitForSelector("#ha-battery:has-text('63%')")
   homeAssistant.set("sensor.station_battery", "64")
   // The station goes offline: the panel tells that the numbers are its
-  // last numbers, and its switches do not work.
+  // last numbers, and its switches do not work. The switch keeps the
+  // focus.
   assert.equal(await page.locator("#ha-station-link").count(), 0)
+  await page.focus("#ha-switch-ac")
   homeAssistant.set("binary_sensor.station_online", "off")
   await page.waitForSelector("#ha-station-link:has-text('These are its last numbers.')")
   await page.waitForSelector("#ha-switch-ac[aria-disabled=true]")
   await page.waitForSelector("#ha-ac-state:has-text('The last state was off.')")
+  assert.equal(await page.evaluate(() => document.activeElement?.id), "ha-switch-ac")
   await check(page, `${name} station with no link`)
+  await page.focus("#ha-switch-ac")
   homeAssistant.set("binary_sensor.station_online", "on")
   await page.waitForSelector("#ha-station-link", { state: "detached" })
+  assert.equal(await page.evaluate(() => document.activeElement?.id), "ha-switch-ac")
   await page.click("#item-stage .stage-back")
   await page.waitForSelector("#item-stage", { state: "detached" })
   await page.waitForSelector("#ha-ghosts:has-text('1 device of Home Assistant is not in the house yet.')")

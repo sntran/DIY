@@ -2557,7 +2557,8 @@ to each entity:
   (`docs/E3800LFP.md` of pecron-monitor). The entities stay available
   when the station is not online, with their last values (the property
   `available` in `entity.py`). The binary sensor `entry:device:online`
-  (`binary_sensor.py`) tells the link of the station.
+  (`binary_sensor.py`) tells the link of the station. A device with "WB"
+  in its model is not a station, as for pecron-monitor (below).
 - pecron-monitor (`attractify-logan/pecron-monitor`), through MQTT (the
   platform `mqtt`). It reads the station by Bluetooth or by the LAN, with
   no cloud, else by the cloud: `pecron_key_name`. The names are
@@ -2579,7 +2580,9 @@ to each entity:
   offline. The sensor `status` tells the link: `online`, or `offline`.
   It is `offline` when EcoFlow tells it, or after 15 minutes with no data
   (three times the option `assume_offline_sec`, 300 seconds by default,
-  in `devices/status_tracker.py`).
+  in `devices/status_tracker.py`). A DELTA Pro Ultra or a DELTA 3 Max
+  Plus of the public API has the sensor `status.scheduled` in its place
+  (`QuotaScheduledStatusSensorEntity` in `sensor.py`).
 - EcoFlow BLE (`rabits/ha-ef-ble`, the platform `ef_ble`), by Bluetooth:
   `ef_sn_key`. The keys are `battery_level`, `input_power`,
   `output_power`, `ac_ports`, `ac_ports_2`, `ac_lv_port`, `ac_hv_port` and
@@ -2726,17 +2729,25 @@ The LiveView (`DIYWeb.HomeAssistant`):
   end it. A new state of the part ends the error of its last control.
 - The part Home Assistant of the panel (`DIYWeb.HomeAssistant.station/2`)
   shows the battery level, the power in and the power out. A number that
-  Home Assistant does not give is "Not known". The numbers change each 30
+  Home Assistant does not give is "Not known". The numbers change each 10
   seconds to 20 minutes: each integration and each station has its own
-  rate (see "The integration for Pecron"). So they are not a live region.
+  rate. EcoFlow BLE reads the station each 10 seconds by default
+  (`DEFAULT_UPDATE_PERIOD` in `const.py`). EcoFlow Cloud gets the data
+  through MQTT when the station sends it. For Pecron, see "The
+  integration for Pecron". So the numbers are not a live region.
+- The numbers and the texts of the station are in one element
+  (`#ha-station-info`) that stays while the item is a station. A text
+  that comes or goes above the switches moves the switches in the page,
+  and then a switch loses the focus (WCAG 2.4.3).
 - The panel tells the link of the station (`link_text/1`). With no link,
   it tells that the numbers are the last numbers. When Home Assistant does
   not tell the link (pecron-monitor), it tells that a number can be old.
 - The panel has two switches, "AC outlets" and "DC outlets", as the
   switch Power of a light. For EcoFlow, the second switch is "12 V
-  outlets". Each switch has its status. A station with no such switch
-  tells it. With no link of the station, the switches do not work, and
-  their status tells the last state.
+  outlets". Each switch has its status. A part that the station does not
+  have has no switch. The panel shows its name, and its status tells that
+  the app has no switch for it. With no link of the station, the switches
+  do not work, and their status tells the last state.
 
 The TLA+ model `specs/HomeAssistantStates.tla` has one entity for each
 device. A part of a station is a device of the model, as a light is. A
@@ -2745,7 +2756,15 @@ entities is too. Each part has its own state and its own control. It is
 in the same watch as the lights, with the same rules: the socket, the
 watch, the old states and the end. The LiveView forgets the stations when
 the link is not connected, as the model asks for the states. So the
-model checks the parts too. The new rules are in the tests:
+model checks the parts too. Three rules of the stations are not in the
+model, and the tests check them. With no station, the hook sends the
+stations only one time, to clear them. This step is safe, because the
+page gets its stations only from the hook. Also, the page clears them
+when the link is not connected. With no link of a station, a switch
+sends no control. This rule only removes steps, so the invariants stay
+true. The
+link of a station is a part, as the other parts. The new rules are in
+the tests:
 
 - `test/js/home_assistant.test.js`: the stations of the five
   integrations, and the entities of their parts. Also a disabled entity, a
@@ -2775,7 +2794,8 @@ model checks the parts too. The new rules are in the tests:
   form.
 - The browser test: a station of Pecron comes in from its ghost,
   with the model of its device. It shows its numbers, and the keyboard
-  turns its AC outlets off. Axe checks the panel.
+  turns its AC outlets off. The station goes offline and back, and the
+  switch keeps the focus. Axe checks the panel.
 
 ### The energy data
 
