@@ -12,7 +12,10 @@ defmodule DIYWeb.MakerLink do
   - `:makers`: for each maker (`"pecron"`), the state of the link and the
     error of the last step (`message/2`). The states are `loading`,
     `none`, `connecting`, `connected`, `offline` and `refused`. It also has
-    the stations of the account (`nil` before the hook tells them).
+    the stations of the account (`nil` before the hook tells them). It
+    also keeps the switches of each station of the last list
+    (`switches`), also when a new token makes the stations `nil`. So a
+    switch does not come and go while the page waits for a new list.
   - `:maker_control`: for each part of a station (`{maker, device,
     part}`), a control that waits for its end (`{:pending, on}`). Or it
     has the error of the last control (`{:error, error}`).
@@ -43,7 +46,8 @@ defmodule DIYWeb.MakerLink do
 
   @doc false
   def on_mount(:default, _params, _session, socket) do
-    makers = Map.new(@makers, &{&1, %{state: "loading", error: nil, stations: nil}})
+    makers =
+      Map.new(@makers, &{&1, %{state: "loading", error: nil, stations: nil, switches: %{}}})
 
     socket =
       socket
@@ -76,7 +80,10 @@ defmodule DIYWeb.MakerLink do
   numbers, `known`, `online` (the link is connected) and the switches. It
   also has the state of the link, `found` (the account has the station)
   and `reachable` (the maker can reach the station now). Each switch has
-  `link`: with the link not connected, a switch does not work.
+  `link`: with the link not connected, a switch does not work. With no
+  stations, the switches of the last list stay (`"none"` for a part that
+  the station does not have). Before the first list, the station has no
+  switches: the page does not know them.
   """
   def station(%{build: build, makers: makers, maker_control: controls}, item_id) do
     with "pecron:" <> device = unit <- build.units[item_id] do
@@ -84,11 +91,18 @@ defmodule DIYWeb.MakerLink do
       link = makers[maker]
       online = link.state == "connected"
       parts = Enum.find(link.stations || [], &(&1["id"] == device))
+      known = link.switches[device]
 
       switches =
-        for {part, name} <- @switches do
+        for {part, name} <- @switches, known != nil do
           {pending, error} = pending(controls[{maker, device, part}])
-          state = if parts, do: switch_state(parts, part)
+
+          state =
+            cond do
+              parts -> switch_state(parts, part)
+              part in known -> nil
+              true -> "none"
+            end
 
           %{
             part: part,
@@ -202,7 +216,17 @@ defmodule DIYWeb.MakerLink do
               false
           end)
 
-        link = %{socket.assigns.makers[maker] | stations: stations}
+        # The switches of each station of a new list. With no list, the
+        # switches of the last list stay.
+        old_link = socket.assigns.makers[maker]
+
+        switches =
+          if stations,
+            do:
+              Map.new(stations, &{&1["id"], Enum.filter(@switch_parts, fn part -> &1[part] end)}),
+            else: old_link.switches
+
+        link = %{old_link | stations: stations, switches: switches}
 
         {:halt,
          assign(socket,
@@ -315,13 +339,18 @@ defmodule DIYWeb.MakerLink do
   def message("timeout", maker), do: "#{name(maker)} did not answer in 20 seconds."
   def message("failed", maker), do: "#{name(maker)} did not do it. Try again."
 
-  @doc "The state of a switch of a station of a maker (`station/2`), in words."
+  @doc """
+  The state of a switch of a station of a maker (`station/2`), in words. A
+  part that the station does not have gets the same words, also with no
+  link.
+  """
+  def switch_text(%{state: "none"}, maker), do: "#{name(maker)} has no switch for it."
+
   def switch_text(%{online: false}, maker),
     do: "The app has no link to #{name(maker)} now."
 
   def switch_text(%{pending: true}, maker), do: "#{name(maker)} turns it on."
   def switch_text(%{pending: false}, maker), do: "#{name(maker)} turns it off."
-  def switch_text(%{state: "none"}, maker), do: "#{name(maker)} has no switch for it."
 
   def switch_text(switch, maker) do
     error = switch.error && message(switch.error, maker)

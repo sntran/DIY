@@ -2941,6 +2941,12 @@ The station:
   last numbers. With the link not connected, the switches do not work.
   The notes of the link are in one element that stays. A note that comes
   or goes above the switches makes a switch lose the focus.
+- The page keeps the switches of each station of the last list, also
+  when a new token makes the stations `nil`. So a part that the station
+  does not have gets no switch while the page waits for a new list, and
+  the other switch stays. Before the first list, the station has no
+  switches: the page does not know them, and they come with the list. A
+  switch that comes does not move the focus.
 - A control that waits stays while a poll fails: the hook ends it with
   its error. Only a new token or a disconnect ends it.
 - The relay and the page read each number on its own. A battery is from
@@ -2987,7 +2993,8 @@ The tests:
 - `test/diy/build_units_test.exs` and
   `test/diy_web/live/maker_link_live_test.exs`: the links, the card, the
   part of the panel, the switches, and the payloads that the page
-  refuses.
+  refuses. Also a station with no DC switch, through a new token, an
+  error and a disconnect, and before the first list.
 - The browser test connects Pecron with a token, links a station, and
   turns its AC outlets with the keyboard. Then the relay does not answer:
   the switch does not work and keeps the focus. Axe checks the card and

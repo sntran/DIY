@@ -295,6 +295,46 @@ defmodule DIYWeb.MakerLinkLiveTest do
     assert has_element?(view, "#maker-closed", "The app has no link to Pecron now.")
   end
 
+  test "a part that the station does not have has no switch, also while the page waits for a list",
+       %{conn: conn} do
+    {view, id} = station_page(conn)
+    status(view, "connected")
+    stations(view, [e3800(%{"dc" => nil})])
+    view |> element("#maker-choice-0") |> render_click()
+    assert has_element?(view, "#pecron-switch-ac[aria-disabled=false]")
+    refute has_element?(view, "#pecron-switch-dc")
+    assert has_element?(view, "span#pecron-dc-label", "DC outlets")
+
+    # A new token, an error and a disconnect: the switches of the last
+    # list stay. The DC outlets get no switch, and the AC switch stays.
+    for {state, list} <- [
+          {"connecting", nil},
+          {"offline", nil},
+          {"connected", [e3800(%{"dc" => nil})]},
+          {"none", nil}
+        ] do
+      stations(view, list)
+      status(view, state)
+      assert has_element?(view, "#pecron-switch-ac")
+      refute has_element?(view, "#pecron-switch-dc")
+      assert has_element?(view, "#pecron-dc-state", "Pecron has no switch for it.")
+    end
+
+    assert has_element?(view, "#pecron-ac-state", "The app has no link to Pecron now.")
+
+    # A new page: before the first list, the station has no switches. The
+    # page does not know them. They come with the list.
+    view = open(conn, ~p"/inside?#{[item: id]}", build_of(view))
+    status(view, "connecting")
+    assert has_element?(view, "#maker-connecting")
+    refute has_element?(view, "#pecron-ac")
+    refute has_element?(view, "#pecron-dc")
+    status(view, "connected")
+    stations(view, [e3800(%{"dc" => nil})])
+    assert has_element?(view, "#pecron-switch-ac[aria-checked=true]")
+    assert has_element?(view, "#pecron-dc-state", "Pecron has no switch for it.")
+  end
+
   test "a station that the account does not have now, and a link that closes", %{conn: conn} do
     {view, id} = station_page(conn)
     status(view, "connected")
@@ -312,7 +352,8 @@ defmodule DIYWeb.MakerLinkLiveTest do
     refute has_element?(view, "#pecron-switch-ac")
     assert has_element?(view, "#maker-unlink")
 
-    # The page waits for the stations of a new token.
+    # The page waits for the stations of a new token. The last list did
+    # not have the station, so the page does not know its switches.
     stations(view, nil)
 
     assert has_element?(
@@ -321,7 +362,7 @@ defmodule DIYWeb.MakerLinkLiveTest do
              "The app waits for the numbers of the station."
            )
 
-    assert has_element?(view, "#pecron-ac-state", "The app waits for its state.")
+    refute has_element?(view, "#pecron-ac-state")
 
     # A disconnect: the panel tells it, and the link of the build stays.
     status(view, "none")
