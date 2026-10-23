@@ -9,7 +9,7 @@ tools `mix.com` and `iex.com` from it:
 ```sh
 mkdir -p ~/bin && cd ~/bin
 curl -fLO https://github.com/sntran/BEAM.com/releases/download/v0.1.0-rc.6/beam.com
-echo "ac36bab20b0cf8a6bcd9b9e02bae1e9d356855a75f4664ac65c58ff6fed8c024  beam.com" | sha256sum -c -
+echo "ac841b72180467773d95d0eec1c7a757b67e003e576a6ba34d8debb40fe6b903  beam.com" | sha256sum -c -
 chmod +x beam.com
 ln -s beam.com mix.com
 ln -s beam.com iex.com
