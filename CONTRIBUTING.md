@@ -2,13 +2,13 @@
 
 ## Build and test
 
-Use [`beam.com`](https://github.com/sntran/BEAM.com) 0.1.0-rc.5 for all
+Use [`beam.com`](https://github.com/sntran/BEAM.com) 0.1.0-rc.6 for all
 the work: it is Erlang/OTP 29.1.1 and Elixir 1.20.4 in one file. Make the
 tools `mix.com` and `iex.com` from it:
 
 ```sh
 mkdir -p ~/bin && cd ~/bin
-curl -fLO https://github.com/sntran/BEAM.com/releases/download/v0.1.0-rc.5/beam.com
+curl -fLO https://github.com/sntran/BEAM.com/releases/download/v0.1.0-rc.6/beam.com
 echo "ac36bab20b0cf8a6bcd9b9e02bae1e9d356855a75f4664ac65c58ff6fed8c024  beam.com" | sha256sum -c -
 chmod +x beam.com
 ln -s beam.com mix.com

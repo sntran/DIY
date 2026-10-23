@@ -11,7 +11,7 @@
   },
   "devDependencies": {
     "axe-core": "4.11.0",
-    "beam.com": "0.1.0-rc.5",
+    "beam.com": "0.1.0-rc.6",
     "fake-indexeddb": "6.2.5",
     "fast-check": "4.10.2",
     "pdfjs-dist": "6.3.289",
