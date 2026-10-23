@@ -27,10 +27,12 @@
   // request, and the app keeps no data of a house on the server.
   "observability": { "enabled": true, "logs": { "invocation_logs": false } },
   // Workers Builds runs "wrangler preview" for a branch that is not main.
-  // A Preview gets none of the bindings, vars and settings above. For this
-  // reason, this block has them again. The Preview gets its own Durable
-  // Object Beam, with its own storage: it does not use the storage of
-  // production.
+  // A Preview does not get the bindings and vars above. It gets the
+  // compatibility date and flags, the rules and the migrations above. This
+  // block gives the bindings and vars again. It also gives the observability
+  // settings, so that a change above does not change the Previews. The
+  // Preview has its own Durable Object Beam and its own storage. It does not
+  // use the storage of production.
   "previews": {
     "durable_objects": { "bindings": [{ "name": "BEAM", "class_name": "Beam" }] },
     "version_metadata": { "binding": "BEAM_VERSION" },
