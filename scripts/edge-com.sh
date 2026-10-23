@@ -50,6 +50,7 @@ beam mix local.hex --force --if-missing
 beam mix local.rebar --force --if-missing
 beam mix deps.get --only prod
 beam mix compile
+sh scripts/tailwind.sh
 beam mix assets.deploy
 # mix release keeps the directories of old versions in lib/. Remove them.
 rm -rf _build/prod/rel/diy
