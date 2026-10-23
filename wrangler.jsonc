@@ -1,5 +1,6 @@
 // Cloudflare Workers: npm run build, then npm run deploy. Workers Builds
-// runs both at each push to main. The Worker needs no secret: the VM makes
+// runs both at each push to main. For other branches, it runs "wrangler
+// preview" (see "previews" below). The Worker needs no secret: the VM makes
 // SECRET_KEY_BASE one time and keeps it in the storage of the Durable
 // Object, and PHX_HOST is the host of the first request.
 {
@@ -24,5 +25,18 @@
   // The logs of the Worker and of the VM stay on. The invocation logs of
   // Cloudflare are off: they can keep the URL and the header fields of a
   // request, and the app keeps no data of a house on the server.
-  "observability": { "enabled": true, "logs": { "invocation_logs": false } }
+  "observability": { "enabled": true, "logs": { "invocation_logs": false } },
+  // Workers Builds runs "wrangler preview" for a branch that is not main.
+  // A Preview does not get the bindings and vars above. It gets the
+  // compatibility date and flags, the rules and the migrations above. This
+  // block gives the bindings and vars again. It also gives the observability
+  // settings, so that a change above does not change the Previews. The
+  // Preview has its own Durable Object Beam and its own storage. It does not
+  // use the storage of production.
+  "previews": {
+    "durable_objects": { "bindings": [{ "name": "BEAM", "class_name": "Beam" }] },
+    "version_metadata": { "binding": "BEAM_VERSION" },
+    "vars": { "BEAM_ERL_FLAGS": "-Mea min" },
+    "observability": { "enabled": true, "logs": { "invocation_logs": false } }
+  }
 }
