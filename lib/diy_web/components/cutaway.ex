@@ -676,7 +676,9 @@ defmodule DIYWeb.Cutaway do
     "membrane" => {36, 120, "M0 0V120"},
     "vmetal" => {4, 24, "M0 0V24"},
     "roof" => {12, 10, "M0 0H12M0 5H12M0 0V5M6 5V10"},
-    "grass" => {72, 72, :stripe}
+    "grass" => {72, 72, :stripe},
+    "water" => {48, 24, {:wave, "M2 12Q14 6 24 12T46 12"}},
+    "paver" => {24, 24, "M0 0H24M0 0V24"}
   }
 
   @doc """
@@ -687,11 +689,37 @@ defmodule DIYWeb.Cutaway do
   """
   def floor(room, z, material, camera, fixed \\ false) do
     p = meters(room.plan)
-    {x1, y1} = {p.x + p.w, p.y + p.d}
-    corners = [{p.x, p.y, z}, {x1, p.y, z}, {x1, y1, z}, {p.x, y1, z}]
+    corners = rect(p, z)
     polys = [{corners, "p-floor p-" <> material} | texture(corners, material)]
-    %{surface(room, z, camera) | polys: polys, fixed: fixed}
+    %{surface(room, z, camera) | polys: polys ++ pool(room, z, camera), fixed: fixed}
   end
+
+  defp rect(p, z),
+    do: [{p.x, p.y, z}, {p.x + p.w, p.y, z}, {p.x + p.w, p.y + p.d, z}, {p.x, p.y + p.d, z}]
+
+  # The depth of the water of a pool under its deck, in meters, for the
+  # picture.
+  @pool_depth 0.35
+
+  # The water of a pool room, in its deck (`DIY.Layout.water/1`). The
+  # water is lower than the deck. So the eye sees the walls of the pool at
+  # the far sides, and the deck hides the water at the near sides. On the
+  # floor, the water then starts after the walls at the far sides. There,
+  # the eye sees a point of the water at the height of the deck.
+  defp pool(%{kind: "pool"} = room, z, camera) do
+    hole = DIY.Layout.water(room.plan)
+    hole = meters(%{hole | x: room.plan.x + hole.x, y: room.plan.y + hole.y})
+    {ex, ey, ez} = camera.eye
+    {sx, sy} = {@pool_depth * ex / ez, @pool_depth * ey / ez}
+    water = %{x: hole.x + sx, y: hole.y + sy, w: hole.w - sx, d: hole.d - sy}
+
+    [{rect(hole, z), "p-floor p-pool-wall"}] ++
+      if water.w > 0 and water.d > 0,
+        do: [{rect(water, z), "p-water"}, {rect(water, z), "p-tex p-tex-water"}],
+        else: []
+  end
+
+  defp pool(_room, _z, _camera), do: []
 
   # The lines of a floor of a material (`textures/0`): a second polygon over
   # the floor, with the pattern of the material.
@@ -727,7 +755,12 @@ defmodule DIYWeb.Cutaway do
     {"ply", ~w(attic)}
   ]
 
-  @doc "The material of the floor of a room, from its place and its name."
+  @doc """
+  The material of the floor of a room: pavers for a pool (its deck), else
+  from its place and its name.
+  """
+  def material(%{kind: "pool"}), do: "paver"
+
   def material(%{place: :outdoor, name: name}) do
     name = String.downcase(name)
 
@@ -1107,7 +1140,8 @@ defmodule DIYWeb.Cutaway do
         patternTransform={@pattern}
       >
         <rect :if={lines == :stripe} width={w / 2} height={h} class="p-tex-stripe" />
-        <path :if={lines != :stripe} d={lines} class="p-tex-line" />
+        <path :if={match?({:wave, _}, lines)} d={elem(lines, 1)} class="p-tex-wave" />
+        <path :if={is_binary(lines)} d={lines} class="p-tex-line" />
       </pattern>
     </defs>
     """
@@ -1252,7 +1286,7 @@ defmodule DIYWeb.Cutaway do
         <polygon
           :if={!texture?(class)}
           points={points}
-          class={[class, @room.id == @selected && "p-chosen"]}
+          class={[class, @room.id == @selected && outline?(class) && "p-chosen"]}
           data-room={@room.id}
           data-plan={@room.plan}
           data-origin={@room.origin}
@@ -1266,6 +1300,10 @@ defmodule DIYWeb.Cutaway do
   # The lines of a floor are for the eyes. A tap goes through them to the
   # floor, and they move with the group of their room.
   defp texture?(class), do: String.starts_with?(class, "p-tex ")
+
+  # The walls and the water of a pool are in its deck: only the deck gets
+  # the outline of the chosen room.
+  defp outline?(class), do: class not in ["p-floor p-pool-wall", "p-water"]
 
   # The outline of the room that the user chose, and a handle in the middle
   # of each wall.

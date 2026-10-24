@@ -564,6 +564,9 @@
  "p-pane": {
   "fill": "rgb(185, 220, 245)"
  },
+ "p-paver": {
+  "fill": "rgb(233, 225, 211)"
+ },
  "p-pill": {
   "fill": "rgba(255, 250, 242, 0.92)",
   "stroke": "rgba(64, 44, 31, 0.45)",
@@ -588,6 +591,9 @@
  },
  "p-pole-t": {
   "fill": "rgb(219, 162, 107)"
+ },
+ "p-pool-wall": {
+  "fill": "rgb(61, 147, 184)"
  },
  "p-roof-b": {
   "fill": "rgb(70, 80, 96)"
@@ -650,6 +656,9 @@
  "p-tex-membrane": {
   "fill": "url(#tex-membrane)"
  },
+ "p-tex-paver": {
+  "fill": "url(#tex-paver)"
+ },
  "p-tex-ply": {
   "fill": "url(#tex-ply)"
  },
@@ -664,6 +673,15 @@
  },
  "p-tex-vmetal": {
   "fill": "url(#tex-vmetal)"
+ },
+ "p-tex-water": {
+  "fill": "url(#tex-water)"
+ },
+ "p-tex-wave": {
+  "fill": "none",
+  "stroke": "rgba(255, 255, 255, 0.6)",
+  "stroke-width": "1.5px",
+  "stroke-linecap": "round"
  },
  "p-tex-wood": {
   "fill": "url(#tex-wood)"
@@ -755,6 +773,9 @@
  },
  "p-wall-top": {
   "stop-color": "rgb(251, 245, 236)"
+ },
+ "p-water": {
+  "fill": "rgb(111, 191, 224)"
  },
  "p-wire": {
   "fill": "none",

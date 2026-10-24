@@ -353,7 +353,7 @@ defmodule DIY.HomeAssistant do
           room = rooms[device.area],
           room != nil and room.plan != nil,
           type = Map.get_lazy(device, :kind, fn -> kind_of(device) end),
-          type != nil and room.place in Catalog.kind(type).places,
+          type != nil and Catalog.fits?(Catalog.kind(type), room),
           do: %{
             device: device.id,
             name: name(device.name, type),

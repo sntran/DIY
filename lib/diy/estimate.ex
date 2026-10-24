@@ -627,6 +627,13 @@ defmodule DIY.Estimate do
   def kwh(%{type: "ev", params: p}, ctx),
     do: other(p["miles"] * ctx.days / p["mi_kwh"] / charge_efficiency(p["charger"]))
 
+  # A gas pool heater burns gas (`therms/2`). The power of its blower is
+  # small: the estimate does not count it.
+  def kwh(%{type: "pool_heater", params: %{"fuel" => "gas"}}, _ctx), do: other(0)
+
+  def kwh(%{type: "hot_tub", params: p} = item, ctx),
+    do: other(in_season(item, ctx) * p["kwh_day"] * ctx.days)
+
   def kwh(%{params: p} = item, ctx),
     do: other(in_season(item, ctx) * p["watts"] * p["hours"] * ctx.days / 1_000)
 
@@ -672,11 +679,15 @@ defmodule DIY.Estimate do
   def therms(%{type: "dryer", params: %{"fuel" => "gas"} = p}, ctx),
     do: p["loads"] * ctx.days / 7 * @dryer
 
+  def therms(%{type: "pool_heater", params: %{"fuel" => "gas"} = p} = item, ctx),
+    do: in_season(item, ctx) * p["kbtu"] * 1_000 * p["hours"] * ctx.days / @therm
+
   def therms(_item, _ctx), do: 0.0
 
   @doc "The part of the power that goes into the battery of a car: a charge loses some."
   def charge_efficiency("l1"), do: 0.85
   def charge_efficiency("l2"), do: 0.9
+  def charge_efficiency("l2_48"), do: 0.9
 
   defp hvac_part(%{cool_btu: cool, heat_btu: heat}) when cool >= heat, do: :cooling
   defp hvac_part(_ctx), do: :heating
@@ -936,6 +947,20 @@ defmodule DIY.Estimate do
 
   defp steps(%{type: "dc_bus"}, _m, _data, _estimate),
     do: ["A busbar connects the wires of the batteries and of the loads. It uses no power."]
+
+  defp steps(%{type: "pool_heater", params: %{"fuel" => "gas"} = p} = item, m, _data, _estimate) do
+    if in_season(item, %{month: m.month}) == 0,
+      do: ["It is off in #{m.name} (#{season_text(p)})."],
+      else: [
+        "It burns gas: #{fmt(p["kbtu"] * 1_000)} BTU/h × #{num(p["hours"])} hours in one day × #{m.days} days ÷ 100,000 BTU = #{num(Float.round(p["kbtu"] * 1_000 * p["hours"] * m.days / @therm, 1))} therms (#{season_text(p)}). The estimate counts no power for it."
+      ]
+  end
+
+  defp steps(%{type: "hot_tub", params: p} = item, m, _data, _estimate) do
+    if in_season(item, %{month: m.month}) == 0,
+      do: ["It is off in #{m.name} (#{season_text(p)})."],
+      else: ["#{num(p["kwh_day"])} kWh in one day × #{m.days} days (#{season_text(p)})."]
+  end
 
   defp steps(%{type: "ev", params: p}, m, _data, _estimate),
     do: [

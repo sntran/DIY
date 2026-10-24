@@ -267,7 +267,7 @@ defmodule DIY.Power do
       station_panels_w: sum(Enum.filter(panels, &(&1.params["to"] == "station")), &panel_w/1),
       grid_panels_w: sum(Enum.filter(panels, &(&1.params["to"] == "grid")), &panel_w/1),
       switch: Enum.find(items, &(&1.type == "transfer_switch")),
-      chargers: Enum.filter(cars, &(&1.params["charger"] == "l2")),
+      chargers: Enum.filter(cars, &(&1.params["charger"] in ["l2", "l2_48"])),
       backup: if(stations == [], do: [], else: Enum.filter(items, & &1.backup))
     }
   end

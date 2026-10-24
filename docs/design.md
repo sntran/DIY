@@ -3846,6 +3846,95 @@ Assistant.
   the screen of the house presets at 320 px in Spanish and in
   Vietnamese: the page is not wider than the screen.
 
+## A pool and the search of the items
+
+A neighbor asked for a pool and for a Tesla charger. So the app has a
+pool room, three items for a pool and a search in the sheet Add.
+
+### A pool room
+
+- A room inside or outside can be a pool: an indoor pool or a pool in
+  the yard. A room on the roof or in the attic is never a pool
+  (`Build.pool_place?/1`, `:pool_place`).
+- A pool room has the key `kind: "pool"`. Only a pool room has the key,
+  so the file of a different build does not change. A file with a
+  different kind, or with a pool on the roof, gives a room that is not a
+  pool.
+- A new pool has water of 30 ft by 15 ft, with a deck around it
+  (`DIY.Layout.water/1`). The deck is 3 ft at the sides and at the front.
+  The deck at the back is 10 ft, for the equipment and a hot tub. A small
+  room has a narrower deck. The box "A pool" in the sheet New room makes
+  a pool. The box "This room is a pool" in the sheet of a room changes it
+  later.
+- A new item in a pool goes on the deck, not on the water
+  (`DIY.Layout`). The person can still drag it. On the plan, only the
+  deck of a chosen pool gets the outline of the choice.
+- The plan and the house from outside draw the deck with pavers. The
+  water has the color `--p-water` and a texture of waves (`tex-water`).
+  The water is lower than the deck. So the eye sees the walls of the pool
+  (`--p-pool-wall`) at the far sides.
+
+### The places of an item
+
+A kind has places (`DIY.Catalog`). The place `:pool` is new.
+`Catalog.fits?(kind, room)` is true when the place of the room is a
+place of the kind. It is also true when the kind has `:pool` and the
+room is a pool. Each check of a place uses this function. These are a
+new item, a move, a file, the home of a station and the devices of Home
+Assistant.
+
+- The pool pump, the pool heater and the hot tub go outside or in a
+  pool. So a hot tub can go in an indoor spa, but not in the kitchen.
+- A room stops being a pool only when each of its items still fits
+  (`:items`). Else, a hot tub stays in a room inside that is not a pool.
+  After this error, the box "This room is a pool" gets a new id. So the
+  page draws a new box, with the state of the room.
+- The list "Where it is" of an item also uses `fits?`. So a hot tub can
+  move from one indoor pool to a different indoor pool.
+- `specs/Pool.tla` checks these rules with TLC: each item fits its room,
+  and no pool is on the roof. Two models have a fault.
+  `Pool.nocheck.cfg` lets a room stop being a pool with no check of its
+  items. `Pool.roof.cfg` checks the place only, so the attic can be a
+  pool. A property
+  test of `test/diy/pool_test.exs` does random steps on a build, with
+  the same invariants.
+
+### The new items
+
+- **Pool heater.** A heat pump or an electric heater uses its watts for
+  its hours in one day. The default is 5,500 W for 1.5 hours, the mean
+  of the season. A heater runs more in spring and fall. The sheet shows
+  the watts or the kBTU/h of the heater, for its fuel. A gas heater
+  uses no kWh for heat. It burns gas: kBTU/h × 1,000 × hours × days ÷
+  100,000 gives the therms. Its blower uses near 300 W. The default
+  season is April to October. A heat pump and a gas heater have a motor
+  for the check of the start of a station. An electric heater has no
+  motor.
+- **Hot tub.** The person gives the kWh of one day: 5 kWh is the
+  default, for a tub with a good cover. The default season is all year.
+- **Tesla Wall Connector.** The charger of a car has the choice "Level
+  2: Tesla Wall Connector, 48 A (11.5 kW)". It charges at 11.5 kW, with
+  the efficiency of a charger of Level 2 (0.9). It counts as a charger
+  of Level 2 for the permits.
+
+### The search of the sheet Add
+
+- The sheet Add has a box of search. Each word of the text must be the
+  start of a word of a kind: of its name or of its more words
+  (`Catalog.words/0`). Capitals have no effect. For example "Tesla" and "wall connector" find the car, and
+  "spa" finds the three items of a pool.
+- The list shows the kinds that fit the room and match the text. A pool
+  room shows the items of a pool first.
+- A kind that matches but does not fit the room shows under "Not for
+  this room", with the places where it goes. An example is "Hot tub: in
+  a room outside or a pool." So the person knows where to add it.
+- The item Other always shows: it takes any name and power. With no
+  match, the sheet tells the person to use it.
+- A status that only a screen reader reads tells the count of the
+  matches.
+- A new sheet Add starts with no text. The text has 40 characters at
+  most.
+
 ## In a car
 
 The owner wants the app in a car later: Android Auto and Android

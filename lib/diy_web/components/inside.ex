@@ -30,7 +30,12 @@ defmodule DIYWeb.Inside do
   attr :view, :map, required: true, doc: "the layers of the plan (`DIYWeb.Cutaway.view/1`)"
   attr :item, :string, default: nil
   attr :add, :string, default: nil
+  attr :add_query, :string, default: "", doc: "the text of the search of the sheet Add"
   attr :room, :string, default: nil, doc: "the room that the person chose"
+
+  attr :pool_key, :integer,
+    default: 0,
+    doc: "a new number after a refused change of the box of a pool: the box renders again"
 
   attr :sheet, :string,
     default: nil,
@@ -257,8 +262,9 @@ defmodule DIYWeb.Inside do
       <.add_sheet
         :if={@add && match?({:ok, _}, Build.room(@build, @add))}
         room={elem(Build.room(@build, @add), 1)}
+        query={@add_query}
       />
-      <.room_sheet :if={@chosen && @sheet == "room"} room={@chosen} />
+      <.room_sheet :if={@chosen && @sheet == "room"} room={@chosen} pool_key={@pool_key} />
       <.new_room_sheet :if={@sheet == "new_room"} levels={@levels} />
       <HomeAssistant.rooms_sheet
         :if={@sheet == "ha_rooms"}
@@ -741,6 +747,7 @@ defmodule DIYWeb.Inside do
   defp state_note(nil), do: ""
 
   attr :room, :map, required: true
+  attr :pool_key, :integer, default: 0
 
   # The sheet of a room: its name, its size, and its removal.
   defp room_sheet(assigns) do
@@ -798,6 +805,29 @@ defmodule DIYWeb.Inside do
         </p>
       </form>
 
+      <form
+        :if={Build.pool_place?(@room)}
+        id={"pool-#{@room.id}"}
+        phx-change="room_pool"
+      >
+        <input type="hidden" name="room_id" value={@room.id} />
+        <input type="hidden" name="pool" value="false" />
+        <%!-- After a refused change, the box gets a new id: the page then
+             draws a new box with the state of the room. The new box gets
+             the focus, so a keyboard user stays on it. --%>
+        <label class="label cursor-pointer gap-2 text-sm whitespace-normal">
+          <input
+            id={"pool-box-#{@room.id}-#{@pool_key}"}
+            phx-mounted={@pool_key > 0 && JS.focus()}
+            type="checkbox"
+            name="pool"
+            value="true"
+            checked={Build.pool?(@room)}
+            class="checkbox checkbox-sm"
+          /> This room is a pool. It has water, and it takes a pool pump, a pool heater and a hot tub.
+        </label>
+      </form>
+
       <button
         type="button"
         id={"delete-#{@room.id}"}
@@ -844,6 +874,10 @@ defmodule DIYWeb.Inside do
           <select name="room[place]" class="select select-sm w-full">
             <option :for={{place, name} <- @place_names} value={place}>{name}</option>
           </select>
+        </label>
+        <label class="label cursor-pointer gap-2 text-sm whitespace-normal">
+          <input type="checkbox" name="room[pool]" value="true" class="checkbox checkbox-sm" />
+          A pool, inside or outside: water of 30 by 15 ft, with a deck around it.
         </label>
         <p class="text-xs opacity-70">The room goes to a free place. Then drag it where it is.</p>
         <button class="btn btn-sm btn-primary">Add the room</button>
@@ -921,11 +955,11 @@ defmodule DIYWeb.Inside do
     # does not go from the house to a van (`DIY.Build.move_item/3`).
     rooms =
       if in_van,
-        do: Enum.filter(Build.zones(assigns.build, assigns.van.id), &(&1.place in kind.places)),
+        do: Enum.filter(Build.zones(assigns.build, assigns.van.id), &Catalog.fits?(kind, &1)),
         else:
           Enum.filter(
             assigns.build.rooms,
-            &(&1.place in kind.places and not Build.van_level?(&1.level))
+            &(Catalog.fits?(kind, &1) and not Build.van_level?(&1.level))
           )
 
     van = Enum.any?(assigns.build.items, &(&1.type == "camper_van"))
@@ -1894,6 +1928,13 @@ defmodule DIYWeb.Inside do
   # and the heat efficiency only for a unit that heats.
   defp shown?(%{key: "weight"}, _item, van), do: van
   defp shown?(%{key: "hspf2"}, item, _van), do: item.params["heat_pump"] == true
+
+  defp shown?(%{key: "watts"}, %{type: "pool_heater"} = item, _van),
+    do: item.params["fuel"] != "gas"
+
+  defp shown?(%{key: "kbtu"}, %{type: "pool_heater"} = item, _van),
+    do: item.params["fuel"] == "gas"
+
   defp shown?(_param, _item, _van), do: true
 
   defp month_name(month), do: Enum.at(Estimate.month_names(), month - 1)
@@ -1980,13 +2021,50 @@ defmodule DIYWeb.Inside do
   end
 
   attr :room, :map, required: true
+  attr :query, :string, default: ""
 
-  # The kinds of items that can go in a room.
+  # The kinds of items that can go in a room, with a search. A pool shows
+  # the items of a pool first. With a text, the kinds that match but go in
+  # a different place show too, with where they go.
   defp add_sheet(assigns) do
-    assigns = assign(assigns, :kinds, Catalog.kinds_for(assigns.room.place))
+    fits = Catalog.kinds_for_room(assigns.room)
+
+    fits =
+      if Build.pool?(assigns.room),
+        do: Enum.sort_by(fits, &(:pool not in &1.places)),
+        else: fits
+
+    search? = String.trim(assigns.query) != ""
+    others = if search?, do: Enum.reject(Catalog.search(assigns.query), &(&1 in fits)), else: []
+    matched = Catalog.search(assigns.query, fits)
+
+    # "Other" takes any name and power: it always shows.
+    other = Enum.filter(fits, &(&1.type == "other" and &1 not in matched))
+
+    assigns =
+      assign(assigns,
+        kinds: matched ++ other,
+        others: others,
+        none: search? and matched == [] and others == [],
+        count: if(search?, do: count_text(length(matched), length(others)))
+      )
 
     ~H"""
     <.sheet id="add-sheet" title={"Add to #{@room.name}"}>
+      <form id="add-search" phx-change="add_search" phx-submit="add_search" role="search">
+        <label class="input input-sm w-full">
+          <.icon name="hero-magnifying-glass" class="size-4 opacity-70" />
+          <input
+            type="search"
+            name="q"
+            value={@query}
+            placeholder="Search: Tesla, pool, fridge"
+            aria-label="Search the items"
+            autocomplete="off"
+            phx-debounce="200"
+          />
+        </label>
+      </form>
       <ul class="grid grid-cols-2 gap-2">
         <li :for={kind <- @kinds}>
           <button
@@ -2001,9 +2079,26 @@ defmodule DIYWeb.Inside do
           </button>
         </li>
       </ul>
+      <p :if={@none} id="add-none" class="text-sm opacity-70">
+        No item has this name. Use "Other": it takes any name and power.
+      </p>
+      <p id="add-count" role="status" class="sr-only">{@count}</p>
+      <div :if={@others != []} id="add-elsewhere" class="space-y-1">
+        <h3 class="text-sm font-semibold">Not for this room</h3>
+        <ul class="space-y-1 text-sm">
+          <li :for={kind <- @others} id={"elsewhere-#{kind.type}"} class="flex items-center gap-2">
+            <Icon.item type={kind.type} class="size-6" />
+            <span>{kind.name}: in {Catalog.where(kind)}.</span>
+          </li>
+        </ul>
+      </div>
     </.sheet>
     """
   end
+
+  # The count of the search, for a screen reader.
+  defp count_text(found, 1), do: "#{found} found. 1 goes in a different place."
+  defp count_text(found, others), do: "#{found} found. #{others} go in a different place."
 
   attr :id, :string, required: true
   attr :title, :string, required: true

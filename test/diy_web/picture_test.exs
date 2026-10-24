@@ -27,6 +27,19 @@ defmodule DIYWeb.PictureTest do
         locale
       )
 
+  # A house with a pool in the yard and a spa inside, with the items of a
+  # pool.
+  defp pool_house do
+    {:ok, build, pool} = Build.add_room(house(), "Pool", "outside", :outdoor, "pool")
+    {:ok, build, spa} = Build.add_room(build, "Spa", "f1", :indoor, "pool")
+
+    Enum.reduce([{pool, "pool_pump"}, {pool, "pool_heater"}, {spa, "hot_tub"}], build, fn
+      {room, type}, build ->
+        {:ok, build, _id} = Build.add_item(build, room, type)
+        build
+    end)
+  end
+
   # The SVG of the house from the outside, with its classes.
   defp svg_of(build) do
     %{__changed__: nil, view: Outside.view(build)}
@@ -53,7 +66,8 @@ defmodule DIYWeb.PictureTest do
     builds = [
       house(),
       house(%{floors: 1, size: 900, heat: "electric"}),
-      house(%{floors: 3, size: 5200, heat: "heat_pump", lot: 9000})
+      house(%{floors: 3, size: 5200, heat: "heat_pump", lot: 9000}),
+      pool_house()
     ]
 
     for build <- builds, class <- classes(build), class not in @plain do
@@ -65,12 +79,13 @@ defmodule DIYWeb.PictureTest do
   # CSS uses the order of app.css: the two are the same only when the
   # classes of a shape set different properties, or the same values.
   test "the classes of a shape never set a property to two values" do
-    for preset <- [
-          %{},
-          %{floors: 1, size: 900, heat: "electric"},
-          %{floors: 3, size: 5200, lot: 9000}
+    for build <- [
+          house(),
+          house(%{floors: 1, size: 900, heat: "electric"}),
+          house(%{floors: 3, size: 5200, lot: 9000}),
+          pool_house()
         ],
-        html = svg_of(house(preset)),
+        html = svg_of(build),
         [_, classes] <- Regex.scan(~r/ class="([^"]*)"/, html),
         list = String.split(classes),
         a <- list,
@@ -96,6 +111,13 @@ defmodule DIYWeb.PictureTest do
     assert svg =~ "Small Steps Home"
     # A bar for each month.
     assert length(Regex.scan(~r/<rect x="\d+" y="[\d.]+" width="28"/, svg)) == 12
+  end
+
+  test "the pool has its water in the picture" do
+    assert svg_of(pool_house()) =~ "p-water"
+    svg = Picture.svg(pool_house(), summary())
+    assert svg =~ "fill:rgb(111, 191, 224)"
+    assert {:ok, <<0x89, "PNG", _::binary>>} = Picture.png(pool_house(), summary())
   end
 
   test "a house with no cost and no ZIP code" do

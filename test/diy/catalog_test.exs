@@ -5,11 +5,12 @@ defmodule DIY.CatalogTest do
   alias DIY.Catalog
 
   test "each kind has its places, features and valid defaults" do
+    # A pool (`:pool`) is a place of the items of a pool (Catalog.fits?/2).
     zones = Keyword.keys(Catalog.zones())
 
     for kind <- Catalog.kinds() do
       assert kind.places != [] and
-               Enum.all?(kind.places, &(&1 in Catalog.places() or &1 in zones))
+               Enum.all?(kind.places, &(&1 in Catalog.places() or &1 in zones or &1 == :pool))
 
       # An item of a van has its weight.
       if Enum.any?(kind.places, &(&1 in zones)),

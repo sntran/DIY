@@ -53,6 +53,7 @@ defmodule DIY.Profile do
   @doc "The power of a car charger, in kW."
   def charger_kw("l1"), do: 1.4
   def charger_kw("l2"), do: 7.2
+  def charger_kw("l2_48"), do: 11.5
 
   # A charge at the power of the charger from an hour, for as many hours as
   # it needs (at most one day).
@@ -91,6 +92,7 @@ defmodule DIY.Profile do
     do: for(h <- hours(), do: if(h in 18..21, do: 4, else: 0.2))
 
   defp weights("pool_pump"), do: for(h <- hours(), do: if(h in 9..16, do: 1, else: 0))
+  defp weights("pool_heater"), do: for(h <- hours(), do: if(h in 10..17, do: 1, else: 0))
   defp weights("space_heater"), do: heating()
   defp weights(_type), do: @flat
 
@@ -163,6 +165,12 @@ defmodule DIY.Profile do
   def watts(%{type: "ceiling_fan", params: p}), do: p["count"] * p["watts"] / 1
   def watts(%{type: "ev", params: p}), do: charger_kw(p["charger"]) * 1_000
 
+  # A gas pool heater uses only a little power: its blower and its control.
+  def watts(%{type: "pool_heater", params: %{"fuel" => "gas"}}), do: 300.0
+
+  # The heater of a hot tub: 5.5 kW, a common heater of 240 V.
+  def watts(%{type: "hot_tub"}), do: 5_500.0
+
   def watts(%{type: type})
       when type in [
              "smart_meter",
@@ -177,5 +185,10 @@ defmodule DIY.Profile do
   def watts(%{params: %{"watts" => watts}}), do: watts / 1
 
   @doc "True for an item with a motor that needs more power to start (a surge)."
-  def motor?(%{type: type}), do: type in ["ac", "mini_split", "fridge", "freezer", "pool_pump"]
+  # An electric pool heater is a resistance: it has no motor. A heat pump
+  # has a compressor, and a gas heater has a blower.
+  def motor?(%{type: "pool_heater", params: %{"fuel" => fuel}}), do: fuel != "electric"
+
+  def motor?(%{type: type}),
+    do: type in ["ac", "mini_split", "fridge", "freezer", "pool_pump"]
 end

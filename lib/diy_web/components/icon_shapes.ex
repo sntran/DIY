@@ -866,6 +866,39 @@ defmodule DIYWeb.Icon.Shapes do
       cylinder({0.35, d / 2, 0.186}, 0.03, 0.09, "white")
   end
 
+  # The heat pump of a pool: a box as the outdoor unit of an AC, but
+  # taller. The fan is on its top, and the fins of its coil are on two
+  # sides.
+  def model("pool_heater") do
+    {w, h} = {0.86, 1.0}
+
+    box({0, 0, 0}, {w, w, 0.05}, "dark") ++
+      rbox({0.02, 0.02, 0.05}, {w - 0.04, w - 0.04, h - 0.05}, 0.04, "gray") ++
+      [
+        disc({w / 2, w / 2, h + 0.005}, :top, 0.33, "i-black"),
+        disc({w / 2, w / 2, h + 0.01}, :top, 0.08, "i-steel-t"),
+        front({0.12, w - 0.02, h - 0.22}, {0.2, 0.08}, "i-glass-dark")
+      ] ++
+      for(
+        k <- 1..7,
+        part <- [
+          front({0.08, w - 0.02, 0.08 + k * 0.09}, {w - 0.16, 0.012}, "i-line"),
+          side({w - 0.02, 0.08, 0.08 + k * 0.09}, {w - 0.16, 0.012}, "i-line")
+        ],
+        do: part
+      )
+  end
+
+  # A hot tub: a square shell with round corners, a skirt of wood, and the
+  # water in its top.
+  def model("hot_tub") do
+    {w, h} = {2.13, 0.91}
+
+    rbox({0, 0, 0}, {w, w, h}, 0.2, "wood") ++
+      rbox({0.03, 0.03, h}, {w - 0.06, w - 0.06, 0.03}, 0.18, "gray") ++
+      rbox({0.16, 0.16, h + 0.03}, {w - 0.32, w - 0.32, 0.01}, 0.12, "blue")
+  end
+
   # A tower heater: a white body with round corners on its foot. Its front
   # has a grille that glows, and its top has the keys and a light.
   def model("space_heater") do
