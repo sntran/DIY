@@ -33,10 +33,6 @@ defmodule DIYWeb.Inside do
   attr :add_query, :string, default: "", doc: "the text of the search of the sheet Add"
   attr :room, :string, default: nil, doc: "the room that the person chose"
 
-  attr :pool_key, :integer,
-    default: 0,
-    doc: "a new number after a refused change of the box of a pool: the box renders again"
-
   attr :sheet, :string,
     default: nil,
     doc: "\"room\" (change the room), \"new_room\" or \"ha_rooms\" (`DIYWeb.HomeAssistant`)"
@@ -264,7 +260,7 @@ defmodule DIYWeb.Inside do
         room={elem(Build.room(@build, @add), 1)}
         query={@add_query}
       />
-      <.room_sheet :if={@chosen && @sheet == "room"} room={@chosen} pool_key={@pool_key} />
+      <.room_sheet :if={@chosen && @sheet == "room"} room={@chosen} />
       <.new_room_sheet :if={@sheet == "new_room"} levels={@levels} />
       <HomeAssistant.rooms_sheet
         :if={@sheet == "ha_rooms"}
@@ -747,7 +743,6 @@ defmodule DIYWeb.Inside do
   defp state_note(nil), do: ""
 
   attr :room, :map, required: true
-  attr :pool_key, :integer, default: 0
 
   # The sheet of a room: its name, its size, and its removal.
   defp room_sheet(assigns) do
@@ -805,29 +800,6 @@ defmodule DIYWeb.Inside do
         </p>
       </form>
 
-      <form
-        :if={Build.pool_place?(@room)}
-        id={"pool-#{@room.id}"}
-        phx-change="room_pool"
-      >
-        <input type="hidden" name="room_id" value={@room.id} />
-        <input type="hidden" name="pool" value="false" />
-        <%!-- After a refused change, the box gets a new id: the page then
-             draws a new box with the state of the room. The new box gets
-             the focus, so a keyboard user stays on it. --%>
-        <label class="label cursor-pointer gap-2 text-sm whitespace-normal">
-          <input
-            id={"pool-box-#{@room.id}-#{@pool_key}"}
-            phx-mounted={@pool_key > 0 && JS.focus()}
-            type="checkbox"
-            name="pool"
-            value="true"
-            checked={Build.pool?(@room)}
-            class="checkbox checkbox-sm"
-          /> This room is a pool. It has water, and it takes a pool pump, a pool heater and a hot tub.
-        </label>
-      </form>
-
       <button
         type="button"
         id={"delete-#{@room.id}"}
@@ -874,10 +846,6 @@ defmodule DIYWeb.Inside do
           <select name="room[place]" class="select select-sm w-full">
             <option :for={{place, name} <- @place_names} value={place}>{name}</option>
           </select>
-        </label>
-        <label class="label cursor-pointer gap-2 text-sm whitespace-normal">
-          <input type="checkbox" name="room[pool]" value="true" class="checkbox checkbox-sm" />
-          A pool, inside or outside: water of 30 by 15 ft, with a deck around it.
         </label>
         <p class="text-xs opacity-70">The room goes to a free place. Then drag it where it is.</p>
         <button class="btn btn-sm btn-primary">Add the room</button>
@@ -2023,16 +1991,11 @@ defmodule DIYWeb.Inside do
   attr :room, :map, required: true
   attr :query, :string, default: ""
 
-  # The kinds of items that can go in a room, with a search. A pool shows
-  # the items of a pool first. With a text, the kinds that match but go in
-  # a different place show too, with where they go.
+  # The kinds of items that can go in a room, with a search. With a text,
+  # the kinds that match but go in a different place show too, with where
+  # they go.
   defp add_sheet(assigns) do
     fits = Catalog.kinds_for_room(assigns.room)
-
-    fits =
-      if Build.pool?(assigns.room),
-        do: Enum.sort_by(fits, &(:pool not in &1.places)),
-        else: fits
 
     search? = String.trim(assigns.query) != ""
     others = if search?, do: Enum.reject(Catalog.search(assigns.query), &(&1 in fits)), else: []

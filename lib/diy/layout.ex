@@ -174,14 +174,14 @@ defmodule DIY.Layout do
   end
 
   @doc """
-  The water of a pool room, in the room: `%{x, y, w, d}` from the corner
-  of the room, in inches. A deck of 3 ft goes around the water. The deck
-  at the back is 10 ft, for the equipment and a hot tub. The deck of a
-  small room is narrower.
+  The water of a pool item (`DIY.Catalog`, the kind `"pool"`) in its box
+  `%{w, d}`: `%{x, y, w, d}` from the corner of the box, in inches. A
+  coping of 2 ft goes around the water. The coping of a small pool is
+  narrower: an eighth of its short side.
   """
   def water(%{w: w, d: d}) do
-    {side, front, back} = {min(36, div(w, 6)), min(36, div(d, 6)), min(120, div(d * 3, 8))}
-    %{x: side, y: back, w: w - 2 * side, d: d - back - front}
+    c = min(24, div(min(w, d), 8))
+    %{x: c, y: c, w: w - 2 * c, d: d - 2 * c}
   end
 
   @doc "A place in a room that keeps the item in the room (`at`)."
@@ -544,9 +544,6 @@ defmodule DIY.Layout do
 
   # The size of a new room: a roof covers the house; a room outside is
   # larger than a room inside.
-  # A pool: water of 30 by 15 ft, a common size of a pool of a house,
-  # with its deck (`water/1`).
-  defp new_size(%{kind: "pool"}, _build), do: {432, 336}
 
   defp new_size(%{place: :roof, level: "roof"}, build) do
     case for(r <- build.rooms, r.plan, layer(r) == "roof", do: r) do
@@ -584,8 +581,6 @@ defmodule DIY.Layout do
       if MapSet.member?(todo, item.id) do
         room = rooms[item.room]
         others = for o <- items, o.room == room.id, o.at != nil, do: item_box(o)
-        # A new item of a pool goes on the deck, not on the water.
-        others = if Map.get(room, :kind) == "pool", do: [water(room.plan) | others], else: others
         at = free_at(item, room.plan, others)
         Enum.map(items, &if(&1.id == item.id, do: %{&1 | at: at}, else: &1))
       else

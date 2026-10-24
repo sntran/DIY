@@ -899,6 +899,16 @@ defmodule DIYWeb.Icon.Shapes do
       rbox({0.16, 0.16, h + 0.03}, {w - 0.32, w - 0.32, 0.01}, 0.12, "blue")
   end
 
+  # A pool: a low coping of stone, and the water in it. On the plan, the
+  # water is lower than the floor (`DIYWeb.Cutaway`). This model is for
+  # the icon.
+  def model("pool") do
+    {w, d, h} = {10.36, 5.79, 0.15}
+
+    box({0, 0, 0}, {w, d, h}, "gray") ++
+      box({0.6, 0.6, h}, {w - 1.2, d - 1.2, 0.01}, "blue")
+  end
+
   # A tower heater: a white body with round corners on its foot. Its front
   # has a grille that glows, and its top has the keys and a light.
   def model("space_heater") do

@@ -291,13 +291,15 @@ defmodule DIY.HomeAssistantDevicesTest do
       device("d7", "Kitchen TV", "cook", ["media_player"])
     ]
 
-    {ghosts, 3} = HomeAssistant.ghosts(build, devices, areas)
+    {ghosts, 4} = HomeAssistant.ghosts(build, devices, areas)
 
     # Only the devices with a kind, in the area of a room, where the kind
-    # can go. A pool pump is outside, not in the living room.
+    # can go. A central AC (Hvac) is outside or on the roof, not in the
+    # living room. A pool pump goes inside, next to a spa.
     assert Enum.map(ghosts, &{&1.device, &1.name, &1.room, &1.type}) == [
              {"d1", "Kitchen Lights", kitchen.id, "lights"},
              {"d2", "Ceiling Fan", living.id, "ceiling_fan"},
+             {"d6", "Pool pump", living.id, "pool_pump"},
              {"d7", "Kitchen TV", kitchen.id, "tv"}
            ]
 
@@ -311,7 +313,7 @@ defmodule DIY.HomeAssistantDevicesTest do
       assert box.x + box.w <= plan.w and box.y + box.d <= plan.d
     end
 
-    [lights, _fan, tv] = ghosts
+    [lights, _fan, _pump, tv] = ghosts
 
     box = fn ghost ->
       Layout.item_box(%{type: ghost.type, size: nil, turn: 0, params: %{}, at: ghost.at})
@@ -329,8 +331,8 @@ defmodule DIY.HomeAssistantDevicesTest do
 
     # A device with an item is not a ghost.
     {:ok, build, _id} = Build.add_device(build, kitchen.id, "lights", "d1")
-    {ghosts, 2} = HomeAssistant.ghosts(build, devices, areas)
-    assert Enum.map(ghosts, & &1.device) == ["d2", "d7"]
+    {ghosts, 3} = HomeAssistant.ghosts(build, devices, areas)
+    assert Enum.map(ghosts, & &1.device) == ["d2", "d6", "d7"]
     {:ok, build, _id} = Build.add_device(build, kitchen.id, "lights", "d4")
     assert HomeAssistant.away(build, devices, areas) == 0
   end

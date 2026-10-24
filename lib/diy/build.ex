@@ -439,58 +439,21 @@ defmodule DIY.Build do
 
   @doc """
   Adds a room on a level. It goes to a free place (`DIY.Layout.fill/1`):
-  the user then moves it. A room of the kind `"pool"` is a pool
-  (`pool?/1`), inside or outside. It is 30 by 15 ft, and it takes the
-  items of a pool.
+  the user then moves it. A pool is an item of a room (the kind `"pool"`
+  of `DIY.Catalog`), not a room.
   """
-  @spec add_room(t(), String.t(), String.t(), atom(), String.t() | nil) ::
-          {:ok, t(), String.t()} | {:error, atom()}
-  def add_room(build, name, level, place, kind \\ nil)
-
-  def add_room(%__MODULE__{house: %{floors: floors}} = build, name, level, place, kind) do
+  @spec add_room(t(), String.t(), String.t(), atom()) :: {:ok, t(), String.t()} | {:error, atom()}
+  def add_room(%__MODULE__{house: %{floors: floors}} = build, name, level, place) do
     with {:ok, name} <- name(name),
          true <- level in levels(floors) || {:error, :level},
-         true <- place in @places || {:error, :place},
-         true <- kind in [nil, "pool"] || {:error, :kind},
-         true <-
-           (kind == nil or pool_place?(%{place: place, level: level})) || {:error, :pool_place} do
+         true <- place in @places || {:error, :place} do
       {id, build} = next_id(build, "r")
       room = %{id: id, name: name, level: level, place: place, plan: nil}
-      room = if kind, do: Map.put(room, :kind, kind), else: room
       {:ok, change(build, &%{&1 | rooms: &1.rooms ++ [room]}), id}
     end
   end
 
-  def add_room(_build, _name, _level, _place, _kind), do: {:error, :house}
-
-  @doc "True when a room is a pool (`add_room/5`)."
-  def pool?(room), do: Map.get(room, :kind) == "pool"
-
-  @doc """
-  True when a room can be a pool: a room inside or outside, not on the
-  level of the roof and the attic.
-  """
-  def pool_place?(%{place: place, level: level}),
-    do: place in [:indoor, :outdoor] and level != "roof"
-
-  @doc """
-  Makes a room of the house a pool, or a room that is not a pool. A room
-  inside with items that only a pool takes (a pool pump inside) stays a
-  pool (`:items`): the person moves them first. A room on the roof is
-  never a pool.
-  """
-  @spec set_pool(t(), String.t(), boolean()) :: {:ok, t()} | {:error, atom()}
-  def set_pool(build, id, pool) when is_boolean(pool) do
-    with {:ok, room} <- house_room(build, id),
-         true <- pool_place?(room) || {:error, :pool_place},
-         new = if(pool, do: Map.put(room, :kind, "pool"), else: Map.delete(room, :kind)),
-         true <-
-           Enum.all?(items_in(build, id), &Catalog.fits?(Catalog.kind(&1.type), new)) ||
-             {:error, :items} do
-      rooms = Enum.map(build.rooms, &if(&1.id == id, do: new, else: &1))
-      {:ok, change(build, &%{&1 | rooms: rooms})}
-    end
-  end
+  def add_room(_build, _name, _level, _place), do: {:error, :house}
 
   @doc "Gives a room a new name."
   @spec rename_room(t(), String.t(), String.t()) :: {:ok, t()} | {:error, atom()}
@@ -647,6 +610,7 @@ defmodule DIY.Build do
          true <- Catalog.fits?(kind, room) || {:error, :place} do
       {id, build} = next_id(build, "i")
       item = %{new_item(id, type, room_id, Map.merge(Catalog.defaults(type), params)) | at: at}
+      item = %{item | size: new_pool_size(item, room)}
       devices = if device, do: Map.put(build.devices, id, device), else: build.devices
 
       {:ok,
@@ -654,6 +618,15 @@ defmodule DIY.Build do
        id}
     end
   end
+
+  # A new pool in a room that is smaller than the pool fills the room. A
+  # different item keeps its size.
+  defp new_pool_size(%{type: "pool"}, %{plan: %{w: rw, d: rd}}) do
+    {w, d, h} = Catalog.size("pool")
+    if w > rw or d > rd, do: %{w: min(w, rw), d: min(d, rd), h: h}
+  end
+
+  defp new_pool_size(item, _room), do: item.size
 
   @doc """
   Adds an item for a device of Home Assistant (the id of the device) to a
@@ -1284,6 +1257,7 @@ defmodule DIY.Build do
          {:ok, price} <- price(map["price"]),
          {:ok, bill} <- bill(map["bill"]),
          {:ok, house} <- house(map["house"]),
+         map = pool_rooms(map),
          {:ok, rooms} <- rooms(map["rooms"], house),
          {:ok, items} <- items(map["items"], rooms),
          {:ok, usage} <- usage(map["usage"]),
@@ -1334,13 +1308,55 @@ defmodule DIY.Build do
 
   defp from_map(_map), do: {:error, :not_a_build}
 
+  # A file of October 2026 can have a room of the kind "pool": then the
+  # room was the pool. Now a pool is an item of a room. The room stays, and
+  # it gets a pool item at the place of its water: the water of a room of
+  # w by d, with a deck of 3 ft at the sides and at the front, and of 10 ft
+  # at the back. A smaller room had a narrower deck. A room on the level of
+  # the roof gets no pool. The ids of the new items come after the largest
+  # id of the file.
+  defp pool_rooms(%{"rooms" => rooms, "items" => items} = map)
+       when is_list(rooms) and is_list(items) do
+    pools =
+      for %{"kind" => "pool", "id" => id, "plan" => %{"w" => w, "d" => d}} = room <- rooms,
+          is_binary(id) and is_integer(w) and is_integer(d) and w > 0 and d > 0,
+          room["place"] in ["indoor", "outdoor"] and room["level"] != "roof",
+          do: {id, w, d}
+
+    first = last_id(0, Enum.filter(rooms ++ items, &is_map/1)) + 1
+
+    pool_items =
+      for {{room, w, d}, n} <- Enum.with_index(pools, first) do
+        {side, front, back} = {min(36, div(w, 6)), min(36, div(d, 6)), min(120, div(d * 3, 8))}
+
+        %{
+          "id" => "i#{n}",
+          "type" => "pool",
+          "room" => room,
+          "typical" => false,
+          "params" => %{},
+          "at" => %{"x" => side, "y" => back},
+          "size" => %{"w" => w - 2 * side, "d" => d - back - front, "h" => 6}
+        }
+      end
+
+    %{map | "rooms" => Enum.map(rooms, &without_kind/1), "items" => items ++ pool_items}
+  end
+
+  defp pool_rooms(map), do: map
+
+  defp without_kind(%{} = room), do: Map.delete(room, "kind")
+  defp without_kind(room), do: room
+
   # The number of the last id: at least the number of each id of the build,
   # so that a new id is new (a text that a person changed can have a small
   # `seq`).
   defp last_id(seq, list) do
-    Enum.reduce(list, seq, fn %{id: id}, seq ->
-      case Integer.parse(String.slice(id, 1..-1//1)) do
-        {number, ""} -> max(seq, number)
+    Enum.reduce(list, seq, fn map, seq ->
+      with id when is_binary(id) <- Map.get(map, :id, Map.get(map, "id")),
+           {number, ""} <- Integer.parse(String.slice(id, 1..-1//1)) do
+        max(seq, number)
+      else
         _ -> seq
       end
     end)
@@ -1558,14 +1574,7 @@ defmodule DIY.Build do
     with {:ok, name} <- name(name),
          true <- level in levels,
          {:ok, place} <- Map.fetch(@place_names, place) do
-      new = %{id: id, name: name, level: level, place: place, plan: read_plan(room["plan"])}
-
-      # A pool is inside or outside. A different kind is lost.
-      {:house,
-       if(room["kind"] == "pool" and pool_place?(new),
-         do: Map.put(new, :kind, "pool"),
-         else: new
-       )}
+      {:house, %{id: id, name: name, level: level, place: place, plan: read_plan(room["plan"])}}
     else
       _ -> :error
     end
