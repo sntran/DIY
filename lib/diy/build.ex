@@ -1049,8 +1049,9 @@ defmodule DIY.Build do
 
   @doc """
   Turns an item a quarter turn, around its center. The item stays in its
-  room (`DIY.Layout.clamp/3`). An item that is larger than its room after
-  the turn goes to the back corner of the room, and goes through a wall.
+  room (`DIY.Layout.clamp/3`). An item can be longer than its room along
+  a side. Then it goes to the start of that side, and through the wall at
+  the other end.
   """
   @spec turn_item(t(), String.t()) :: {:ok, t()} | {:error, atom()}
   def turn_item(build, id) do

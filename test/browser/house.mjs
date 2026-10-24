@@ -357,6 +357,10 @@ async function pool(page, name) {
   await page.click("#turn-item")
   await page.waitForFunction((w) => document.querySelector("#item-map-item").getAttribute("width") !== w, wide)
     .catch(() => assert.fail(`${name}: the map shows the turn of the pool`))
+  // The map is on the screen after the tap.
+  const map = await page.locator("#item-map").boundingBox()
+  const screen = page.viewportSize()
+  assert.ok(map.y >= 0 && map.y + map.height <= screen.height + 1, `${name}: the map is on the screen after "Turn it"`)
   await check(page, `${name} pool turned`)
   await page.click("#item-stage .stage-back")
   await page.waitForSelector("#item-stage", { state: "detached" })

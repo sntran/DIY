@@ -54,6 +54,9 @@ const liveSocket = new LiveSocket("/live", Socket, {
 // also moves it again after two frames, and then it can take the focus
 // from a key that the person uses after it.
 window.addEventListener("diy:focus", (event) => event.target.focus())
+// "diy:show" (JS.dispatch/2) scrolls an element onto the screen, only as
+// far as necessary: for example the map of the room after "Turn it".
+window.addEventListener("diy:show", (event) => event.target.scrollIntoView({block: "nearest"}))
 // The LiveView moves the focus after its patch (push_event "diy:focus"),
 // for example when the key with the focus goes with its part.
 window.addEventListener("phx:diy:focus", (event) => document.querySelector(event.detail.to)?.focus())

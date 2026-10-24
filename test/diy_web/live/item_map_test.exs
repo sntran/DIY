@@ -54,7 +54,7 @@ defmodule DIYWeb.ItemMapTest do
     {x, y} = {at.at.x, at.at.y}
     assert numbers(view, "#item-map-item", ~w(x y width height)) == [x, y, 408, 228]
     assert numbers(view, "#item-map-front", ~w(x1 y1 x2 y2)) == [x, y + 228, x + 408, y + 228]
-    assert has_element?(view, "#item-space", "Its space on the floor: 34 ft by 19 ft.")
+    assert has_element?(view, "#item-space", "Its space on the plan: 34 ft by 19 ft.")
     refute has_element?(view, "#item-larger")
 
     # A turn: the pool is 228 by 408, and its front is at the large x. The
@@ -65,6 +65,7 @@ defmodule DIYWeb.ItemMapTest do
     assert numbers(view, "#item-map-front", ~w(x1 y1 x2 y2)) == [x + 228, y, x + 228, y + 408]
     assert has_element?(view, "#item-space", "19 ft by 34 ft")
     assert has_element?(view, "#item-larger", "It is larger than Backyard (36 ft 6 in by 25 ft)")
+    assert has_element?(view, "#item-larger", "Make it smaller, or turn it.")
 
     # Two more turns: the front is at the small y, then at the small x.
     render_click(view, "turn_item", %{"id" => pool})
@@ -109,8 +110,11 @@ defmodule DIYWeb.ItemMapTest do
     html =
       render_component(&DIYWeb.Inside.room_map/1, item: item, room: galley, items: build.items)
 
-    {{rx, ry}, {dx, dy}} = Camera.arrows(Camera.van())
-    assert html =~ ~s|transform="matrix(#{rx} #{dx} #{ry} #{dy} 0 0)"|
+    # In a van, the Right arrow moves an item to the small y, and the Down
+    # arrow to the large x. On the map, the small y is at the right, and
+    # the large x is at the bottom.
+    assert Camera.arrows(Camera.van()) == {{0, -1}, {1, 0}}
+    assert html =~ ~s|transform="matrix(0 1 -1 0 0 0)"|
   end
 
   test "a turn keeps an item in its room" do
@@ -126,5 +130,22 @@ defmodule DIYWeb.ItemMapTest do
     {:ok, turned} = Build.item(build, freezer)
     assert Layout.extent(turned) == {30, 56}
     assert turned.at.y + 56 == laundry.plan.d
+
+    # At the back wall: it would go 13 inches through the back wall.
+    {:ok, build} = Build.turn_item(build, freezer)
+    {:ok, build} = Build.place_item(build, freezer, laundry.id, %{x: 0, y: 0})
+    {:ok, build} = Build.turn_item(build, freezer)
+    {:ok, turned} = Build.item(build, freezer)
+    assert turned.at == %{x: 13, y: 0}
+  end
+
+  test "an item larger than its room both ways: a turn does not help", %{conn: conn} do
+    build = house()
+    yard = room(build, "Backyard")
+    {:ok, build, pool} = Build.add_item(build, yard.id, "pool")
+    {:ok, build} = Build.size_item(build, pool, %{w: 460, d: 320, h: 6})
+    view = open(conn, ~p"/inside?#{[item: pool]}", build)
+    assert has_element?(view, "#item-larger", "it goes through a wall. Make it smaller.")
+    refute has_element?(view, "#item-larger", "turn it")
   end
 end

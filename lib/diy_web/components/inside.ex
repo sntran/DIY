@@ -1595,14 +1595,30 @@ defmodule DIYWeb.Inside do
     ~H"""
     <div id="item-place" class="stage-fields">
       <p class="stage-label">Its place, its size and its turn</p>
-      <.moves
-        id="move-item"
-        event="nudge_item"
-        target={@item.id}
-        step={6}
-        what="the item"
-        van={Build.van_level?(@room.level)}
-      />
+      <%!-- "Turn it" is next to the arrows and over the map. After a tap,
+      the page scrolls the map onto the screen if necessary ("diy:show"):
+      the person sees the turn, also on a phone. --%>
+      <div class="flex flex-wrap items-center gap-2">
+        <.moves
+          id="move-item"
+          event="nudge_item"
+          target={@item.id}
+          step={6}
+          what="the item"
+          van={Build.van_level?(@room.level)}
+        />
+        <button
+          type="button"
+          id="turn-item"
+          phx-click={
+            JS.push("turn_item", value: %{id: @item.id})
+            |> JS.dispatch("diy:show", to: "#item-map")
+          }
+          class="btn btn-sm"
+        >
+          <.icon name="hero-arrow-path" class="size-4" /> Turn it
+        </button>
+      </div>
       <p id="item-where" class="stage-help" aria-live="polite">{where(@item, @room, @items)}</p>
       <.room_map item={@item} room={@room} items={@items} />
       <p :if={@item.type == "solar_panels"} class="stage-help">
@@ -1686,18 +1702,8 @@ defmodule DIYWeb.Inside do
             "These are the typical sizes of this kind of item. Give the sizes of your item."
         end}
       </p>
-      <div class="flex flex-wrap gap-2">
+      <div :if={@item.size} class="flex flex-wrap gap-2">
         <button
-          type="button"
-          id="turn-item"
-          phx-click="turn_item"
-          phx-value-id={@item.id}
-          class="stage-btn"
-        >
-          <.icon name="hero-arrow-path" class="size-5" /> Turn it
-        </button>
-        <button
-          :if={@item.size}
           type="button"
           id="typical-size"
           phx-click={
@@ -1783,10 +1789,10 @@ defmodule DIYWeb.Inside do
   has the color of the app, and a thick line on its front. The other items
   of the room are gray: an item on a wall or a ceiling has a dashed line.
   The map has the axes of the move buttons (`moves/1`): the Up arrow moves
-  the item up on the map. So a turn, a move and a new size show at once,
-  also when the plan is behind the sheet. Under the map, a text gives the
-  space of the item on the floor, and tells when the item is larger than
-  its room. The text above the map gives its place in words, so the map
+  the item up on the map. So a turn, a move and a new size show
+  immediately, also when the plan is behind the sheet. Under the map, a
+  text gives the space of the item on the plan. Another text tells when
+  the item is larger than its room, and if a turn can help. The text above the map gives its place in words, so the map
   has no text for a screen reader.
   """
   def room_map(assigns) do
@@ -1825,7 +1831,8 @@ defmodule DIYWeb.Inside do
         front: front(box, item.turn),
         space: "#{feet(w)} by #{feet(d)}",
         room_space: "#{feet(room.plan.w)} by #{feet(room.plan.d)}",
-        larger: w > room.plan.w or d > room.plan.d
+        larger: w > room.plan.w or d > room.plan.d,
+        turn_fits: d <= room.plan.w and w <= room.plan.d
       )
 
     ~H"""
@@ -1858,9 +1865,11 @@ defmodule DIYWeb.Inside do
         />
       </g>
     </svg>
-    <p id="item-space" class="stage-help">Its space on the floor: {@space}.</p>
-    <p :if={@larger} id="item-larger" class="stage-help">
-      It is larger than {@room.name} ({@room_space}): it goes through a wall. Make it smaller, or turn it.
+    <p id="item-space" class="stage-help">Its space on the plan: {@space}.</p>
+    <p :if={@larger} id="item-larger" class="stage-help" aria-live="polite">
+      It is larger than {@room.name} ({@room_space}): it goes through a wall. {if @turn_fits,
+        do: "Make it smaller, or turn it.",
+        else: "Make it smaller."}
     </p>
     """
   end
