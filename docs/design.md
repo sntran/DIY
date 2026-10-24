@@ -2117,13 +2117,23 @@ only the total. This is a decision of the owner (October 2026):
   (`Labels.noclamp.cfg`).
 - The size of a text in resvg is not known before the draw. Thus the
   width of a label comes from its letters. Each letter has the width of
-  the widest letter of its kind in Inter (from Chromium, October 2026).
-  The widths are parts of the size of the font. M, W, m, w, @ and % have
-  1.04. A different capital has 0.78. A different letter, number or sign
-  has 0.68. A letter that is not in the fonts of the NIF has 1.04. So a label is not
-  narrower than its text. A name of more than 24 letters ends in "…".
+  the widest letter of its kind in Inter. The widths are parts of the
+  size of the font:
+  - M, W, m, w, @, %, Æ and æ: 1.04;
+  - a different capital of ASCII, or a capital of Latin with a mark: 0.78;
+  - a different letter, number or sign of ASCII, or a letter of Latin
+    with a mark: 0.68;
+  - each different letter: 1.04. The widest letter of the fonts is W
+    (1.038).
+
+  `scripts/inter-widths.mjs` reads the width of each letter of the fonts
+  of the NIF (311 letters). It writes `test/fixtures/inter_widths.json`,
+  and a test checks each letter. So a label is not narrower than its
+  text. A name of more than 24 letters ends in "…".
 - The box of the house clips the sky, the rain and the snow
   (`clipPath`). They do not go on the paper around the box.
+
+The PNG and the NIF:
 
 - A site that shows a preview reads PNG and JPEG, not SVG.
 - The NIF is resvg 0.48.1 in WebAssembly, as in mkfifo.com, with the text

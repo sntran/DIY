@@ -226,25 +226,29 @@ defmodule DIYWeb.Picture do
 
   @doc false
   # The width of a text, at most. Each letter has the width of the widest
-  # letter of its kind in Inter, regular or bold (from Chromium, October
-  # 2026). The widths are parts of the size of the font:
-  # - M, W, m, w, @, % and "…": 1.04;
-  # - a different capital letter of Latin: 0.78;
-  # - a different letter of Latin, a number or a sign: 0.68;
-  # - a letter that is not in the fonts of the NIF: 1.04.
+  # letter of its kind in Inter, regular or bold. The widths are parts of
+  # the size of the font:
+  # - M, W, m, w, @, %, Æ and æ: 1.04;
+  # - a different capital of ASCII, or a capital of Latin with a mark:
+  #   0.78;
+  # - a different letter, number or sign of ASCII, or a letter of Latin
+  #   with a mark: 0.68;
+  # - each different letter: 1.04. The widest letter of the fonts of the
+  #   NIF is W (1.038).
+  # The test checks each letter of the fonts (test/fixtures/inter_widths.json,
+  # from scripts/inter-widths.mjs).
   def width(text, size) do
     text |> String.graphemes() |> Enum.map(&letter/1) |> Enum.sum() |> Kernel.*(size)
   end
 
-  defp letter(letter) when letter in ~w(M W m w @ % …), do: 1.04
+  defp letter(letter) when letter in ~w(M W m w @ % Æ æ), do: 1.04
 
-  defp letter(<<c::utf8, _rest::binary>> = letter) do
-    cond do
-      c > 0x024F and c not in 0x1E00..0x1EFF -> 1.04
-      String.downcase(letter) != letter -> 0.78
-      true -> 0.68
-    end
+  defp letter(<<c::utf8, _rest::binary>> = letter)
+       when c < 0x80 or c in 0xC0..0x024F or c in 0x1E00..0x1EFF do
+    if String.downcase(letter) != letter, do: 0.78, else: 0.68
   end
+
+  defp letter(_letter), do: 1.04
 
   # The line from a label down to the top of its item. All the lines are
   # under all the labels.

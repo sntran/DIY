@@ -264,14 +264,21 @@ defmodule DIYWeb.PictureTest do
       # Inter bold has W of 1.038 of the size of the font.
       assert label.w >= 24 * 1.038 * 12
 
-      # The widths of kinds of letters (Inter, regular and bold, from
-      # Chromium): each is at least the widest letter of its kind.
-      assert Picture.width("W", 10) >= 10.38
-      assert Picture.width("@%m", 10) >= 10.16 + 10.16 + 9.13
-      assert Picture.width("Ơ", 10) >= 7.8
-      assert Picture.width("4+~", 10) >= 3 * 6.79
       assert Picture.width("ௌ", 10) == 10.4
       assert Picture.width("", 10) == 0
+    end
+
+    # Each letter of the fonts of the NIF, with its width in Inter Regular
+    # or Bold (scripts/inter-widths.mjs).
+    @widths "test/fixtures/inter_widths.json" |> File.read!() |> Jason.decode!()
+
+    test "the width of each letter of the fonts is not less than its width in Inter" do
+      assert length(@widths) > 300
+
+      for [code, width] <- @widths do
+        assert Picture.width(<<code::utf8>>, 1) >= width,
+               "#{<<code::utf8>>} (U+#{Integer.to_string(code, 16)}) is #{width} wide"
+      end
     end
 
     test "the box of the house clips the sky, the rain and the snow" do
