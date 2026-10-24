@@ -60,7 +60,9 @@ defmodule DIYWeb.PictureTest do
   # The classes of the picture that have no style on the page: the frame
   # of the SVG and the group of an item. The class of the textures has
   # only `stroke: none`, as a shape with no class.
-  @plain ~w(block w-full cutaway cutaway-house cutaway-outside p-item p-tex)
+  # The groups of the rain and the snow move on the page only.
+  @plain ~w(block w-full cutaway cutaway-house cutaway-outside p-item p-tex) ++
+           ~w(p-fall p-fall-sun p-fall-clouds p-fall-rain p-fall-snow)
 
   test "each class of the picture of a house has a style" do
     builds = [
@@ -118,6 +120,25 @@ defmodule DIYWeb.PictureTest do
     svg = Picture.svg(pool_house(), summary())
     assert svg =~ "fill:rgb(111, 191, 224)"
     assert {:ok, <<0x89, "PNG", _::binary>>} = Picture.png(pool_house(), summary())
+  end
+
+  test "the picture has the sky of the link: its colors follow the time of day" do
+    night =
+      Share.summary(Enum.map(1..12, &(&1 * 100)), 1500, "en", %{time: "night", weather: "sun"})
+
+    svg = Picture.svg(house(), night)
+    assert svg =~ ~s|style="fill:rgb(16, 27, 51)"|
+    assert svg =~ "fill:rgb(242, 196, 107)"
+
+    snow = %{night | sky: %{time: "day", weather: "snow"}}
+    svg = Picture.svg(house(), snow)
+    assert svg =~ "fill:rgb(230, 236, 241)"
+    refute svg =~ "fill:rgb(16, 27, 51)"
+    assert {:ok, <<0x89, "PNG", _::binary>>} = Picture.png(house(), snow)
+
+    # Snow changes some classes; the other classes keep the style of the scene.
+    assert Picture.styles("night", "snow")["p-grass"] != Picture.styles("night")["p-grass"]
+    assert Picture.styles("night", "snow")["p-pane"] == Picture.styles("night")["p-pane"]
   end
 
   test "a house with no cost and no ZIP code" do

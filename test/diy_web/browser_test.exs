@@ -1,9 +1,9 @@
 defmodule DIYWeb.BrowserTest do
   @moduledoc """
   The browser test: `test/browser/house.mjs` builds a house in Chromium,
-  with the checks of axe-core on each screen. The weather, Power to Choose
-  and the cloud of Pecron are the stubs of the tests, for all the
-  processes of the server. The page calls the cloud of EcoFlow directly:
+  with the checks of axe-core on each screen. The weather, the sky, Power
+  to Choose and the cloud of Pecron are the stubs of the tests, for all
+  the processes of the server. The page calls the cloud of EcoFlow directly:
   the walk serves it in the browser (`test/browser/fake_ecoflow.mjs`).
 
   It needs the server of the tests, Node.js with the packages of
@@ -22,6 +22,7 @@ defmodule DIYWeb.BrowserTest do
   setup do
     Req.Test.set_req_test_to_shared()
     DIY.Stubs.weather()
+    DIY.Stubs.sky()
     DIY.Stubs.market()
     DIY.Stubs.pecron()
     on_exit(&Req.Test.set_req_test_to_private/0)

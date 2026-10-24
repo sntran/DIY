@@ -286,8 +286,15 @@
 .i-pv-line { fill: #6d8fd6 }
 
 /* The plan of the house at scale (DIYWeb.Cutaway): the lot, the slabs, the
-   walls (cut), the floors of the rooms, and the roof. */
-.cutaway {
+   walls (cut), the floors of the rooms, and the roof. The house from the
+   outside (DIYWeb.Outside) has a scene: data-scene is the time of day at
+   the house. Its colors follow the scene, not the theme of the page: a
+   scene by day or at sunset has the light colors, and a night has the
+   dark colors. The selectors of a scene are stronger than the selectors
+   of the theme. */
+.cutaway,
+:root .cutaway.cutaway[data-scene=day],
+:root .cutaway.cutaway[data-scene=sunset] {
   --p-grass-t: #a7d37f; --p-grass-l: #b08463; --p-grass-r: #8e6649;
   --p-slab-t: #ece8e1; --p-slab-l: #d6d0c5; --p-slab-r: #b9b2a6;
   --p-wall-t: #fbf9f5; --p-wall-l: #f3eee6; --p-wall-r: #d9d2c5;
@@ -301,6 +308,8 @@
   --p-vinsul: #f9a8d4; --p-vmetal: #c9ced6; --p-vmat: #4b5059; --p-vroof: #f1f3f6;
   --p-grain: rgb(31 35 40 / 0.13); --p-stripe: rgb(255 255 255 / 0.12); --p-shadow: #1f2328;
   --p-frame: #ffffff; --p-pane: #b9dcf5; --p-baseboard: #e4ddd1;
+  --p-sun: #ffc93c; --p-moon: #f4efdc; --p-star: #ffffff; --p-cloud: #ffffff; --p-cloud-dark: #c2cad4;
+  --p-rain: #4f86c6; --p-snow: #ffffff;
   background: var(--p-sky);
 }
 @media (prefers-color-scheme: dark) {
@@ -319,9 +328,11 @@
     --p-vinsul: #b56a93; --p-vmetal: #5b616b; --p-vmat: #2b2f35; --p-vroof: #8d949e;
     --p-grain: rgb(0 0 0 / 0.28); --p-stripe: rgb(255 255 255 / 0.05); --p-shadow: #000000;
     --p-frame: #d6d1c8; --p-pane: #2c4a66; --p-baseboard: #9b958b;
+    --p-cloud: #4b5566; --p-cloud-dark: #363e4b; --p-rain: #8db4e2; --p-snow: #e8eef6;
   }
 }
-[data-theme=dark] .cutaway {
+[data-theme=dark] .cutaway,
+:root .cutaway.cutaway[data-scene=night] {
   --p-grass-t: #3f6b3a; --p-grass-l: #5f4635; --p-grass-r: #4a3628;
   --p-slab-t: #6b6f76; --p-slab-l: #575b62; --p-slab-r: #464a50;
   --p-wall-t: #c4beb3; --p-wall-l: #b0aa9f; --p-wall-r: #8a847a;
@@ -336,11 +347,14 @@
   --p-vinsul: #b56a93; --p-vmetal: #5b616b; --p-vmat: #2b2f35; --p-vroof: #8d949e;
   --p-grain: rgb(0 0 0 / 0.28); --p-stripe: rgb(255 255 255 / 0.05); --p-shadow: #000000;
   --p-frame: #d6d1c8; --p-pane: #2c4a66; --p-baseboard: #9b958b;
+  --p-cloud: #4b5566; --p-cloud-dark: #363e4b; --p-rain: #8db4e2; --p-snow: #e8eef6;
 }
 /* The house (the class cutaway-house): the warm colors of a picture that an
    artist drew of a house, on a dark background. The van keeps the colors
    above. */
-.cutaway-house {
+.cutaway-house,
+:root .cutaway-house.cutaway-house[data-scene=day],
+:root .cutaway-house.cutaway-house[data-scene=sunset] {
   --p-grass-t: #a9c98a; --p-yard: #97bb78;
   --p-slab-t: #f3ece1; --p-slab-l: #fbf6ee; --p-slab-r: #e6dccd; --p-wall-t: #5f554c;
   --p-wood: #dca671; --p-tile: #ece5d8; --p-carpet: #d9c7ad; --p-concrete: #cfcac2; --p-ply: #e3c89a;
@@ -357,7 +371,8 @@
     --p-pill: rgb(34 30 27 / 0.92); --p-pill-text: #f5ebdd;
   }
 }
-[data-theme=dark] .cutaway-house {
+[data-theme=dark] .cutaway-house,
+:root .cutaway-house.cutaway-house[data-scene=night] {
   --p-slab-t: #4a4540; --p-slab-l: #8a7f70; --p-slab-r: #6e6458; --p-wall-t: #1c1a18;
   --p-wood: #8f5e36; --p-tile: #6e675d; --p-carpet: #74604c; --p-concrete: #5d5a55; --p-ply: #7a6343;
   --p-grain: rgb(0 0 0 / 0.3);
@@ -400,7 +415,9 @@
 /* The warm colors of the items on the plan of the house, as in a drawn
    picture: by day, and at night (the dark mode). The outlines are brown, as
    of ink. */
-.cutaway-house {
+.cutaway-house,
+:root .cutaway-house.cutaway-house[data-scene=day],
+:root .cutaway-house.cutaway-house[data-scene=sunset] {
   --c-white-t: #fbf4e8; --c-white-l: #efe3cf; --c-white-r: #d9c9ae;
   --c-steel-t: #ece6dc; --c-steel-l: #d5cdc0; --c-steel-r: #b8ae9f;
   --c-gray-t: #aaa398; --c-gray-l: #8f887d; --c-gray-r: #746d63;
@@ -450,7 +467,8 @@
     --c-wall-top: #6d5747; --c-wall-low: #9c7350; --c-side-top: #5a473a; --c-side-low: #7d5c41;
   }
 }
-[data-theme=dark] .cutaway-house {
+[data-theme=dark] .cutaway-house,
+:root .cutaway-house.cutaway-house[data-scene=night] {
   --c-white-t: #b4aba0; --c-white-l: #aca090; --c-white-r: #9e8f7a;
   --c-steel-t: #aaa298; --c-steel-l: #9b9186; --c-steel-r: #887d70;
   --c-gray-t: #7f766b; --c-gray-l: #6d645a; --c-gray-r: #5b5248;
@@ -529,7 +547,8 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme=light]) .p-glow { display: inline }
 }
-[data-theme=dark] .p-glow { display: inline }
+[data-theme=dark] .p-glow, :root [data-scene=night] .p-glow.p-glow { display: inline }
+:root [data-scene=day] .p-glow.p-glow, :root [data-scene=sunset] .p-glow.p-glow { display: none }
 /* The items of the house that run have small, slow loops: the flame of a
    furnace flickers, and a hot coil glows (the classes i-fire and i-coil).
    A loop starts when the layer of its item shows (assets/js/plan.js), and
@@ -559,11 +578,44 @@
   .cutaway-outside .p-flow { animation: p-flow 0.9s linear 5 }
 }
 @keyframes p-flow { to { stroke-dashoffset: -8 } }
-/* At night, the windows of the house have the warm light of the rooms. */
+/* At night and at sunset, the windows of the house have the warm light of
+   the rooms. By day, they have the color of the glass. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme=light]) .cutaway-outside .p-pane { fill: #f2c46b }
 }
-[data-theme=dark] .cutaway-outside .p-pane { fill: #f2c46b }
+[data-theme=dark] .cutaway-outside .p-pane,
+:root [data-scene=night].cutaway-outside .p-pane.p-pane,
+:root [data-scene=sunset].cutaway-outside .p-pane.p-pane { fill: #f2c46b }
+:root [data-scene=day].cutaway-outside .p-pane.p-pane { fill: var(--p-pane) }
+/* The sky of the house from the outside (DIYWeb.Outside.sky/2): the sun or
+   the moon, the stars and the clouds, and the rain or the snow over the
+   house. The sky of a sunset is warm, and its light covers the house. The
+   rain and the snow fall for 4.8 seconds when the picture shows, and then
+   they stop (WCAG 2.2.2). With "reduce motion", they do not move. */
+.p-sky, .p-sky-cut { fill: var(--p-sky) }
+:root .cutaway.cutaway[data-scene=day] { --p-sky: #d9ebf8 }
+:root .cutaway.cutaway[data-scene=sunset] { --p-sky: #f5c7a4 }
+:root .cutaway.cutaway[data-scene=night] { --p-sky: #101b33 }
+/* Snow covers the yard and the roof: white by day, blue-gray at night. */
+:root .cutaway-house.cutaway-house[data-weather=snow] {
+  --p-yard: #e6ecf1; --p-grass-t: #f0f3f6; --p-roof-f: #c4cdd7; --p-roof-b: #aeb8c4
+}
+:root .cutaway-house.cutaway-house[data-scene=night][data-weather=snow] {
+  --p-yard: #6f7a8a; --p-grass-t: #7e8999; --p-roof-f: #66707f; --p-roof-b: #566070
+}
+.p-sun { fill: var(--p-sun) } .p-sun-low { fill: #ff8a3d } .p-moon { fill: var(--p-moon) }
+.p-star { fill: var(--p-star); opacity: 0.85 }
+.p-cloud { fill: var(--p-cloud); opacity: 0.95 } .p-cloud-dark { fill: var(--p-cloud-dark); opacity: 0.95 }
+.p-rain { fill: none; stroke: var(--p-rain); stroke-width: 1.1; stroke-linecap: round; opacity: 0.8;
+  vector-effect: non-scaling-stroke }
+.p-snow { fill: var(--p-snow); opacity: 0.9 }
+.p-dusk { fill: #ff8a3d; opacity: 0.1; pointer-events: none }
+@media (prefers-reduced-motion: no-preference) {
+  .cutaway-outside .p-fall-rain { animation: p-rain 0.6s linear 8 }
+  .cutaway-outside .p-fall-snow { animation: p-snow 2.4s ease-in-out 2 alternate }
+}
+@keyframes p-rain { from { transform: translate(0, -6px) } to { transform: translate(-1.5px, 6px) } }
+@keyframes p-snow { from { transform: translate(-2px, -4px) } to { transform: translate(2px, 4px) } }
 .p-chip { fill: var(--p-pill); stroke: var(--p-edge); stroke-width: 0.8; vector-effect: non-scaling-stroke }
 .p-chip-text { font: 600 7px / 1 ui-sans-serif, system-ui, sans-serif; fill: var(--p-pill-text) }
 /* The van cut open (DIYWeb.VanCutaway): its walls (bare or with panels),

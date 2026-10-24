@@ -2071,7 +2071,8 @@ The page of a link has the tags of Open Graph:
 - `og:image`: `/s/DATA/picture.png`, a PNG of 1200 × 630 pixels.
 
 The picture is the house from the outside, the numbers of the year, and
-the bars of the months (`DIYWeb.Picture`). The server makes the SVG, and
+the bars of the months (`DIYWeb.Picture`). The house has the sky of the
+link ("The sky at the house"). The server makes the SVG, and
 the NIF resvg draws it (`DIY.Picture.NIF`, `native/resvg`,
 `priv/resvg.wasm`, `scripts/nif.sh`).
 
@@ -2088,7 +2089,8 @@ the NIF resvg draws it (`DIY.Picture.NIF`, `native/resvg`,
 - resvg reads no CSS of the page: no variables and no `color-mix`. Thus
   the SVG of the picture has the style of each shape in its attributes.
   `scripts/picture-styles.mjs` asks Chromium for the style of each class
-  of the picture in `app.css`, and writes `priv/picture/styles.json`.
+  of the picture in `app.css`, for each scene of the sky. It writes
+  `priv/picture/styles.json`.
   The browser test checks that the file is the same as the style of
   `app.css`. A stroke that does not scale on the page
   (`vector-effect: non-scaling-stroke`) gets the width for the scale of
@@ -3934,6 +3936,68 @@ Assistant.
   matches.
 - A new sheet Add starts with no text. The text has 40 characters at
   most.
+
+## The sky at the house
+
+The picture of the house from the outside shows the sky at the house:
+day, sunset or night, with sun, clouds, rain or snow. The page keeps the
+theme of the phone. Only the picture follows the time at the house.
+
+### The sky of now
+
+- `DIY.Sky.now/3` asks Open-Meteo (https://open-meteo.com) for the
+  weather of now at the point of the ZIP code. The service is free and
+  needs no key. The request has the point only, as for the weather
+  history (`DIY.Weather`).
+- The answer has the local time, the code of the weather of the WMO, the
+  temperature, and the sunrise and the sunset of the day.
+- The time of day is "sunset" from 30 minutes before to 30 minutes after
+  the sunset or the sunrise. Between them, it is "day". Else it is
+  "night".
+- The code of the weather gives "sun" (0 and 1), "clouds" (2, 3 and
+  fog), "rain" (drizzle, rain, showers and storms) or "snow".
+- The cache keeps the sky of a point for 30 minutes: its key has the
+  half hour of the request.
+
+### The page
+
+- The page asks for the sky when the build gets a ZIP code. Until the
+  answer comes, and after an error, the picture is a day with sun.
+- 30 minutes after an answer, the page asks again. It keeps the sky of
+  before until the new answer comes. A new timer cancels the timer
+  before, and a new ZIP code cancels it too.
+- An answer for a ZIP code that the page left goes away.
+- `specs/Sky.tla` checks these rules with TLC: the page shows the sky of
+  its ZIP code or no sky, and one timer waits at most. Two models have a
+  fault. `Sky.nocheck.cfg` takes each answer, and `Sky.nocancel.cfg`
+  keeps the old timer.
+
+### The choice of the sky
+
+- Under the picture, the person can choose a time of day (Now, Day,
+  Sunset or Night) and a weather (Now, Sun, Clouds, Rain or Snow). "Now"
+  is the sky at the house. The sheet of the share has the same choice.
+  The person does not have to wait for the night to share a picture of
+  the night.
+- The link of a share carries the sky of its picture ("t" and "w" in
+  its summary). A link of an older version has no sky: a day with sun.
+
+### The drawing
+
+- `DIYWeb.Outside.sky/2` gives the shapes of the sky. Behind the house:
+  the sky, the sun or the moon, the stars and the clouds. Over the house:
+  the rain or the snow, and the warm light of a sunset.
+- The SVG has `data-scene` (the time of day) and `data-weather`. The
+  colors of the plan follow the scene, not the theme of the page. A day
+  and a sunset have the light colors, and a night has the dark colors
+  and the warm light in the windows. The selectors of a scene are
+  stronger than the selectors of the theme (app.css).
+- Snow covers the yard and the roof.
+- The rain and the snow fall for 4.8 seconds, and then they stop (WCAG
+  2.2.2). With "reduce motion", they do not move.
+- The picture of a link (`DIYWeb.Picture`) has the styles of its scene.
+  `priv/picture/styles.json` has the styles of each scene, and the
+  classes that snow changes.
 
 ## In a car
 

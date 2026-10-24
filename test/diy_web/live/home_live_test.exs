@@ -159,7 +159,8 @@ defmodule DIYWeb.HomeLiveTest do
     assert has_element?(
              view,
              ~s(#house-picture[aria-label="See the rooms. The picture: a house with 2 floors, ) <>
-               ~s(a garage, outside: Central AC, the wire of the grid, you in front of the door."])
+               ~s(a garage, outside: Central AC, the wire of the grid, you in front of the door, ) <>
+               ~s(on a day with a clear sky."])
            )
 
     outside = fn -> :sys.get_state(view.pid).socket.assigns.outside end

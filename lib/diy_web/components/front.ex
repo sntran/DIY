@@ -16,6 +16,9 @@ defmodule DIYWeb.Front do
   attr :weather, :map, required: true
   attr :market, :map, required: true
   attr :outside, :map, required: true, doc: "the house from the outside (`DIYWeb.Outside.view/1`)"
+  attr :sky, :map, required: true, doc: "the sky of the picture (`DIY.Sky.pick/2`)"
+  attr :sky_pick, :map, required: true, doc: "the choice of the sky (`DIYWeb.Outside.sky_form/1`)"
+  attr :sky_now, :map, default: nil, doc: "the sky at the house now (`DIY.Sky.now/3`)"
   attr :bill_month, :integer, default: nil, doc: "the month that the person chose on the chart"
 
   attr :ha_meter, :map,
@@ -40,7 +43,8 @@ defmodule DIYWeb.Front do
         </p>
       </div>
 
-      <.house outside={@outside} />
+      <.house outside={@outside} sky={@sky} />
+      <Outside.sky_form id="sky-form" pick={@sky_pick} now={@sky_now} />
 
       <.bill
         estimate={@estimate}
@@ -83,18 +87,19 @@ defmodule DIYWeb.Front do
   end
 
   attr :outside, :map, required: true
+  attr :sky, :map, required: true
 
   # The picture of the house from the outside (`DIYWeb.Outside`), in the
-  # look of the plan of the rooms. A tap goes in.
+  # look of the plan of the rooms, with its sky. A tap goes in.
   defp house(assigns) do
     ~H"""
     <.link
       patch={~p"/inside"}
       id="house-picture"
       class="block overflow-hidden rounded-box"
-      aria-label={"See the rooms. The picture: #{@outside.label}."}
+      aria-label={"See the rooms. The picture: #{@outside.label}, on #{Outside.sky_label(@sky)}."}
     >
-      <Outside.house view={@outside} />
+      <Outside.house view={@outside} sky={@sky} />
     </.link>
     """
   end

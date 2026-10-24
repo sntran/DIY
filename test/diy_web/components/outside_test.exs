@@ -354,7 +354,7 @@ defmodule DIYWeb.OutsideTest do
     [loops] =
       for [_, block] <-
             Regex.scan(~r/@media \(prefers-reduced-motion: no-preference\) \{(.*?)\n\}/s, css),
-          block =~ "cutaway-outside",
+          block =~ "p-flow",
           do: block
 
     # The flow stops after 5 seconds at most, at its first state: it moves
@@ -372,7 +372,99 @@ defmodule DIYWeb.OutsideTest do
     refute String.replace(css, loops, "") =~ "animation: p-flow"
 
     assert css =~ ":root:not([data-theme=light]) .cutaway-outside .p-pane { fill:"
-    assert css =~ "[data-theme=dark] .cutaway-outside .p-pane { fill:"
+    assert css =~ "[data-theme=dark] .cutaway-outside .p-pane,\n"
+    assert css =~ ":root [data-scene=night].cutaway-outside .p-pane.p-pane,\n"
+
+    # The rain and the snow stop after 5 seconds at most (WCAG 2.2.2).
+    [falls] =
+      for [_, block] <-
+            Regex.scan(~r/@media \(prefers-reduced-motion: no-preference\) \{(.*?)\n\}/s, css),
+          block =~ "p-fall",
+          do: block
+
+    for [_, time, count] <-
+          Regex.scan(~r/\.p-fall-\w+ \{ animation: p-\w+ ([\d.]+)s \S+ (\d+)/, falls) do
+      assert String.to_float(time) * String.to_integer(count) <= 5
+    end
+
+    assert length(Regex.scan(~r/\.p-fall-\w+ \{ animation:/, falls)) == 2
+  end
+
+  describe "the sky" do
+    @box {0.0, 0.0, 400.0, 300.0}
+
+    defp sky_classes(shapes), do: Enum.map(shapes, fn {_tag, a} -> a.class end)
+
+    test "a day: the sky and the sun; clouds hide no sun" do
+      assert sky_classes(Outside.sky(@box, %{time: "day", weather: "sun"}).back) ==
+               ~w(p-sky p-sun)
+
+      %{back: back, front: []} = Outside.sky(@box, %{time: "day", weather: "clouds"})
+      assert "p-sun" in sky_classes(back)
+      assert Enum.count(sky_classes(back), &(&1 == "p-cloud")) == 12
+    end
+
+    test "a night: the moon and the stars, fewer stars with clouds" do
+      back = sky_classes(Outside.sky(@box, %{time: "night", weather: "sun"}).back)
+      assert Enum.take(back, 3) == ~w(p-sky p-moon p-sky-cut)
+      assert Enum.count(back, &(&1 == "p-star")) == 16
+      back = sky_classes(Outside.sky(@box, %{time: "night", weather: "clouds"}).back)
+      assert Enum.count(back, &(&1 == "p-star")) == 6
+    end
+
+    test "rain and snow: dark clouds, no sun and no moon, and the rain or the snow in front" do
+      for time <- DIY.Sky.times() do
+        %{back: back, front: front} = Outside.sky(@box, %{time: time, weather: "rain"})
+        back = sky_classes(back)
+        refute Enum.any?(back, &(&1 in ~w(p-sun p-sun-low p-moon p-star)))
+        assert Enum.count(back, &(&1 == "p-cloud-dark")) == 16
+        assert [{:path, %{class: "p-rain", d: d}} | _] = front
+        assert length(String.split(d, "M", trim: true)) == 60
+      end
+
+      %{front: front} = Outside.sky(@box, %{time: "day", weather: "snow"})
+      assert Enum.count(sky_classes(front), &(&1 == "p-snow")) == 70
+    end
+
+    test "a sunset: a low sun, and a warm light over the house" do
+      %{back: back, front: front} = Outside.sky(@box, %{time: "sunset", weather: "sun"})
+      assert "p-sun-low" in sky_classes(back)
+      assert sky_classes(front) == ["p-dusk"]
+    end
+
+    property "each shape of the sky is in the box of the picture" do
+      check all(
+              time <- member_of(DIY.Sky.times()),
+              weather <- member_of(DIY.Sky.weathers()),
+              w <- float(min: 100.0, max: 900.0),
+              h <- float(min: 100.0, max: 900.0)
+            ) do
+        %{back: back, front: front} =
+          Outside.sky({10.0, 20.0, w, h}, %{time: time, weather: weather})
+
+        for {tag, a} <- back ++ front, tag in [:circle, :ellipse] do
+          assert a.cx >= 10.0 and a.cx <= 10.0 + w
+          assert a.cy >= 20.0 and a.cy <= 20.0 + h
+        end
+      end
+    end
+
+    test "the sky in words, and on the SVG" do
+      assert Outside.sky_label(%{time: "night", weather: "rain"}) == "a night with rain"
+      assert Outside.sky_label(%{time: "day", weather: "sun"}) == "a day with a clear sky"
+      assert Outside.sky_label(%{time: "sunset", weather: "clouds"}) == "a sunset with clouds"
+      assert Outside.sky_label(%{time: "day", weather: "snow"}) == "a day with snow"
+
+      html =
+        %{__changed__: nil, view: Outside.view(house()), sky: %{time: "night", weather: "snow"}}
+        |> Outside.house()
+        |> Phoenix.HTML.Safe.to_iodata()
+        |> IO.iodata_to_binary()
+
+      assert html =~ ~s(data-scene="night")
+      assert html =~ ~s(data-weather="snow")
+      assert html =~ ~s(<g class="p-fall p-fall-snow">)
+    end
   end
 
   ## The property

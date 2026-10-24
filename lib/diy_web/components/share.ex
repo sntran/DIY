@@ -16,6 +16,9 @@ defmodule DIYWeb.Share do
     `url` and `picture` are `nil` for a house that is too large for a link
     """
 
+  attr :sky_pick, :map, required: true, doc: "the choice of the sky (`DIYWeb.Outside.sky_form/1`)"
+  attr :sky_now, :map, default: nil, doc: "the sky at the house now (`DIY.Sky.now/3`)"
+
   @doc """
   The sheet of the share: what the link shows, the box of the ZIP code,
   and the button Share (the hook Share, `assets/js/share.js`).
@@ -36,6 +39,7 @@ defmodule DIYWeb.Share do
         height="630"
         class="w-full h-auto rounded-box border border-base-300"
       />
+      <Outside.sky_form id="share-sky" pick={@sky_pick} now={@sky_now} />
       <ul class="text-sm list-disc ps-5 space-y-1">
         <li>{gettext("The house, its rooms and its items.")}</li>
         <li>
@@ -120,7 +124,7 @@ defmodule DIYWeb.Share do
             <p class="text-sm opacity-70">{DIYWeb.Picture.title(shared.build, shared.summary)}</p>
           </div>
           <div class="overflow-hidden rounded-box" role="img" aria-label={shared.view.label}>
-            <Outside.house view={shared.view} />
+            <Outside.house view={shared.view} sky={shared.summary.sky} />
           </div>
           <dl class="grid grid-cols-2 gap-3">
             <div class="rounded-box bg-base-200 p-3">
