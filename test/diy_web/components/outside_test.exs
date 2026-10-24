@@ -288,8 +288,9 @@ defmodule DIYWeb.OutsideTest do
     # after the slabs.
     {:ok, build, patio} = Build.add_room(house(), "Patio", "f1", :outdoor)
     view = Outside.view(build)
-    assert [%{id: ^patio}] = view.level.rooms
+    assert [%{id: ^patio, polys: [{points, class} | _]}] = view.level.rooms
     refute object(view, "slab-" <> patio)
+    assert html(view) =~ ~s(points="#{points}" class="#{class}")
   end
 
   test "you stand in front of the door, also when a room is in front of a part of the wall" do

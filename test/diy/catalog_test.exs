@@ -5,18 +5,19 @@ defmodule DIY.CatalogTest do
   alias DIY.Catalog
 
   test "each kind has its places, features and valid defaults" do
-    # A pool (`:pool`) is a place of the items of a pool (Catalog.fits?/2).
     zones = Keyword.keys(Catalog.zones())
 
     for kind <- Catalog.kinds() do
       assert kind.places != [] and
-               Enum.all?(kind.places, &(&1 in Catalog.places() or &1 in zones or &1 == :pool))
+               Enum.all?(kind.places, &(&1 in Catalog.places() or &1 in zones))
 
       # An item of a van has its weight.
       if Enum.any?(kind.places, &(&1 in zones)),
         do: assert(Enum.any?(kind.params, &(&1.key == "weight")), kind.type)
 
-      assert kind.features != []
+      # A pool has no feature: it uses no power, and its pump and its
+      # heater are items.
+      assert kind.features != [] or kind.type == "pool"
       assert {:ok, defaults} = Catalog.params(kind.type, %{})
       assert defaults == Catalog.defaults(kind.type)
       assert Catalog.kind(kind.type) == kind

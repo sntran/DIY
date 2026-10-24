@@ -26,133 +26,192 @@ defmodule DIY.PoolTest do
     {build, id}
   end
 
-  describe "a pool room" do
-    test "is a room of the kind pool, inside or outside, with water of 30 by 15 ft" do
-      {:ok, build, outdoor} = Build.add_room(build(), "Pool", "outside", :outdoor, "pool")
-      {:ok, build, indoor} = Build.add_room(build, "Spa", "f1", :indoor, "pool")
-      {:ok, out} = Build.room(build, outdoor)
-      {:ok, ins} = Build.room(build, indoor)
+  # A file of a build of October 2026: the JSON of a build, with the rooms
+  # changed by a function.
+  defp old_file(build, change) do
+    map = build |> Build.to_json() |> Jason.decode!()
+    Jason.encode!(%{map | "rooms" => Enum.map(map["rooms"], change)})
+  end
 
-      assert Build.pool?(out) and Build.pool?(ins)
-      refute Build.pool?(room(build, "Kitchen"))
-      assert {out.plan.w, out.plan.d} == {432, 336}
-      assert {ins.plan.w, ins.plan.d} == {432, 336}
-      assert Layout.water(out.plan) == %{x: 36, y: 120, w: 360, d: 180}
-      assert Layout.max_room() >= 432
+  describe "a pool" do
+    test "is an item of a room inside or outside, with water of 30 by 15 ft" do
+      build = build()
+      backyard = room(build, "Backyard").id
+      {build, pool} = add(build, backyard, "pool")
+      {:ok, item} = Build.item(build, pool)
+      assert Layout.size(item) == {408, 228, 6}
+      assert Layout.water(%{w: 408, d: 228}) == %{x: 24, y: 24, w: 360, d: 180}
+
+      # A spa is a pool in a room inside.
+      {:ok, build, spa} = Build.add_room(build, "Spa", "f1", :indoor)
+      {build, _spa_pool} = add(build, spa, "pool")
+      assert Enum.count(build.items, &(&1.type == "pool")) == 2
+
+      # It uses no power: its pump and its heater are items.
+      estimate = Estimate.run(build, climate())
+      assert Enum.all?(estimate.months, &(&1.items[pool].kwh == 0.0))
+      assert Profile.watts(item) == 0.0
+
+      assert [_ | _] = Estimate.explain(item, 7, estimate)
+      assert Enum.any?(Estimate.explain(item, 7, estimate), &(&1 =~ "uses no power"))
     end
 
-    test "is never on the roof or in the attic, and has no other kind" do
-      assert Build.add_room(build(), "Pool", "roof", :roof, "pool") == {:error, :pool_place}
-      assert Build.add_room(build(), "Pool", "roof", :indoor, "pool") == {:error, :pool_place}
-      attic = room(build(), "Attic").id
-      assert Build.set_pool(build(), attic, true) == {:error, :pool_place}
-      refute Build.pool_place?(room(build(), "Attic"))
-      assert Build.pool_place?(room(build(), "Kitchen"))
-      assert Build.add_room(build(), "Pool", "outside", :outdoor, "lake") == {:error, :kind}
-      assert Build.add_room(Build.new(), "Pool", "outside", :outdoor, "pool") == {:error, :house}
-    end
+    test "is never in the attic, and nor is a hot tub; a roof deck takes them" do
+      build = build()
 
-    test "keeps its kind in the file of the build; a bad kind is lost" do
-      {:ok, build, id} = Build.add_room(build(), "Pool", "outside", :outdoor, "pool")
+      for name <- ["Roof", "Attic"], type <- ~w(pool hot_tub) do
+        refute Catalog.fits?(Catalog.kind(type), room(build, name))
+        assert Build.add_item(build, room(build, name).id, type) == {:error, :place}
+      end
+
+      {build, tub} = add(build, room(build, "Backyard").id, "hot_tub")
+      assert Build.move_item(build, tub, room(build, "Attic").id) == {:error, :place}
+
+      # A roof deck: a room outside on the level of the roof.
+      {:ok, build, deck} = Build.add_room(build, "Roof deck", "roof", :outdoor)
+      assert {:ok, build} = Build.move_item(build, tub, deck)
+      {build, _pool} = add(build, deck, "pool")
       {:ok, back} = build |> Build.to_json() |> Build.from_json()
-      assert {:ok, %{kind: "pool"}} = Build.room(back, id)
-
-      map = Jason.decode!(Build.to_json(build))
-
-      rooms =
-        Enum.map(map["rooms"], fn
-          %{"id" => ^id} = room -> Map.put(room, "kind", "lake")
-          %{"name" => name} = room when name in ["Roof", "Attic"] -> Map.put(room, "kind", "pool")
-          room -> room
-        end)
-
-      {:ok, back} = Build.from_json(Jason.encode!(%{map | "rooms" => rooms}))
-      refute back.rooms |> Enum.any?(&Build.pool?/1)
+      assert Enum.count(back.items, &(&1.room == deck)) == 2
     end
 
-    test "a link of a shared house keeps the pool" do
-      {:ok, build, id} = Build.add_room(build(), "Pool", "outside", :outdoor, "pool")
-      {:ok, build, _tub} = Build.add_item(build, id, "hot_tub")
+    test "fills a room that is smaller than the pool" do
+      {:ok, build, spa} = Build.add_room(build(), "Spa", "f1", :indoor)
+      {:ok, room} = Build.room(build, spa)
+      {build, pool} = add(build, spa, "pool")
+      {:ok, item} = Build.item(build, pool)
+      assert Layout.size(item) == {min(408, room.plan.w), min(228, room.plan.d), 6}
+      assert item.at == %{x: 0, y: 0}
+    end
+
+    test "keeps its place and its size in the file and in a shared link" do
+      build = build()
+      {build, pool} = add(build, room(build, "Backyard").id, "pool")
+      {:ok, build} = Build.size_item(build, pool, %{w: 300, d: 150, h: 6})
+      {:ok, back} = build |> Build.to_json() |> Build.from_json()
+      assert Build.item(back, pool) == Build.item(build, pool)
+
       summary = DIY.Share.summary(List.duplicate(1000, 12), 1500, "en")
       {:ok, data} = DIY.Share.encode(build, summary)
       {:ok, shared, _s} = DIY.Share.decode(data)
-      assert {:ok, %{kind: "pool"}} = Build.room(shared, id)
-      assert Enum.any?(shared.items, &(&1.type == "hot_tub" and &1.room == id))
+      assert {:ok, %{type: "pool", size: %{w: 300, d: 150}}} = Build.item(shared, pool)
     end
 
-    test "turns on and off; a pool inside keeps the items that only a pool takes" do
-      kitchen = room(build(), "Kitchen").id
-      {:ok, build} = Build.set_pool(build(), kitchen, true)
-      assert Build.pool?(room(build, "Kitchen"))
-      {build, _pump} = add(build, kitchen, "pool_pump")
+    test "a room of the kind pool of an older file gets a pool item at its water" do
+      build = build()
+      yard = room(build, "Backyard")
+      attic = room(build, "Attic")
+      {build, tub} = add(build, yard.id, "hot_tub")
 
-      assert Build.set_pool(build, kitchen, false) == {:error, :items}
+      text =
+        old_file(build, fn
+          %{"id" => id} = room when id in [yard.id, attic.id] -> Map.put(room, "kind", "pool")
+          room -> room
+        end)
 
-      roof = room(build, "Roof").id
-      assert Build.set_pool(build, roof, true) == {:error, :pool_place}
-      assert Build.set_pool(build, "r999", true) == {:error, :room}
+      {:ok, back} = Build.from_json(text)
+      refute Enum.any?(back.rooms, &Map.has_key?(&1, :kind))
+      assert {:ok, %{room: room}} = Build.item(back, tub)
+      assert room == yard.id
 
-      # Outside, a pool pump goes in any room: the pool can stop.
-      {:ok, build, pool} = Build.add_room(build, "Pool", "outside", :outdoor, "pool")
-      {build, _pump} = add(build, pool, "pool_pump")
-      assert {:ok, build} = Build.set_pool(build, pool, false)
-      refute build |> Build.room(pool) |> elem(1) |> Build.pool?()
+      # The water of the room: a deck of 3 ft at the sides and at the
+      # front, and of 10 ft at the back. The attic gets no pool.
+      assert [pool] = Enum.filter(back.items, &(&1.type == "pool"))
+      {side, front, rear} = {36, 36, min(120, div(yard.plan.d * 3, 8))}
+      assert pool.room == yard.id
+      assert pool.at == %{x: side, y: rear}
+      assert pool.size == %{w: yard.plan.w - 2 * side, d: yard.plan.d - rear - front, h: 6}
+
+      # Its id is new, and the next ids come after it.
+      assert Enum.uniq_by(back.items, & &1.id) == back.items
+      {:ok, next, id} = Build.add_item(back, yard.id, "lights")
+      refute Enum.any?(back.items, &(&1.id == id))
+      assert {:ok, _} = Build.item(next, pool.id)
+
+      # A room of a different kind keeps no kind.
+      {:ok, plain} = Build.from_json(old_file(build, &Map.put(&1, "kind", "lake")))
+      refute Enum.any?(plain.items, &(&1.type == "pool"))
+
+      # A very large pool room gives a pool of the largest size. A pool
+      # room with no plan gives a pool of the typical size.
+      large =
+        old_file(build, fn
+          %{"id" => id} = room when id == yard.id ->
+            Map.merge(room, %{
+              "kind" => "pool",
+              "plan" => %{"x" => 0, "y" => 0, "w" => 1440, "d" => 600}
+            })
+
+          room ->
+            room
+        end)
+
+      {:ok, back} = Build.from_json(large)
+      assert [%{size: %{w: 1200, d: 444}}] = Enum.filter(back.items, &(&1.type == "pool"))
+
+      no_plan =
+        old_file(build, fn
+          %{"id" => id} = room when id == yard.id ->
+            Map.merge(room, %{"kind" => "pool", "plan" => nil})
+
+          room ->
+            room
+        end)
+
+      {:ok, back} = Build.from_json(no_plan)
+      assert [pool] = Enum.filter(back.items, &(&1.type == "pool"))
+      assert pool.room == yard.id
+      assert Layout.size(pool) == {408, 228, 6}
+
+      # A bad room is the error of a bad room, as before.
+      assert Build.from_json(old_file(build, fn _room -> 5 end)) == {:error, :rooms}
     end
   end
 
-  describe "the deck of a pool" do
-    test "a small room has a narrow deck, and water in it" do
-      assert Layout.water(%{w: 24, d: 24}) == %{x: 4, y: 9, w: 16, d: 11}
-      assert Layout.water(%{w: 120, d: 120}) == %{x: 20, y: 45, w: 80, d: 55}
+  describe "the water of a pool" do
+    test "a small pool has a narrow coping" do
+      assert Layout.water(%{w: 24, d: 24}) == %{x: 3, y: 3, w: 18, d: 18}
+      assert Layout.water(%{w: 5, d: 400}) == %{x: 0, y: 0, w: 5, d: 400}
     end
 
-    property "the water is in the room, with a deck on each side" do
-      check all(
-              w <- integer(Layout.min_room()..Layout.max_room()),
-              d <- integer(Layout.min_room()..Layout.max_room())
-            ) do
+    property "the water is in the pool, with the same coping on each side" do
+      check all(w <- integer(1..1200), d <- integer(1..1200)) do
         water = Layout.water(%{w: w, d: d})
-        assert water.x > 0 and water.y > 0 and water.w > 0 and water.d > 0
-        assert water.x + water.w < w and water.y + water.d < d
+        assert water.x >= 0 and water.x == water.y
+        assert water.w > 0 and water.d > 0
+        assert water.x + water.w + water.x == w and water.y + water.d + water.y == d
       end
     end
 
-    test "a new item of a pool goes on the deck, not on the water" do
-      {:ok, build, pool} = Build.add_room(build(), "Pool", "outside", :outdoor, "pool")
-      {:ok, room} = Build.room(build, pool)
-      water = Layout.water(room.plan)
+    test "a new item goes next to the pool, not on the water" do
+      # A yard of 60 by 40 ft, far from the house.
+      {:ok, build, backyard} = Build.add_room(build(), "Yard", "outside", :outdoor)
+      {:ok, build} = Build.size_room(build, backyard, %{x: 2400, y: 0, w: 720, d: 480})
+      {build, pool} = add(build, backyard, "pool")
+      {:ok, item} = Build.item(build, pool)
 
       build =
         Enum.reduce(~w(pool_pump pool_heater hot_tub lights), build, fn type, build ->
-          {:ok, build, _id} = Build.add_item(build, pool, type)
+          {build, _id} = add(build, backyard, type)
           build
         end)
 
-      for item <- build.items, item.room == pool do
-        refute Layout.overlap?(Layout.item_box(item), water), "#{item.type} is on the water"
+      for other <- build.items, other.room == backyard, other.id != pool do
+        refute Layout.overlap?(Layout.item_box(other), Layout.item_box(item)),
+               "#{other.type} is on the pool"
       end
     end
   end
 
   describe "the items of a pool" do
-    test "go outside or in a pool, not in a different room inside" do
+    test "go in a room inside or outside, next to a pool" do
       build = build()
-      kitchen = room(build, "Kitchen").id
-      backyard = room(build, "Backyard").id
-      {:ok, build, spa} = Build.add_room(build, "Spa", "f1", :indoor, "pool")
 
-      for type <- ~w(pool_pump pool_heater hot_tub) do
-        kind = Catalog.kind(type)
-        assert Build.add_item(build, kitchen, type) == {:error, :place}
-        assert {:ok, _build, _id} = Build.add_item(build, backyard, type)
-        assert {:ok, _build, _id} = Build.add_item(build, spa, type)
-        refute Catalog.fits?(kind, room(build, "Kitchen"))
-        assert kind in Catalog.kinds_for_room(elem(Build.room(build, spa), 1))
+      for type <- ~w(pool_pump pool_heater hot_tub), name <- ["Kitchen", "Backyard"] do
+        assert {:ok, _build, _id} = Build.add_item(build, room(build, name).id, type)
       end
 
-      {build, tub} = add(build, spa, "hot_tub")
-      assert Build.move_item(build, tub, kitchen) == {:error, :place}
-      assert {:ok, _build} = Build.move_item(build, tub, backyard)
+      assert Catalog.where(Catalog.kind("pool")) == "a room inside or a room outside"
     end
   end
 
@@ -162,8 +221,9 @@ defmodule DIY.PoolTest do
 
       assert "ev" in types.("Tesla")
       assert "ev" in types.("wall connector")
-      assert Enum.all?(~w(pool_pump pool_heater), &(&1 in types.("pool")))
-      assert Enum.all?(~w(pool_pump pool_heater hot_tub), &(&1 in types.("Spa")))
+      assert Enum.all?(~w(pool pool_pump pool_heater), &(&1 in types.("pool")))
+      assert Enum.all?(~w(pool pool_pump pool_heater hot_tub), &(&1 in types.("Spa")))
+      assert "pool" in types.("swimming")
       assert "hot_tub" in types.("Jacuzzi")
       assert "fridge" in types.("refrigerator")
       assert types.("zzz") == []
@@ -186,7 +246,8 @@ defmodule DIY.PoolTest do
     end
 
     test "tells where a kind goes" do
-      assert Catalog.where(Catalog.kind("pool_pump")) == "a room outside or a pool"
+      assert Catalog.where(Catalog.kind("pool_pump")) == "a room inside or a room outside"
+      assert Catalog.where(Catalog.kind("ac")) == "a room outside or the roof"
       assert Catalog.where(Catalog.kind("lights")) == "a room inside or a room outside"
       assert Catalog.where(Catalog.kind("dishwasher")) == "a room inside"
 
@@ -267,15 +328,14 @@ defmodule DIY.PoolTest do
   describe "the model of specs/Pool.tla" do
     property "each item fits its room after any steps, and no pool is on the roof" do
       base = build()
-      {:ok, base, _id} = Build.add_room(base, "Pool", "outside", :outdoor, "pool")
       rooms = Enum.map(base.rooms, & &1.id)
-      types = ~w(hot_tub pool_pump pool_heater dishwasher lights fridge)
+      types = ~w(pool hot_tub pool_pump dishwasher lights fridge)
 
       step =
         one_of([
           tuple({constant(:add), member_of(rooms), member_of(types)}),
           tuple({constant(:move), integer(0..30), member_of(rooms)}),
-          tuple({constant(:pool), member_of(rooms), boolean()})
+          tuple({constant(:place), integer(0..30), member_of(rooms)})
         ])
 
       check all(steps <- list_of(step, max_length: 25)) do
@@ -284,9 +344,14 @@ defmodule DIY.PoolTest do
         for item <- build.items, item.room in rooms do
           {:ok, room} = Build.room(build, item.room)
           assert Catalog.fits?(Catalog.kind(item.type), room), "#{item.type} in #{room.name}"
+
+          if Catalog.kind(item.type)[:heavy],
+            do: assert(room.level != "roof", "#{item.type} in #{room.name}")
         end
 
-        refute Enum.any?(build.rooms, &(Build.pool?(&1) and not Build.pool_place?(&1)))
+        # The file of the build keeps each item in its room.
+        {:ok, back} = build |> Build.to_json() |> Build.from_json()
+        assert Enum.map(back.items, &{&1.id, &1.room}) == Enum.map(build.items, &{&1.id, &1.room})
       end
     end
   end
@@ -307,10 +372,13 @@ defmodule DIY.PoolTest do
     end
   end
 
-  defp run({:pool, room, pool}, build) do
-    case Build.set_pool(build, room, pool) do
+  # A drag of an item on the plan, to a room or in its own room.
+  defp run({:place, n, room}, build) do
+    item = Enum.at(build.items, rem(n, length(build.items)))
+
+    case Build.place_item(build, item.id, room, %{x: 12, y: 12}) do
       {:ok, build} -> build
-      {:error, reason} when reason in [:items, :pool_place] -> build
+      {:error, _reason} -> build
     end
   end
 end

@@ -64,7 +64,7 @@ defmodule DIY.BuildDevicesTest do
 
     assert Build.add_device(build1, kitchen.id, "tv", 5) == {:error, :device}
     assert Build.add_device(build1, roof.id, "solar_panels", "dev-9") == {:error, :room}
-    assert Build.add_device(build1, kitchen.id, "pool_pump", "dev-9") == {:error, :place}
+    assert Build.add_device(build1, kitchen.id, "ac", "dev-9") == {:error, :place}
     assert Build.add_device(build1, "r999", "tv", "dev-9") == {:error, :room}
     assert Build.add_device(build1, kitchen.id, "nothing", "dev-9") == {:error, :type}
 

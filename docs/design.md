@@ -2535,7 +2535,7 @@ prototype "Hub in Hand" showed this way: things in the house, not cards.
 5. `DIY.HomeAssistant.ghosts/4` gives the ghosts, and the count of all
    of them. A ghost is a device with a kind and with no item, in the area
    of a room. The match of the rooms gives the room of an area: the
-   links, then the names. The kind must go in the room: a pool pump is
+   links, then the names. The kind must go in the room: a central AC is
    not a ghost in a living room. A device with no name has the name of
    its kind. A large Home Assistant can have hundreds of devices: the
    plan shows 8 ghosts in a room and 60 in the house at most. The next
@@ -3918,55 +3918,57 @@ Assistant.
 ## A pool and the search of the items
 
 A neighbor asked for a pool and for a Tesla charger. So the app has a
-pool room, three items for a pool and a search in the sheet Add.
+pool, three items for a pool and a search in the sheet Add.
 
-### A pool room
+### A pool is an item
 
-- A room inside or outside can be a pool: an indoor pool or a pool in
-  the yard. A room on the roof or in the attic is never a pool
-  (`Build.pool_place?/1`, `:pool_place`).
-- A pool room has the key `kind: "pool"`. Only a pool room has the key,
-  so the file of a different build does not change. A file with a
-  different kind, or with a pool on the roof, gives a room that is not a
-  pool.
-- A new pool has water of 30 ft by 15 ft, with a deck around it
-  (`DIY.Layout.water/1`). The deck is 3 ft at the sides and at the front.
-  The deck at the back is 10 ft, for the equipment and a hot tub. A small
-  room has a narrower deck. The box "A pool" in the sheet New room makes
-  a pool. The box "This room is a pool" in the sheet of a room changes it
-  later.
-- A new item in a pool goes on the deck, not on the water
-  (`DIY.Layout`). The person can still drag it. On the plan, only the
-  deck of a chosen pool gets the outline of the choice.
-- The plan and the house from outside draw the deck with pavers. The
+The owner decided this (October 2026): "A pool is an item of any room,
+indoor or outdoor. A spa is just a pool inside the room." A person adds
+a pool to the backyard. The yard stays a yard, with the grass around the
+pool.
+
+- The kind `"pool"` goes in a room inside or outside. It is heavy: it
+  does not go in the attic. A roof deck (a room outside on the level of
+  the roof) takes it. A hot tub is heavy too.
+- A new pool has water of 30 by 15 ft, with a coping of 2 ft around it.
+  So the item is 34 by 19 ft (`DIY.Catalog`). In a room that is smaller,
+  a new pool fills the room. A room with no plan gets a pool of the
+  typical size. A very large room gives a pool of the largest size of an
+  item. The person changes its size in its sheet, as
+  for each item, and drags it on the plan.
+- The water is in the box of the item (`DIY.Layout.water/1`). The coping
+  is an eighth of the short side of a small pool. New items go next to
+  the pool, not on it, as for each item (`DIY.Layout.fill/1`).
+- The plan and the house from outside draw the coping with pavers. The
   water has the color `--p-water` and a texture of waves (`tex-water`).
-  The water is lower than the deck. So the eye sees the walls of the pool
-  (`--p-pool-wall`) at the far sides.
+  The water is lower than the coping. So the eye sees the walls of the
+  pool (`--p-pool-wall`) at the far sides.
+- A pool uses no power: its pump and its heater are items next to it.
+  The estimate counts them, not the pool.
+- A file or a link of October 2026 can have a room of the kind `"pool"`.
+  The read keeps the room, with no kind. It adds a pool item at the place
+  of its water. The deck of the water was 3 ft at the sides and at the
+  front, and 10 ft at the back. A room on the level of the roof gets no
+  pool. The new item gets an id after the largest id of the file.
 
 ### The places of an item
 
-A kind has places (`DIY.Catalog`). The place `:pool` is new.
-`Catalog.fits?(kind, room)` is true when the place of the room is a
-place of the kind. It is also true when the kind has `:pool` and the
-room is a pool. Each check of a place uses this function. These are a
-new item, a move, a file, the home of a station and the devices of Home
-Assistant.
+A kind has places (`DIY.Catalog`). `Catalog.fits?(kind, room)` is true
+when the place of the room is a place of the kind. A heavy kind also
+must not be in the attic. Each check of a place uses this function.
+These are a new item, a move, a file, the home of a station and the
+devices of Home Assistant.
 
-- The pool pump, the pool heater and the hot tub go outside or in a
-  pool. So a hot tub can go in an indoor spa, but not in the kitchen.
-- A room stops being a pool only when each of its items still fits
-  (`:items`). Else, a hot tub stays in a room inside that is not a pool.
-  After this error, the box "This room is a pool" gets a new id. So the
-  page draws a new box, with the state of the room.
-- The list "Where it is" of an item also uses `fits?`. So a hot tub can
-  move from one indoor pool to a different indoor pool.
-- `specs/Pool.tla` checks these rules with TLC: each item fits its room,
-  and no pool is on the roof. Two models have a fault.
-  `Pool.nocheck.cfg` lets a room stop being a pool with no check of its
-  items. `Pool.roof.cfg` checks the place only, so the attic can be a
-  pool. A property
-  test of `test/diy/pool_test.exs` does random steps on a build, with
-  the same invariants.
+- The pool pump, the pool heater and the hot tub go in a room inside or
+  outside, next to a pool. So a pool pump of Home Assistant can be a
+  ghost in a room inside.
+- `specs/Pool.tla` checks these rules with TLC. Each item fits its room.
+  No pool and no hot tub is in the attic, and a roof deck takes them. Two
+  models have a fault. `Pool.nocheck.cfg` moves an item with no check of the
+  room. `Pool.light.cfg` checks the place only, so a pool goes in the
+  attic. A property test of `test/diy/pool_test.exs` does random steps
+  on a build, with the same invariants. It also reads the file of each
+  build again.
 
 ### The new items
 
@@ -3991,12 +3993,11 @@ Assistant.
 - The sheet Add has a box of search. Each word of the text must be the
   start of a word of a kind: of its name or of its more words
   (`Catalog.words/0`). Capitals have no effect. For example "Tesla" and "wall connector" find the car, and
-  "spa" finds the three items of a pool.
-- The list shows the kinds that fit the room and match the text. A pool
-  room shows the items of a pool first.
+  "spa" finds the pool and the three items of a pool.
+- The list shows the kinds that fit the room and match the text.
 - A kind that matches but does not fit the room shows under "Not for
-  this room", with the places where it goes. An example is "Hot tub: in
-  a room outside or a pool." So the person knows where to add it.
+  this room", with the places where it goes. An example is "Central AC:
+  in a room outside or the roof." So the person knows where to add it.
 - The item Other always shows: it takes any name and power. With no
   match, the sheet tells the person to use it.
 - A status that only a screen reader reads tells the count of the

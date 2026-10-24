@@ -183,7 +183,7 @@ defmodule DIY.BuildTest do
     assert {:ok, build, id} = Build.add_item(build, kitchen.id, "freezer")
     assert {:ok, %{typical: false, params: %{"kwh_year" => 400}}} = Build.item(build, id)
     assert Build.add_item(build, kitchen.id, "rocket") == {:error, :type}
-    assert Build.add_item(build, kitchen.id, "pool_pump") == {:error, :place}
+    assert Build.add_item(build, kitchen.id, "ac") == {:error, :place}
     assert Build.add_item(build, "r999", "freezer") == {:error, :room}
 
     assert {:ok, build} = Build.update_item(build, id, %{"kwh_year" => "350"})

@@ -691,7 +691,7 @@ defmodule DIYWeb.Cutaway do
     p = meters(room.plan)
     corners = rect(p, z)
     polys = [{corners, "p-floor p-" <> material} | texture(corners, material)]
-    %{surface(room, z, camera) | polys: polys ++ pool(room, z, camera), fixed: fixed}
+    %{surface(room, z, camera) | polys: polys, fixed: fixed}
   end
 
   defp rect(p, z),
@@ -701,25 +701,30 @@ defmodule DIYWeb.Cutaway do
   # picture.
   @pool_depth 0.35
 
-  # The water of a pool room, in its deck (`DIY.Layout.water/1`). The
-  # water is lower than the deck. So the eye sees the walls of the pool at
-  # the far sides, and the deck hides the water at the near sides. On the
-  # floor, the water then starts after the walls at the far sides. There,
-  # the eye sees a point of the water at the height of the deck.
-  defp pool(%{kind: "pool"} = room, z, camera) do
-    hole = DIY.Layout.water(room.plan)
-    hole = meters(%{hole | x: room.plan.x + hole.x, y: room.plan.y + hole.y})
+  # A pool item: a coping of pavers, and the water in it
+  # (`DIY.Layout.water/1`). The box is `%{x, y, w, d}` on the plan, in
+  # inches, after the turn. The water is lower than the coping. So the eye
+  # sees the walls of the pool at the far sides, and the coping hides the
+  # water at the near sides. On the floor, the water then starts after the
+  # walls at the far sides. There, the eye sees a point of the water at the
+  # height of the coping.
+  defp pool(box, z, camera) do
+    coping = meters(box)
+    hole = Layout.water(box)
+    hole = meters(%{hole | x: box.x + hole.x, y: box.y + hole.y})
     {ex, ey, ez} = camera.eye
     {sx, sy} = {@pool_depth * ex / ez, @pool_depth * ey / ez}
     water = %{x: hole.x + sx, y: hole.y + sy, w: hole.w - sx, d: hole.d - sy}
 
-    [{rect(hole, z), "p-floor p-pool-wall"}] ++
+    [
+      {rect(coping, z), "p-floor p-paver"},
+      {rect(coping, z), "p-tex p-tex-paver"},
+      {rect(hole, z), "p-floor p-pool-wall"}
+    ] ++
       if water.w > 0 and water.d > 0,
         do: [{rect(water, z), "p-water"}, {rect(water, z), "p-tex p-tex-water"}],
         else: []
   end
-
-  defp pool(_room, _z, _camera), do: []
 
   # The lines of a floor of a material (`textures/0`): a second polygon over
   # the floor, with the pattern of the material.
@@ -755,12 +760,7 @@ defmodule DIYWeb.Cutaway do
     {"ply", ~w(attic)}
   ]
 
-  @doc """
-  The material of the floor of a room: pavers for a pool (its deck), else
-  from its place and its name.
-  """
-  def material(%{kind: "pool"}), do: "paver"
-
+  @doc "The material of the floor of a room, from its place and its name."
   def material(%{place: :outdoor, name: name}) do
     name = String.downcase(name)
 
@@ -953,6 +953,10 @@ defmodule DIYWeb.Cutaway do
           frame = %{at: {x * @m, y * @m, z}, size: size, turn: item.turn, camera: camera}
           Shapes.placed_model(Shapes.van(item.params["model"]), frame)
 
+        {"pool", nil} ->
+          for {corners, class} <- pool(%{x: x, y: y, w: ew, d: ed}, z, camera),
+              do: {:poly, corners, class}
+
         {type, nil} ->
           base = z + Catalog.lift(type) * @m
 
@@ -974,9 +978,10 @@ defmodule DIYWeb.Cutaway do
           })
       end
 
-    # A soft shadow on the floor under an item that stands on it.
+    # A soft shadow on the floor under an item that stands on it. A pool is
+    # in the floor.
     shadow =
-      if roof == nil and Catalog.lift(item.type) == 0 do
+      if roof == nil and Catalog.lift(item.type) == 0 and item.type != "pool" do
         {x0, y0, x1, y1} = {(x - 3) * @m, (y - 3) * @m, (x + ew + 3) * @m, (y + ed + 3) * @m}
 
         [
@@ -1286,7 +1291,7 @@ defmodule DIYWeb.Cutaway do
         <polygon
           :if={!texture?(class)}
           points={points}
-          class={[class, @room.id == @selected && outline?(class) && "p-chosen"]}
+          class={[class, @room.id == @selected && "p-chosen"]}
           data-room={@room.id}
           data-plan={@room.plan}
           data-origin={@room.origin}
@@ -1300,10 +1305,6 @@ defmodule DIYWeb.Cutaway do
   # The lines of a floor are for the eyes. A tap goes through them to the
   # floor, and they move with the group of their room.
   defp texture?(class), do: String.starts_with?(class, "p-tex ")
-
-  # The walls and the water of a pool are in its deck: only the deck gets
-  # the outline of the chosen room.
-  defp outline?(class), do: class not in ["p-floor p-pool-wall", "p-water"]
 
   # The outline of the room that the user chose, and a handle in the middle
   # of each wall.

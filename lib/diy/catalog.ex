@@ -680,12 +680,24 @@ defmodule DIY.Catalog do
         )
       ]
     },
-    # The items of a pool go outside, or in a room that is a pool
-    # (`:pool`, `fits?/2`).
+    # A pool is an item of a room inside or outside: a spa is a pool in a
+    # room inside. It is the water and a coping around it. It uses no
+    # electricity. Its pump, its heater and a hot tub are items next to
+    # it. It is heavy: it does not go in the attic (`fits?/2`).
+    %{
+      type: "pool",
+      name: "Pool",
+      places: [:indoor, :outdoor],
+      heavy: true,
+      features: [],
+      params: []
+    },
+    # The items of a pool go in a room inside or outside, next to the
+    # pool.
     %{
       type: "pool_pump",
       name: "Pool pump",
-      places: [:outdoor, :pool],
+      places: [:indoor, :outdoor],
       features: [:estimate],
       params: [
         int("watts", "Power", "W", 1100, 100, 4000, "A 1 HP pump uses near 1,100 W."),
@@ -696,7 +708,7 @@ defmodule DIY.Catalog do
     %{
       type: "pool_heater",
       name: "Pool heater",
-      places: [:outdoor, :pool],
+      places: [:indoor, :outdoor],
       features: [:estimate],
       params: [
         choice(
@@ -738,7 +750,8 @@ defmodule DIY.Catalog do
     %{
       type: "hot_tub",
       name: "Hot tub",
-      places: [:outdoor, :pool],
+      places: [:indoor, :outdoor],
+      heavy: true,
       features: [:estimate],
       params: [
         float(
@@ -1420,6 +1433,10 @@ defmodule DIY.Catalog do
     "pool_heater" => {34, 34, 40},
     # No source: a hot tub of 7 by 7 ft for 5 or 6 persons.
     "hot_tub" => {84, 84, 36},
+    # Water of 30 by 15 ft, a common size of the pool of a house, with a
+    # coping of 2 ft around it. The coping is 6 in over the floor. No
+    # source: the person gives the size of the pool.
+    "pool" => {408, 228, 6},
     # No source: a tower heater.
     "space_heater" => {10, 7, 25},
     # Pecron F5000LFP: 21.7 by 15 by 13.1 in (Pecron). Its trolley is not in
@@ -1572,14 +1589,16 @@ defmodule DIY.Catalog do
   def kinds_for(place), do: Enum.filter(@kinds, &(place in &1.places))
 
   @doc """
-  True when an item of a kind can go in a room. A room that is a pool
-  (`kind: "pool"`, `DIY.Build.pool?/1`) also takes the items of the place
-  `:pool`. So an indoor pool takes a pool pump, a pool heater and a hot
-  tub.
+  True when an item of a kind can go in a room: the place of the room is
+  a place of the kind. A heavy kind (`heavy: true`: a pool and a hot tub)
+  does not go in the attic. The attic is a room inside on the level of the
+  roof. A heavy kind can go on a roof deck: a room outside on that level.
   """
-  def fits?(%{places: places}, room) do
-    room.place in places or (:pool in places and Map.get(room, :kind) == "pool")
+  def fits?(%{places: places} = kind, room) do
+    room.place in places and not (Map.get(kind, :heavy, false) and attic?(room))
   end
+
+  defp attic?(room), do: room.level == "roof" and room.place == :indoor
 
   @doc "The kinds that can go in a room (`fits?/2`)."
   def kinds_for_room(room), do: Enum.filter(@kinds, &fits?(&1, room))
@@ -1591,6 +1610,7 @@ defmodule DIY.Catalog do
     "pool_pump" => ~w(pool pump spa),
     "pool_heater" => ~w(pool heater spa heat pump),
     "hot_tub" => ~w(hot tub spa jacuzzi),
+    "pool" => ~w(pool swimming spa),
     "fridge" => ~w(refrigerator),
     "freezer" => ~w(refrigerator),
     "ac" => ~w(air conditioner hvac cooling heat pump),
@@ -1629,25 +1649,20 @@ defmodule DIY.Catalog do
   defp words_of(text),
     do: text |> String.downcase() |> String.split(~r/[^\p{L}\p{N}]+/u, trim: true)
 
-  @doc "The kinds that can go in the house: in a room, on the roof or in a pool."
+  @doc "The kinds that can go in the house: in a room or on the roof."
   def house_kinds,
-    do: Enum.filter(@kinds, fn kind -> Enum.any?(kind.places, &(&1 in [:pool | @places])) end)
+    do: Enum.filter(@kinds, fn kind -> Enum.any?(kind.places, &(&1 in @places)) end)
 
   @doc """
   Where a kind can go in the house, in words: for example "a room inside
-  or a pool".
+  or a room outside".
   """
   def where(%{places: places}) do
-    names = %{
-      indoor: "a room inside",
-      outdoor: "a room outside",
-      roof: "the roof",
-      pool: "a pool"
-    }
+    names = %{indoor: "a room inside", outdoor: "a room outside", roof: "the roof"}
 
     places
     |> Enum.filter(&Map.has_key?(names, &1))
-    |> Enum.sort_by(&Enum.find_index([:indoor, :outdoor, :roof, :pool], fn p -> p == &1 end))
+    |> Enum.sort_by(&Enum.find_index([:indoor, :outdoor, :roof], fn p -> p == &1 end))
     |> Enum.map(&names[&1])
     |> join_or()
   end

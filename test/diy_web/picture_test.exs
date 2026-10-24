@@ -48,14 +48,24 @@ defmodule DIYWeb.PictureTest do
   # A house with a pool in the yard and a spa inside, with the items of a
   # pool.
   defp pool_house do
-    {:ok, build, pool} = Build.add_room(house(), "Pool", "outside", :outdoor, "pool")
-    {:ok, build, spa} = Build.add_room(build, "Spa", "f1", :indoor, "pool")
+    build = house()
+    yard = Enum.find(build.rooms, &(&1.name == "Backyard")).id
+    {:ok, build, spa} = Build.add_room(build, "Spa", "f1", :indoor)
 
-    Enum.reduce([{pool, "pool_pump"}, {pool, "pool_heater"}, {spa, "hot_tub"}], build, fn
-      {room, type}, build ->
+    Enum.reduce(
+      [
+        {yard, "pool"},
+        {yard, "pool_pump"},
+        {yard, "pool_heater"},
+        {spa, "pool"},
+        {spa, "hot_tub"}
+      ],
+      build,
+      fn {room, type}, build ->
         {:ok, build, _id} = Build.add_item(build, room, type)
         build
-    end)
+      end
+    )
   end
 
   # Each sky of a picture: each time of day with each weather.

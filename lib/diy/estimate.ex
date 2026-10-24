@@ -89,8 +89,9 @@ defmodule DIY.Estimate do
   @dryer 0.073
   @therm 100_000
 
-  # The kinds that use no power of the house by themselves (`no_use/0`).
-  @no_use ~w(power_station solar_panels transfer_switch smart_meter camper_van dc_bus)
+  # The kinds that use no power of the house by themselves (`no_use/0`). A
+  # pool uses no power: its pump and its heater are items.
+  @no_use ~w(power_station solar_panels transfer_switch smart_meter camper_van dc_bus pool)
 
   @hvac_range 0.15
   @typical_range 0.20
@@ -947,6 +948,9 @@ defmodule DIY.Estimate do
 
   defp steps(%{type: "dc_bus"}, _m, _data, _estimate),
     do: ["A busbar connects the wires of the batteries and of the loads. It uses no power."]
+
+  defp steps(%{type: "pool"}, _m, _data, _estimate),
+    do: ["The water uses no power. Its pump, its heater and a hot tub are items next to it."]
 
   defp steps(%{type: "pool_heater", params: %{"fuel" => "gas"} = p} = item, m, _data, _estimate) do
     if in_season(item, %{month: m.month}) == 0,

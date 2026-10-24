@@ -290,7 +290,7 @@ defmodule DIY.EstimateTest do
   test "the explanation of each item gives its kWh in each month" do
     build =
       Enum.reduce(DIY.Kinds.house(), build(), fn kind, build ->
-        room = Enum.find(build.rooms, &(&1.place in kind.places))
+        room = Enum.find(build.rooms, &Catalog.fits?(kind, &1))
         {:ok, build, _id} = Build.add_item(build, room.id, kind.type)
         build
       end)
@@ -709,7 +709,7 @@ defmodule DIY.EstimateTest do
             kind <- member_of(DIY.Kinds.house())
           ) do
       before = Estimate.run(build, climate).kwh
-      room = Enum.find(build.rooms, &(&1.place in kind.places))
+      room = Enum.find(build.rooms, &Catalog.fits?(kind, &1))
       {:ok, more, _id} = Build.add_item(build, room.id, kind.type)
       # A second cooling or heating item shares the load: it can lower it.
       if kind.type not in ["ac", "mini_split", "furnace", "heat_strips"] do
