@@ -156,8 +156,8 @@ defmodule DIYWeb.PictureTest do
 
     svg = Picture.svg(house(), night)
     assert svg =~ ~s|style="fill:rgb(16, 27, 51)"|
-    # The house cut open: at night, a window has the color of the night,
-    # and the floor of a room has the light of a lamp.
+    # The house cut open at night: a window has the color of the night.
+    # The floor of a room has the light of a lamp.
     assert svg =~ "fill:rgb(44, 74, 102)"
     refute svg =~ "fill:rgb(242, 196, 107)"
     assert svg =~ "fill:url(#p-glow-fill)"

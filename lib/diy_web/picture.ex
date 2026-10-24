@@ -3,9 +3,9 @@ defmodule DIYWeb.Picture do
   The picture of a shared house, for the preview of its link
   (docs/design.md, "The preview of a link"). It is a PNG of 1200 × 630
   pixels. It shows the floors of the house cut open (`DIYWeb.Cutaway`)
-  in the sky of the link, with labels on the items that use the most
-  kWh (`DIYWeb.Picture.Labels`). At the right, it shows the numbers of
-  the year and a bar for each month.
+  in the sky of the link. The items that use the most kWh have labels
+  (`DIYWeb.Picture.Labels`). At the right, it shows the numbers of the
+  year and a bar for each month.
 
   The NIF resvg draws it (`DIY.Picture.NIF`). resvg reads no CSS of the
   page. Thus each shape of the SVG has its style in a `style` attribute,

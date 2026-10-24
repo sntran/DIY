@@ -2009,10 +2009,10 @@ The link also has a summary:
 - the language of the person who shares;
 - the sky of the picture ("The sky at the house");
 - the 6 items with the most kWh in a year, for the labels of the
-  picture: the id of each item, its kWh of a year, and its cost of a year
-  at the price of the page Rooms. An item with less than 1 kWh has no
-  label. A link of an older version has no items: its picture has no
-  labels.
+  picture. Each item has its id, its kWh of a year, and its cost of a
+  year. The cost uses the price of the page Rooms. An item with less than
+  1 kWh has no label. A link of an older version has no items: its
+  picture has no labels.
 
 The LiveView of the person who shares makes the summary from the
 numbers of the bill on the page House. Thus the server needs no weather
@@ -2093,28 +2093,30 @@ only the total. This is a decision of the owner (October 2026):
   label, for example a furnace in the attic. The picture has no lot and
   no names of rooms. The box of the house is only around its rooms and
   its items. Thus the house is as large as possible in the picture.
-- The sky of the link is behind the house ("The sky at the house"): the
-  sun or the moon, the clouds, and the rain or the snow over the house.
-  The colors of the house follow the time of day, as on the page. In the
-  house cut open, a window has the color of the sky, and at night each
-  room has the light of a lamp.
-- The 6 items with the most kWh have labels: the name of the item, then
-  its kWh and its cost of a year, for example "Central AC" and
-  "6,828 kWh · $908 a year". With no cost in the link, the label has the
-  kWh only. The label is above its item, with a line down to the item.
+- The sky of the link is behind the house ("The sky at the house"). It
+  has the sun or the moon, the clouds, and the rain or the snow over the
+  house. The colors of the house follow the time of day, as on the page.
+  In the house cut open, a window has the color of the sky. At night,
+  each room has the light of a lamp.
+- The 6 items with the most kWh have labels. A label has the name of the
+  item, then its kWh and its cost of a year. An example is "Central AC"
+  and "6,828 kWh · $908 a year". With no cost in the link, the label has
+  the kWh only. The label is above its item, with a line down to the
+  item.
 - The labels must not overlap (`DIYWeb.Picture.Labels`). The item with
   the most kWh gets its place first. Each label goes to the nearest free
-  place above its item: at the center of the item, at its left or at its
-  right, at the first height where it is free. A label with no free
-  place in the box is not in the picture. `specs/Labels.tla` checks that
-  two labels never overlap, that each label is in the box, and that the
-  first label always has a place when it fits. Two faults break the
-  model: no check of a free place (`Labels.nocheck.cfg`), and no clamp to
-  the box (`Labels.noclamp.cfg`).
-- The size of a text in resvg is not known before the draw. The width of
-  a label comes from the count of its letters: Inter has letters of about
-  0.56 (regular) and 0.64 (bold) of the size of its font, or less. So a
-  label is not narrower than its text.
+  place above its item. At each height, the label can be at the center
+  of the item, at its left or at its right. A label with no free place in
+  the box is not in the picture.
+- `specs/Labels.tla` checks three rules: two labels never overlap, each
+  label is in the box, and the first label always has a place when it
+  fits. Two faults break the model. One has no check of a free place
+  (`Labels.nocheck.cfg`). One does not keep a place in the box
+  (`Labels.noclamp.cfg`).
+- The size of a text in resvg is not known before the draw. Thus the
+  width of a label comes from the count of its letters. The letters of
+  Inter are about 0.56 (regular) and 0.64 (bold) of the size of its font,
+  or less. So a label is not narrower than its text.
 
 - A site that shows a preview reads PNG and JPEG, not SVG.
 - The NIF is resvg 0.48.1 in WebAssembly, as in mkfifo.com, with the text
@@ -2135,8 +2137,9 @@ only the total. This is a decision of the owner (October 2026):
   `app.css`. A stroke that does not scale on the page
   (`vector-effect: non-scaling-stroke`) gets the width for the scale of
   the picture. For each scene, the file also has the classes that are
-  different in the house cut open ("SCENE-inside"): the house from the
-  outside has a window with the light of a lamp at night.
+  different in the house cut open ("SCENE-inside"). For example, at
+  night a window of the house from the outside has the light of a lamp.
+  In the house cut open, it has the color of the night.
 - In workerd, the request of the picture of a typical house takes about
   0.65 s: the decode, the SVG and the draw. The house cut open has more
   shapes than the house from the outside (0.25 s). A site that shows

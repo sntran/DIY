@@ -2009,8 +2009,8 @@ defmodule DIYWeb.HomeLive do
 
   defp share(socket), do: assign(socket, :share, nil)
 
-  # The items of the house of today with their kWh and their cost of a
-  # year, as on the page Rooms, for the labels of the picture of a link.
+  # The items of the house of today, with their kWh and their cost of a
+  # year (as on the page Rooms). The picture of a link shows them on labels.
   defp share_items(%{build: build, estimate: estimate, price: price}) do
     for item <- Build.today(build).items, data = estimate.items[item.id] do
       {item.id, data.year, price && Format.cost(data.year, price.cents)}
