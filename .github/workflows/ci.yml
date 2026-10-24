@@ -39,7 +39,9 @@ env:
 jobs:
   check:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    # The tests, the TLA+ models and the browser test take near 25 minutes
+    # on a slow runner.
+    timeout-minutes: 45
     steps:
       # Two commits: the merge of a pull request, and its base (HEAD^1).
       - uses: actions/checkout@v4
