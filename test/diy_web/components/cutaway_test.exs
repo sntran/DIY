@@ -382,7 +382,7 @@ defmodule DIYWeb.CutawayTest do
     kitchen = room(build, "Kitchen")
     {build, fridge} = add(build, kitchen, "fridge")
     {build, meter} = add(build, kitchen, "smart_meter")
-    {:ok, build} = Build.place_item(build, fridge, kitchen, %{x: 20, y: 10})
+    {:ok, build} = Build.place_item(build, fridge, kitchen, %{x: 20, y: 60})
     [ground | _] = Cutaway.view(build).levels
     objects = Map.new(ground.objects, &{&1.id, &1})
 

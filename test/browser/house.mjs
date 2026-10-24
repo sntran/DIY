@@ -364,6 +364,18 @@ async function pool(page, name) {
   await page.click("#item-stage .stage-back")
   await page.waitForSelector("#item-stage", { state: "detached" })
 
+  // The person drags the dryer onto the washer: it goes on the washer
+  // (data-on).
+  await page.click("button[data-focus=ground]")
+  const [washerId, dryerId] = [await itemId(page, "Clothes washer"), await itemId(page, "Clothes dryer")]
+  const dryer = `g[data-item="${dryerId}"]`
+  const washer = center(await page.locator(`g[data-item="${washerId}"]`).boundingBox())
+  const from = center(await page.locator(dryer).boundingBox())
+  await drag(page, from, washer.x - from.x, washer.y - from.y)
+  await page.waitForSelector(`${dryer}[data-on="${washerId}"]`, { state: "attached" })
+    .catch(() => assert.fail(`${name}: the dryer goes on the washer with a drag`))
+  await check(page, `${name} dryer on the washer`)
+
   await follow(page, 'a[id^="add-"][aria-label="Add an item to Kitchen"]')
   await page.waitForSelector("#add-sheet")
   await page.fill("#add-search input[name=q]", "heat pump")

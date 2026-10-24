@@ -47,7 +47,7 @@ defmodule DIYWeb.Outside do
     camera = Camera.house()
     house = build |> Build.house_view() |> Build.today()
     rooms = Enum.filter(house.rooms, & &1.plan)
-    items = Enum.group_by(house.items, & &1.room)
+    items = house.items |> Cutaway.stacked() |> Enum.group_by(& &1.room)
 
     # A yard is on the ground. A room outside on a floor (a balcony) is on
     # its slab, with no wall. A room outside on the roof does not show.

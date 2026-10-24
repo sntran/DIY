@@ -123,6 +123,7 @@ defmodule DIY.Build do
           plan: plan() | nil
         }
   @type item :: %{
+          optional(:on) => String.t(),
           id: String.t(),
           type: String.t(),
           room: String.t(),
@@ -208,6 +209,9 @@ defmodule DIY.Build do
   def change(%__MODULE__{revision: revision} = build, fun) do
     %__MODULE__{} = changed = fun.(build)
     %__MODULE__{} = changed = Layout.fill(changed)
+    # An item stays on an item only when the two still stack (`DIY.Stack`).
+    rooms = Map.new(changed.rooms, &{&1.id, &1})
+    changed = %{changed | items: DIY.Stack.normalize(changed.items, rooms)}
     # An item that went away takes its links and its wires with it.
     ids = Enum.map(changed.items, & &1.id)
     devices = Map.take(changed.devices, ids)
@@ -1018,17 +1022,28 @@ defmodule DIY.Build do
   its kind can go. `at` is the back corner of the item in the room, in
   inches. The item stays in the room. An item does not go between the
   house and a van (as `move_item/3`).
+
+  An item over an item of the house goes on it (`DIY.Stack`). With
+  `snap` true (a drop on the plan), it snaps to the item under it, or to
+  the side of an item near it. The items on it go with it.
   """
-  @spec place_item(t(), String.t(), String.t(), %{x: integer(), y: integer()}) ::
+  @spec place_item(t(), String.t(), String.t(), %{x: integer(), y: integer()}, boolean()) ::
           {:ok, t()} | {:error, atom()}
-  def place_item(build, id, room_id, %{x: x, y: y}) when is_integer(x) and is_integer(y) do
+  def place_item(build, id, room_id, %{x: x, y: y}, snap \\ false)
+      when is_integer(x) and is_integer(y) do
     with {:ok, item} <- item(build, id),
          {:ok, from} <- plan_room(build, item.room),
          {:ok, room} <- plan_room(build, room_id),
          true <- Catalog.fits?(Catalog.kind(item.type), room) || {:error, :place},
          true <- van_level?(from.level) == van_level?(room.level) || {:error, :place} do
       at = Layout.clamp(%{x: x, y: y}, item, room.plan)
-      {:ok, replace_item(build, %{item | room: room.id, at: at})}
+
+      {at, on} = DIY.Stack.place(build.items, item, room, at, snap)
+
+      moved = %{item | room: room.id, at: at}
+      moved = if on, do: Map.put(moved, :on, on), else: Map.delete(moved, :on)
+      rooms = Map.new(build.rooms, &{&1.id, &1})
+      {:ok, change(build, &%{&1 | items: DIY.Stack.carry(&1.items, item, moved, rooms)})}
     end
   end
 
@@ -1299,7 +1314,10 @@ defmodule DIY.Build do
        }
        |> repair_vans()
        |> fit_wires()
-       |> Layout.fill()}
+       |> Layout.fill()
+       |> then(
+         &%{&1 | items: DIY.Stack.normalize(&1.items, Map.new(&1.rooms, fn r -> {r.id, r} end))}
+       )}
     end
   end
 
@@ -1736,6 +1754,11 @@ defmodule DIY.Build do
             true -> nil
           end
 
+        # An item that goes home gets a free place in the house: its place
+        # in the van has no meaning there.
+        spot = read_spot(item)
+        spot = if room, do: spot, else: Map.delete(%{spot | at: nil}, :on)
+
         item =
           Map.merge(
             %{
@@ -1748,7 +1771,7 @@ defmodule DIY.Build do
               home: if(room, do: home),
               params: Catalog.loose_params(type, Map.get(item, "params"))
             },
-            read_spot(item)
+            spot
           )
 
         if item.room, do: {:van, item}, else: :skip
@@ -1770,8 +1793,11 @@ defmodule DIY.Build do
   # The place of an item in its room, its turn and its size. A part that
   # is not valid goes away: the item goes to a free place
   # (`DIY.Layout.fill/1`), with no turn, or with its typical size.
+  # The item under an item comes from the file: `DIY.Stack.normalize/2`
+  # checks it when the items are there.
   defp read_spot(item) do
-    %{at: read_at(item["at"]), turn: item_turn(item), size: read_size(item["size"])}
+    spot = %{at: read_at(item["at"]), turn: item_turn(item), size: read_size(item["size"])}
+    if is_binary(item["on"]), do: Map.put(spot, :on, item["on"]), else: spot
   end
 
   defp read_at(%{"x" => x, "y" => y}) when is_integer(x) and is_integer(y),

@@ -398,15 +398,22 @@ defmodule DIYWeb.Inside do
   @doc """
   The place of an item in its room, in words. In the house, the Left key
   goes to the left wall, and the Up key to the back wall. In a van, the Up
-  key goes to its right side, and the Right key to its back.
+  key goes to its right side, and the Right key to its back. An item on
+  an item (`DIY.Stack`) also tells the item under it, from `items`.
   """
-  def where(item, %{level: "van:" <> _} = zone),
+  def where(item, %{level: "van:" <> _} = zone, _items),
     do:
       "#{feet(item.at.x)} from the right side of #{zone.name}, #{feet(item.at.y)} from its back."
 
-  def where(item, room),
-    do:
+  def where(item, room, items) do
+    place =
       "#{feet(item.at.x)} from the left wall of #{room.name}, #{feet(item.at.y)} from the back wall."
+
+    case Enum.find(items, &(&1.id == DIY.Stack.on(item))) do
+      nil -> place
+      base -> "#{place} Under it: #{Catalog.name(base)}."
+    end
+  end
 
   @doc "A length in inches as feet and inches, for example 12 ft 6 in."
   def feet(inches) do
@@ -1292,7 +1299,13 @@ defmodule DIYWeb.Inside do
             </option>
           </select>
         </form>
-        <.place :if={@item.at} item={@item} room={@room} bad={bad_sides(@error)} />
+        <.place
+          :if={@item.at}
+          item={@item}
+          room={@room}
+          items={@build.items}
+          bad={bad_sides(@error)}
+        />
       </section>
 
       <section id="part-more" class="stage-sec" aria-labelledby="part-more-title">
@@ -1556,6 +1569,7 @@ defmodule DIYWeb.Inside do
 
   attr :item, :map, required: true
   attr :room, :map, required: true, doc: "the room or the zone of the item"
+  attr :items, :list, default: [], doc: "the items of the build: the item under the item"
 
   attr :bad, :list,
     default: [],
@@ -1589,7 +1603,7 @@ defmodule DIYWeb.Inside do
         what="the item"
         van={Build.van_level?(@room.level)}
       />
-      <p id="item-where" class="stage-help" aria-live="polite">{where(@item, @room)}</p>
+      <p id="item-where" class="stage-help" aria-live="polite">{where(@item, @room, @items)}</p>
       <p :if={@item.type == "solar_panels"} class="stage-help">
         The watts give the size of the panels on the roof: {@panel} inches for each panel of 400 W.
       </p>

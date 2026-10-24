@@ -3970,6 +3970,73 @@ devices of Home Assistant.
   on a build, with the same invariants. It also reads the file of each
   build again.
 
+### Items on items
+
+The owner asked for items on items, with a snap that helps the person
+(October 2026). A person puts a dryer on a washer, a power
+station on a freezer, or a pool pump on the coping of a pool
+(`DIY.Stack`).
+
+- An item has the key `on`: the id of the item under it. An item on the
+  floor has no key. The file and the link keep the key.
+- An item A holds an item B when two rules are true. The center of the
+  space of B is over A. The space of A is at least half of the space of
+  B. So a TV goes on a narrow stand, and a dryer that turns stays on its
+  washer. But a fridge does not go on a microwave. A pool holds an item
+  only on its coping: an item over the water is not on the pool.
+- A drop on the plan puts the item on the item that holds it. When two
+  or more items hold it, it goes on the item with the highest top. Near
+  an end of the item under it (6 inches or less), it goes to that end.
+  Near the center, it goes to the center. An item that is larger than
+  the item under it goes to its center. Then it goes next to an item on
+  the same item, as on the floor. On a pool, it stays where the person
+  drops it.
+- A drop on the floor can move the item to the side of an item on the
+  floor near it (6 inches or less). Then the two have no gap. Items on a
+  wall or a ceiling have no effect on this, and they do not move this
+  way.
+- The arrow keys do not move the item to an end or a side. The item goes
+  on the item that holds it, or on the floor.
+- When an item moves, the items on it move with it, by the same
+  distance, also to a different room. In a drag, the page moves them
+  with it (`data-on`). Each item stays in its room. An item that does
+  not fit the new room stays, with the items on it: a TV does not go
+  outside on a pool pump.
+- After each change, an item that is not held by the item under it
+  comes down. For example, the item under it goes away, or turns, or
+  gets a new size. Or the list of the sheet moves it to a new room. An
+  item that comes down goes on the highest item that holds it there, if
+  there is one. The other items on the floor stay where they are: a new
+  item does not take an old item on it.
+- Two items can overlap, on the floor or on the top of an item, as
+  before. For example, a full room gives a new item a place over an old
+  item. The snap helps the person to put the items side by side.
+- An item on an item is on its top: the picture adds the height of the
+  item under it. A pool is in the floor, so an item on a pool is at the
+  floor. An item over the top of an item has no shadow. The top item
+  paints after the item under it (`DIYWeb.Camera.order/2`).
+- Solar panels, a camper van, a car and an item on a wall or a ceiling
+  do not stack. A pool holds an item, but it does not go on an item. The
+  items of the roof and of a van do not stack.
+- When a file moves an item from a van to the house, the item gets a
+  free place in the house (`DIY.Layout.fill/1`).
+- The sheet of the item tells the item under it: "Under it: Clothes
+  washer."
+- `specs/Stack.tla` checks the rules with TLC. Each item fits its room.
+  The item under an item is there, in the same room and under it. No
+  item is under itself. An item that comes down goes on an item that
+  holds it (the step property `SeatFallen`). Four models have a fault:
+  - `Stack.noloop.cfg` puts an item on an item that is on it.
+  - `Stack.nodrop.cfg` deletes an item, but the items on it stay on it.
+  - `Stack.nofit.cfg` moves the items on an item to a room that they do
+    not fit.
+  - `Stack.noseat.cfg` keeps an item that comes down on the floor, also
+    in an item that holds it.
+
+  A property test of `test/diy/stack_test.exs` does random drops, moves,
+  turns, sizes, walls and deletes, with the same invariants. It also
+  reads the file of each build again.
+
 ### The new items
 
 - **Pool heater.** A heat pump or an electric heater uses its watts for
