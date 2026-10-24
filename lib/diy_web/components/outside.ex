@@ -674,8 +674,9 @@ defmodule DIYWeb.Outside do
   @doc """
   The sky of a picture (`view/1`) at a time of day and with a weather
   (`DIY.Sky`). `back` paints before the house: the sky, the sun or the
-  moon, the stars and the clouds. `front` paints after it: the rain or the
-  snow, and the warm light of a sunset. Each shape is `{tag, attributes}`.
+  moon, the stars and the clouds. `fall` paints after it: the rain or the
+  snow, in a group that moves. `glow` paints last: the warm light of a
+  sunset, which does not move. Each shape is `{tag, attributes}`.
 
   The sun and the moon are at the top left: the grid and its label are at
   the right. The rain and the snow cover all the picture.
@@ -690,11 +691,10 @@ defmodule DIYWeb.Outside do
         stars(time, weather, x, y, w, h, s) ++
         clouds(weather, dark?, x, y, w, h, s)
 
-    front =
-      fall(weather, x, y, w, h, s) ++
-        if(time == "sunset", do: [{:rect, %{x: x, y: y, w: w, h: h, class: "p-dusk"}}], else: [])
+    glow =
+      if time == "sunset", do: [{:rect, %{x: x, y: y, w: w, h: h, class: "p-dusk"}}], else: []
 
-    %{back: back, front: front}
+    %{back: back, fall: fall(weather, x, y, w, h, s), glow: glow}
   end
 
   # The sun by day (not in rain or snow), the low sun at a sunset, and the
@@ -833,7 +833,8 @@ defmodule DIYWeb.Outside do
         />
         <text x={chip.x} y={chip.y} text-anchor="middle" class="p-chip-text">{chip.text}</text>
       </g>
-      <g class={"p-fall p-fall-#{@sky.weather}"}><.shapes list={@shapes.front} /></g>
+      <g class={"p-fall p-fall-#{@sky.weather}"}><.shapes list={@shapes.fall} /></g>
+      <.shapes list={@shapes.glow} />
     </svg>
     """
   end
@@ -848,13 +849,13 @@ defmodule DIYWeb.Outside do
   """
   def sky_form(assigns) do
     ~H"""
-    <form id={@id} phx-change="sky_pick" class="space-y-1">
+    <form id={@id} phx-change="sky_pick" class="space-y-1" lang={Gettext.get_locale(DIY.Gettext)}>
       <div class="grid grid-cols-2 gap-2">
         <label class="text-sm">
           <span class="block font-semibold">{gettext("Time of day")}</span>
           <select name="time" class="select select-sm w-full">
             <option value="now" selected={@pick["time"] == "now"}>
-              {now_name(@now && time_name(@now.time))}
+              {now_name(@now && now_time(@now))}
             </option>
             <option :for={time <- DIY.Sky.times()} value={time} selected={@pick["time"] == time}>
               {time_name(time)}
@@ -880,7 +881,7 @@ defmodule DIYWeb.Outside do
       <p :if={@now} id={"#{@id}-now"} class="text-xs opacity-70">
         {gettext("Now at the house: %{temp} °F, %{time}, %{weather}.",
           temp: round(@now.temp),
-          time: String.downcase(time_name(@now.time)),
+          time: String.downcase(now_time(@now)),
           weather: String.downcase(weather_name(@now.weather))
         )}
       </p>
@@ -890,6 +891,11 @@ defmodule DIYWeb.Outside do
 
   defp now_name(nil), do: gettext("Now")
   defp now_name(name), do: gettext("Now (%{name})", name: name)
+
+  # Near the sunrise, the sky of now is a sunrise: the picture is the same
+  # as at a sunset.
+  defp now_time(%{time: "sunset", dawn: true}), do: gettext("Sunrise")
+  defp now_time(%{time: time}), do: time_name(time)
 
   defp time_name("day"), do: gettext("Day")
   defp time_name("sunset"), do: gettext("Sunset")

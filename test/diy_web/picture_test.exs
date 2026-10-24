@@ -40,18 +40,23 @@ defmodule DIYWeb.PictureTest do
     end)
   end
 
+  # Each sky of a picture: each time of day with each weather.
+  @skies for time <- DIY.Sky.times(),
+             weather <- DIY.Sky.weathers(),
+             do: %{time: time, weather: weather}
+
   # The SVG of the house from the outside, with its classes.
-  defp svg_of(build) do
-    %{__changed__: nil, view: Outside.view(build)}
+  defp svg_of(build, sky \\ %{time: "day", weather: "sun"}) do
+    %{__changed__: nil, view: Outside.view(build), sky: sky}
     |> Outside.house()
     |> Phoenix.HTML.Safe.to_iodata()
     |> IO.iodata_to_binary()
   end
 
   # The classes of the SVG of the house from the outside.
-  defp classes(build) do
+  defp classes(build, sky) do
     build
-    |> svg_of()
+    |> svg_of(sky)
     |> then(&Regex.scan(~r/ class="([^"]*)"/, &1))
     |> Enum.flat_map(fn [_, c] -> String.split(c) end)
     |> MapSet.new()
@@ -72,8 +77,12 @@ defmodule DIYWeb.PictureTest do
       pool_house()
     ]
 
-    for build <- builds, class <- classes(build), class not in @plain do
-      assert Map.has_key?(Picture.styles(), class), "#{class} has no style"
+    for build <- builds,
+        sky <- @skies,
+        styles = Picture.styles(sky.time, sky.weather),
+        class <- classes(build, sky),
+        class not in @plain do
+      assert Map.has_key?(styles, class), "#{class} has no style in #{inspect(sky)}"
     end
   end
 
@@ -87,14 +96,16 @@ defmodule DIYWeb.PictureTest do
           house(%{floors: 3, size: 5200, lot: 9000}),
           pool_house()
         ],
-        html = svg_of(build),
+        sky <- @skies,
+        styles = Picture.styles(sky.time, sky.weather),
+        html = svg_of(build, sky),
         [_, classes] <- Regex.scan(~r/ class="([^"]*)"/, html),
         list = String.split(classes),
         a <- list,
         b <- list,
         a < b,
-        {prop, value} <- Map.get(Picture.styles(), a, %{}),
-        other = Map.get(Picture.styles(), b, %{})[prop],
+        {prop, value} <- Map.get(styles, a, %{}),
+        other = Map.get(styles, b, %{})[prop],
         other != nil do
       assert other == value, "#{a} and #{b} set #{prop} to #{value} and #{other}"
     end

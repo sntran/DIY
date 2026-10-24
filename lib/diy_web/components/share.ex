@@ -123,7 +123,11 @@ defmodule DIYWeb.Share do
             <%!-- The title of the link is in its language: the page has the language of the person who opens it. --%>
             <p class="text-sm opacity-70">{DIYWeb.Picture.title(shared.build, shared.summary)}</p>
           </div>
-          <div class="overflow-hidden rounded-box" role="img" aria-label={shared.view.label}>
+          <div
+            class="overflow-hidden rounded-box"
+            role="img"
+            aria-label={"#{shared.view.label}, on #{Outside.sky_label(shared.summary.sky)}"}
+          >
             <Outside.house view={shared.view} sky={shared.summary.sky} />
           </div>
           <dl class="grid grid-cols-2 gap-3">

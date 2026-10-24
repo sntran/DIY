@@ -471,6 +471,7 @@ async function build(context, name) {
   // scene, not the theme of the page: by day, the sky is light also in the
   // dark theme.
   const skyFill = () => page.$eval("#house-picture .p-sky", (el) => getComputedStyle(el).fill)
+  const paneFill = () => page.$eval("#house-picture .p-pane", (el) => getComputedStyle(el).fill)
   if (process.env.DIY_STUBS) {
     await page.waitForSelector("#sky-form option[value=now]:has-text('Now (Day)')", { state: "attached" })
     await page.waitForSelector("#sky-form-now:has-text('Now at the house: 59 °F, day, sun.')")
@@ -479,11 +480,13 @@ async function build(context, name) {
   await page.selectOption("#sky-form select[name=weather]", "rain")
   await page.waitForSelector("#house-picture svg[data-scene=night][data-weather=rain]")
   assert.equal(await skyFill(), "rgb(16, 27, 51)")
+  assert.equal(await paneFill(), "rgb(242, 196, 107)")
   await check(page, `${name} night with rain`)
   await page.selectOption("#sky-form select[name=time]", "day")
   await page.selectOption("#sky-form select[name=weather]", "sun")
   await page.waitForSelector("#house-picture svg[data-scene=day][data-weather=sun]")
   assert.equal(await skyFill(), "rgb(217, 235, 248)")
+  assert.equal(await paneFill(), "rgb(185, 220, 245)")
   await page.selectOption("#sky-form select[name=time]", "now")
   await page.selectOption("#sky-form select[name=weather]", "now")
   await page.waitForSelector("#sky-form option[value=now][selected]", { state: "attached" })

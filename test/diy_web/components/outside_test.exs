@@ -399,7 +399,7 @@ defmodule DIYWeb.OutsideTest do
       assert sky_classes(Outside.sky(@box, %{time: "day", weather: "sun"}).back) ==
                ~w(p-sky p-sun)
 
-      %{back: back, front: []} = Outside.sky(@box, %{time: "day", weather: "clouds"})
+      %{back: back, fall: [], glow: []} = Outside.sky(@box, %{time: "day", weather: "clouds"})
       assert "p-sun" in sky_classes(back)
       assert Enum.count(sky_classes(back), &(&1 == "p-cloud")) == 12
     end
@@ -414,22 +414,27 @@ defmodule DIYWeb.OutsideTest do
 
     test "rain and snow: dark clouds, no sun and no moon, and the rain or the snow in front" do
       for time <- DIY.Sky.times() do
-        %{back: back, front: front} = Outside.sky(@box, %{time: time, weather: "rain"})
+        %{back: back, fall: fall} = Outside.sky(@box, %{time: time, weather: "rain"})
         back = sky_classes(back)
         refute Enum.any?(back, &(&1 in ~w(p-sun p-sun-low p-moon p-star)))
         assert Enum.count(back, &(&1 == "p-cloud-dark")) == 16
-        assert [{:path, %{class: "p-rain", d: d}} | _] = front
+        assert [{:path, %{class: "p-rain", d: d}}] = fall
         assert length(String.split(d, "M", trim: true)) == 60
       end
 
-      %{front: front} = Outside.sky(@box, %{time: "day", weather: "snow"})
-      assert Enum.count(sky_classes(front), &(&1 == "p-snow")) == 70
+      %{fall: fall} = Outside.sky(@box, %{time: "day", weather: "snow"})
+      assert Enum.count(sky_classes(fall), &(&1 == "p-snow")) == 70
     end
 
     test "a sunset: a low sun, and a warm light over the house" do
-      %{back: back, front: front} = Outside.sky(@box, %{time: "sunset", weather: "sun"})
+      %{back: back, glow: glow} = Outside.sky(@box, %{time: "sunset", weather: "sun"})
       assert "p-sun-low" in sky_classes(back)
-      assert sky_classes(front) == ["p-dusk"]
+      assert sky_classes(glow) == ["p-dusk"]
+
+      # The warm light is not in the group of the rain, which moves.
+      %{fall: fall, glow: glow} = Outside.sky(@box, %{time: "sunset", weather: "rain"})
+      assert sky_classes(fall) == ["p-rain"]
+      assert sky_classes(glow) == ["p-dusk"]
     end
 
     property "each shape of the sky is in the box of the picture" do
@@ -439,10 +444,10 @@ defmodule DIYWeb.OutsideTest do
               w <- float(min: 100.0, max: 900.0),
               h <- float(min: 100.0, max: 900.0)
             ) do
-        %{back: back, front: front} =
+        %{back: back, fall: fall, glow: glow} =
           Outside.sky({10.0, 20.0, w, h}, %{time: time, weather: weather})
 
-        for {tag, a} <- back ++ front, tag in [:circle, :ellipse] do
+        for {tag, a} <- back ++ fall ++ glow, tag in [:circle, :ellipse] do
           assert a.cx >= 10.0 and a.cx <= 10.0 + w
           assert a.cy >= 20.0 and a.cy <= 20.0 + h
         end

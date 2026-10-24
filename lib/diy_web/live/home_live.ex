@@ -24,8 +24,10 @@ defmodule DIYWeb.HomeLive do
 
   @power_types ~w(power_station solar_panels transfer_switch ev)
 
-  # The time to ask for the sky at the house again: 30 minutes.
+  # The time to ask for the sky at the house again: 30 minutes, or sooner
+  # at the next change of the time of day. After an error: 5 minutes.
   @sky_again 30 * 60 * 1000
+  @sky_retry 5 * 60 * 1000
 
   # The sides of the size of an item, for − and +.
   @sides %{"w" => {:w, "Width"}, "d" => {:d, "Depth"}, "h" => {:h, "Height"}}
@@ -1519,9 +1521,9 @@ defmodule DIYWeb.HomeLive do
 
   # The sky of the ZIP code, for the picture of the house
   # (specs/Sky.tla). A new ZIP code has no sky until its answer comes. The
-  # page asks again 30 minutes after an answer, with one timer: a new
-  # timer cancels the one before. While the page asks again, the picture
-  # keeps the sky of before.
+  # page asks again after an answer, with one timer: a new timer cancels
+  # the one before. While the page asks again, the picture keeps the sky
+  # of before.
   defp load_sky(%{assigns: %{build: %{zip: nil}}} = socket) do
     cancel_sky_timer(socket)
     assign(socket, :sky, %{zip: nil, status: :none, now: nil, timer: nil})
@@ -1641,8 +1643,10 @@ defmodule DIYWeb.HomeLive do
   # The sky again, 30 minutes after an answer, when the ZIP code is the
   # same. The cache of DIY.Sky has a new key then. The picture keeps the
   # sky of before until the answer comes.
-  def handle_info({:sky_again, zip}, %{assigns: %{sky: %{zip: zip} = sky}} = socket),
-    do: {:noreply, socket |> assign(:sky, %{sky | status: :loading, timer: nil}) |> ask_sky()}
+  def handle_info({:sky_again, zip}, %{assigns: %{sky: %{zip: zip} = sky}} = socket) do
+    cancel_sky_timer(socket)
+    {:noreply, socket |> assign(:sky, %{sky | status: :loading, timer: nil}) |> ask_sky()}
+  end
 
   def handle_info({:sky_again, _zip}, socket), do: {:noreply, socket}
 
@@ -1723,18 +1727,27 @@ defmodule DIYWeb.HomeLive do
   end
 
   # The answer of the sky of a ZIP code that the build does not have now
-  # goes away. An error gives no sky: the picture is then a day with sun,
-  # or the choice of the person.
-  def handle_async({:sky, zip}, result, %{assigns: %{sky: %{zip: zip}}} = socket) do
+  # goes away. The page asks again in 30 minutes, or at the next change of
+  # the time of day. An error keeps the sky of before (with no sky, the
+  # picture is a day with sun), and the page asks again in 5 minutes.
+  def handle_async({:sky, zip}, result, %{assigns: %{sky: %{zip: zip} = sky}} = socket) do
     cancel_sky_timer(socket)
-    timer = Process.send_after(self(), {:sky_again, zip}, @sky_again)
 
-    sky =
+    {status, now, wait} =
       case result do
-        {:ok, {:ok, now}} -> %{zip: zip, status: :ok, now: now, timer: timer}
-        _error -> %{zip: zip, status: :error, now: nil, timer: timer}
+        {:ok, {:ok, %{next: next} = now}} when is_integer(next) ->
+          {:ok, now, min(@sky_again, (next + 1) * 1000)}
+
+        {:ok, {:ok, now}} ->
+          {:ok, now, @sky_again}
+
+        # The sky of before, with the clock of now.
+        _error ->
+          {:error, sky.now && DIY.Sky.at(sky.now.answer, DateTime.utc_now()), @sky_retry}
       end
 
+    timer = Process.send_after(self(), {:sky_again, zip}, wait)
+    sky = %{zip: zip, status: status, now: now, timer: timer}
     {:noreply, socket |> assign(:sky, sky) |> share()}
   end
 
@@ -1944,7 +1957,7 @@ defmodule DIYWeb.HomeLive do
                 :if={@share}
                 share={@share}
                 sky_pick={@sky_pick}
-                sky_now={@sky.now}
+                sky_now={if @share_zip, do: @sky.now}
               />
             </div>
         <% end %>
@@ -1956,7 +1969,8 @@ defmodule DIYWeb.HomeLive do
   # The sheet of the share (DIYWeb.Share): the link of the house of today,
   # with the numbers of the page. The picture and the title are in the
   # language of the page. The link changes only when the sheet opens, when
-  # the box of the ZIP code changes, and when the numbers change.
+  # the box of the ZIP code changes, and when the numbers change. It also
+  # changes with the choice of the sky, and with a new sky of now.
   defp share(
          %{
            assigns: %{
@@ -1969,7 +1983,9 @@ defmodule DIYWeb.HomeLive do
            socket
        ) do
     assigns = socket.assigns
-    sky = DIY.Sky.pick(assigns.sky_pick, assigns.sky.now)
+    # A link with no ZIP code carries no sky of now: "now" is a day with
+    # sun. The sky of now with the time of the post can tell the place.
+    sky = DIY.Sky.pick(assigns.sky_pick, if(assigns.share_zip, do: assigns.sky.now))
     summary = Share.summary(Enum.map(bill.months, & &1.kwh), bill.cost, assigns.locale, sky)
     zip? = assigns.share_zip
     shared = if zip?, do: build, else: %{build | zip: nil}

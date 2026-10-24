@@ -54,12 +54,20 @@ defmodule DIYWeb.SkyLiveTest do
            )
 
     # A night with rain.
-    Stubs.sky(Stubs.open_meteo("2026-10-24T22:00", 63))
+    Stubs.sky(Stubs.open_meteo(time: "night", code: 63))
     view = open(conn, ~p"/", house("75071"))
     assert scene(view) == {"night", "rain"}
     assert has_element?(view, ~s(#house-picture[aria-label$="on a night with rain."]))
     refute render(view) =~ "p-moon"
     assert render(view) =~ ~s(class="p-rain")
+
+    # Near the sunrise, the sky of now is a sunrise; the picture is the
+    # same as at a sunset.
+    Req.Test.stub(DIY.Sky, &Req.Test.json(&1, Stubs.open_meteo(time: "dawn")))
+    view = open(conn, ~p"/", house("75075"))
+    assert scene(view) == {"sunset", "sun"}
+    assert has_element?(view, "#sky-form option[value=now]", "Now (Sunrise)")
+    assert has_element?(view, "#sky-form-now", "Now at the house: 59 °F, sunrise, sun.")
   end
 
   test "the person chooses a time of day and a weather, and then now again", %{conn: conn} do
@@ -85,8 +93,41 @@ defmodule DIYWeb.SkyLiveTest do
     view = open(conn, ~p"/", house("75072"))
     assert sky(view).status == :error
     assert scene(view) == {"day", "sun"}
-    assert has_element?(view, "#sky-form option[value=now]", "Now")
+    assert has_element?(view, "#sky-form option[value=now]", ~r/^\s*Now\s*$/)
     refute has_element?(view, "#sky-form-now")
+    # The page asks again in 5 minutes.
+    assert Process.read_timer(sky(view).timer) in (4 * 60_000)..(5 * 60_000)
+  end
+
+  test "an error keeps the sky of before", %{conn: conn} do
+    Stubs.sky(Stubs.open_meteo(time: "night"))
+    view = open(conn, ~p"/", house())
+    assert scene(view) == {"night", "sun"}
+    old_local = sky(view).now.local
+    Stubs.sky(503)
+    send(view.pid, {:sky_again, "75070"})
+    settle(view)
+    assert sky(view).status == :error
+    assert scene(view) == {"night", "sun"}
+    # The sky of before has the clock of now.
+    assert NaiveDateTime.diff(sky(view).now.local, old_local, :microsecond) > 0
+  end
+
+  test "with no change of the time of day (near a pole), the page asks again in 30 minutes",
+       %{conn: conn} do
+    Stubs.sky(Stubs.open_meteo(time: "polar"))
+    view = open(conn, ~p"/", house())
+    assert scene(view) == {"night", "sun"}
+    assert Process.read_timer(sky(view).timer) > 29 * 60_000
+  end
+
+  test "the page asks again at the next change of the time of day", %{conn: conn} do
+    # The sunset is in 35 minutes: the time of day changes in 5 minutes.
+    at = DateTime.add(DateTime.utc_now(), 25, :minute)
+    Req.Test.stub(DIY.Sky, &Req.Test.json(&1, Stubs.open_meteo(time: "sunset", at: at)))
+    view = open(conn, ~p"/", house())
+    assert scene(view) == {"day", "sun"}
+    assert Process.read_timer(sky(view).timer) in (4 * 60_000)..(5 * 60_000 + 2_000)
   end
 
   test "the link of a share carries the sky of the picture", %{conn: conn} do
@@ -100,25 +141,40 @@ defmodule DIYWeb.SkyLiveTest do
     assert {:ok, _build, %{sky: %{time: "night", weather: "clouds"}}} = Share.decode(data)
     assert has_element?(view, ~s(#share-sheet img[src="/s/#{data}/picture.png"]))
 
+    # With no ZIP code in the link, "now" is a day with sun: the sky of now
+    # can tell the place.
+    Stubs.sky(Stubs.open_meteo(time: "night", code: 71))
+    view = open(conn, ~p"/?sheet=share", house("75074"))
+    assert scene(view) == {"night", "snow"}
+    assert {:ok, _build, %{sky: %{time: "night", weather: "snow"}}} = link(view)
+    view |> form("#share-zip", %{"zip" => "false"}) |> render_change()
+    assert {:ok, _build, %{sky: %{time: "day", weather: "sun"}}} = link(view)
+    # The choice "Now" of the sheet does not name the sky of now.
+    assert has_element?(view, "#share-sky option[value=now]", ~r/^\s*Now\s*$/)
+    refute has_element?(view, "#share-sky-now")
+    view |> form("#share-sky", %{"time" => "night", "weather" => "now"}) |> render_change()
+    assert {:ok, _build, %{sky: %{time: "night", weather: "sun"}}} = link(view)
+
     # The page of the link draws the house with the sky of the link.
     {:ok, shared, _html} = live(build_conn(), ~p"/s/#{data}")
     html = shared |> element("#shared svg") |> render()
     assert html =~ ~s(data-scene="night")
     assert html =~ ~s(data-weather="clouds")
+    assert has_element?(shared, ~s(#shared [role=img][aria-label$=", on a night with clouds"]))
   end
 
   test "the page asks for the sky again after 30 minutes, and keeps the sky of before",
        %{conn: conn} do
     view = open(conn, ~p"/", house())
     %{zip: "75070", status: :ok, timer: timer} = sky(view)
-    assert is_integer(Process.read_timer(timer))
+    assert Process.read_timer(timer) > 29 * 60_000
 
     test = self()
 
     Req.Test.stub(DIY.Sky, fn conn ->
       send(test, :asked)
       Process.sleep(100)
-      Req.Test.json(conn, Stubs.open_meteo("2026-10-24T18:40", 3))
+      Req.Test.json(conn, Stubs.open_meteo(time: "sunset", code: 3))
     end)
 
     send(view.pid, {:sky_again, "75070"})
@@ -157,6 +213,13 @@ defmodule DIYWeb.SkyLiveTest do
 
     assert {:noreply, ^socket} =
              DIYWeb.HomeLive.handle_async({:sky, "75070"}, {:ok, {:error, "x"}}, socket)
+  end
+
+  defp link(view) do
+    "http://www.example.com/s/" <> data =
+      view |> element("#share-link") |> render() |> attr("value")
+
+    Share.decode(data)
   end
 
   defp attr(html, name) do

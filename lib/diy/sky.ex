@@ -7,12 +7,18 @@ defmodule DIY.Sky do
 
   - The time of day is `"day"`, `"sunset"` or `"night"`. It is `"sunset"`
     from 30 minutes before to 30 minutes after the sunset, and also near
-    the sunrise. The times are the local times of the place.
+    the sunrise (then `dawn` is true). The times are the local times of
+    the place, from the clock of the server and the offset of the place.
+  - With no sunrise and no sunset in the day (near a pole), the time of
+    day is `"day"` or `"night"` all day, from Open-Meteo. In a polar
+    night, the sunrise and the sunset are the same time. In a polar day,
+    the sunset is 24 hours or more after the sunrise.
   - The weather is `"sun"`, `"clouds"`, `"rain"` or `"snow"`, from the
     code of the weather of the World Meteorological Organization (WMO).
 
-  The request has the point of the ZIP code, as for `DIY.Weather`. The
-  cache keeps the sky of a point for 30 minutes.
+  The request has a point on a grid of 0.25°, as for `DIY.Weather`: many
+  ZIP codes have the same point. The cache keeps the answer of a point
+  for 30 minutes.
   """
 
   alias DIY.Cache
@@ -21,17 +27,18 @@ defmodule DIY.Sky do
   @times ~w(day sunset night)
   @weathers ~w(sun clouds rain snow)
   # The minutes before and after the sunset (and the sunrise) that are
-  # "sunset", and the seconds that the cache keeps a sky.
+  # "sunset", and the milliseconds that the cache keeps an answer.
   @dusk 30
-  @keep 30 * 60
+  @keep 30 * 60 * 1000
 
   @type t :: %{
           time: String.t(),
+          dawn: boolean(),
           weather: String.t(),
           temp: float(),
           local: NaiveDateTime.t(),
-          sunrise: NaiveDateTime.t(),
-          sunset: NaiveDateTime.t()
+          next: non_neg_integer() | nil,
+          answer: map()
         }
 
   @doc "The times of day: `day`, `sunset` and `night`."
@@ -41,15 +48,22 @@ defmodule DIY.Sky do
   def weathers, do: @weathers
 
   @doc """
-  The sky now at a point. The answer stays in the cache for 30 minutes:
-  the key has the half hour of `at`.
+  The sky at a point at a time (`at`, UTC). It has the time of day and the
+  local time at `at`. `next` is the seconds until the time of day
+  changes, or nil after the last change of the day. `answer` is the
+  answer of Open-Meteo, for `at/2`.
   """
   @spec now(float(), float(), DateTime.t()) :: {:ok, t()} | {:error, String.t()}
   def now(lat, lon, at \\ DateTime.utc_now()) do
-    {lat, lon} = {Float.round(lat / 1, 2), Float.round(lon / 1, 2)}
-    slot = div(DateTime.to_unix(at), @keep)
-    Cache.fetch({__MODULE__, lat, lon, slot}, fn -> get(lat, lon) end)
+    {lat, lon} = {grid(lat), grid(lon)}
+    fetch = fn -> get(lat, lon) end
+
+    with {:ok, answer} <- Cache.fetch({__MODULE__, lat, lon}, fetch, max_age: @keep) do
+      {:ok, at(answer, at)}
+    end
   end
+
+  defp grid(value), do: Float.round(round(value * 4) / 4, 2)
 
   defp get(lat, lon) do
     options =
@@ -58,7 +72,7 @@ defmodule DIY.Sky do
         params: [
           latitude: lat,
           longitude: lon,
-          current: "weather_code,temperature_2m",
+          current: "weather_code,temperature_2m,is_day",
           daily: "sunrise,sunset",
           timezone: "auto",
           forecast_days: 1,
@@ -82,19 +96,19 @@ defmodule DIY.Sky do
 
   @doc false
   def parse(%{
-        "current" => %{"time" => time, "weather_code" => code, "temperature_2m" => temp},
+        "utc_offset_seconds" => offset,
+        "current" => %{"weather_code" => code, "temperature_2m" => temp, "is_day" => day},
         "daily" => %{"sunrise" => [rise | _], "sunset" => [set | _]}
       })
-      when is_integer(code) and is_number(temp) do
-    with {:ok, local} <- local(time),
-         {:ok, sunrise} <- local(rise),
+      when is_integer(offset) and is_integer(code) and is_number(temp) and day in [0, 1] do
+    with {:ok, sunrise} <- local(rise),
          {:ok, sunset} <- local(set) do
       {:ok,
        %{
-         time: time_of_day(local, sunrise, sunset),
+         offset: offset,
          weather: weather(code),
          temp: temp / 1,
-         local: local,
+         day: day == 1,
          sunrise: sunrise,
          sunset: sunset
        }}
@@ -115,15 +129,54 @@ defmodule DIY.Sky do
   defp local(_text), do: {:error, "The service of the sky gave a time that the app cannot read."}
 
   @doc """
+  The sky of an answer of Open-Meteo (`now/3`, `answer`) at a time (UTC).
+  When the service does not answer, the page uses the answer of before
+  with the clock of now.
+  """
+  @spec at(map(), DateTime.t()) :: t()
+  def at(answer, at) do
+    local = at |> DateTime.to_naive() |> NaiveDateTime.add(answer.offset)
+    %{sunrise: rise, sunset: set} = answer
+    polar? = rise == set or NaiveDateTime.diff(set, rise, :hour) >= 24
+
+    {time, next} =
+      if polar?,
+        do: {if(answer.day, do: "day", else: "night"), nil},
+        else: {time_of_day(local, rise, set), next(local, rise, set)}
+
+    %{
+      time: time,
+      dawn: time == "sunset" and near?(local, rise),
+      weather: answer.weather,
+      temp: answer.temp,
+      local: local,
+      next: next,
+      answer: answer
+    }
+  end
+
+  defp near?(local, time), do: abs(NaiveDateTime.diff(local, time, :second)) <= @dusk * 60
+
+  # The seconds until the next change of the time of day, or nil. The
+  # time of day is "sunset" from 30 minutes before to 30 minutes after the
+  # sunset (or the sunrise), with the two ends. So it changes at the
+  # start, and one second after the end.
+  defp next(local, rise, set) do
+    [rise, set]
+    |> Enum.flat_map(&[NaiveDateTime.add(&1, -@dusk * 60), NaiveDateTime.add(&1, @dusk * 60 + 1)])
+    |> Enum.map(&NaiveDateTime.diff(&1, local, :second))
+    |> Enum.filter(&(&1 > 0))
+    |> Enum.min(fn -> nil end)
+  end
+
+  @doc """
   The time of day at a local time, from the sunrise and the sunset of the
   day.
   """
   @spec time_of_day(NaiveDateTime.t(), NaiveDateTime.t(), NaiveDateTime.t()) :: String.t()
   def time_of_day(local, sunrise, sunset) do
-    near? = &(abs(NaiveDateTime.diff(local, &1, :minute)) <= @dusk)
-
     cond do
-      near?.(sunrise) or near?.(sunset) -> "sunset"
+      near?(local, sunrise) or near?(local, sunset) -> "sunset"
       NaiveDateTime.after?(local, sunrise) and NaiveDateTime.before?(local, sunset) -> "day"
       true -> "night"
     end
