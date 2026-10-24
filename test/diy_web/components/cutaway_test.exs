@@ -398,7 +398,7 @@ defmodule DIYWeb.CutawayTest do
     assert_paints_first(build, pool, pump)
   end
 
-  test "a pool through a wall paints first, and the walls keep their order" do
+  test "a pool through a wall paints before the wall, and the walls keep their order" do
     # A pool (223 inches) in the laundry (78 wide) goes through its wall
     # into the garage. The wall of the garage stays behind the water heater.
     build = house()
@@ -410,8 +410,8 @@ defmodule DIYWeb.CutawayTest do
     garage = room(build, "Garage")
     [ground | _] = Cutaway.view(build).levels
     ids = Enum.map(ground.objects, & &1.id)
-    assert hd(ids) == pool
     wall = Enum.find_index(ids, &(&1 == "ground-#{garage}-x0-0"))
+    assert Enum.find_index(ids, &(&1 == pool)) < wall
     assert wall < Enum.find_index(ids, &(&1 == heater))
   end
 

@@ -194,14 +194,37 @@ defmodule DIYWeb.Camera do
   Three boxes can each be behind the next one (a cycle). Then the box with
   the fewest boxes before it comes first.
 
-  An object with `flat: true` is in the floor (a pool). It comes first,
-  before all the other objects, also when it is loose. The eye looks down,
-  so it does not cover an object on its floor. The other objects keep
-  their order: the flat object adds no rule to it.
+  An object with `flat: true` is in the floor (a pool), also when it is
+  loose. Some objects are wholly under it and cover the same part of the
+  screen, for example the slab of a balcony. It comes just after the last
+  of them. With no such object, it comes first. The eye looks down, so it does not
+  cover an object on its floor. The other objects keep their order: the
+  flat object adds no rule to it.
   """
   def order(objects, camera) do
     {flat, objects} = Enum.split_with(objects, &Map.get(&1, :flat, false))
-    Enum.sort_by(flat, &{&1.key, &1.id}) ++ standing(objects, camera)
+    ordered = standing(objects, camera)
+
+    # From the last place to the first, so that each place stays right. At
+    # one place, the flat objects go in the order of their keys.
+    flat
+    |> Enum.map(&{under(&1, ordered, camera), &1})
+    |> Enum.sort_by(fn {at, f} -> {at, f.key, f.id} end, :desc)
+    |> Enum.reduce(ordered, fn {at, f}, list -> List.insert_at(list, at, f) end)
+  end
+
+  # The place of a flat object in the order: just after the last object
+  # that is wholly under it and that covers the same part of the screen.
+  defp under(%{box: {_, _, z0, _, _, _}} = flat, ordered, camera) do
+    screen = screen(camera, flat.polys)
+
+    ordered
+    |> Enum.with_index(1)
+    |> Enum.filter(fn {%{box: {_, _, _, _, _, z1}} = o, _at} ->
+      z1 <= z0 + 1.0e-6 and cover?(screen(camera, o.polys), screen)
+    end)
+    |> Enum.map(&elem(&1, 1))
+    |> Enum.max(fn -> 0 end)
   end
 
   defp standing(objects, camera) do

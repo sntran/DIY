@@ -3953,11 +3953,12 @@ pool.
   water has the color `--p-water` and a texture of waves (`tex-water`).
   The water is lower than the coping. So the eye sees the walls of the
   pool (`--p-pool-wall`) at the far sides.
-- A pool is flat, in the floor (`flat: true`). It paints first, before
-  the walls and the items, also when it is larger than its room
-  (`DIYWeb.Camera.order/2`). The eye looks down, so a pool does not cover
-  an item on its floor. It adds no rule to the order of the other
-  objects, so it cannot make a cycle. (An item larger than its room
+- A pool is flat, in the floor (`flat: true`). It paints just after the
+  objects that are wholly under it, for example the slab of a balcony.
+  Then come the walls and the items, also when the pool is larger than
+  its room (`DIYWeb.Camera.order/2`). The eye looks down, so a pool does
+  not cover an item on its floor. It adds no rule to the order of the
+  other objects, so it cannot make a cycle. (An item larger than its room
   paints by the depth of its center only. A pool that did so covered a
   pump on its coping, and a tap on the pump opened the pool.)
 - A pool uses no power: its pump and its heater are items next to it.
