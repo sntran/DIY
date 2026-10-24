@@ -377,6 +377,64 @@ defmodule DIYWeb.CutawayTest do
              )
   end
 
+  test "a pool larger than its room paints before the items over it" do
+    build = house()
+    yard = room(build, "Backyard")
+    {build, pool} = add(build, yard, "pool")
+    {build, pump} = add(build, yard, "pool_pump")
+
+    # After a turn, the pool (228 by 408) is larger than the yard (300
+    # deep). The pump goes on its coping, and on its water. The pool still
+    # paints first: the pump stays on the top of the plan, and a tap on it
+    # opens the pump.
+    {:ok, build} = Build.turn_item(build, pool)
+    {:ok, %{at: at}} = Build.item(build, pool)
+    {:ok, build} = Build.place_item(build, pump, yard, %{x: at.x + 100, y: at.y + 8}, true)
+    {:ok, %{on: ^pool}} = Build.item(build, pump)
+    assert_paints_first(build, pool, pump)
+    {:ok, build} = Build.place_item(build, pump, yard, %{x: at.x + 100, y: at.y + 150}, true)
+    {:ok, on_water} = Build.item(build, pump)
+    refute Map.has_key?(on_water, :on)
+    assert_paints_first(build, pool, pump)
+  end
+
+  test "a pool through a wall paints before a pump on it, and the walls keep their order" do
+    # A pool (223 inches) in the laundry (78 wide) goes through its wall
+    # into the garage. The wall of the garage stays behind the water heater.
+    build = house()
+    laundry = room(build, "Laundry")
+    {build, pool} = add(build, laundry, "pool")
+    {:ok, build} = Build.size_item(build, pool, %{w: 223, d: 223, h: 223})
+    {:ok, build} = Build.place_item(build, pool, laundry, %{x: 0, y: 22})
+    heater = Enum.find(build.items, &(&1.type == "water_heater")).id
+    garage = room(build, "Garage")
+
+    # A pump on its coping, and a low item in the garage. The pool is on the
+    # two sides of the wall: near the wall, the low item makes a cycle with
+    # the pool (docs/design.md). In a cycle, the pool comes first, so it
+    # does not cover the pump.
+    {build, pump} = add(build, laundry, "pool_pump")
+    {:ok, build} = Build.place_item(build, pump, laundry, %{x: 20, y: 30}, true)
+    {build, low} = add(build, garage, "other")
+    {:ok, build} = Build.size_item(build, low, %{w: 12, d: 12, h: 4})
+
+    for at <- [%{x: 60, y: 270}, %{x: 0, y: 250}, %{x: 100, y: 200}, %{x: 0, y: 150}] do
+      {:ok, build} = Build.place_item(build, low, garage, at)
+      [ground | _] = Cutaway.view(build).levels
+      ids = Enum.map(ground.objects, & &1.id)
+      index = fn id -> Enum.find_index(ids, &(&1 == id)) end
+      assert index.("ground-#{garage}-x0-0") < index.(heater)
+      assert index.(pool) < index.(pump), inspect(at)
+    end
+  end
+
+  defp assert_paints_first(build, first, last) do
+    [ground | _] = Cutaway.view(build).levels
+    ids = Enum.map(ground.objects, & &1.id)
+    assert Enum.find_index(ids, &(&1 == first)) < Enum.find_index(ids, &(&1 == last))
+    assert Enum.find(ground.objects, &(&1.id == first)).flat
+  end
+
   test "a soft shadow under an item on a floor, and none under an item on a wall" do
     build = house()
     kitchen = room(build, "Kitchen")

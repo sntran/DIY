@@ -1595,15 +1595,32 @@ defmodule DIYWeb.Inside do
     ~H"""
     <div id="item-place" class="stage-fields">
       <p class="stage-label">Its place, its size and its turn</p>
-      <.moves
-        id="move-item"
-        event="nudge_item"
-        target={@item.id}
-        step={6}
-        what="the item"
-        van={Build.van_level?(@room.level)}
-      />
+      <%!-- "Turn it" is next to the arrows and over the map. After a tap,
+      the page scrolls the map onto the screen if necessary ("diy:show"):
+      the person sees the turn, also on a phone. --%>
+      <div class="flex flex-wrap items-center gap-2">
+        <.moves
+          id="move-item"
+          event="nudge_item"
+          target={@item.id}
+          step={6}
+          what="the item"
+          van={Build.van_level?(@room.level)}
+        />
+        <button
+          type="button"
+          id="turn-item"
+          phx-click={
+            JS.push("turn_item", value: %{id: @item.id})
+            |> JS.dispatch("diy:show", to: "#item-map")
+          }
+          class="btn btn-sm"
+        >
+          <.icon name="hero-arrow-path" class="size-4" /> Turn it
+        </button>
+      </div>
       <p id="item-where" class="stage-help" aria-live="polite">{where(@item, @room, @items)}</p>
+      <.room_map item={@item} room={@room} items={@items} />
       <p :if={@item.type == "solar_panels"} class="stage-help">
         The watts give the size of the panels on the roof: {@panel} inches for each panel of 400 W.
       </p>
@@ -1685,18 +1702,8 @@ defmodule DIYWeb.Inside do
             "These are the typical sizes of this kind of item. Give the sizes of your item."
         end}
       </p>
-      <div class="flex flex-wrap gap-2">
+      <div :if={@item.size} class="flex flex-wrap gap-2">
         <button
-          type="button"
-          id="turn-item"
-          phx-click="turn_item"
-          phx-value-id={@item.id}
-          class="stage-btn"
-        >
-          <.icon name="hero-arrow-path" class="size-5" /> Turn it
-        </button>
-        <button
-          :if={@item.size}
           type="button"
           id="typical-size"
           phx-click={
@@ -1771,6 +1778,117 @@ defmodule DIYWeb.Inside do
       No free place is next to it. Make it smaller first (Change).
     </p>
     """
+  end
+
+  attr :item, :map, required: true
+  attr :room, :map, required: true, doc: "the room or the zone of the item, with its plan"
+  attr :items, :list, default: [], doc: "the items of the build"
+
+  @doc """
+  A small map of the room from above, in the sheet of an item. The item
+  has the color of the app, and a thick line on its front. The other items
+  of the room are gray: an item on a wall or a ceiling has a dashed line.
+  The map has the axes of the move buttons (`moves/1`): the Up arrow moves
+  the item up on the map. So a turn, a move and a new size show
+  immediately, also when the plan is behind the sheet. Under the map, a
+  text gives the space of the item on the plan. Another text tells when
+  the item is larger than its room, and if a turn can help. The text above the map gives its place in words, so the map
+  has no text for a screen reader.
+  """
+  def room_map(assigns) do
+    %{item: item, room: room} = assigns
+    camera = if Build.van_level?(room.level), do: Camera.van(), else: Camera.house()
+    {{rx, ry}, {dx, dy}} = Camera.arrows(camera)
+    box = Layout.item_box(item)
+
+    others =
+      for o <- assigns.items, o.room == room.id, o.id != item.id, o.at != nil do
+        {Layout.item_box(o), Catalog.lift(o.type) > 0}
+      end
+
+    # The box of the map on the screen: the room and the item (an item can
+    # be larger than its room).
+    points =
+      for {x, y} <- [
+            {0, 0},
+            {room.plan.w, room.plan.d},
+            {box.x, box.y},
+            {box.x + box.w, box.y + box.d}
+          ],
+          do: {rx * x + ry * y, dx * x + dy * y}
+
+    {xs, ys} = Enum.unzip(points)
+    pad = 6
+    {x0, y0} = {Enum.min(xs) - pad, Enum.min(ys) - pad}
+    {w, d} = Layout.extent(item)
+
+    assigns =
+      assign(assigns,
+        view: "#{x0} #{y0} #{Enum.max(xs) + pad - x0} #{Enum.max(ys) + pad - y0}",
+        matrix: "matrix(#{rx} #{dx} #{ry} #{dy} 0 0)",
+        box: box,
+        others: others,
+        front: front(box, item.turn),
+        space: "#{feet(w)} by #{feet(d)}",
+        room_space: "#{feet(room.plan.w)} by #{feet(room.plan.d)}",
+        larger: w > room.plan.w or d > room.plan.d,
+        turn_fits: d <= room.plan.w and w <= room.plan.d
+      )
+
+    ~H"""
+    <svg id="item-map" class="stage-map" viewBox={@view} aria-hidden="true">
+      <g transform={@matrix}>
+        <rect class="stage-map-room" x="0" y="0" width={@room.plan.w} height={@room.plan.d} />
+        <rect
+          :for={{o, up} <- @others}
+          class={["stage-map-other", up && "is-up"]}
+          x={o.x}
+          y={o.y}
+          width={o.w}
+          height={o.d}
+        />
+        <rect
+          id="item-map-item"
+          class="stage-map-item"
+          x={@box.x}
+          y={@box.y}
+          width={@box.w}
+          height={@box.d}
+        />
+        <line
+          id="item-map-front"
+          class="stage-map-front"
+          x1={elem(@front, 0)}
+          y1={elem(@front, 1)}
+          x2={elem(@front, 2)}
+          y2={elem(@front, 3)}
+        />
+      </g>
+    </svg>
+    <p id="item-space" class="stage-help">Its space on the plan: {@space}.</p>
+    <%!-- The live region is always there: a screen reader reads a new
+    text in it. --%>
+    <div id="item-larger-live" aria-live="polite">
+      <p :if={@larger} id="item-larger" class="stage-help">
+        It is larger than {@room.name} ({@room_space}): it goes through a wall. {if @turn_fits,
+          do: "Make it smaller, or turn it.",
+          else: "Make it smaller."}
+      </p>
+    </div>
+    """
+  end
+
+  # The front side of an item on the map: `{x1, y1, x2, y2}`. With no turn,
+  # the front is at the large y. A quarter turn takes the front to the
+  # large x (`DIYWeb.Icon.Shapes`), then to the small y, then to the small
+  # x.
+  defp front(%{x: x, y: y, w: w, d: d}, turn) do
+    case rem(turn, 4) do
+      0 -> {x, y + d, x + w, y + d}
+      1 -> {x + w, y, x + w, y + d}
+      2 -> {x, y, x + w, y}
+      3 -> {x, y, x, y + d}
+    end
   end
 
   # The move of each button on the plan (inches): left, up, down and right

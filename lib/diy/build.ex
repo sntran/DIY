@@ -1047,16 +1047,21 @@ defmodule DIY.Build do
     end
   end
 
-  @doc "Turns an item a quarter turn, around its center."
+  @doc """
+  Turns an item a quarter turn, around its center. The item stays in its
+  room (`DIY.Layout.clamp/3`). An item can be longer than its room along
+  a side. Then it goes to the start of that side, and through the wall at
+  the other end.
+  """
   @spec turn_item(t(), String.t()) :: {:ok, t()} | {:error, atom()}
   def turn_item(build, id) do
     with {:ok, item} <- item(build, id),
-         {:ok, _room} <- plan_room(build, item.room) do
+         {:ok, room} <- plan_room(build, item.room) do
       {w, d} = Layout.extent(item)
       turned = %{item | turn: rem(item.turn + 1, 4)}
       {tw, td} = Layout.extent(turned)
       at = %{x: item.at.x + div(w - tw, 2), y: item.at.y + div(d - td, 2)}
-      {:ok, replace_item(build, %{turned | at: at})}
+      {:ok, replace_item(build, %{turned | at: Layout.clamp(at, turned, room.plan)})}
     end
   end
 

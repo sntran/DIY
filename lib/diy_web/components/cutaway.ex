@@ -1015,6 +1015,9 @@ defmodule DIYWeb.Cutaway do
       id: item.id,
       kind: :item,
       loose: ew > room.plan.w or ed > room.plan.d,
+      # A pool is in the floor: it paints first, also when it is larger
+      # than its room (`DIYWeb.Camera.order/2`).
+      flat: item.type == "pool",
       room: room.id,
       on: DIY.Stack.on(item),
       name: Catalog.name(item),

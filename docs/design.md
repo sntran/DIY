@@ -1708,7 +1708,17 @@ learns it one time, and then knows each item.
      model". A station of a model also shows the source of its numbers.
   4. Where it is: its room, its place, its size and its turn. The list of
      the rooms has only the rooms where the item can go. An item does not
-     go from the house to a van with this list.
+     go from the house to a van with this list. A small map of the room
+     from above shows the item, a thick line on its front, and the other
+     items of the room (`Inside.room_map/1`). The map has the axes of the
+     move buttons. While the sheet is open, the model on the stage does
+     not show the turn, and the plan is behind the sheet. So the map shows
+     a turn, a move or a new size immediately. "Turn it" is next to the
+     move buttons, over the map: on a phone, the map is on the screen
+     after a tap. Under the map, a text gives the space of the item on the
+     plan. When the item is larger than its room, a text says so, and
+     tells if a turn can help. A turn keeps the item in its room, as a
+     move does.
   5. More: the flags (a plan, a power station runs it), what the app
      uses it for, and Remove.
 
@@ -3943,6 +3953,18 @@ pool.
   water has the color `--p-water` and a texture of waves (`tex-water`).
   The water is lower than the coping. So the eye sees the walls of the
   pool (`--p-pool-wall`) at the far sides.
+- A pool is flat, in the floor (`flat: true`). Each object that goes
+  lower than it paints before it, for example the slab of a balcony. Each
+  object that rises over it paints after it, for example a pump on its
+  coping. This is true also when the pool is larger than its room
+  (`DIYWeb.Camera.order/2`). The eye looks down, so a pool does not cover
+  an item on its floor. These rules make no cycle with the items of its
+  room. A pool can go through a wall: then it is on the two sides of that
+  wall. With the items near the wall, it can be in a cycle. Then no order
+  is right, and the pool comes first. An item that goes lower than the
+  pool can cover its edge, but the pool does not cover an item on it. (An item larger than its room
+  paints by the depth of its center only. A pool that did so covered a
+  pump on its coping, and a tap on the pump opened the pool.)
 - A pool uses no power: its pump and its heater are items next to it.
   The estimate counts them, not the pool.
 - A file or a link of October 2026 can have a room of the kind `"pool"`.
