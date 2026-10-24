@@ -108,8 +108,12 @@ const homeAssistant = await fakeHomeAssistant({
   },
 })
 
-// axe on the page as it is now.
+// axe on the page as it is now. First the animations and the transitions
+// that end must end: a panel that fades in has a low contrast until then.
+// The loops of the items that run never end, so they do not count.
 async function check(page, name) {
+  await page.waitForFunction(() =>
+    document.getAnimations().every((a) => a.playState !== "running" || a.effect?.getTiming().iterations === Infinity))
   await page.evaluate(axe)
   const { violations } = await page.evaluate((tags) => window.axe.run(document, { runOnly: tags }), tags)
   for (const violation of violations) {
