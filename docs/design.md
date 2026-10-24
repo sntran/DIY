@@ -2010,8 +2010,10 @@ The link also has a summary:
 - the sky of the picture ("The sky at the house");
 - the 6 items with the most kWh in a year, for the labels of the
   picture. Each item has its id, its kWh of a year, and its cost of a
-  year. The cost uses the price of the page Rooms. An item with less than
-  1 kWh has no label. A link of an older version has no items: its
+  year. The numbers are of the house of today, as the numbers of the
+  year: with a planned item, the page Rooms can show different numbers.
+  The cost uses the price of the page Rooms. An item with less than 1 kWh
+  has no label. A link of an older version has no items: its
   picture has no labels.
 
 The LiveView of the person who shares makes the summary from the
@@ -2114,9 +2116,14 @@ only the total. This is a decision of the owner (October 2026):
   (`Labels.nocheck.cfg`). One does not keep a place in the box
   (`Labels.noclamp.cfg`).
 - The size of a text in resvg is not known before the draw. Thus the
-  width of a label comes from the count of its letters. The letters of
-  Inter are about 0.56 (regular) and 0.64 (bold) of the size of its font,
-  or less. So a label is not narrower than its text.
+  width of a label comes from its letters. Each letter has the width of
+  the widest letter of its kind in Inter (from Chromium, October 2026).
+  The widths are parts of the size of the font. M, W, m, w, @ and % have
+  1.04. A different capital has 0.78. A different letter, number or sign
+  has 0.68. A letter that is not in the fonts of the NIF has 1.04. So a label is not
+  narrower than its text. A name of more than 24 letters ends in "…".
+- The box of the house clips the sky, the rain and the snow
+  (`clipPath`). They do not go on the paper around the box.
 
 - A site that shows a preview reads PNG and JPEG, not SVG.
 - The NIF is resvg 0.48.1 in WebAssembly, as in mkfifo.com, with the text

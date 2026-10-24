@@ -87,13 +87,18 @@ defmodule DIYWeb.Picture do
     ])
   end
 
-  # The sky, the house cut open in it, and the labels. All the lines are
-  # under all the labels.
+  # The sky, the house cut open in it, and the labels. The box of the
+  # house clips the sky, the rain and the snow. All the lines are under
+  # all the labels.
   defp house(build, summary) do
     {parts, labels} = parts(build, summary)
+    {x, y, w, h} = @house
 
     [
+      ~s(<clipPath id="picture-house"><rect x="#{x}" y="#{y}" width="#{w}" height="#{h}"/></clipPath>),
+      ~s|<g clip-path="url(#picture-house)">|,
       Enum.map(parts, fn {svg, scale} -> inline(svg, scale, summary.sky, true) end),
+      "</g>",
       Enum.map(labels, &line/1),
       Enum.map(labels, &label/1)
     ]
@@ -199,9 +204,10 @@ defmodule DIYWeb.Picture do
       {x0, y0, w, _h} = bounds(object.polys)
       {x, y} = at.({x0 + w / 2, y0})
       numbers = label_numbers(kwh, cost)
-      width = max(width(object.name, @name_size, 0.64), width(numbers, @numbers_size, 0.56))
+      name = short(object.name)
+      width = max(width(name, @name_size), width(numbers, @numbers_size))
 
-      %{x: x, y: y, w: width + 2 * @label_pad, h: @label_h, name: object.name, kwh: kwh}
+      %{x: x, y: y, w: width + 2 * @label_pad, h: @label_h, name: name, kwh: kwh}
       |> Map.put(:numbers, numbers)
     end)
     |> Enum.sort_by(&(-&1.kwh))
@@ -213,9 +219,32 @@ defmodule DIYWeb.Picture do
   defp label_numbers(kwh, cost),
     do: gettext("%{kwh} · %{cost} a year", kwh: Format.kwh(kwh), cost: Format.money(cost))
 
-  # The width of a text: Inter has letters of about 0.56 (regular) and
-  # 0.64 (bold) of the size of its font, or less.
-  defp width(text, size, em), do: String.length(text) * size * em
+  # A name of more than 24 letters: its first 23 letters and "…".
+  defp short(name) do
+    if String.length(name) > 24, do: String.slice(name, 0, 23) <> "…", else: name
+  end
+
+  @doc false
+  # The width of a text, at most. Each letter has the width of the widest
+  # letter of its kind in Inter, regular or bold (from Chromium, October
+  # 2026). The widths are parts of the size of the font:
+  # - M, W, m, w, @, % and "…": 1.04;
+  # - a different capital letter of Latin: 0.78;
+  # - a different letter of Latin, a number or a sign: 0.68;
+  # - a letter that is not in the fonts of the NIF: 1.04.
+  def width(text, size) do
+    text |> String.graphemes() |> Enum.map(&letter/1) |> Enum.sum() |> Kernel.*(size)
+  end
+
+  defp letter(letter) when letter in ~w(M W m w @ % …), do: 1.04
+
+  defp letter(<<c::utf8, _rest::binary>> = letter) do
+    cond do
+      c > 0x024F and c not in 0x1E00..0x1EFF -> 1.04
+      String.downcase(letter) != letter -> 0.78
+      true -> 0.68
+    end
+  end
 
   # The line from a label down to the top of its item. All the lines are
   # under all the labels.

@@ -40,8 +40,9 @@ VARIABLES count,   \* the count of the labels that came
 
 vars == <<count, first, placed>>
 
-\* A label can be wider than the box: then it has no place.
-Label == [x : 0..W, y : 0..H, w : 1..(W + 1), h : 1..2]
+\* A label can be wider than the box: then it has no place. An item can be
+\* under the box: then the label is at the bottom of the box.
+Label == [x : 0..W, y : 0..(H + 2), w : 1..(W + 1), h : 1..2]
 
 Min(a, b) == IF a < b THEN a ELSE b
 Max(a, b) == IF a > b THEN a ELSE b

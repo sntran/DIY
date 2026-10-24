@@ -714,32 +714,32 @@ msgid "%{cost} for the electricity of a year. Small Steps Home shows where the e
 msgstr ""
 
 #: lib/diy_web/components/share.ex:46
-#: lib/diy_web/picture.ex:211
+#: lib/diy_web/picture.ex:217
 #, elixir-autogen, elixir-format
 msgid "%{kwh} a year"
 msgstr ""
 
-#: lib/diy_web/picture.ex:336
+#: lib/diy_web/picture.ex:365
 #, elixir-autogen, elixir-format
 msgid "A"
 msgstr ""
 
-#: lib/diy_web/picture.ex:294
+#: lib/diy_web/picture.ex:323
 #, elixir-autogen, elixir-format
 msgid "A house of %{size} sq ft"
 msgstr ""
 
-#: lib/diy_web/picture.ex:290
+#: lib/diy_web/picture.ex:319
 #, elixir-autogen, elixir-format
 msgid "A house of %{size} sq ft in %{zip}"
 msgstr ""
 
-#: lib/diy_web/picture.ex:274
+#: lib/diy_web/picture.ex:303
 #, elixir-autogen, elixir-format
 msgid "A house of %{size} sq ft in %{zip}: %{kwh} kWh a year"
 msgstr ""
 
-#: lib/diy_web/picture.ex:281
+#: lib/diy_web/picture.ex:310
 #, elixir-autogen, elixir-format
 msgid "A house of %{size} sq ft: %{kwh} kWh a year"
 msgstr ""
@@ -769,7 +769,7 @@ msgstr ""
 msgid "Cost in a year"
 msgstr ""
 
-#: lib/diy_web/picture.ex:344
+#: lib/diy_web/picture.ex:373
 #, elixir-autogen, elixir-format
 msgid "D"
 msgstr ""
@@ -784,7 +784,7 @@ msgstr ""
 msgid "Electricity in a year"
 msgstr ""
 
-#: lib/diy_web/picture.ex:334
+#: lib/diy_web/picture.ex:363
 #, elixir-autogen, elixir-format
 msgid "F"
 msgstr ""
@@ -799,7 +799,7 @@ msgstr ""
 msgid "Go to Small Steps Home"
 msgstr ""
 
-#: lib/diy_web/picture.ex:333
+#: lib/diy_web/picture.ex:362
 #, elixir-autogen, elixir-format
 msgid "J"
 msgstr ""
@@ -829,7 +829,7 @@ msgstr ""
 msgid "Keep my house"
 msgstr ""
 
-#: lib/diy_web/picture.ex:335
+#: lib/diy_web/picture.ex:364
 #, elixir-autogen, elixir-format
 msgid "M"
 msgstr ""
@@ -844,7 +844,7 @@ msgstr ""
 msgid "May"
 msgstr ""
 
-#: lib/diy_web/picture.ex:343
+#: lib/diy_web/picture.ex:372
 #, elixir-autogen, elixir-format
 msgid "N"
 msgstr ""
@@ -859,7 +859,7 @@ msgstr ""
 msgid "November"
 msgstr ""
 
-#: lib/diy_web/picture.ex:342
+#: lib/diy_web/picture.ex:371
 #, elixir-autogen, elixir-format
 msgid "O"
 msgstr ""
@@ -874,7 +874,7 @@ msgstr ""
 msgid "Put the ZIP code in the link. The weather and the plans need it."
 msgstr ""
 
-#: lib/diy_web/picture.ex:341
+#: lib/diy_web/picture.ex:370
 #, elixir-autogen, elixir-format
 msgid "S"
 msgstr ""
@@ -961,35 +961,35 @@ msgstr ""
 msgid "ZIP code %{zip}"
 msgstr ""
 
-#: lib/diy_web/picture.ex:300
+#: lib/diy_web/picture.ex:329
 #, elixir-autogen, elixir-format
 msgid "for the electricity of a year"
 msgstr ""
 
-#: lib/diy_web/picture.ex:309
+#: lib/diy_web/picture.ex:338
 #, elixir-autogen, elixir-format
 msgid "of electricity in a year"
 msgstr ""
 
-#: lib/diy_web/picture.ex:340
+#: lib/diy_web/picture.ex:369
 #, elixir-autogen, elixir-format
 msgctxt "August"
 msgid "A"
 msgstr ""
 
-#: lib/diy_web/picture.ex:339
+#: lib/diy_web/picture.ex:368
 #, elixir-autogen, elixir-format
 msgctxt "July"
 msgid "J"
 msgstr ""
 
-#: lib/diy_web/picture.ex:338
+#: lib/diy_web/picture.ex:367
 #, elixir-autogen, elixir-format
 msgctxt "June"
 msgid "J"
 msgstr ""
 
-#: lib/diy_web/picture.ex:337
+#: lib/diy_web/picture.ex:366
 #, elixir-autogen, elixir-format
 msgctxt "May"
 msgid "M"
@@ -1085,7 +1085,7 @@ msgstr ""
 msgid "Sunrise"
 msgstr ""
 
-#: lib/diy_web/picture.ex:214
+#: lib/diy_web/picture.ex:220
 #, elixir-autogen, elixir-format
 msgid "%{kwh} · %{cost} a year"
 msgstr ""

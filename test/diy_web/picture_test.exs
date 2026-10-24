@@ -251,6 +251,43 @@ defmodule DIYWeb.PictureTest do
       assert svg =~ "6,828 kWh · $908 mỗi năm"
     end
 
+    test "a long name ends in an ellipsis, and a label is never narrower than its text" do
+      build = house()
+      kitchen = Enum.find(build.rooms, &(&1.name == "Kitchen")).id
+      {:ok, build, other} = Build.add_item(build, kitchen, "other")
+      {:ok, build} = Build.update_item(build, other, %{"name" => String.duplicate("W", 32)})
+
+      {_parts, [label]} =
+        Picture.parts(build, %{summary() | items: [%{id: other, kwh: 900, cost: 120}]})
+
+      assert label.name == String.duplicate("W", 23) <> "…"
+      # Inter bold has W of 1.038 of the size of the font.
+      assert label.w >= 24 * 1.038 * 12
+
+      # The widths of kinds of letters (Inter, regular and bold, from
+      # Chromium): each is at least the widest letter of its kind.
+      assert Picture.width("W", 10) >= 10.38
+      assert Picture.width("@%m", 10) >= 10.16 + 10.16 + 9.13
+      assert Picture.width("Ơ", 10) >= 7.8
+      assert Picture.width("4+~", 10) >= 3 * 6.79
+      assert Picture.width("ௌ", 10) == 10.4
+      assert Picture.width("", 10) == 0
+    end
+
+    test "the box of the house clips the sky, the rain and the snow" do
+      svg = Picture.svg(house(), %{summary() | sky: %{time: "night", weather: "rain"}})
+
+      assert svg =~
+               ~s(<clipPath id="picture-house"><rect x="32" y="32" width="668" height="566"/></clipPath>)
+
+      [before, inside] = String.split(svg, ~s|<g clip-path="url(#picture-house)">|)
+      [inside, _after] = String.split(inside, "</g><text", parts: 2)
+      # The sky and the rain are in the clipped group, and not before it.
+      assert inside =~ "fill:rgb(16, 27, 51)"
+      assert inside =~ ~s(id="plan-ground")
+      refute before =~ "<path"
+    end
+
     test "a sky over the house: the rain, the snow and the light of a sunset" do
       build = pool_house()
 
