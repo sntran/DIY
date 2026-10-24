@@ -3970,6 +3970,51 @@ devices of Home Assistant.
   on a build, with the same invariants. It also reads the file of each
   build again.
 
+### Items on items
+
+The owner asked for this (October 2026): "I think we just need to add
+the logic that items can be stacked on each other (with snapping to make
+it easier for the user)." A person puts a microwave on a counter, a
+dryer on a washer, or a hot tub on the coping of a pool (`DIY.Stack`).
+
+- An item has the key `on`: the id of the item under it. An item on the
+  floor has no key. The file and the link keep the key.
+- A drop on the plan puts the item on the item under the center of its
+  space. When two or more items are there, it goes on the item with the
+  highest top. The item stays in the space of the item under it. Near an
+  end (6 inches or less) or near the center, it snaps to it. An item
+  that is larger than the item under it is at its center.
+- A drop on the floor snaps the item to the side of an item near it (6
+  inches or less), so the two are flush.
+- The arrow keys do not snap. The item goes on the item under its
+  center, or on the floor.
+- When an item moves, the items on it move with it, by the same
+  distance, also to a different room. In a drag, the page moves them
+  with it (`data-on`). Each item stays in its room. An item that does
+  not fit the new room stays, with the items on it: a TV does not go
+  outside on a pool pump.
+- When an item goes away, the items on it come down to the floor at
+  their place. When the list of the sheet moves an item to a different
+  room, the items on it also come down. When an item is no longer over
+  the item under it, it comes down too.
+- An item on an item is on its top: the picture adds the height of the
+  item under it. A pool is in the floor, so an item on a pool is at the
+  floor. An item over the floor has no shadow. The top item paints after the
+  item under it (`DIYWeb.Camera.order/2`).
+- Solar panels, a camper van and an item on a wall or a ceiling do not
+  stack. A pool and a car take an item, but they do not go on an item.
+  Items in a van do not stack.
+- The sheet of the item tells the item under it: "Under it: Clothes
+  washer."
+- `specs/Stack.tla` checks the rules with TLC: each item fits its room,
+  the item under an item is there, in the same room and under it, and no
+  item is under itself. Three models have a fault. `Stack.noloop.cfg`
+  puts an item on an item that is on it. `Stack.nodrop.cfg` deletes an
+  item, but the items on it stay on it. `Stack.nofit.cfg` moves the
+  items on an item to a room that they do not fit. A property test of
+  `test/diy/stack_test.exs` does random drops, moves, turns and deletes,
+  with the same invariants.
+
 ### The new items
 
 - **Pool heater.** A heat pump or an electric heater uses its watts for

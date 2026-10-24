@@ -536,9 +536,16 @@ export const planHook = {
   },
 
   // The elements that move with a drag. An item moves with the pill of a
-  // hub. A room moves with its items, its furniture and its outline.
+  // hub, and with the items on it (`data-on`), and the items on them. A
+  // room moves with its items, its furniture and its outline.
   moving(drag) {
-    if (drag.kind === "item") return [...this.svg.querySelectorAll(`[data-item="${drag.el.getAttribute("data-item")}"]`)]
+    if (drag.kind === "item") {
+      // A loop of a Set also visits the ids that it adds.
+      const ids = new Set([drag.el.getAttribute("data-item")])
+      for (const id of ids)
+        for (const el of this.svg.querySelectorAll(`[data-on="${id}"]`)) ids.add(el.getAttribute("data-item"))
+      return [...ids].flatMap((id) => [...this.svg.querySelectorAll(`[data-item="${id}"]`)])
+    }
     const id = drag.el.getAttribute("data-room")
     return [
       drag.el.parentNode,

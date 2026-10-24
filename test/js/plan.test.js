@@ -327,6 +327,9 @@ function setup({storage = new Map(), chosen = true, width = 400, height = 800, w
   // of the fridge, for the test.
   const fridgePill = add({"data-item": "i1", "data-in": "r1", "data-at": "18 15"}, ground)
   const pillText = add({}, fridgePill)
+  // A microwave on the fridge, and a cup on the microwave.
+  const microwaveG = add({"data-item": "i5", "data-in": "r1", "data-at": "18 15", "data-on": "i1"}, ground)
+  const cupG = add({"data-item": "i6", "data-in": "r1", "data-at": "18 15", "data-on": "i5"}, ground)
   // A table of the kitchen (furniture).
   const tableG = add({"data-with": "r1"}, ground)
   // A ghost of a device of Home Assistant.
@@ -424,7 +427,7 @@ function setup({storage = new Map(), chosen = true, width = 400, height = 800, w
   const pointer = (type, id, x, y, target = empty, pointerType = "mouse") =>
     svg.fire(type, {pointerId: id, clientX: x, clientY: y, target, pointerType, preventDefault() {}})
   return {
-    hook, svg, root, kitchen, living, roof, fridge, fridgeG, fridgePill, pillText, kitchenG, empty, selection, outlineEl, handles, labels, pills,
+    hook, svg, root, kitchen, living, roof, fridge, fridgeG, fridgePill, microwaveG, cupG, pillText, kitchenG, empty, selection, outlineEl, handles, labels, pills,
     pushed, pointer, storage, setUnder: (list) => (under = list), win, timers, hint, wallFace, slab,
     zoomIn, zoomOut, fitButton, focus, focusF2, listItem, listRoom, other, tableG, bedroom, upper, ghostFace,
   }
@@ -787,14 +790,17 @@ test("a view as wide as the house but not as high: the finger moves the view", (
 })
 
 test("an item goes to the room under the center of its space, not under the pointer", () => {
-  const {hook, pointer, pushed, fridge, fridgeG, fridgePill, kitchen, living, setUnder} = setup()
+  const {hook, pointer, pushed, fridge, fridgeG, fridgePill, microwaveG, cupG, kitchen, living, setUnder} = setup()
   // 40 inches along x: the center stays in the kitchen, but the pointer
   // (on the top of the fridge) is on the living room.
   pointer("pointerdown", 1, 100, 100, fridge)
   pointer("pointermove", 1, 100 + 2 * HOUSE[0] * 40, 100 + 2 * HOUSE[1] * 40)
   assert.equal(fridgeG.getAttribute("transform"), along(40))
-  // The pill of the item moves with it.
+  // The pill of the item moves with it, and the items on it, and the
+  // items on them.
   assert.equal(fridgePill.getAttribute("transform"), along(40))
+  assert.equal(microwaveG.getAttribute("transform"), along(40))
+  assert.equal(cupG.getAttribute("transform"), along(40))
   assert.ok(fridgeG.classes.has("p-dragging"))
   setUnder([fridge, living])
   pointer("pointerup", 1, 100, 100)

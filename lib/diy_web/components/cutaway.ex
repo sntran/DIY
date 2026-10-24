@@ -43,7 +43,8 @@ defmodule DIYWeb.Cutaway do
   - each item: `data-item`, `data-in` (its room) and `data-at` (the
     center of the item on the plan, in inches). The item of a device of
     Home Assistant also has `data-ha`: the state of the device (`on`,
-    `off` or `unavailable`);
+    `off` or `unavailable`). An item on an item has `data-on` (the item
+    under it): in a drag, it moves with the item under it;
   - each wall of a room of the house, and the edge of the slab under it:
     `data-of` (its room). A tap on it chooses the room, and the zoom to a
     room shows its walls;
@@ -97,7 +98,7 @@ defmodule DIYWeb.Cutaway do
     house = build |> Layout.house_box() |> meters()
     gap = gap(camera, house, @full)
     by_layer = build.rooms |> Enum.filter(& &1.plan) |> Enum.group_by(&Layout.layer/1)
-    items = Enum.group_by(build.items, & &1.room)
+    items = build.items |> stacked() |> Enum.group_by(& &1.room)
     ghosts = ghosts |> Enum.with_index(1) |> Enum.group_by(fn {ghost, _i} -> ghost.room end)
     floors = build.house.floors
 
@@ -925,9 +926,19 @@ defmodule DIYWeb.Cutaway do
   ## The items
 
   @doc """
+  The items with the height of the item under each, in inches (`:on_top`,
+  `DIY.Stack.heights/1`), for `item_view/4`.
+  """
+  def stacked(items) do
+    heights = DIY.Stack.heights(items)
+    Enum.map(items, &Map.put(&1, :on_top, Map.get(heights, &1.id, 0)))
+  end
+
+  @doc """
   An item: its shapes at its place, size and turn in its room, on a floor
-  at a height (meters), for a camera. It has its box in the world, for the
-  order of the paint.
+  at a height (meters), for a camera. An item on an item stands on its top
+  (`:on_top`, `stacked/1`). It has its box in the world, for the order of
+  the paint.
   """
   def item_view(item, room, z, camera) do
     {w, d, h} = Layout.size(item)
@@ -958,7 +969,7 @@ defmodule DIYWeb.Cutaway do
               do: {:poly, corners, class}
 
         {type, nil} ->
-          base = z + Catalog.lift(type) * @m
+          base = z + (Catalog.lift(type) + Map.get(item, :on_top, 0)) * @m
 
           Shapes.placed(Shapes.look(item), %{
             at: {x * @m, y * @m, base},
@@ -981,7 +992,8 @@ defmodule DIYWeb.Cutaway do
     # A soft shadow on the floor under an item that stands on it. A pool is
     # in the floor.
     shadow =
-      if roof == nil and Catalog.lift(item.type) == 0 and item.type != "pool" do
+      if roof == nil and Catalog.lift(item.type) == 0 and Map.get(item, :on_top, 0) == 0 and
+           item.type != "pool" do
         {x0, y0, x1, y1} = {(x - 3) * @m, (y - 3) * @m, (x + ew + 3) * @m, (y + ed + 3) * @m}
 
         [
@@ -1004,6 +1016,7 @@ defmodule DIYWeb.Cutaway do
       kind: :item,
       loose: ew > room.plan.w or ed > room.plan.d,
       room: room.id,
+      on: DIY.Stack.on(item),
       name: Catalog.name(item),
       at: "#{round(cx)} #{round(cy)}",
       planned: item.planned,
@@ -1211,6 +1224,7 @@ defmodule DIYWeb.Cutaway do
           data-item={object.kind == :item && object.id}
           data-in={object.kind == :item && object.room}
           data-at={object.kind == :item && object.at}
+          data-on={object.kind == :item && object.on}
           data-of={object.kind == :wall && Map.get(object, :room)}
           data-with={object.kind == :fixture && Map.get(object, :room)}
           data-ghost={object.kind == :ghost && object.device}

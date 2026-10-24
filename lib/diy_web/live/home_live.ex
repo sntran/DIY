@@ -673,7 +673,8 @@ defmodule DIYWeb.HomeLive do
          {:ok, %{plan: %{} = plan}} <- Build.room(build, room) do
       {w, d} = Layout.extent(item)
       at = %{x: round(x - w / 2) - plan.x, y: round(y - d / 2) - plan.y}
-      plan_result(socket, Build.place_item(build, id, room, at), nil)
+      # A drop snaps (`DIY.Stack`).
+      plan_result(socket, Build.place_item(build, id, room, at, true), nil)
     else
       _none -> {:noreply, socket}
     end
@@ -710,7 +711,7 @@ defmodule DIYWeb.HomeLive do
     case {parse_int(dx), parse_int(dy)} do
       {dx, dy} when is_integer(dx) and is_integer(dy) ->
         {:noreply, socket} = handle_event(event, %{"id" => id, "dx" => dx, "dy" => dy}, socket)
-        # The sheet of the item shows its new place (`DIYWeb.Inside.where/2`):
+        # The sheet of the item shows its new place (`DIYWeb.Inside.where/3`):
         # the status does not tell it a second time.
         {:noreply, if(event == "nudge_item", do: assign(socket, :status, nil), else: socket)}
 
@@ -1255,12 +1256,12 @@ defmodule DIYWeb.HomeLive do
   defp wall(_plan, _edge, _dx, _dy), do: :error
 
   # The texts for a screen reader after an arrow key or a turn
-  # (`DIYWeb.Inside.where/2`).
+  # (`DIYWeb.Inside.where/3`).
   defp item_status(build, id) do
     {:ok, item} = Build.item(build, id)
     {:ok, room} = Build.room(build, item.room)
 
-    "#{Catalog.name(item)}: #{Inside.where(item, room)}"
+    "#{Catalog.name(item)}: #{Inside.where(item, room, build.items)}"
   end
 
   defp turn_status(build, id) do
