@@ -1604,6 +1604,7 @@ defmodule DIYWeb.Inside do
         van={Build.van_level?(@room.level)}
       />
       <p id="item-where" class="stage-help" aria-live="polite">{where(@item, @room, @items)}</p>
+      <.room_map item={@item} room={@room} items={@items} />
       <p :if={@item.type == "solar_panels"} class="stage-help">
         The watts give the size of the panels on the roof: {@panel} inches for each panel of 400 W.
       </p>
@@ -1771,6 +1772,110 @@ defmodule DIYWeb.Inside do
       No free place is next to it. Make it smaller first (Change).
     </p>
     """
+  end
+
+  attr :item, :map, required: true
+  attr :room, :map, required: true, doc: "the room or the zone of the item, with its plan"
+  attr :items, :list, default: [], doc: "the items of the build"
+
+  @doc """
+  A small map of the room from above, in the sheet of an item. The item
+  has the color of the app, and a thick line on its front. The other items
+  of the room are gray: an item on a wall or a ceiling has a dashed line.
+  The map has the axes of the move buttons (`moves/1`): the Up arrow moves
+  the item up on the map. So a turn, a move and a new size show at once,
+  also when the plan is behind the sheet. Under the map, a text gives the
+  space of the item on the floor, and tells when the item is larger than
+  its room. The text above the map gives its place in words, so the map
+  has no text for a screen reader.
+  """
+  def room_map(assigns) do
+    %{item: item, room: room} = assigns
+    camera = if Build.van_level?(room.level), do: Camera.van(), else: Camera.house()
+    {{rx, ry}, {dx, dy}} = Camera.arrows(camera)
+    box = Layout.item_box(item)
+
+    others =
+      for o <- assigns.items, o.room == room.id, o.id != item.id, o.at != nil do
+        {Layout.item_box(o), Catalog.lift(o.type) > 0}
+      end
+
+    # The box of the map on the screen: the room and the item (an item can
+    # be larger than its room).
+    points =
+      for {x, y} <- [
+            {0, 0},
+            {room.plan.w, room.plan.d},
+            {box.x, box.y},
+            {box.x + box.w, box.y + box.d}
+          ],
+          do: {rx * x + ry * y, dx * x + dy * y}
+
+    {xs, ys} = Enum.unzip(points)
+    pad = 6
+    {x0, y0} = {Enum.min(xs) - pad, Enum.min(ys) - pad}
+    {w, d} = Layout.extent(item)
+
+    assigns =
+      assign(assigns,
+        view: "#{x0} #{y0} #{Enum.max(xs) + pad - x0} #{Enum.max(ys) + pad - y0}",
+        matrix: "matrix(#{rx} #{dx} #{ry} #{dy} 0 0)",
+        box: box,
+        others: others,
+        front: front(box, item.turn),
+        space: "#{feet(w)} by #{feet(d)}",
+        room_space: "#{feet(room.plan.w)} by #{feet(room.plan.d)}",
+        larger: w > room.plan.w or d > room.plan.d
+      )
+
+    ~H"""
+    <svg id="item-map" class="stage-map" viewBox={@view} aria-hidden="true">
+      <g transform={@matrix}>
+        <rect class="stage-map-room" x="0" y="0" width={@room.plan.w} height={@room.plan.d} />
+        <rect
+          :for={{o, up} <- @others}
+          class={["stage-map-other", up && "is-up"]}
+          x={o.x}
+          y={o.y}
+          width={o.w}
+          height={o.d}
+        />
+        <rect
+          id="item-map-item"
+          class="stage-map-item"
+          x={@box.x}
+          y={@box.y}
+          width={@box.w}
+          height={@box.d}
+        />
+        <line
+          id="item-map-front"
+          class="stage-map-front"
+          x1={elem(@front, 0)}
+          y1={elem(@front, 1)}
+          x2={elem(@front, 2)}
+          y2={elem(@front, 3)}
+        />
+      </g>
+    </svg>
+    <p id="item-space" class="stage-help">Its space on the floor: {@space}.</p>
+    <p :if={@larger} id="item-larger" class="stage-help">
+      It is larger than {@room.name} ({@room_space}): it goes through a wall. Make it smaller, or turn it.
+    </p>
+    """
+  end
+
+  # The front side of an item on the map: `{x1, y1, x2, y2}`. With no turn,
+  # the front is at the large y. A quarter turn takes the front to the
+  # large x (`DIYWeb.Icon.Shapes`), then to the small y, then to the small
+  # x.
+  defp front(%{x: x, y: y, w: w, d: d}, turn) do
+    case rem(turn, 4) do
+      0 -> {x, y + d, x + w, y + d}
+      1 -> {x + w, y, x + w, y + d}
+      2 -> {x, y, x + w, y}
+      3 -> {x, y, x, y + d}
+    end
   end
 
   # The move of each button on the plan (inches): left, up, down and right

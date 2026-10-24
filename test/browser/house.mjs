@@ -352,6 +352,12 @@ async function pool(page, name) {
   await page.click("#add-pool")
   await page.waitForSelector("#item-stage:has-text('Pool')")
   await check(page, `${name} pool`)
+  // "Turn it": the map of the room in the sheet shows the turn.
+  const wide = await page.getAttribute("#item-map-item", "width")
+  await page.click("#turn-item")
+  await page.waitForFunction((w) => document.querySelector("#item-map-item").getAttribute("width") !== w, wide)
+    .catch(() => assert.fail(`${name}: the map shows the turn of the pool`))
+  await check(page, `${name} pool turned`)
   await page.click("#item-stage .stage-back")
   await page.waitForSelector("#item-stage", { state: "detached" })
   await page.waitForSelector("#plan-svg polygon.p-water", { state: "attached" })

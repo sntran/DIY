@@ -1708,7 +1708,15 @@ learns it one time, and then knows each item.
      model". A station of a model also shows the source of its numbers.
   4. Where it is: its room, its place, its size and its turn. The list of
      the rooms has only the rooms where the item can go. An item does not
-     go from the house to a van with this list.
+     go from the house to a van with this list. A small map of the room
+     from above shows the item, a thick line on its front, and the other
+     items of the room (`Inside.room_map/1`). The map has the axes of the
+     move buttons. While the sheet is open, the model on the stage does
+     not show the turn, and the plan is behind the sheet. So the map shows
+     a turn, a move or a new size at once. Under the map, a text gives the
+     space of the item on the floor. When the item is larger than its
+     room, a text says so. A turn keeps the item in its room, as a move
+     does.
   5. More: the flags (a plan, a power station runs it), what the app
      uses it for, and Remove.
 
