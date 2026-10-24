@@ -676,7 +676,8 @@ defmodule DIYWeb.Cutaway do
     "membrane" => {36, 120, "M0 0V120"},
     "vmetal" => {4, 24, "M0 0V24"},
     "roof" => {12, 10, "M0 0H12M0 5H12M0 0V5M6 5V10"},
-    "grass" => {72, 72, :stripe}
+    "grass" => {72, 72, :stripe},
+    "water" => {48, 24, {:wave, "M2 12Q14 6 24 12T46 12"}}
   }
 
   @doc """
@@ -727,7 +728,12 @@ defmodule DIYWeb.Cutaway do
     {"ply", ~w(attic)}
   ]
 
-  @doc "The material of the floor of a room, from its place and its name."
+  @doc """
+  The material of the floor of a room: water for a pool, else from its
+  place and its name.
+  """
+  def material(%{kind: "pool"}), do: "water"
+
   def material(%{place: :outdoor, name: name}) do
     name = String.downcase(name)
 
@@ -1107,7 +1113,8 @@ defmodule DIYWeb.Cutaway do
         patternTransform={@pattern}
       >
         <rect :if={lines == :stripe} width={w / 2} height={h} class="p-tex-stripe" />
-        <path :if={lines != :stripe} d={lines} class="p-tex-line" />
+        <path :if={match?({:wave, _}, lines)} d={elem(lines, 1)} class="p-tex-wave" />
+        <path :if={is_binary(lines)} d={lines} class="p-tex-line" />
       </pattern>
     </defs>
     """

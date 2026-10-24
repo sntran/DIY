@@ -294,7 +294,7 @@
   --p-wood: #e9c99d; --p-tile: #dde5ee; --p-carpet: #e8ddd0; --p-concrete: #cdd1d6;
   --p-ply: #e7d1a6; --p-asphalt: #8a8e95; --p-deck: #cfa57a; --p-yard: #8fc56b;
   --p-membrane: #a3abb5; --p-roof-f: #5b6675; --p-roof-b: #465060; --p-gable: #efe9df;
-  --p-pad: #dad6cf; --p-edge: rgb(31 35 40 / 0.28); --p-text: #1f2937; --p-halo: #ffffff;
+  --p-pad: #dad6cf; --p-water: #6fbfe0; --p-edge: rgb(31 35 40 / 0.28); --p-text: #1f2937; --p-halo: #ffffff;
   --p-chosen: #2563eb; --p-sky: #eef5fc;
   --p-vwall-t: #f4f5f7; --p-vwall-l: #e3e6ea; --p-vwall-r: #c8cdd4;
   --p-vpanel-t: #f0d3a8; --p-vpanel-l: #e2bd88; --p-vpanel-r: #c9a06a;
@@ -374,12 +374,16 @@
 .p-deck { fill: var(--p-deck) } .p-grass { fill: var(--p-yard) } .p-membrane { fill: var(--p-membrane) }
 .p-roof-f { fill: var(--p-roof-f) } .p-roof-b { fill: var(--p-roof-b) } .p-gable { fill: var(--p-gable) }
 .p-pad { fill: var(--p-pad) }
+/* The water of a pool, with white waves (a pattern on the plan). */
+.p-water { fill: var(--p-water) }
+.p-tex-wave { fill: none; stroke: rgb(255 255 255 / 0.6); stroke-width: 1.5; stroke-linecap: round }
 /* The details of the plan: the lines of a floor (a pattern on the plan),
    the soft shadow under an item, and the trim of a high wall. */
 .p-tex { stroke: none; pointer-events: none }
 .p-tex-wood { fill: url(#tex-wood) } .p-tex-tile { fill: url(#tex-tile) } .p-tex-concrete { fill: url(#tex-concrete) }
 .p-tex-deck { fill: url(#tex-deck) } .p-tex-ply { fill: url(#tex-ply) } .p-tex-membrane { fill: url(#tex-membrane) }
 .p-tex-vmetal { fill: url(#tex-vmetal) } .p-tex-roof { fill: url(#tex-roof) } .p-tex-grass { fill: url(#tex-grass) }
+.p-tex-water { fill: url(#tex-water) }
 .p-tex-line { fill: none; stroke: var(--p-grain); stroke-width: 0.6 }
 .p-tex-stripe { fill: var(--p-stripe) }
 .p-shadow { fill: url(#p-shadow-fill); pointer-events: none }

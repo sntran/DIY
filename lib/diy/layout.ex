@@ -533,6 +533,9 @@ defmodule DIY.Layout do
 
   # The size of a new room: a roof covers the house; a room outside is
   # larger than a room inside.
+  # A pool: 30 by 15 ft, a common size of a pool of a house.
+  defp new_size(%{kind: "pool"}, _build), do: {360, 180}
+
   defp new_size(%{place: :roof, level: "roof"}, build) do
     case for(r <- build.rooms, r.plan, layer(r) == "roof", do: r) do
       [] -> build |> house_box() |> then(&{&1.w, &1.d})

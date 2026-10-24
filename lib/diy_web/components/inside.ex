@@ -30,6 +30,7 @@ defmodule DIYWeb.Inside do
   attr :view, :map, required: true, doc: "the layers of the plan (`DIYWeb.Cutaway.view/1`)"
   attr :item, :string, default: nil
   attr :add, :string, default: nil
+  attr :add_query, :string, default: "", doc: "the text of the search of the sheet Add"
   attr :room, :string, default: nil, doc: "the room that the person chose"
 
   attr :sheet, :string,
@@ -257,6 +258,7 @@ defmodule DIYWeb.Inside do
       <.add_sheet
         :if={@add && match?({:ok, _}, Build.room(@build, @add))}
         room={elem(Build.room(@build, @add), 1)}
+        query={@add_query}
       />
       <.room_sheet :if={@chosen && @sheet == "room"} room={@chosen} />
       <.new_room_sheet :if={@sheet == "new_room"} levels={@levels} />
@@ -798,6 +800,24 @@ defmodule DIYWeb.Inside do
         </p>
       </form>
 
+      <form
+        :if={@room.place in [:indoor, :outdoor]}
+        id={"pool-#{@room.id}"}
+        phx-change="room_pool"
+      >
+        <input type="hidden" name="room_id" value={@room.id} />
+        <input type="hidden" name="pool" value="false" />
+        <label class="label cursor-pointer gap-2 text-sm whitespace-normal">
+          <input
+            type="checkbox"
+            name="pool"
+            value="true"
+            checked={Build.pool?(@room)}
+            class="checkbox checkbox-sm"
+          /> This room is a pool. It has water, and it takes a pool pump, a pool heater and a hot tub.
+        </label>
+      </form>
+
       <button
         type="button"
         id={"delete-#{@room.id}"}
@@ -844,6 +864,10 @@ defmodule DIYWeb.Inside do
           <select name="room[place]" class="select select-sm w-full">
             <option :for={{place, name} <- @place_names} value={place}>{name}</option>
           </select>
+        </label>
+        <label class="label cursor-pointer gap-2 text-sm whitespace-normal">
+          <input type="checkbox" name="room[pool]" value="true" class="checkbox checkbox-sm" />
+          A pool, inside or outside: 30 by 15 ft, with water.
         </label>
         <p class="text-xs opacity-70">The room goes to a free place. Then drag it where it is.</p>
         <button class="btn btn-sm btn-primary">Add the room</button>
@@ -1980,13 +2004,42 @@ defmodule DIYWeb.Inside do
   end
 
   attr :room, :map, required: true
+  attr :query, :string, default: ""
 
-  # The kinds of items that can go in a room.
+  # The kinds of items that can go in a room, with a search. A pool shows
+  # the items of a pool first. With a text, the kinds that match but go in
+  # a different place show too, with where they go.
   defp add_sheet(assigns) do
-    assigns = assign(assigns, :kinds, Catalog.kinds_for(assigns.room.place))
+    fits = Catalog.kinds_for_room(assigns.room)
+
+    fits =
+      if Build.pool?(assigns.room),
+        do: Enum.sort_by(fits, &(:pool not in &1.places)),
+        else: fits
+
+    others =
+      if String.trim(assigns.query) == "",
+        do: [],
+        else: Enum.reject(Catalog.search(assigns.query), &(&1 in fits))
+
+    assigns = assign(assigns, kinds: Catalog.search(assigns.query, fits), others: others)
 
     ~H"""
     <.sheet id="add-sheet" title={"Add to #{@room.name}"}>
+      <form id="add-search" phx-change="add_search" phx-submit="add_search" role="search">
+        <label class="input input-sm w-full">
+          <.icon name="hero-magnifying-glass" class="size-4 opacity-70" />
+          <input
+            type="search"
+            name="q"
+            value={@query}
+            placeholder="Search: Tesla, pool, fridge"
+            aria-label="Search the items"
+            autocomplete="off"
+            phx-debounce="200"
+          />
+        </label>
+      </form>
       <ul class="grid grid-cols-2 gap-2">
         <li :for={kind <- @kinds}>
           <button
@@ -2001,6 +2054,18 @@ defmodule DIYWeb.Inside do
           </button>
         </li>
       </ul>
+      <p :if={@kinds == [] and @others == []} id="add-none" class="text-sm opacity-70">
+        No item has this name. Try "Other": it takes any name and power.
+      </p>
+      <div :if={@others != []} id="add-elsewhere" class="space-y-1">
+        <p class="text-sm font-semibold">Not for this room</p>
+        <ul class="space-y-1 text-sm">
+          <li :for={kind <- @others} id={"elsewhere-#{kind.type}"} class="flex items-center gap-2">
+            <Icon.item type={kind.type} class="size-6" />
+            <span>{kind.name}: in {Catalog.where(kind)}.</span>
+          </li>
+        </ul>
+      </div>
     </.sheet>
     """
   end

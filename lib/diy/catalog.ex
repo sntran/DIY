@@ -680,15 +680,69 @@ defmodule DIY.Catalog do
         )
       ]
     },
+    # The items of a pool go outside, or in a room that is a pool
+    # (`:pool`, `fits?/2`).
     %{
       type: "pool_pump",
       name: "Pool pump",
-      places: [:outdoor],
+      places: [:outdoor, :pool],
       features: [:estimate],
       params: [
         int("watts", "Power", "W", 1100, 100, 4000, "A 1 HP pump uses near 1,100 W."),
         float("hours", "Hours in one day", "h", 8.0, 0.0, 24.0, nil),
         season("summer")
+      ]
+    },
+    %{
+      type: "pool_heater",
+      name: "Pool heater",
+      places: [:outdoor, :pool],
+      features: [:estimate],
+      params: [
+        choice(
+          "fuel",
+          "Kind",
+          [{"heat_pump", "Heat pump"}, {"electric", "Electric"}, {"gas", "Gas"}],
+          "heat_pump"
+        ),
+        int(
+          "watts",
+          "Power",
+          "W",
+          5500,
+          500,
+          30000,
+          "Only for a heat pump or an electric heater. A heat pump of 140,000 BTU/h uses near 5,500 W. The electric heater of a spa uses near 11,000 W."
+        ),
+        int(
+          "kbtu",
+          "Gas input",
+          "kBTU/h",
+          400,
+          50,
+          500,
+          "Only for a gas heater. The label gives it, for example 400,000 BTU/h."
+        ),
+        float("hours", "Hours in one day", "h", 4.0, 0.0, 24.0, nil),
+        season("warm")
+      ]
+    },
+    %{
+      type: "hot_tub",
+      name: "Hot tub",
+      places: [:outdoor, :pool],
+      features: [:estimate],
+      params: [
+        float(
+          "kwh_day",
+          "Use in one day",
+          "kWh",
+          5.0,
+          0.0,
+          40.0,
+          "A hot tub with a good cover uses near 3 to 8 kWh in one day, more in a cold month."
+        ),
+        season("all")
       ]
     },
     %{
@@ -866,7 +920,11 @@ defmodule DIY.Catalog do
         choice(
           "charger",
           "Charger",
-          [{"l1", "Level 1: a wall outlet (1.4 kW)"}, {"l2", "Level 2: 240 V (7.2 kW)"}],
+          [
+            {"l1", "Level 1: a wall outlet (1.4 kW)"},
+            {"l2", "Level 2: 240 V (7.2 kW)"},
+            {"l2_48", "Level 2: Tesla Wall Connector, 48 A (11.5 kW)"}
+          ],
           "l2"
         ),
         choice(
@@ -1350,6 +1408,10 @@ defmodule DIY.Catalog do
     "home_assistant" => {4, 4, 1},
     # Hayward SP2610X15: 25 1/8 by 7 7/8 by 10 7/8 in (Pool360).
     "pool_pump" => {25, 8, 11},
+    # No source: a heat pump of a pool, near 3 ft on each side.
+    "pool_heater" => {34, 34, 40},
+    # No source: a hot tub of 7 by 7 ft for 5 or 6 persons.
+    "hot_tub" => {84, 84, 36},
     # No source: a tower heater.
     "space_heater" => {10, 7, 25},
     # Pecron F5000LFP: 21.7 by 15 by 13.1 in (Pecron). Its trolley is not in
@@ -1500,6 +1562,86 @@ defmodule DIY.Catalog do
 
   @doc "The kinds that can go in a place."
   def kinds_for(place), do: Enum.filter(@kinds, &(place in &1.places))
+
+  @doc """
+  True when an item of a kind can go in a room. A room that is a pool
+  (`kind: "pool"`, `DIY.Build.pool?/1`) also takes the items of the place
+  `:pool`. So an indoor pool takes a pool pump, a pool heater and a hot
+  tub.
+  """
+  def fits?(%{places: places}, room) do
+    room.place in places or (:pool in places and Map.get(room, :kind) == "pool")
+  end
+
+  @doc "The kinds that can go in a room (`fits?/2`)."
+  def kinds_for_room(room), do: Enum.filter(@kinds, &fits?(&1, room))
+
+  # More words for the search of the kinds (`search/2`): the words that a
+  # person can type for a kind with a different name.
+  @words %{
+    "ev" => ~w(tesla ev car charger charging wall connector vehicle),
+    "pool_pump" => ~w(pool pump spa),
+    "pool_heater" => ~w(pool heater spa heat pump),
+    "hot_tub" => ~w(hot tub spa jacuzzi),
+    "fridge" => ~w(refrigerator),
+    "freezer" => ~w(refrigerator),
+    "ac" => ~w(air conditioner hvac cooling),
+    "mini_split" => ~w(heat pump ductless air conditioner),
+    "furnace" => ~w(heater heating hvac),
+    "water_heater" => ~w(tank tankless),
+    "range" => ~w(stove oven cooktop),
+    "computer" => ~w(pc laptop desk),
+    "always_on" => ~w(router modem standby),
+    "solar_panels" => ~w(solar pv),
+    "power_station" => ~w(battery backup ecoflow pecron generator)
+  }
+
+  @doc "The more words of the kinds (`@words`), for the tests."
+  def words, do: @words
+
+  @doc """
+  The kinds of the house that match a text. The text is in the name of
+  the kind or in its more words (`@words`), with no difference of
+  capitals. An empty text matches all the kinds.
+  """
+  def search(text, kinds \\ house_kinds()) do
+    case text |> String.downcase() |> String.trim() do
+      "" ->
+        kinds
+
+      text ->
+        Enum.filter(kinds, fn kind ->
+          words = Enum.join([String.downcase(kind.name) | Map.get(@words, kind.type, [])], " ")
+          String.contains?(words, text)
+        end)
+    end
+  end
+
+  @doc "The kinds that can go in the house: in a room, on the roof or in a pool."
+  def house_kinds,
+    do: Enum.filter(@kinds, fn kind -> Enum.any?(kind.places, &(&1 in [:pool | @places])) end)
+
+  @doc """
+  Where a kind can go in the house, in words: for example "a room inside
+  or a pool".
+  """
+  def where(%{places: places}) do
+    names = %{
+      indoor: "a room inside",
+      outdoor: "a room outside",
+      roof: "the roof",
+      pool: "a pool"
+    }
+
+    places
+    |> Enum.filter(&Map.has_key?(names, &1))
+    |> Enum.sort_by(&Enum.find_index([:indoor, :outdoor, :roof, :pool], fn p -> p == &1 end))
+    |> Enum.map(&names[&1])
+    |> join_or()
+  end
+
+  defp join_or([one]), do: one
+  defp join_or(list), do: Enum.join(Enum.drop(list, -1), ", ") <> " or " <> List.last(list)
 
   @doc "The months of a season."
   def season_months(season) do

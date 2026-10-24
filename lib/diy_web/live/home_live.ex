@@ -122,6 +122,11 @@ defmodule DIYWeb.HomeLive do
      |> assign(zip_error: nil, zip_text: nil)
      |> item_frames()
      |> assign(:add, if(sheets?, do: params["add"]))
+     # A new sheet Add starts with no search.
+     |> assign(
+       :add_query,
+       if(params["add"] == socket.assigns[:add], do: socket.assigns[:add_query] || "", else: "")
+     )
      |> assign(:room, params["room"])
      |> assign(:sheet, params["sheet"])
      |> ha_rooms(socket.assigns.live_action, params["sheet"])
@@ -622,12 +627,13 @@ defmodule DIYWeb.HomeLive do
 
   def handle_event(
         "add_room",
-        %{"room" => %{"name" => name, "level" => level, "place" => place}},
+        %{"room" => %{"name" => name, "level" => level, "place" => place} = room},
         socket
       ) do
     place = Enum.find(Catalog.places(), &(Atom.to_string(&1) == place))
+    kind = if room["pool"] == "true", do: "pool"
 
-    case Build.add_room(socket.assigns.build, name, level, place) do
+    case Build.add_room(socket.assigns.build, name, level, place, kind) do
       {:ok, build, id} ->
         {:noreply, socket |> put(build) |> push_patch(to: ~p"/inside?#{[room: id]}")}
 
@@ -766,6 +772,18 @@ defmodule DIYWeb.HomeLive do
   def handle_event("rename_room", %{"room_id" => id, "name" => name}, socket) do
     with_build(socket, Build.rename_room(socket.assigns.build, id, name))
   end
+
+  # The box "This room is a pool" of the sheet of a room.
+  def handle_event("room_pool", %{"room_id" => id, "pool" => pool}, socket) do
+    case Build.set_pool(socket.assigns.build, id, pool == "true") do
+      {:ok, build} -> {:noreply, put(socket, build)}
+      {:error, reason} -> {:noreply, put_flash(socket, :error, room_error(reason))}
+    end
+  end
+
+  # The search of the sheet Add (DIYWeb.Inside).
+  def handle_event("add_search", %{"q" => q}, socket) when is_binary(q),
+    do: {:noreply, assign(socket, :add_query, String.slice(q, 0, 40))}
 
   # The match of the rooms with Home Assistant (DIYWeb.HomeAssistant): the
   # app changes the build, and the hook adds the areas to Home Assistant.
@@ -1331,6 +1349,13 @@ defmodule DIYWeb.HomeLive do
   defp room_error(:level), do: gettext("Choose a floor of the house.")
   defp room_error(:place), do: gettext("Choose a place: inside, outside or the roof.")
   defp room_error(:house), do: gettext("Choose a house first.")
+  defp room_error(:pool_place), do: gettext("A pool is inside or outside, not on the roof.")
+
+  defp room_error(:items),
+    do:
+      gettext(
+        "Move the items of the pool to a different room first. Then the room can stop being a pool."
+      )
 
   defp lookup(options, key) do
     Enum.find_value(options, fn {k, _label, value} -> if k == key, do: value end)
@@ -1708,6 +1733,7 @@ defmodule DIYWeb.HomeLive do
                 view={@cutaway}
                 item={@item}
                 add={@add}
+                add_query={@add_query}
                 room={@room}
                 sheet={@sheet}
                 status={@status}

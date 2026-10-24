@@ -439,21 +439,50 @@ defmodule DIY.Build do
 
   @doc """
   Adds a room on a level. It goes to a free place (`DIY.Layout.fill/1`):
-  the user then moves it.
+  the user then moves it. A room of the kind `"pool"` is a pool
+  (`pool?/1`), inside or outside. It is 30 by 15 ft, and it takes the
+  items of a pool.
   """
-  @spec add_room(t(), String.t(), String.t(), atom()) ::
+  @spec add_room(t(), String.t(), String.t(), atom(), String.t() | nil) ::
           {:ok, t(), String.t()} | {:error, atom()}
-  def add_room(%__MODULE__{house: %{floors: floors}} = build, name, level, place) do
+  def add_room(build, name, level, place, kind \\ nil)
+
+  def add_room(%__MODULE__{house: %{floors: floors}} = build, name, level, place, kind) do
     with {:ok, name} <- name(name),
          true <- level in levels(floors) || {:error, :level},
-         true <- place in @places || {:error, :place} do
+         true <- place in @places || {:error, :place},
+         true <- kind in [nil, "pool"] || {:error, :kind},
+         true <- (kind == nil or place in [:indoor, :outdoor]) || {:error, :pool_place} do
       {id, build} = next_id(build, "r")
       room = %{id: id, name: name, level: level, place: place, plan: nil}
+      room = if kind, do: Map.put(room, :kind, kind), else: room
       {:ok, change(build, &%{&1 | rooms: &1.rooms ++ [room]}), id}
     end
   end
 
-  def add_room(_build, _name, _level, _place), do: {:error, :house}
+  def add_room(_build, _name, _level, _place, _kind), do: {:error, :house}
+
+  @doc "True when a room is a pool (`add_room/5`)."
+  def pool?(room), do: Map.get(room, :kind) == "pool"
+
+  @doc """
+  Makes a room of the house a pool, or a room that is not a pool. A room
+  inside with items that only a pool takes (a pool pump inside) stays a
+  pool (`:items`): the person moves them first. A room on the roof is
+  never a pool.
+  """
+  @spec set_pool(t(), String.t(), boolean()) :: {:ok, t()} | {:error, atom()}
+  def set_pool(build, id, pool) when is_boolean(pool) do
+    with {:ok, room} <- house_room(build, id),
+         true <- room.place in [:indoor, :outdoor] || {:error, :pool_place},
+         new = if(pool, do: Map.put(room, :kind, "pool"), else: Map.delete(room, :kind)),
+         true <-
+           Enum.all?(items_in(build, id), &Catalog.fits?(Catalog.kind(&1.type), new)) ||
+             {:error, :items} do
+      rooms = Enum.map(build.rooms, &if(&1.id == id, do: new, else: &1))
+      {:ok, change(build, &%{&1 | rooms: rooms})}
+    end
+  end
 
   @doc "Gives a room a new name."
   @spec rename_room(t(), String.t(), String.t()) :: {:ok, t()} | {:error, atom()}
@@ -493,8 +522,8 @@ defmodule DIY.Build do
   end
 
   defp new_home(item, house) do
-    places = Catalog.kind(item.type).places
-    Enum.find_value(house, &(&1.place in places && &1.id))
+    kind = Catalog.kind(item.type)
+    Enum.find_value(house, &(Catalog.fits?(kind, &1) && &1.id))
   end
 
   defp house_room(build, id) do
@@ -607,7 +636,7 @@ defmodule DIY.Build do
   defp add_item(build, room_id, type, params, device, at) do
     with {:ok, room} <- room(build, room_id),
          %{} = kind <- Catalog.kind(type) || {:error, :type},
-         true <- room.place in kind.places || {:error, :place} do
+         true <- Catalog.fits?(kind, room) || {:error, :place} do
       {id, build} = next_id(build, "i")
       item = %{new_item(id, type, room_id, Map.merge(Catalog.defaults(type), params)) | at: at}
       devices = if device, do: Map.put(build.devices, id, device), else: build.devices
@@ -897,7 +926,7 @@ defmodule DIY.Build do
     with {:ok, item} <- item(build, id),
          {:ok, from} <- room(build, item.room),
          {:ok, room} <- room(build, room_id),
-         true <- room.place in Catalog.kind(item.type).places || {:error, :place},
+         true <- Catalog.fits?(Catalog.kind(item.type), room) || {:error, :place},
          true <- van_level?(from.level) == van_level?(room.level) || {:error, :place} do
       {:ok, replace_item(build, %{item | room: room_id, at: nil})}
     end
@@ -1015,7 +1044,7 @@ defmodule DIY.Build do
     with {:ok, item} <- item(build, id),
          {:ok, from} <- plan_room(build, item.room),
          {:ok, room} <- plan_room(build, room_id),
-         true <- room.place in Catalog.kind(item.type).places || {:error, :place},
+         true <- Catalog.fits?(Catalog.kind(item.type), room) || {:error, :place},
          true <- van_level?(from.level) == van_level?(room.level) || {:error, :place} do
       at = Layout.clamp(%{x: x, y: y}, item, room.plan)
       {:ok, replace_item(build, %{item | room: room.id, at: at})}
@@ -1521,7 +1550,14 @@ defmodule DIY.Build do
     with {:ok, name} <- name(name),
          true <- level in levels,
          {:ok, place} <- Map.fetch(@place_names, place) do
-      {:house, %{id: id, name: name, level: level, place: place, plan: read_plan(room["plan"])}}
+      new = %{id: id, name: name, level: level, place: place, plan: read_plan(room["plan"])}
+
+      # A pool is inside or outside. A different kind is lost.
+      {:house,
+       if(room["kind"] == "pool" and place in [:indoor, :outdoor],
+         do: Map.put(new, :kind, "pool"),
+         else: new
+       )}
     else
       _ -> :error
     end
@@ -1625,7 +1661,7 @@ defmodule DIY.Build do
        )
        when is_binary(id) and is_boolean(typical) do
     with %{} = kind <- Catalog.kind(type),
-         true <- room.place in kind.places,
+         true <- Catalog.fits?(kind, room),
          planned when is_boolean(planned) <- Map.get(item, "planned", false),
          backup when is_boolean(backup) <- Map.get(item, "backup", false),
          {:ok, params} <- Catalog.params(type, params) do
@@ -1695,7 +1731,7 @@ defmodule DIY.Build do
   defp item_home(_kind, nil, _house), do: nil
 
   defp item_home(kind, home, house) do
-    rooms = Enum.filter(house, &(&1.place in kind.places))
+    rooms = Enum.filter(house, &Catalog.fits?(kind, &1))
     Enum.find_value(rooms, &(&1.id == home && home)) || Enum.find_value(rooms, & &1.id)
   end
 

@@ -333,6 +333,48 @@ async function van(page, name) {
   await page.waitForSelector("#van-stations:has-text('at home')")
 }
 
+// A pool in the yard, with water on the plan and on the house. Its sheet
+// Add finds the hot tub with a search. The search in the kitchen tells
+// where the hot tub goes.
+async function pool(page, name) {
+  await page.click("nav >> text=Rooms")
+  await page.waitForSelector("#inside")
+  await page.click("#add-room")
+  await page.waitForSelector("#new-room")
+  await page.fill("#new-room input[name='room[name]']", "Pool")
+  await page.selectOption("#new-room select[name='room[level]']", "outside")
+  await page.selectOption("#new-room select[name='room[place]']", "outdoor")
+  await page.check("#new-room input[name='room[pool]']")
+  await check(page, `${name} new pool`)
+  await page.click("#new-room button")
+  await page.waitForSelector("#room-bar:has-text('Pool')")
+  await page.waitForSelector("#plan-svg polygon.p-water", { state: "attached" })
+
+  await page.click("#bar-add")
+  await page.waitForSelector("#add-sheet")
+  await page.fill("#add-search input[name=q]", "spa")
+  await page.waitForSelector("#add-sheet ul li:first-child #add-pool_pump, #add-sheet ul li:first-child #add-pool_heater, #add-sheet ul li:first-child #add-hot_tub")
+  await page.waitForSelector("#add-fridge", { state: "detached" })
+  await check(page, `${name} search`)
+  await page.click("#add-hot_tub")
+  await page.waitForSelector("#item-stage:has-text('Hot tub')")
+  await page.click("#item-stage .stage-back")
+  await page.waitForSelector("#item-stage", { state: "detached" })
+
+  await follow(page, 'a[id^="add-"][aria-label="Add an item to Kitchen"]')
+  await page.waitForSelector("#add-sheet")
+  await page.fill("#add-search input[name=q]", "hot tub")
+  await page.waitForSelector("#elsewhere-hot_tub:has-text('a room outside or a pool')")
+  await page.fill("#add-search input[name=q]", "Tesla")
+  await page.waitForSelector("#add-ev")
+  await page.waitForSelector("#add-elsewhere", { state: "detached" })
+  await page.click("#add-sheet a[data-close]")
+  await page.waitForSelector("#add-sheet", { state: "detached" })
+
+  await page.click("nav >> text=House")
+  await page.waitForSelector("#house-picture .p-water", { state: "attached" })
+}
+
 async function connected(page) {
   await page.waitForSelector(".phx-connected")
 }
@@ -1269,6 +1311,7 @@ for (const colorScheme of ["light", "dark"]) {
 
     await lesson(page, name)
     await van(page, name)
+    await pool(page, name)
 
     await context.close()
   }
