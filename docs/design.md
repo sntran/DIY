@@ -2138,8 +2138,10 @@ only the total. This is a decision of the owner (October 2026):
   different in the house cut open ("SCENE-inside"): the house from the
   outside has a window with the light of a lamp at night.
 - In workerd, the request of the picture of a typical house takes about
-  0.25 s: the decode, the SVG and the draw. The NIF adds about 3 MB to the
-  Worker (October 2026).
+  0.65 s: the decode, the SVG and the draw. The house cut open has more
+  shapes than the house from the outside (0.25 s). A site that shows
+  previews asks for the picture one time (see the cache below). The NIF
+  adds about 3 MB to the Worker (October 2026).
 - The answer has `Cache-Control: public, max-age=31536000, immutable`:
   the picture of a link never changes. A site that shows previews keeps
   the picture in its own cache.
