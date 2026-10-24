@@ -97,7 +97,7 @@ defmodule DIYWeb.HomeLive do
      |> assign(:room, nil)
      |> assign(:sheet, nil)
      |> assign(:status, nil)
-     |> assign(shared: nil, meta: nil, adopt: nil, share_zip: true, origin: "")
+     |> assign(shared: nil, meta: nil, adopt: nil, share: nil, share_zip: true, origin: "")
      |> allow_upload(:build_file,
        accept: ~w(.json),
        max_entries: 1,
@@ -131,7 +131,8 @@ defmodule DIYWeb.HomeLive do
      |> assign(checks: nil, answers: %{})
      |> assign(:hint, false)
      |> assign(:origin, origin(uri))
-     |> shared(params)}
+     |> shared(params)
+     |> share()}
   end
 
   # The scheme, the host and the port of the page, for the full links of
@@ -173,7 +174,10 @@ defmodule DIYWeb.HomeLive do
     end
   end
 
-  defp shared(socket, _params), do: assign(socket, shared: nil, meta: nil, adopt: nil)
+  defp shared(%{assigns: %{shared: nil}} = socket, _params), do: socket
+
+  defp shared(socket, _params),
+    do: assign(socket, shared: nil, meta: nil, adopt: nil, page_title: "Small Steps Home")
 
   defp share_description(%{cost: nil}),
     do: gettext("Small Steps Home shows where the electricity of a house goes.")
@@ -1062,7 +1066,7 @@ defmodule DIYWeb.HomeLive do
 
   # The box of the ZIP code in the sheet of the share.
   def handle_event("share_zip", %{"zip" => zip}, socket),
-    do: {:noreply, assign(socket, :share_zip, zip == "true")}
+    do: {:noreply, socket |> assign(:share_zip, zip == "true") |> share()}
 
   # Start from a shared house: it takes the place of the build of the
   # device, as the import of a file does. When the device has a house, the
@@ -1507,6 +1511,7 @@ defmodule DIYWeb.HomeLive do
     |> assign(:bill, bill)
     |> assign(:whatif, whatif)
     |> assign(:shares, shares)
+    |> share()
   end
 
   # The part of the power of each month at night, for each plan with a
@@ -1818,7 +1823,7 @@ defmodule DIYWeb.HomeLive do
                 bill_month={@bill_month}
                 ha_meter={DIYWeb.HomeAssistant.meter_offer(%{ha_energy: @ha_energy, build: @build})}
               />
-              <DIYWeb.Share.sheet :if={@sheet == "share" and @bill != nil} {share_sheet(assigns)} />
+              <DIYWeb.Share.sheet :if={@share} share={@share} />
             </div>
         <% end %>
       <% end %>
@@ -1828,21 +1833,41 @@ defmodule DIYWeb.HomeLive do
 
   # The sheet of the share (DIYWeb.Share): the link of the house of today,
   # with the numbers of the page. The picture and the title are in the
-  # language of the page.
-  defp share_sheet(%{build: build, bill: bill} = assigns) do
+  # language of the page. The link changes only when the sheet opens, when
+  # the box of the ZIP code changes, and when the numbers change.
+  defp share(
+         %{
+           assigns: %{
+             live_action: :front,
+             sheet: "share",
+             bill: %{} = bill,
+             build: %Build{} = build
+           }
+         } =
+           socket
+       ) do
+    assigns = socket.assigns
     summary = Share.summary(Enum.map(bill.months, & &1.kwh), bill.cost, assigns.locale)
-    data = Share.encode(Build.today(build), summary, zip: assigns.share_zip)
-    shared = if assigns.share_zip, do: build, else: %{build | zip: nil}
+    zip? = assigns.share_zip
+    shared = if zip?, do: build, else: %{build | zip: nil}
+    share = %{build: build, summary: summary, zip: zip?, title: Picture.title(shared, summary)}
 
-    %{
-      build: build,
-      summary: summary,
-      zip: assigns.share_zip,
-      url: assigns.origin <> ~p"/s/#{data}",
-      picture: ~p"/s/#{data}/picture.png",
-      title: Picture.title(shared, summary)
-    }
+    share =
+      case Share.encode(Build.today(build), summary, zip: zip?) do
+        {:ok, data} ->
+          Map.merge(share, %{
+            url: assigns.origin <> ~p"/s/#{data}",
+            picture: ~p"/s/#{data}/picture.png"
+          })
+
+        {:error, :too_large} ->
+          Map.merge(share, %{url: nil, picture: nil})
+      end
+
+    assign(socket, :share, share)
   end
+
+  defp share(socket), do: assign(socket, :share, nil)
 
   defp nav?(%Build{house: house}) when is_map(house), do: true
   defp nav?(_build), do: false

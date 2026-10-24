@@ -8,6 +8,12 @@ defmodule DIYWeb.ShareLiveTest do
 
   alias DIY.{Build, House, Share, Stubs}
 
+  # The DATA of the link of a house that a link can carry.
+  defp encode!(build, summary, opts \\ []) do
+    {:ok, data} = Share.encode(build, summary, opts)
+    data
+  end
+
   setup do
     Stubs.weather()
     Stubs.market()
@@ -37,7 +43,7 @@ defmodule DIYWeb.ShareLiveTest do
   defp summary, do: Share.summary(Enum.map(1..12, &(1000 + 10 * &1)), 1500, "en")
 
   # The link of a shared house of 2,400 sq ft.
-  defp link_data(opts \\ []), do: Share.encode(house(2400), summary(), opts)
+  defp link_data(opts \\ []), do: encode!(house(2400), summary(), opts)
 
   describe "the sheet of the share" do
     test "the page House shares the house of today, with its numbers", %{conn: conn} do
@@ -82,6 +88,24 @@ defmodule DIYWeb.ShareLiveTest do
       assert has_element?(view, "#share-sheet li", "ZIP code 75070")
     end
 
+    test "a house that is too large for a link has no link", %{conn: conn} do
+      build = house()
+      kitchen = Enum.find(build.rooms, &(&1.name == "Kitchen")).id
+
+      build =
+        Enum.reduce(1..(151 - length(build.items)), build, fn _i, b ->
+          {:ok, b, _id} = Build.add_item(b, kitchen, "fridge")
+          b
+        end)
+
+      {:ok, view, _html} = live(conn, ~p"/?sheet=share")
+      restore(view, build)
+      settle(view)
+      assert has_element?(view, "#share-too-large", "150 items")
+      refute has_element?(view, "#share-button")
+      refute has_element?(view, "#share-sheet img")
+    end
+
     test "a house with no bill yet has no share", %{conn: conn} do
       Stubs.weather(:down)
       {:ok, view, _html} = live(conn, ~p"/?sheet=share")
@@ -111,7 +135,15 @@ defmodule DIYWeb.ShareLiveTest do
       # The page shows the house before the build of the device loads.
       assert html =~ "12,780 kWh"
 
-      vi = Share.encode(house(2400), %{summary() | cost: nil, locale: "vi"})
+      # A page in Vietnamese for a link in English. The page is in its own
+      # language. The tags of the preview are in the language of the link.
+      html =
+        conn |> put_req_cookie("diy_language", "vi") |> get(~p"/s/#{data}") |> html_response(200)
+
+      assert html =~ "Nhà 2,400 ft² ở 75070: 12,780 kWh mỗi năm</p>"
+      assert html =~ ~s(<meta property="og:title" content="A house of 2,400 sq ft)
+
+      vi = encode!(house(2400), %{summary() | cost: nil, locale: "vi"})
       html = conn |> get(~p"/s/#{vi}") |> html_response(200)
       assert html =~ ~s(content="Nhà 2,400 ft² ở 75070: 12,780 kWh mỗi năm")
       assert html =~ ~s(<meta name="description" content="Small Steps Home cho thấy)
@@ -179,6 +211,7 @@ defmodule DIYWeb.ShareLiveTest do
       restore(view, house())
       render_patch(view, ~p"/settings")
       assert :sys.get_state(view.pid).socket.assigns.meta == nil
+      assert page_title(view) == "Small Steps Home"
     end
   end
 
@@ -198,10 +231,14 @@ defmodule DIYWeb.ShareLiveTest do
             build_conn() |> get(~p"/s/#{data}") |> html_response(200)
             build_conn() |> get(~p"/s/#{data}/picture.png") |> response(200)
             build_conn() |> get(~p"/settings") |> html_response(200)
+            # The mount of the LiveView logs its parameters.
+            {:ok, view, _html} = live(build_conn(), ~p"/s/#{data}")
+            render(view)
           end)
 
         refute log =~ data
         assert log =~ "GET /settings"
+        assert log =~ ~s("data" => "[FILTERED]")
       after
         Logger.configure(level: level)
       end

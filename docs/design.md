@@ -1992,11 +1992,13 @@ The shared house is the build with these changes (`DIY.Share.strip/2`):
 - No link to Home Assistant or to a maker: `areas`, `devices` and `units`
   are empty. The data of these links is never necessary for the numbers.
 - No state of the app of the person: no `revision`, `stamp`, `lesson`,
-  `lesson_plan` or `hints`.
+  `lesson_plan` or `hints`. No plans of the lesson (`plans`): the
+  numbers of the link do not need them.
 - The ZIP code stays, because the weather and the plans need it. The
   sheet of the share tells this, and it has a box that removes it.
-- The bill and the real months stay: they are the numbers to show. The
-  sheet shows them before the share.
+- The bill, the prices and the real months of the meter stay: they give
+  the numbers. The sheet tells that the link has the months of the meter,
+  and it shows the numbers of the year.
 
 The link also has a summary:
 
@@ -2014,10 +2016,20 @@ person who opens it.
 Any person can write a link with any summary. A link shows only its own
 numbers, and the server checks that each number is in its range.
 
-A typical house gives a link of about 1,400 characters (October 2026).
-The server refuses a `DATA` of more than 6,000 characters. It also
-refuses a JSON of more than 256 KiB after the inflate, so a small link
-cannot become a large house (`DIY.Share.decode/1`).
+A typical house gives a link of about 1,400 characters and 8 KB of JSON
+(October 2026). A link has these limits (`DIY.Share.decode/1`):
+
+- a `DATA` of 6,000 characters at most;
+- a JSON of 32 KiB at most after the inflate;
+- 150 items and 50 rooms at most.
+
+The decode counts the items and the rooms before it reads the house. It
+counts the rooms again after the read, because the read gives each van
+its zones. So a small link cannot become a large house. This is important, because
+the one VM serves all the pages. The picture of a house with 900 items
+takes about 8 times the time of a typical house. The sheet of the share
+uses the same limits. A house that a link cannot carry gets a message,
+and no link.
 
 ### The share
 
@@ -2037,7 +2049,8 @@ and a bar for each month. It changes nothing on the device until the
 person taps **Start from this house**.
 
 - **Start from this house** puts the shared house in the place of the
-  build of the device, as the import of a file does (`DIY.Build.import/2`).
+  build of the device. The import of a file does the same
+  (`DIY.Build.import/2`).
   So the device saves it with the protocol of "The build on the device".
   This needs no new state, and the model `specs/Device.tla` does not
   change.
@@ -2066,11 +2079,12 @@ the NIF resvg draws it (`DIY.Picture.NIF`, `native/resvg`,
 - The NIF is resvg 0.48.1 in WebAssembly, as in mkfifo.com, with the text
   of resvg. Two fonts are in the file: Inter, regular and bold
   (`native/resvg/fonts`). Each font has only the letters of English,
-  Spanish and Vietnamese, so it is 85 KB. The NIF reads no file and no
-  image. It refuses
-  entities of a DTD and a picture of more than 1,048,576 pixels. The NIF
-  of mkfifo.com has no text, so DIY has its own NIF. This is a decision
-  of the owner (October 2026).
+  Spanish and Vietnamese, so it is 85 KB. The NIF reads the fonts one
+  time. It reads no file and no image. It refuses entities of a DTD and a
+  picture of more than 1,048,576 pixels. A panic of resvg is a trap of
+  the module: beam.com raises an error in the process of that request
+  only (docs/NIFS.md of BEAM.com). The NIF of mkfifo.com has no text, so
+  DIY has its own NIF. This is a decision of the owner (October 2026).
 - resvg reads no CSS of the page: no variables and no `color-mix`. Thus
   the SVG of the picture has the style of each shape in its attributes.
   `scripts/picture-styles.mjs` asks Chromium for the style of each class
@@ -2079,10 +2093,15 @@ the NIF resvg draws it (`DIY.Picture.NIF`, `native/resvg`,
   `app.css`. A stroke that does not scale on the page
   (`vector-effect: non-scaling-stroke`) gets the width for the scale of
   the picture.
-- In workerd, a picture takes about 40 ms, and 94 ms for the first one.
-  The NIF adds about 3 MB to the Worker (October 2026).
+- In workerd, the request of the picture of a typical house takes about
+  0.25 s: the decode, the SVG and the draw. The NIF adds about 3 MB to the
+  Worker (October 2026).
 - The answer has `Cache-Control: public, max-age=31536000, immutable`:
-  the picture of a link never changes.
+  the picture of a link never changes. A site that shows previews keeps
+  the picture in its own cache.
+- The sheet of the share makes its link when it opens, when the box of
+  the ZIP code changes, and when the numbers change. A render of the page
+  does not make the link again.
 
 ### The tests of a shared house
 
@@ -2091,13 +2110,18 @@ the NIF resvg draws it (`DIY.Picture.NIF`, `native/resvg`,
   bytes gives an error and never a crash. A decode never inflates more
   than its limit, and a stream that ends early is an error.
 - The picture: the SVG has no class and no `<style>`, and each class of
-  the picture has a style in `priv/picture/styles.json`. The NIF gives a
-  PNG of 1200 × 630 pixels, and refuses a bad SVG, entities, a large
-  picture and a text that is not UTF-8.
+  the picture has a style in `priv/picture/styles.json`. Two classes of
+  one shape never set a property to two values. The NIF gives a PNG of
+  1200 × 630 pixels. It refuses a bad SVG, entities, a large picture and
+  a text that is not UTF-8.
+- The limits: a property gives houses with more items and rooms. Each
+  house within the limits gives the same house after a decode, and each
+  other house gives an error.
 - The LiveView: the share sheet and its box of the ZIP code. The page of
   a link, a bad link, and the tags of Open Graph. The button Start from
   this house, with a house on the device and with no house.
-- The log: a request for a link writes no line with its path.
+- The log: a request for a link, its picture and the mount of its page
+  write no line with the house.
 - JavaScript: the hook of the share, with and without `navigator.share`.
 - The browser walk: a share from the page House, the page of its link,
   its picture, and **Start from this house**. On the Worker, the walk

@@ -2,6 +2,13 @@ defmodule DIYWeb.PictureTest do
   use DIYWeb.ConnCase, async: true
 
   alias DIY.{Build, House, Share}
+
+  # The DATA of the link of a house that a link can carry.
+  defp encode!(build, summary, opts \\ []) do
+    {:ok, data} = Share.encode(build, summary, opts)
+    data
+  end
+
   alias DIYWeb.{Outside, Picture}
 
   defp house(preset \\ %{}) do
@@ -20,12 +27,18 @@ defmodule DIYWeb.PictureTest do
         locale
       )
 
-  # The classes of the SVG of the house from the outside.
-  defp classes(build) do
+  # The SVG of the house from the outside, with its classes.
+  defp svg_of(build) do
     %{__changed__: nil, view: Outside.view(build)}
     |> Outside.house()
     |> Phoenix.HTML.Safe.to_iodata()
     |> IO.iodata_to_binary()
+  end
+
+  # The classes of the SVG of the house from the outside.
+  defp classes(build) do
+    build
+    |> svg_of()
     |> then(&Regex.scan(~r/ class="([^"]*)"/, &1))
     |> Enum.flat_map(fn [_, c] -> String.split(c) end)
     |> MapSet.new()
@@ -45,6 +58,28 @@ defmodule DIYWeb.PictureTest do
 
     for build <- builds, class <- classes(build), class not in @plain do
       assert Map.has_key?(Picture.styles(), class), "#{class} has no style"
+    end
+  end
+
+  # The SVG gets the styles of its classes in their order on each shape.
+  # CSS uses the order of app.css: the two are the same only when the
+  # classes of a shape set different properties, or the same values.
+  test "the classes of a shape never set a property to two values" do
+    for preset <- [
+          %{},
+          %{floors: 1, size: 900, heat: "electric"},
+          %{floors: 3, size: 5200, lot: 9000}
+        ],
+        html = svg_of(house(preset)),
+        [_, classes] <- Regex.scan(~r/ class="([^"]*)"/, html),
+        list = String.split(classes),
+        a <- list,
+        b <- list,
+        a < b,
+        {prop, value} <- Map.get(Picture.styles(), a, %{}),
+        other = Map.get(Picture.styles(), b, %{})[prop],
+        other != nil do
+      assert other == value, "#{a} and #{b} set #{prop} to #{value} and #{other}"
     end
   end
 
@@ -132,7 +167,7 @@ defmodule DIYWeb.PictureTest do
 
   describe "the controller" do
     test "a link gives its picture, with a cache of one year", %{conn: conn} do
-      data = Share.encode(house(), summary())
+      data = encode!(house(), summary())
       conn = get(conn, ~p"/s/#{data}/picture.png")
       assert conn.status == 200
       assert get_resp_header(conn, "content-type") == ["image/png"]
@@ -142,7 +177,7 @@ defmodule DIYWeb.PictureTest do
     end
 
     test "a site that asks for HTML gets the picture", %{conn: conn} do
-      data = Share.encode(house(), summary())
+      data = encode!(house(), summary())
       conn = conn |> put_req_header("accept", "text/html") |> get(~p"/s/#{data}/picture.png")
       assert conn.status == 200
     end

@@ -19,22 +19,29 @@ defmodule DIY.Share do
   # The languages of the app (`DIY.Gettext`).
   @locales Application.compile_env!(:diy, [DIY.Gettext, :allowed_locales])
 
-  # The largest DATA, and the largest JSON after the inflate.
+  # The largest DATA, and the largest JSON after the inflate. A typical
+  # house is about 8 KB of JSON.
   @max_data 6_000
-  @max_json 256 * 1024
+  @max_json 32 * 1024
+
+  # The most items and rooms of a shared house. A picture of a house with
+  # more items takes too much time of the VM (docs/design.md, "The link").
+  @max_items 150
+  @max_rooms 50
 
   # The largest kWh of a month, and the largest cost of a year.
   @max_kwh 100_000
   @max_cost 10_000_000
 
   # The fields of the build that a link never has. They are the links to
-  # Home Assistant and to the makers, and the state of the app. A decode
-  # puts these values back, whatever the link has.
+  # Home Assistant and to the makers, and the state of the app and of the
+  # lesson. A decode puts these values back, whatever the link has.
   @forced %{
     "revision" => 0,
     "stamp" => "",
     "lesson" => 1,
     "lesson_plan" => nil,
+    "plans" => [],
     "hints" => [],
     "areas" => %{},
     "devices" => %{},
@@ -51,8 +58,9 @@ defmodule DIY.Share do
   def max_data, do: @max_data
 
   @doc """
-  The build with no data of a link to Home Assistant or to a maker, and
-  no state of the app. With `zip: false`, it also has no ZIP code.
+  The build with no data of a link to Home Assistant or to a maker. It has
+  no state of the app and no plans of the lesson. With `zip: false`, it
+  also has no ZIP code.
   """
   @spec strip(Build.t(), keyword()) :: Build.t()
   def strip(%Build{} = build, opts \\ []) do
@@ -62,6 +70,7 @@ defmodule DIY.Share do
         stamp: "",
         lesson: 1,
         lesson_plan: nil,
+        plans: [],
         hints: [],
         areas: %{},
         devices: %{},
@@ -78,13 +87,14 @@ defmodule DIY.Share do
   - the cost of the year in dollars, or `nil`;
   - a locale of the app.
 
-  The numbers are rounded.
+  The numbers are rounded, and they stay in the range that a link
+  accepts.
   """
   @spec summary([number()], number() | nil, String.t()) :: summary()
   def summary(months, cost, locale) when length(months) == 12 do
     %{
-      months: Enum.map(months, &max(round(&1), 0)),
-      cost: cost && max(round(cost), 0),
+      months: Enum.map(months, &(&1 |> round() |> max(0) |> min(@max_kwh))),
+      cost: cost && cost |> round() |> max(0) |> min(@max_cost),
       locale: if(locale in @locales, do: locale, else: "en")
     }
   end
@@ -94,9 +104,11 @@ defmodule DIY.Share do
 
   @doc """
   The `DATA` of the link of a build and its summary. The build is
-  stripped (`strip/2`): `opts` goes to it.
+  stripped (`strip/2`): `opts` goes to it. A house that a link cannot
+  carry gives `{:error, :too_large}`: it has too many items or rooms, or
+  its link is too long.
   """
-  @spec encode(Build.t(), summary(), keyword()) :: String.t()
+  @spec encode(Build.t(), summary(), keyword()) :: {:ok, String.t()} | {:error, :too_large}
   def encode(%Build{} = build, summary, opts \\ []) do
     map =
       build
@@ -111,8 +123,20 @@ defmodule DIY.Share do
         "s" => %{"m" => summary.months, "c" => summary.cost, "l" => summary.locale}
       })
 
-    @version <> Base.url_encode64(deflate(json), padding: false)
+    data = Base.url_encode64(deflate(json), padding: false)
+
+    if small?(map) and byte_size(json) <= @max_json and byte_size(data) < @max_data,
+      do: {:ok, @version <> data},
+      else: {:error, :too_large}
   end
+
+  # The count of the items and of the rooms of the JSON of a build.
+  defp small?(map) do
+    count(map["items"]) <= @max_items and count(map["rooms"]) <= @max_rooms
+  end
+
+  defp count(list) when is_list(list), do: length(list)
+  defp count(_other), do: 0
 
   @doc """
   Reads the `DATA` of a link. Gives `{:ok, build, summary}`, or
@@ -161,11 +185,18 @@ defmodule DIY.Share do
 
   defp read_summary(_summary), do: {:error, :summary}
 
-  # A shared house has a house: the page of the link draws it.
+  # A shared house has a house: the page of the link draws it. The count
+  # of its items and rooms comes first: it costs nothing. The read gives
+  # each van its zones, so the rooms are counted again after the read.
   defp read_build(map) do
-    case map |> Map.merge(@forced) |> Jason.encode!() |> Build.from_json() do
-      {:ok, %Build{house: %{}} = build} -> {:ok, build}
+    with true <- small?(map) || {:error, :too_large},
+         {:ok, %Build{house: %{}} = build} <-
+           map |> Map.merge(@forced) |> Jason.encode!() |> Build.from_json(),
+         true <- length(build.rooms) <= @max_rooms || {:error, :too_large} do
+      {:ok, build}
+    else
       {:ok, _build} -> {:error, :no_house}
+      {:error, :too_large} -> {:error, :too_large}
       {:error, _reason} -> {:error, :build}
     end
   end

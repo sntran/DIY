@@ -1,13 +1,13 @@
 //! The NIF of `DIY.Picture`: resvg 0.48.1 in WebAssembly, for beam.com
 //! (docs/NIFS.md of BEAM.com). It draws an SVG to a PNG of a given width.
 //!
-//! The app makes the SVG, but the SVG has the names and the numbers of a
-//! shared house. Thus the NIF refuses a document that can use much
-//! memory or much time: entities of a DTD, more than 1,048,576 pixels,
-//! and images. The text uses the two fonts of `fonts/`: Inter, in its
-//! regular and bold weights. The NIF reads no file.
+//! The app makes the SVG from the numbers of a link, and a link can have
+//! any numbers. Thus the NIF refuses a document that can use much memory
+//! or much time: entities of a DTD, more than 1,048,576 pixels, and
+//! images. The text uses the two fonts of `fonts/`: Inter, in its regular
+//! and bold weights. The NIF reads the fonts one time, and reads no file.
 
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use resvg::{tiny_skia, usvg};
 use rustler::{Binary, Encoder, Env, NewBinary, Term};
@@ -21,6 +21,21 @@ const MAX_PIXELS: u64 = 1 << 20;
 
 const REGULAR: &[u8] = include_bytes!("../fonts/Inter-Regular.otf");
 const BOLD: &[u8] = include_bytes!("../fonts/Inter-Bold.otf");
+
+/// The fonts, read at the first draw.
+static FONTS: OnceLock<Arc<usvg::fontdb::Database>> = OnceLock::new();
+
+fn fonts() -> Arc<usvg::fontdb::Database> {
+    FONTS
+        .get_or_init(|| {
+            let mut fontdb = usvg::fontdb::Database::new();
+            fontdb.load_font_data(REGULAR.to_vec());
+            fontdb.load_font_data(BOLD.to_vec());
+            fontdb.set_sans_serif_family("Inter");
+            Arc::new(fontdb)
+        })
+        .clone()
+}
 
 /// Draws the SVG `svg` at the width `width`, with the height of its
 /// proportion. Gives `{:ok, png}` or `{:error, message}`.
@@ -62,14 +77,9 @@ fn draw(bytes: &[u8], width: u32) -> Result<Vec<u8>, String> {
         return Err("entities are not supported".to_string());
     }
 
-    let mut fontdb = usvg::fontdb::Database::new();
-    fontdb.load_font_data(REGULAR.to_vec());
-    fontdb.load_font_data(BOLD.to_vec());
-    fontdb.set_sans_serif_family("Inter");
-
     let opt = usvg::Options {
         font_family: "Inter".to_string(),
-        fontdb: Arc::new(fontdb),
+        fontdb: fonts(),
         image_href_resolver: usvg::ImageHrefResolver {
             resolve_data: Box::new(|_, _, _| None),
             resolve_string: Box::new(|_, _| None),

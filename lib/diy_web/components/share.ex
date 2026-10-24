@@ -8,12 +8,13 @@ defmodule DIYWeb.Share do
   alias DIY.Share
   alias DIYWeb.{Format, Inside, Outside}
 
-  attr :build, :map, required: true
-  attr :summary, :map, required: true, doc: "the summary of the numbers (`DIY.Share.summary/3`)"
-  attr :zip, :boolean, required: true, doc: "the link has the ZIP code"
-  attr :url, :string, required: true, doc: "the full link"
-  attr :picture, :string, required: true, doc: "the path of the picture of the link"
-  attr :title, :string, required: true, doc: "the title of the link"
+  attr :share, :map,
+    required: true,
+    doc: """
+    the link. It has `build`, `summary` (`DIY.Share.summary/3`), `zip`
+    (true when the link has the ZIP code), `title`, `url` and `picture`.
+    `url` and `picture` are `nil` for a house that is too large for a link
+    """
 
   @doc """
   The sheet of the share: what the link shows, the box of the ZIP code,
@@ -28,8 +29,9 @@ defmodule DIYWeb.Share do
         )}
       </p>
       <img
-        src={@picture}
-        alt={@title}
+        :if={@share.picture}
+        src={@share.picture}
+        alt={@share.title}
         width="1200"
         height="630"
         class="w-full h-auto rounded-box border border-base-300"
@@ -37,10 +39,11 @@ defmodule DIYWeb.Share do
       <ul class="text-sm list-disc ps-5 space-y-1">
         <li>{gettext("The house, its rooms and its items.")}</li>
         <li>
-          {gettext("%{kwh} a year", kwh: Format.kwh(Share.year(@summary)))}{if @summary.cost,
-            do: " · " <> gettext("%{cost} a year", cost: Format.money(@summary.cost))}
+          {gettext("%{kwh} a year", kwh: Format.kwh(Share.year(@share.summary)))}{if @share.summary.cost,
+            do: " · " <> gettext("%{cost} a year", cost: Format.money(@share.summary.cost))}
         </li>
-        <li :if={@zip}>{gettext("ZIP code %{zip}", zip: @build.zip)}</li>
+        <li :if={@share.build.usage}>{gettext("The months of your meter.")}</li>
+        <li :if={@share.zip}>{gettext("ZIP code %{zip}", zip: @share.build.zip)}</li>
         <li>
           {gettext(
             "Not in the link: your links to Home Assistant and to the makers of your stations."
@@ -50,29 +53,49 @@ defmodule DIYWeb.Share do
       <form id="share-zip" phx-change="share_zip">
         <label class="label cursor-pointer gap-2 text-sm whitespace-normal">
           <input type="hidden" name="zip" value="false" />
-          <input type="checkbox" name="zip" value="true" checked={@zip} class="checkbox checkbox-sm" />
+          <input
+            type="checkbox"
+            name="zip"
+            value="true"
+            checked={@share.zip}
+            class="checkbox checkbox-sm"
+          />
           {gettext("Put the ZIP code in the link. The weather and the plans need it.")}
         </label>
       </form>
-      <label class="text-sm block">
-        <span class="block font-semibold">{gettext("The link")}</span>
-        <input id="share-link" type="text" readonly value={@url} class="input input-sm w-full" />
-      </label>
-      <button
-        id="share-button"
-        type="button"
-        phx-hook="Share"
-        data-path={@url}
-        data-title={@title}
-        data-copied={gettext("The link is in the clipboard.")}
-        data-failed={gettext("Copy the link from the box.")}
-        data-status="share-status"
-        class="btn btn-primary w-full"
-      >
-        <.icon name="hero-share" class="size-5" /> {gettext("Share")}
-      </button>
-      <%!-- Only the hook Share writes the status: a render of the page keeps it. --%>
-      <p id="share-status" role="status" phx-update="ignore" class="text-sm min-h-5"></p>
+      <%= if @share.url do %>
+        <label class="text-sm block">
+          <span class="block font-semibold">{gettext("The link")}</span>
+          <input
+            id="share-link"
+            type="text"
+            readonly
+            value={@share.url}
+            class="input input-sm w-full"
+          />
+        </label>
+        <button
+          id="share-button"
+          type="button"
+          phx-hook="Share"
+          data-path={@share.url}
+          data-title={@share.title}
+          data-copied={gettext("The link is in the clipboard.")}
+          data-failed={gettext("Copy the link from the box.")}
+          data-status="share-status"
+          class="btn btn-primary w-full"
+        >
+          <.icon name="hero-share" class="size-5" /> {gettext("Share")}
+        </button>
+        <%!-- Only the hook Share writes the status: a render of the page keeps it. --%>
+        <p id="share-status" role="status" phx-update="ignore" class="text-sm min-h-5"></p>
+      <% else %>
+        <p id="share-too-large" role="alert" class="alert alert-warning text-sm">
+          {gettext(
+            "This house is too large for a link. A link can have 150 items and 50 rooms at most."
+          )}
+        </p>
+      <% end %>
     </Inside.sheet>
     """
   end
@@ -93,7 +116,8 @@ defmodule DIYWeb.Share do
         <% {:ok, shared} -> %>
           <div>
             <h1 class="text-2xl font-bold">{gettext("A shared house")}</h1>
-            <p class="text-sm opacity-70">{shared.title}</p>
+            <%!-- The title of the link is in its language: the page has the language of the person who opens it. --%>
+            <p class="text-sm opacity-70">{DIYWeb.Picture.title(shared.build, shared.summary)}</p>
           </div>
           <div class="overflow-hidden rounded-box" role="img" aria-label={shared.view.label}>
             <Outside.house view={shared.view} />
@@ -119,14 +143,18 @@ defmodule DIYWeb.Share do
             )}
           </p>
           <%= if @adopt == :confirm do %>
-            <div id="adopt-confirm" role="alert" class="alert alert-warning flex-col items-start">
+            <div
+              id="adopt-confirm"
+              role="alert"
+              class="rounded-box border border-warning bg-warning/10 p-4 space-y-3"
+            >
               <p>
                 {gettext("This house takes the place of your house on this device.")}
                 <.link navigate={~p"/settings"} class="link">
                   {gettext("Keep a file of your house first.")}
                 </.link>
               </p>
-              <div class="flex gap-2">
+              <div class="flex flex-wrap gap-2">
                 <button
                   id="adopt-sure"
                   type="button"

@@ -4,6 +4,12 @@ defmodule DIY.ShareTest do
 
   alias DIY.{Build, House, Share}
 
+  # The DATA of the link of a house that a link can carry.
+  defp encode!(build, summary, opts \\ []) do
+    {:ok, data} = Share.encode(build, summary, opts)
+    data
+  end
+
   # A build of a preset house, with links to Home Assistant and to a maker,
   # and the state of the app of the person.
   defp house(opts \\ []) do
@@ -60,7 +66,7 @@ defmodule DIY.ShareTest do
       stripped = Share.strip(build)
       assert stripped.areas == %{} and stripped.devices == %{} and stripped.units == %{}
       assert stripped.revision == 0 and stripped.stamp == "" and stripped.hints == []
-      assert stripped.lesson == 1 and stripped.lesson_plan == nil
+      assert stripped.lesson == 1 and stripped.lesson_plan == nil and stripped.plans == []
       # The house, its rooms and its items stay.
       assert stripped.rooms == build.rooms and stripped.items == build.items
       assert stripped.zip == "75070"
@@ -68,6 +74,83 @@ defmodule DIY.ShareTest do
 
     test "removes the ZIP code with zip: false" do
       assert Share.strip(house(), zip: false).zip == nil
+    end
+  end
+
+  # A house with `n` more items in its first room, and `rooms` more rooms.
+  defp large(build, n, rooms \\ 0) do
+    room = Enum.find(build.rooms, &(&1.name == "Kitchen")).id
+
+    build =
+      Enum.reduce(1..rooms//1, build, fn i, b ->
+        {:ok, b, _id} = Build.add_room(b, "Room #{i}", "f1", :indoor)
+        b
+      end)
+
+    Enum.reduce(1..n//1, build, fn _i, b ->
+      {:ok, b, _id} = Build.add_item(b, room, "fridge")
+      b
+    end)
+  end
+
+  describe "the limits of a link" do
+    test "a house with too many items or rooms has no link" do
+      build = house()
+      items = 150 - length(build.items)
+      assert {:ok, _data} = build |> large(items) |> Share.encode(summary())
+      assert {:error, :too_large} = build |> large(items + 1) |> Share.encode(summary())
+
+      rooms = 50 - length(build.rooms)
+      assert {:ok, _data} = build |> large(0, rooms) |> Share.encode(summary())
+      assert {:error, :too_large} = build |> large(0, rooms + 1) |> Share.encode(summary())
+    end
+
+    property "a link never carries more than 150 items or 50 rooms" do
+      check all(extra <- integer(0..200), rooms <- integer(0..60), max_runs: 25) do
+        build = house() |> large(extra, rooms)
+        json = json(build, @s)
+
+        if length(build.items) <= 150 and length(build.rooms) <= 50 and
+             byte_size(json) <= 32 * 1024 do
+          assert {:ok, decoded, _s} = Share.decode(data(json))
+          assert length(decoded.items) == length(build.items)
+        else
+          assert {:error, _reason} = Share.decode(data(json))
+          assert {:error, :too_large} = Share.encode(build, summary())
+        end
+      end
+    end
+
+    test "a link with vans that get too many zones at the read is refused" do
+      build = house()
+      kitchen = Enum.find(build.rooms, &(&1.name == "Kitchen")).id
+      map = build |> Build.to_json() |> Jason.decode!()
+      [item | _] = map["items"]
+
+      vans =
+        for i <- 1..20,
+            do: %{
+              item
+              | "id" => "v#{i}",
+                "type" => "camper_van",
+                "room" => kitchen,
+                "params" => %{}
+            }
+
+      json = Jason.encode!(%{"b" => %{map | "items" => map["items"] ++ vans}, "s" => @s})
+      assert Share.decode(data(json)) == {:error, :too_large}
+    end
+
+    test "a link that has too many items is refused before its house is read" do
+      build = house() |> large(151 - length(house().items))
+      assert Share.decode(data(json(build, @s))) == {:error, :too_large}
+    end
+
+    test "a summary out of the range of a link gets its limits" do
+      s = Share.summary(List.duplicate(1.0e9, 12), 1.0e12, "en")
+      assert s.months == List.duplicate(100_000, 12)
+      assert s.cost == 10_000_000
+      assert {:ok, _build, ^s} = house() |> encode!(s) |> Share.decode()
     end
   end
 
@@ -92,7 +175,7 @@ defmodule DIY.ShareTest do
   describe "encode/3 and decode/1" do
     test "a typical house gives a short link that gives the house back" do
       build = house() |> linked()
-      data = Share.encode(build, summary())
+      data = encode!(build, summary())
       assert String.starts_with?(data, "1")
       assert byte_size(data) < 2_000
       assert data =~ ~r/\A[A-Za-z0-9_-]+\z/
@@ -103,7 +186,7 @@ defmodule DIY.ShareTest do
     end
 
     test "a link with no ZIP code" do
-      {:ok, decoded, _s} = house() |> Share.encode(summary(nil), zip: false) |> Share.decode()
+      {:ok, decoded, _s} = house() |> encode!(summary(nil), zip: false) |> Share.decode()
       assert decoded.zip == nil
     end
 
@@ -123,7 +206,7 @@ defmodule DIY.ShareTest do
         build = if link?, do: linked(build), else: build
         s = Share.summary(months, cost, locale)
 
-        assert {:ok, decoded, ^s} = build |> Share.encode(s, zip: zip?) |> Share.decode()
+        assert {:ok, decoded, ^s} = build |> encode!(s, zip: zip?) |> Share.decode()
         assert decoded == Share.strip(build, zip: zip?)
         assert decoded.areas == %{} and decoded.devices == %{} and decoded.units == %{}
       end
@@ -187,11 +270,11 @@ defmodule DIY.ShareTest do
       assert Share.decode(bomb) == {:error, :too_large}
 
       # A text just over the limit in one piece.
-      assert Share.decode(data(String.duplicate(" ", 256 * 1024 + 1))) == {:error, :too_large}
+      assert Share.decode(data(String.duplicate(" ", 32 * 1024 + 1))) == {:error, :too_large}
     end
 
     test "a link that ends before the end of its data" do
-      data = house() |> Share.encode(summary())
+      data = house() |> encode!(summary())
       assert {:error, _reason} = Share.decode(binary_part(data, 0, div(byte_size(data), 2)))
 
       # A cut stream: the inflate gives no output and asks for more input.
