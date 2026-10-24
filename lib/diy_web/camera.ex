@@ -193,8 +193,18 @@ defmodule DIYWeb.Camera do
   flat rug. A part that stands behind a rug does not cover it.
   Three boxes can each be behind the next one (a cycle). Then the box with
   the fewest boxes before it comes first.
+
+  An object with `flat: true` is in the floor (a pool). It comes first,
+  before all the other objects, also when it is loose. The eye looks down,
+  so it does not cover an object on its floor. The other objects keep
+  their order: the flat object adds no rule to it.
   """
   def order(objects, camera) do
+    {flat, objects} = Enum.split_with(objects, &Map.get(&1, :flat, false))
+    Enum.sort_by(flat, &{&1.key, &1.id}) ++ standing(objects, camera)
+  end
+
+  defp standing(objects, camera) do
     screens = Map.new(objects, &{&1.id, screen(camera, &1.polys)})
 
     after_ =

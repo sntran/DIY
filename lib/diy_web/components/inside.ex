@@ -1866,11 +1866,15 @@ defmodule DIYWeb.Inside do
       </g>
     </svg>
     <p id="item-space" class="stage-help">Its space on the plan: {@space}.</p>
-    <p :if={@larger} id="item-larger" class="stage-help" aria-live="polite">
-      It is larger than {@room.name} ({@room_space}): it goes through a wall. {if @turn_fits,
-        do: "Make it smaller, or turn it.",
-        else: "Make it smaller."}
-    </p>
+    <%!-- The live region is always there: a screen reader reads a new
+    text in it. --%>
+    <div id="item-larger-live" aria-live="polite">
+      <p :if={@larger} id="item-larger" class="stage-help">
+        It is larger than {@room.name} ({@room_space}): it goes through a wall. {if @turn_fits,
+          do: "Make it smaller, or turn it.",
+          else: "Make it smaller."}
+      </p>
+    </div>
     """
   end
 

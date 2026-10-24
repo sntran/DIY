@@ -1014,11 +1014,10 @@ defmodule DIYWeb.Cutaway do
     %{
       id: item.id,
       kind: :item,
-      # An item larger than its room goes through a wall: it paints by its
-      # key only (`DIYWeb.Camera.order/2`). A pool is flat, in the floor:
-      # it paints before each item on it, also when it is larger than its
-      # room.
-      loose: item.type != "pool" and (ew > room.plan.w or ed > room.plan.d),
+      loose: ew > room.plan.w or ed > room.plan.d,
+      # A pool is in the floor: it paints first, also when it is larger
+      # than its room (`DIYWeb.Camera.order/2`).
+      flat: item.type == "pool",
       room: room.id,
       on: DIY.Stack.on(item),
       name: Catalog.name(item),

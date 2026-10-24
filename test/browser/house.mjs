@@ -357,10 +357,16 @@ async function pool(page, name) {
   await page.click("#turn-item")
   await page.waitForFunction((w) => document.querySelector("#item-map-item").getAttribute("width") !== w, wide)
     .catch(() => assert.fail(`${name}: the map shows the turn of the pool`))
-  // The map is on the screen after the tap.
-  const map = await page.locator("#item-map").boundingBox()
-  const screen = page.viewportSize()
-  assert.ok(map.y >= 0 && map.y + map.height <= screen.height + 1, `${name}: the map is on the screen after "Turn it"`)
+  // The map is on the screen after the tap. The sheet scrolls: so no
+  // different element is over the top or the bottom of the map.
+  await page.waitForTimeout(300)
+  const seen = await page.evaluate(() => {
+    const map = document.querySelector("#item-map")
+    const box = map.getBoundingClientRect()
+    const x = box.left + box.width / 2
+    return [box.top + 4, box.bottom - 4].every((y) => map.contains(document.elementFromPoint(x, y)))
+  })
+  assert.ok(seen, `${name}: the map is on the screen after "Turn it"`)
   await check(page, `${name} pool turned`)
   await page.click("#item-stage .stage-back")
   await page.waitForSelector("#item-stage", { state: "detached" })
