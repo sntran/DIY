@@ -20,8 +20,8 @@
 (* - Delete: the item goes away.                                           *)
 (* After each step, some items come down (normalize/2). An item that is  *)
 (* not over the item under it comes down. An item in a different room or  *)
-(* in a loop comes down too. Then each item on the floor goes on an item   *)
-(* at its spot that is not on it.                                          *)
+(* in a loop comes down too. Then each item that came down goes on an     *)
+(* item at its spot that is not on it. The other items stay.               *)
 (*                                                                         *)
 (* Some items do not go in the room Out (InsideOnly): a TV does not go    *)
 (* outside.                                                                *)
@@ -34,7 +34,7 @@
 (* - "nofit": the items on an item go with it, also to a room that they do *)
 (*   not fit (Stack.nofit.cfg).                                            *)
 (* - "noseat": an item that comes down stays on the floor, also in an item *)
-(*   (Stack.noseat.cfg).                                                   *)
+(*   that holds it (Stack.noseat.cfg).                                     *)
 (***************************************************************************)
 EXTENDS Integers, FiniteSets
 
@@ -71,8 +71,9 @@ Valid(i, o, p, r, s) ==
   /\ s[o[i]] = s[i]
   /\ (Mode = "noloop" \/ i \notin Under(o, i, N))
 
-\* Each item on the floor, one by one, goes on an item at its spot that is
-\* not on it. The code takes the highest such item; the model takes any.
+\* Each item that came down (todo), one by one, goes on an item at its spot
+\* that is not on it. The code takes the highest such item; the model takes
+\* any.
 RECURSIVE Seat(_, _, _, _, _)
 Seat(o, todo, p, r, s) ==
   IF todo = {} THEN o
@@ -84,14 +85,13 @@ Seat(o, todo, p, r, s) ==
        IN Seat(o2, todo \ {i}, p, r, s)
 
 Normalize(o, p, r, s) ==
-  Seat([i \in Items |-> IF o[i] # None /\ Valid(i, o, p, r, s) THEN o[i] ELSE None],
-       Items, p, r, s)
+  LET d == [i \in Items |-> IF o[i] # None /\ Valid(i, o, p, r, s) THEN o[i] ELSE None]
+  IN Seat(d, {i \in Items : o[i] # None /\ d[i] = None}, p, r, s)
 
 Init ==
   /\ present = Items
   /\ room \in {r \in [Items -> Rooms] : \A i \in Items : Fits(i, r[i])}
-  \* At the start, each item is at a different spot, on the floor.
-  /\ spot \in {s \in [Items -> Spots] : \A i, j \in Items : i # j => s[i] # s[j]}
+  /\ spot \in [Items -> Spots]
   /\ on = [i \in Items |-> None]
 
 \* An item goes to spot x of room r. It goes on an item there, or on the
@@ -174,10 +174,13 @@ OnExists ==
 \* Each item fits its room.
 Fit == \A i \in present : Fits(i, room[i])
 
-\* No item is on the floor in an item: each item at its spot is on it.
-NoInside ==
-  \A i \in present : on[i] = None =>
-    \A b \in present : (b # i /\ room[b] = room[i] /\ spot[b] = spot[i]) => b \in Above(on, i)
+\* An item that comes down in a step is on the floor only when each item
+\* at its spot is on it.
+SeatFallen ==
+  [][\A i \in Items :
+       (i \in present' /\ on[i] # None /\ on'[i] = None) =>
+         \A b \in present' : (b # i /\ room'[b] = room'[i] /\ spot'[b] = spot'[i]) =>
+           b \in Above(on', i)]_vars
 
 \* No item is under itself, also through other items.
 NoLoop == \A i \in present : i \notin Under(on, i, N)

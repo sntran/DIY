@@ -12,12 +12,10 @@ defmodule DIY.Stack do
     under it, along each side of the plan. On a pool, the center is over
     the coping, not over the water (`DIY.Layout.water/1`).
   - No item is on itself, also through other items.
-  - An item is not on the floor in an item that can take it: it is on
-    that item.
   - When an item moves, the items on it move with it. When it goes away,
     the items on it come down. When an item no longer holds an item, that
-    item comes down. An item that comes down goes on the item under it,
-    or on the floor.
+    item comes down. An item that comes down goes on the item that holds
+    it there, or on the floor.
   - Some kinds do not go on an item, and do not take an item on them.
     These are solar panels, a camper van, a car, and an item on a wall or
     a ceiling (`DIY.Catalog.lift/1`). A pool takes an item, but it does
@@ -95,11 +93,16 @@ defmodule DIY.Stack do
   The items with the rules of a stack, for the rooms in `rooms` (by id).
   First, an `on` that breaks a rule goes away. For example, the item under
   it is not there, or is in a different room. Or it does not hold the
-  item (`holds?/2`), or the items make a loop. Then each item on the
-  floor goes on the highest item under it that holds it, if there is one.
+  item (`holds?/2`), or the items make a loop. Then each item that came
+  down goes on the highest item under it that holds it, if there is one.
+  The other items on the floor stay on the floor.
   """
   @spec normalize([map()], %{String.t() => map()}) :: [map()]
-  def normalize(items, rooms), do: items |> drop(rooms) |> seat(rooms)
+  def normalize(items, rooms) do
+    fixed = drop(items, rooms)
+    fallen = for {a, b} <- Enum.zip(items, fixed), on(a) != nil and on(b) == nil, do: a.id
+    if fallen == [], do: fixed, else: seat(fixed, rooms, MapSet.new(fallen))
+  end
 
   defp drop(items, rooms) do
     by_id = Map.new(items, &{&1.id, &1})
@@ -122,20 +125,19 @@ defmodule DIY.Stack do
       not on_it?(by_id, item.id, item.id, map_size(by_id))
   end
 
-  # The last item of the list is the newest: it goes on an older item
-  # first. The tops of the items are those before the seat: they only
-  # choose between two items that hold the item.
-  defp seat(items, rooms) do
+  # The items that came down (`fallen`) go on the item that holds them. The
+  # last item of the list is the newest: it goes on an older item first.
+  defp seat(items, rooms, fallen) do
     takers = takers(items)
 
     by_id =
       items
       |> Enum.reverse()
+      |> Enum.filter(&MapSet.member?(fallen, &1.id))
       |> Enum.reduce(Map.new(items, &{&1.id, &1}), fn %{id: id}, by_id ->
         item = by_id[id]
 
-        with nil <- on(item),
-             true <- item.at != nil and goes_on?(item) and stacks?(rooms[item.room]),
+        with true <- item.at != nil and goes_on?(item) and stacks?(rooms[item.room]),
              %{} = base <- base(by_id, item, takers) do
           Map.put(by_id, id, Map.put(item, :on, base.id))
         else
@@ -323,9 +325,9 @@ defmodule DIY.Stack do
     Enum.find([from, from + length - size, center], a, &(abs(a - &1) <= @snap))
   end
 
-  # An item on the floor: next to the side of an item on the floor near
-  # it, with no gap, when the gap is a snap or less and the two are side
-  # by side. An item on a wall or a ceiling does not snap.
+  # An item on the floor goes next to the side of an item on the floor
+  # near it, with no gap. The gap must be a snap or less, and the two must
+  # be side by side. An item on a wall or a ceiling does not snap.
   defp beside(item, others, plan) do
     box = Layout.item_box(item)
 

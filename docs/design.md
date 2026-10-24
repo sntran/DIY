@@ -4003,10 +4003,10 @@ station on a freezer, or a pool pump on the coping of a pool
   outside on a pool pump.
 - After each change, an item that is not held by the item under it
   comes down. For example, the item under it goes away, or turns, or
-  gets a new size. Or the list of the sheet moves it to a new room.
-  Then an item on the floor goes on the highest item that holds it, if
-  there is one. So no item stands on the floor inside a different item.
-  When two items hold each other, the newer item goes on the older item.
+  gets a new size. Or the list of the sheet moves it to a new room. An
+  item that comes down goes on the highest item that holds it there, if
+  there is one. The other items on the floor stay where they are: a new
+  item does not take an old item on it.
 - An item on an item is on its top: the picture adds the height of the
   item under it. A pool is in the floor, so an item on a pool is at the
   floor. An item over the top of an item has no shadow. The top item
@@ -4020,14 +4020,14 @@ station on a freezer, or a pool pump on the coping of a pool
   washer."
 - `specs/Stack.tla` checks the rules with TLC. Each item fits its room.
   The item under an item is there, in the same room and under it. No
-  item is under itself. No item is on the floor in an item. Four models
-  have a fault:
+  item is under itself. An item that comes down goes on an item that
+  holds it (the step property `SeatFallen`). Four models have a fault:
   - `Stack.noloop.cfg` puts an item on an item that is on it.
   - `Stack.nodrop.cfg` deletes an item, but the items on it stay on it.
   - `Stack.nofit.cfg` moves the items on an item to a room that they do
     not fit.
   - `Stack.noseat.cfg` keeps an item that comes down on the floor, also
-    in an item.
+    in an item that holds it.
 
   A property test of `test/diy/stack_test.exs` does random drops, moves,
   turns, sizes, walls and deletes, with the same invariants. It also

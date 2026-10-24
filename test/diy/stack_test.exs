@@ -253,7 +253,8 @@ defmodule DIY.StackTest do
     map = Jason.decode!(Build.to_json(build))
 
     # A bad item under the dryer goes away. The dryer is over the washer,
-    # so it goes on it again. Far from the washer, it is on the floor.
+    # so it goes on it again. Far from the washer, it is on the floor. The
+    # read does not see an `on` that is not a text.
     for bad <- ["nothing", dryer, 42], at <- [washer.at, %{x: 0, y: 70}] do
       items =
         Enum.map(map["items"], fn item ->
@@ -263,11 +264,13 @@ defmodule DIY.StackTest do
         end)
 
       {:ok, read} = Build.from_json(Jason.encode!(%{map | "items" => items}))
-      assert Map.get(item(read, dryer), :on) == if(at == washer.at, do: washer.id)
+
+      assert Map.get(item(read, dryer), :on) ==
+               if(at == washer.at and is_binary(bad), do: washer.id)
     end
   end
 
-  test "normalize drops an on that breaks a rule, and puts an item on the floor on the item under it" do
+  test "normalize drops an on that breaks a rule, and puts the item on the item that holds it" do
     a = %{id: "a", type: "washer", room: "r1", at: %{x: 0, y: 0}, size: nil, turn: 0, params: %{}}
     b = %{a | id: "b", type: "dryer"}
     rooms = %{"r1" => %{place: :indoor, level: "f1"}, "r2" => %{place: :indoor, level: "f1"}}
@@ -298,17 +301,19 @@ defmodule DIY.StackTest do
     # roof, a van, a room that is not there).
     panels = %{b | type: "solar_panels"}
     assert Stack.normalize([a, on.(panels, "a")], rooms) == [a, panels]
-    # The freezer is larger than the washer: the washer goes on it.
+    # The freezer is larger than the washer: it comes down.
     freezer = %{b | type: "freezer"}
-    assert Stack.normalize([a, on.(freezer, "a")], rooms) == [on.(a, "b"), freezer]
+    assert Stack.normalize([a, on.(freezer, "a")], rooms) == [a, freezer]
 
     for room <- [%{place: :roof, level: "roof"}, %{place: :living, level: "van:v1"}, nil] do
       assert Stack.normalize([a, on.(b, "a")], %{"r1" => room}) == [a, b]
     end
 
-    # A dryer on the floor in the washer goes on it.
+    # A dryer that comes down goes on the washer that holds it. A dryer on
+    # the floor that did not come down stays on the floor.
     good = on.(b, "a")
-    assert Stack.normalize([a, b], rooms) == [a, good]
+    c = %{b | id: "c"}
+    assert Stack.normalize([a, on.(c, "x"), b], rooms) == [a, on.(c, "a"), b]
     assert Stack.normalize([a, good], rooms) == [a, good]
     assert Stack.heights([a, good]) == %{"b" => 39}
   end
@@ -340,9 +345,10 @@ defmodule DIY.StackTest do
 
   # The rules of a stack (`specs/Stack.tla`). Each item on an item is on
   # an item of its room that is there and holds it. The two kinds stack.
-  # No item is under itself. No item is on the floor in an item that holds
-  # it. Each item fits its room. A file gives the same items.
-  defp check_rules(build) do
+  # No item is under itself. An item that came down in the step is on the
+  # floor only when no item holds it. Each item fits its room. A file
+  # gives the same items.
+  defp check_rules(before, build) do
     by_id = Map.new(build.items, &{&1.id, &1})
     rooms = Map.new(build.rooms, &{&1.id, &1})
 
@@ -360,9 +366,11 @@ defmodule DIY.StackTest do
       refute item.id in Enum.take(chain, length(build.items) + 1), "#{item.id} is in a loop"
     end
 
+    was = Map.new(before.items, &{&1.id, Map.get(&1, :on)})
+
     for item <- build.items,
-        Map.get(item, :on) == nil and item.at != nil and Stack.goes_on?(item) and
-          Stack.stacks?(rooms[item.room]),
+        was[item.id] != nil and Map.get(item, :on) == nil and item.at != nil and
+          Stack.goes_on?(item) and Stack.stacks?(rooms[item.room]),
         base <- build.items,
         base.id != item.id and base.room == item.room and Stack.takes?(base) and
           Stack.holds?(base, item) do
@@ -419,9 +427,9 @@ defmodule DIY.StackTest do
 
       Enum.reduce(steps, build, fn step, build ->
         case run(build, ids, step) do
-          {:ok, build} ->
-            check_rules(build)
-            build
+          {:ok, after_} ->
+            check_rules(build, after_)
+            after_
 
           {:error, _reason} ->
             build
