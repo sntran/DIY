@@ -845,6 +845,7 @@
    "fill": "rgb(196, 205, 215)"
   }
  },
+ "day-inside": {},
  "sunset": {
   "i-black": {
    "fill": "rgb(31, 35, 40)"
@@ -1691,6 +1692,11 @@
    "fill": "rgb(196, 205, 215)"
   }
  },
+ "sunset-inside": {
+  "p-pane": {
+   "fill": "rgb(185, 220, 245)"
+  }
+ },
  "night": {
   "i-black": {
    "fill": "rgb(31, 35, 40)"
@@ -2531,6 +2537,11 @@
   },
   "p-roof-f": {
    "fill": "rgb(102, 112, 127)"
+  }
+ },
+ "night-inside": {
+  "p-pane": {
+   "fill": "rgb(44, 74, 102)"
   }
  }
 }

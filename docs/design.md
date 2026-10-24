@@ -2006,7 +2006,15 @@ The link also has a summary:
 
 - the kWh of each month and of the year;
 - the cost of the year, when the app knows a price;
-- the language of the person who shares.
+- the language of the person who shares;
+- the sky of the picture ("The sky at the house");
+- the 6 items with the most kWh in a year, for the labels of the
+  picture. Each item has its id, its kWh of a year, and its cost of a
+  year. The numbers are of the house of today, as the numbers of the
+  year: with a planned item, the page Rooms can show different numbers.
+  The cost uses the price of the page Rooms. An item with less than 1 kWh
+  has no label. A link of an older version has no items: its
+  picture has no labels.
 
 The LiveView of the person who shares makes the summary from the
 numbers of the bill on the page House. Thus the server needs no weather
@@ -2072,11 +2080,57 @@ The page of a link has the tags of Open Graph:
   line about the app.
 - `og:image`: `/s/DATA/picture.png`, a PNG of 1200 × 630 pixels.
 
-The picture is the house from the outside, the numbers of the year, and
-the bars of the months (`DIYWeb.Picture`). The house has the sky of the
-link ("The sky at the house"). The server makes the SVG, and
-the NIF resvg draws it (`DIY.Picture.NIF`, `native/resvg`,
+The picture has the house cut open, the numbers of the year, and the
+bars of the months (`DIYWeb.Picture`). The server makes the SVG, and the
+NIF resvg draws it (`DIY.Picture.NIF`, `native/resvg`,
 `priv/resvg.wasm`, `scripts/nif.sh`).
+
+The house in the picture is the house of the page Rooms
+(`DIYWeb.Cutaway`), so a neighbor sees where the electricity goes, not
+only the total. This is a decision of the owner (October 2026):
+
+- The picture shows each floor of the house, one over the other, as on
+  the page Rooms. Floor 1 has the rooms outside: the yard, the drive and
+  a pool. The attic and the roof show only when they have an item with a
+  label, for example a furnace in the attic. The picture has no lot and
+  no names of rooms. The box of the house is only around its rooms and
+  its items. Thus the house is as large as possible in the picture.
+- The sky of the link is behind the house ("The sky at the house"). It
+  has the sun or the moon, the clouds, and the rain or the snow over the
+  house. The colors of the house follow the time of day, as on the page.
+  In the house cut open, a window has the color of the sky. At night,
+  each room has the light of a lamp.
+- The 6 items with the most kWh have labels. A label has the name of the
+  item, then its kWh and its cost of a year. An example is "Central AC"
+  and "6,828 kWh · $908 a year". With no cost in the link, the label has
+  the kWh only. The label is above its item, with a line down to the
+  item.
+- The labels must not overlap (`DIYWeb.Picture.Labels`). The item with
+  the most kWh gets its place first. Each label goes to the nearest free
+  place above its item. At each height, the label can be at the center
+  of the item, at its left or at its right. A label with no free place in
+  the box is not in the picture.
+- `specs/Labels.tla` checks three rules: two labels never overlap, each
+  label is in the box, and the first label always has a place when it
+  fits. Two faults break the model. One has no check of a free place
+  (`Labels.nocheck.cfg`). One does not keep a place in the box
+  (`Labels.noclamp.cfg`).
+- The size of a text in resvg is not known before the draw. Thus the
+  width of a label comes from its letters. `scripts/inter-widths.mjs`
+  reads the width of each letter of the fonts of the NIF (311 letters,
+  Inter regular and bold, the larger one). It writes
+  `priv/picture/inter_widths.json`. resvg moves on for each code point.
+  Thus the width of a text is the sum of the widths of its code points.
+- resvg draws nothing for a letter that is not in the fonts, for example
+  an emoji or a Chinese letter. Thus the name of a label keeps only the
+  letters of the fonts. A name with no such letter is "…". A name of more
+  than 24 letters ends in "…". A different text of a label gets the
+  width of W (1.038) for each letter that is not in the fonts. So a label
+  is not narrower than its text.
+- The box of the house clips the sky, the rain and the snow
+  (`clipPath`). They do not go on the paper around the box.
+
+The PNG and the NIF:
 
 - A site that shows a preview reads PNG and JPEG, not SVG.
 - The NIF is resvg 0.48.1 in WebAssembly, as in mkfifo.com, with the text
@@ -2096,10 +2150,15 @@ the NIF resvg draws it (`DIY.Picture.NIF`, `native/resvg`,
   The browser test checks that the file is the same as the style of
   `app.css`. A stroke that does not scale on the page
   (`vector-effect: non-scaling-stroke`) gets the width for the scale of
-  the picture.
+  the picture. For each scene, the file also has the classes that are
+  different in the house cut open ("SCENE-inside"). For example, at
+  night a window of the house from the outside has the light of a lamp.
+  In the house cut open, it has the color of the night.
 - In workerd, the request of the picture of a typical house takes about
-  0.25 s: the decode, the SVG and the draw. The NIF adds about 3 MB to the
-  Worker (October 2026).
+  0.65 s: the decode, the SVG and the draw. The house cut open has more
+  shapes than the house from the outside (0.25 s). A site that shows
+  previews asks for the picture one time (see the cache below). The NIF
+  adds about 3 MB to the Worker (October 2026).
 - The answer has `Cache-Control: public, max-age=31536000, immutable`:
   the picture of a link never changes. A site that shows previews keeps
   the picture in its own cache.
@@ -2109,15 +2168,21 @@ the NIF resvg draws it (`DIY.Picture.NIF`, `native/resvg`,
 
 ### The tests of a shared house
 
-- Properties: a stripped build gives the same build after an encode and
-  a decode. A stripped build has no data of a link. A text of random
-  bytes gives an error and never a crash. A decode never inflates more
-  than its limit, and a stream that ends early is an error.
+- Properties: a stripped build gives the same build and summary (with
+  its items) after an encode and a decode. A stripped build has no data
+  of a link. A text of random bytes gives an error and never a crash. A
+  decode never inflates more than its limit, and a stream that ends early
+  is an error. A link with bad items is an error.
 - The picture: the SVG has no class and no `<style>`, and each class of
   the picture has a style in `priv/picture/styles.json`. Two classes of
   one shape never set a property to two values. The NIF gives a PNG of
   1200 × 630 pixels. It refuses a bad SVG, entities, a large picture and
-  a text that is not UTF-8.
+  a text that is not UTF-8. The picture shows each floor, and the attic
+  and the roof only with a label. The labels have the kWh and the cost of
+  their items, in the language of the process.
+- The labels (properties): two labels never overlap, and each label is
+  in the box. The labels keep their order, and the first label always
+  has a place. A label is above its item, or at the top of the box.
 - The limits: a property gives houses with more items and rooms. Each
   house within the limits gives the same house after a decode, and each
   other house gives an error.

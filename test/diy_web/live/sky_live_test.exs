@@ -171,16 +171,20 @@ defmodule DIYWeb.SkyLiveTest do
 
     test = self()
 
+    # The service answers when the test tells it to.
     Req.Test.stub(DIY.Sky, fn conn ->
-      send(test, :asked)
-      Process.sleep(100)
-      Req.Test.json(conn, Stubs.open_meteo(time: "sunset", code: 3))
+      send(test, {:asked, self()})
+
+      receive do
+        :answer -> Req.Test.json(conn, Stubs.open_meteo(time: "sunset", code: 3))
+      end
     end)
 
     send(view.pid, {:sky_again, "75070"})
-    assert_receive :asked, 2_000
+    assert_receive {:asked, service}, 2_000
     # While the page asks, the picture keeps the sky of before.
     assert scene(view) == {"day", "sun"}
+    send(service, :answer)
     settle(view)
     assert scene(view) == {"sunset", "clouds"}
     new = sky(view).timer
@@ -188,7 +192,7 @@ defmodule DIYWeb.SkyLiveTest do
 
     # A timer for a different ZIP code asks nothing.
     send(view.pid, {:sky_again, "99999"})
-    refute_receive :asked, 200
+    refute_receive {:asked, _service}, 200
   end
 
   test "a new ZIP code asks for its sky, and cancels the timer of the old one", %{conn: conn} do

@@ -71,6 +71,17 @@ defmodule DIYWeb.ShareLiveTest do
       assert shared.house == build(view).house
       assert shared.zip == "75070"
       assert s.cost == round(bill.cost)
+
+      # The link has the items with the most kWh, with their cost at the
+      # price of the page, for the labels of the picture.
+      assigns = :sys.get_state(view.pid).socket.assigns
+      assert [first | _] = s.items
+      assert length(s.items) == 6
+      assert s.items == Enum.sort_by(s.items, &(-&1.kwh))
+      item = Enum.find(shared.items, &(&1.id == first.id))
+      year = assigns.estimate.items[item.id].year
+      assert first.kwh == round(year)
+      assert first.cost == round(DIYWeb.Format.cost(year, assigns.price.cents))
     end
 
     test "the box of the ZIP code takes it out of the link", %{conn: conn} do

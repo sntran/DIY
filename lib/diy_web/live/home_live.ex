@@ -1986,7 +1986,8 @@ defmodule DIYWeb.HomeLive do
     # A link with no ZIP code carries no sky of now: "now" is a day with
     # sun. The sky of now with the time of the post can tell the place.
     sky = DIY.Sky.pick(assigns.sky_pick, if(assigns.share_zip, do: assigns.sky.now))
-    summary = Share.summary(Enum.map(bill.months, & &1.kwh), bill.cost, assigns.locale, sky)
+    months = Enum.map(bill.months, & &1.kwh)
+    summary = Share.summary(months, bill.cost, assigns.locale, sky, share_items(assigns))
     zip? = assigns.share_zip
     shared = if zip?, do: build, else: %{build | zip: nil}
     share = %{build: build, summary: summary, zip: zip?, title: Picture.title(shared, summary)}
@@ -2007,6 +2008,15 @@ defmodule DIYWeb.HomeLive do
   end
 
   defp share(socket), do: assign(socket, :share, nil)
+
+  # The items of the house of today, with their kWh and their cost of a
+  # year. These are the numbers of the year of the link, with no planned
+  # item. The picture of a link shows them on labels.
+  defp share_items(%{build: build, estimate: estimate, price: price}) do
+    for item <- Build.today(build).items, data = estimate.items[item.id] do
+      {item.id, data.year, price && Format.cost(data.year, price.cents)}
+    end
+  end
 
   defp nav?(%Build{house: house}) when is_map(house), do: true
   defp nav?(_build), do: false

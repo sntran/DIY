@@ -154,7 +154,7 @@ defmodule DIY.ShareTest do
     end
   end
 
-  describe "summary/3" do
+  describe "summary/5" do
     test "rounds the numbers, keeps them at 0 or more, and knows the locales" do
       s = Share.summary([1.4, -3 | List.duplicate(10.6, 10)], 99.5, "vi")
       assert s.months == [1, 0 | List.duplicate(11, 10)]
@@ -166,10 +166,29 @@ defmodule DIY.ShareTest do
                months: List.duplicate(1, 12),
                cost: nil,
                locale: "en",
-               sky: %{time: "day", weather: "sun"}
+               sky: %{time: "day", weather: "sun"},
+               items: []
              }
 
       assert Share.summary(List.duplicate(1, 12), -5, "es").cost == 0
+    end
+
+    test "keeps the 6 items with the most kWh, rounded, for the labels of the picture" do
+      items =
+        [{"i1", 6828.4, 908.2}, {"i2", 0.4, 0.05}, {"i3", 500, nil}, {"i4", 1.0e9, -3}] ++
+          for(n <- 5..12, do: {"i#{n}", n * 10, n}) ++
+          [{String.duplicate("i", 17), 9_000, 1}, {nil, 9_000, 1}]
+
+      s = Share.summary(List.duplicate(1, 12), nil, "en", nil, items)
+
+      assert s.items == [
+               %{id: "i4", kwh: 1_200_000, cost: 0},
+               %{id: "i1", kwh: 6828, cost: 908},
+               %{id: "i3", kwh: 500, cost: nil},
+               %{id: "i12", kwh: 120, cost: 12},
+               %{id: "i11", kwh: 110, cost: 11},
+               %{id: "i10", kwh: 100, cost: 10}
+             ]
     end
   end
 
@@ -212,6 +231,28 @@ defmodule DIY.ShareTest do
       assert Share.decode(data(json(house(), Map.put(@s, "w", 3)))) == {:error, :summary}
     end
 
+    test "a link carries the items with labels; a link of an older version has none" do
+      items = [{"i1", 6828, 908}, {"i3", 500, nil}]
+      s = Share.summary(List.duplicate(900, 12), 1200, "en", nil, items)
+      assert {:ok, _build, ^s} = house() |> encode!(s) |> Share.decode()
+      assert {:ok, _build, %{items: []}} = Share.decode(data(json(house(), @s)))
+
+      for bad <- [
+            "x",
+            [["i1", 5]],
+            [["i1", 0, 1]],
+            [["i1", 5, -1]],
+            [["i1", 5.5, 1]],
+            [[1, 5, 1]],
+            [[String.duplicate("i", 17), 5, 1]],
+            [["i1", 1_200_001, 1]],
+            List.duplicate(["i1", 5, 1], 7)
+          ] do
+        assert Share.decode(data(json(house(), Map.put(@s, "i", bad)))) == {:error, :summary},
+               inspect(bad)
+      end
+    end
+
     test "a link with no ZIP code" do
       {:ok, decoded, _s} = house() |> encode!(summary(nil), zip: false) |> Share.decode()
       assert decoded.zip == nil
@@ -229,11 +270,18 @@ defmodule DIY.ShareTest do
               cost <- one_of([constant(nil), float(min: 0.0, max: 50_000.0)]),
               locale <- member_of(["en", "es", "vi"]),
               time <- member_of(DIY.Sky.times()),
-              weather <- member_of(DIY.Sky.weathers())
+              weather <- member_of(DIY.Sky.weathers()),
+              uses <- list_of(float(min: 0.0, max: 20_000.0), max_length: 12),
+              cost? <- boolean()
             ) do
         build = house(size: size, floors: floors, heat: heat, door: door)
         build = if link?, do: linked(build), else: build
-        s = Share.summary(months, cost, locale, %{time: time, weather: weather})
+
+        items =
+          for {item, kwh} <- Enum.zip(build.items, uses),
+              do: {item.id, kwh, if(cost?, do: kwh * 0.133)}
+
+        s = Share.summary(months, cost, locale, %{time: time, weather: weather}, items)
 
         assert {:ok, decoded, ^s} = build |> encode!(s, zip: zip?) |> Share.decode()
         assert decoded == Share.strip(build, zip: zip?)

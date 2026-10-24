@@ -9,7 +9,8 @@ defmodule DIYWeb.PictureTest do
     data
   end
 
-  alias DIYWeb.{Outside, Picture}
+  alias DIYWeb.Picture
+  alias DIYWeb.Picture.Labels
 
   defp house(preset \\ %{}) do
     preset = Map.merge(%{size: 2400, year: 2005, floors: 2, heat: "gas", lot: nil}, preset)
@@ -19,13 +20,30 @@ defmodule DIYWeb.PictureTest do
     Build.put_house(build, house, rooms, items)
   end
 
-  defp summary(cost \\ 2190, locale \\ "en"),
+  defp summary(cost \\ 2190, locale \\ "en", items \\ []),
     do:
       Share.summary(
         [1180, 980, 1010, 1100, 1350, 1720, 2010, 2080, 1760, 1300, 1050, 1190],
         cost,
-        locale
+        locale,
+        %{time: "day", weather: "sun"},
+        items
       )
+
+  # The id of the first item of a type in a build.
+  defp id(build, type), do: Enum.find(build.items, &(&1.type == type)).id
+
+  # A summary with labels for the items of a house: the kWh and the cost
+  # of a year of each type.
+  defp labeled(build, uses, sky \\ %{time: "day", weather: "sun"}) do
+    items = for {type, kwh, cost} <- uses, do: {id(build, type), kwh, cost}
+
+    %{
+      summary()
+      | items: Share.summary(List.duplicate(0, 12), nil, "en", sky, items).items,
+        sky: sky
+    }
+  end
 
   # A house with a pool in the yard and a spa inside, with the items of a
   # pool.
@@ -45,15 +63,14 @@ defmodule DIYWeb.PictureTest do
              weather <- DIY.Sky.weathers(),
              do: %{time: time, weather: weather}
 
-  # The SVG of the house from the outside, with its classes.
+  # The parts of the picture with their classes (`Picture.parts/2`), as
+  # one text, in a sky.
   defp svg_of(build, sky \\ %{time: "day", weather: "sun"}) do
-    %{__changed__: nil, view: Outside.view(build), sky: sky}
-    |> Outside.house()
-    |> Phoenix.HTML.Safe.to_iodata()
-    |> IO.iodata_to_binary()
+    {parts, _labels} = Picture.parts(build, %{summary() | sky: sky})
+    Enum.map_join(parts, fn {svg, _scale} -> svg end)
   end
 
-  # The classes of the SVG of the house from the outside.
+  # The classes of the parts of the picture.
   defp classes(build, sky) do
     build
     |> svg_of(sky)
@@ -62,12 +79,12 @@ defmodule DIYWeb.PictureTest do
     |> MapSet.new()
   end
 
-  # The classes of the picture that have no style on the page: the frame
-  # of the SVG and the group of an item. The class of the textures has
-  # only `stroke: none`, as a shape with no class.
-  # The groups of the rain and the snow move on the page only.
-  @plain ~w(block w-full cutaway cutaway-house cutaway-outside p-item p-tex) ++
-           ~w(p-fall p-fall-sun p-fall-clouds p-fall-rain p-fall-snow)
+  # The classes of the picture that have no style on the page. They are
+  # the classes of the frame of the SVG, and of the group of an item or of
+  # a piece of furniture. The class of the textures has only
+  # `stroke: none`, as a shape with no class.
+  @plain ~w(block w-full h-full touch-none select-none cutaway cutaway-house) ++
+           ~w(p-item p-fixture p-tex)
 
   test "each class of the picture of a house has a style" do
     builds = [
@@ -79,7 +96,7 @@ defmodule DIYWeb.PictureTest do
 
     for build <- builds,
         sky <- @skies,
-        styles = Picture.styles(sky.time, sky.weather),
+        styles = Picture.styles(sky.time, sky.weather, true),
         class <- classes(build, sky),
         class not in @plain do
       assert Map.has_key?(styles, class), "#{class} has no style in #{inspect(sky)}"
@@ -97,7 +114,7 @@ defmodule DIYWeb.PictureTest do
           pool_house()
         ],
         sky <- @skies,
-        styles = Picture.styles(sky.time, sky.weather),
+        styles = Picture.styles(sky.time, sky.weather, true),
         html = svg_of(build, sky),
         [_, classes] <- Regex.scan(~r/ class="([^"]*)"/, html),
         list = String.split(classes),
@@ -139,7 +156,13 @@ defmodule DIYWeb.PictureTest do
 
     svg = Picture.svg(house(), night)
     assert svg =~ ~s|style="fill:rgb(16, 27, 51)"|
-    assert svg =~ "fill:rgb(242, 196, 107)"
+    # The house cut open at night: a window has the color of the night.
+    # The floor of a room has the light of a lamp.
+    assert svg =~ "fill:rgb(44, 74, 102)"
+    refute svg =~ "fill:rgb(242, 196, 107)"
+    assert svg =~ "fill:url(#p-glow-fill)"
+    refute svg =~ "display:none;fill:url(#p-glow-fill)"
+    assert Picture.svg(house(), summary()) =~ "display:none;fill:url(#p-glow-fill)"
 
     snow = %{night | sky: %{time: "day", weather: "snow"}}
     svg = Picture.svg(house(), snow)
@@ -150,6 +173,165 @@ defmodule DIYWeb.PictureTest do
     # Snow changes some classes; the other classes keep the style of the scene.
     assert Picture.styles("night", "snow")["p-grass"] != Picture.styles("night")["p-grass"]
     assert Picture.styles("night", "snow")["p-pane"] == Picture.styles("night")["p-pane"]
+    # Inside, a window at night has the color of the night.
+    assert Picture.styles("night", "snow", true)["p-pane"] != Picture.styles("night")["p-pane"]
+
+    assert Picture.styles("night", "snow", true)["p-grass"] ==
+             Picture.styles("night", "snow")["p-grass"]
+  end
+
+  describe "the house cut open" do
+    test "the picture shows each floor, and the attic and the roof only with a label" do
+      build = house()
+      svg = Picture.svg(build, summary())
+      assert svg =~ ~s(id="plan-ground")
+      assert svg =~ ~s(id="plan-f2")
+      refute svg =~ ~s(id="plan-attic")
+      refute svg =~ ~s(id="plan-roof")
+      # No name of a room, and no lot: the yard is a room.
+      refute svg =~ "Kitchen<"
+      refute svg =~ "Floor 1 and around the house"
+
+      # The gas furnace is in the attic.
+      svg = Picture.svg(build, labeled(build, [{"furnace", 257, 34}]))
+      assert svg =~ ~s(id="plan-attic")
+      refute svg =~ ~s(id="plan-roof")
+      assert svg =~ ">Gas furnace<"
+
+      # The AC on the roof.
+      roof = Enum.find(build.rooms, &(&1.name == "Roof")).id
+      {:ok, build} = Build.move_item(build, id(build, "ac"), roof)
+      svg = Picture.svg(build, labeled(build, [{"ac", 6828, 908}]))
+      assert svg =~ ~s(id="plan-roof")
+
+      # A house with 3 floors.
+      svg = Picture.svg(house(%{floors: 3, size: 5200}), summary())
+      assert svg =~ ~s(id="plan-f3")
+    end
+
+    test "the items with the most kWh have labels with their kWh and cost" do
+      build = pool_house()
+
+      uses = [
+        {"ac", 6828, 908},
+        {"pool_pump", 1346, 179},
+        {"dryer", 652, 87},
+        {"fridge", 500, 67},
+        {"hot_tub", 1200, nil}
+      ]
+
+      svg = Picture.svg(build, labeled(build, uses))
+      assert svg =~ ">Central AC<"
+      assert svg =~ ">6,828 kWh · $908 a year<"
+      assert svg =~ ">1,346 kWh · $179 a year<"
+      # With no cost, the label has the kWh only.
+      assert svg =~ ">1,200 kWh a year<"
+
+      {_parts, labels} = Picture.parts(build, labeled(build, uses))
+      assert Enum.map(labels, & &1.name) |> hd() == "Central AC"
+      assert length(labels) == 5
+
+      for a <- labels, b <- labels, a != b, do: refute(Labels.overlap?(a, b))
+
+      for l <- labels do
+        assert l.left >= 38 and l.left + l.w <= 694
+        assert l.top >= 38 and l.top + l.h <= 592
+      end
+
+      # An item that is not in the house has no label. The labels are in
+      # the language of the process.
+      summary = %{labeled(build, uses) | items: [%{id: "i999", kwh: 5, cost: 1}]}
+      assert {_parts, []} = Picture.parts(build, summary)
+
+      svg =
+        Gettext.with_locale(DIY.Gettext, "vi", fn ->
+          Picture.svg(build, labeled(build, [{"ac", 6828, 908}]))
+        end)
+
+      assert svg =~ "6,828 kWh · $908 mỗi năm"
+    end
+
+    # The label of an item Other with a name.
+    defp named(name) do
+      build = house()
+      kitchen = Enum.find(build.rooms, &(&1.name == "Kitchen")).id
+      {:ok, build, other} = Build.add_item(build, kitchen, "other")
+      {:ok, build} = Build.update_item(build, other, %{"name" => name})
+
+      {_parts, [label]} =
+        Picture.parts(build, %{summary() | items: [%{id: other, kwh: 900, cost: 120}]})
+
+      label
+    end
+
+    # The width of each letter of the fonts of the NIF, in Inter Regular or
+    # Bold, the larger one (scripts/inter-widths.mjs).
+    @widths "priv/picture/inter_widths.json"
+            |> File.read!()
+            |> Jason.decode!()
+            |> Map.new(fn [c, w] -> {c, w} end)
+
+    # The width of a text in resvg: each code point moves on by its width.
+    # A code point that is not in the fonts moves on by the width of
+    # .notdef (0.656).
+    defp drawn_width(text, size),
+      do:
+        for(<<c::utf8 <- text>>, reduce: 0, do: (sum -> sum + Map.get(@widths, c, 0.656))) * size
+
+    test "a long name ends in an ellipsis, and a label is never narrower than its text" do
+      label = named(String.duplicate("W", 32))
+      assert label.name == String.duplicate("W", 23) <> "…"
+      assert label.w >= drawn_width(label.name, 12)
+
+      # resvg draws nothing for a letter that is not in the fonts: the name
+      # has no such letter. An emoji of a family is 7 code points.
+      family = "👨‍👩‍👧‍👦"
+      label = named(String.duplicate(family, 4) <> "Big fan")
+      assert label.name == "Big fan"
+      assert label.w >= drawn_width("Big fan", 12)
+      assert named("Big 🇺🇸 fan ").name == "Big fan"
+      assert named("空调").name == "…"
+      assert named("Điều hòa").name == "Điều hòa"
+
+      # The width of a text with a letter that is not in the fonts is
+      # larger than in resvg.
+      assert Picture.width(family, 10) >= drawn_width(family, 10)
+      assert Picture.width("ௌW", 10) == 2 * 10.38
+      assert Picture.width("", 10) == 0
+      assert map_size(@widths) == 311
+    end
+
+    test "the box of the house clips the sky, the rain and the snow" do
+      svg = Picture.svg(house(), %{summary() | sky: %{time: "night", weather: "rain"}})
+
+      assert svg =~
+               ~s(<clipPath id="picture-house"><rect x="32" y="32" width="668" height="566"/></clipPath>)
+
+      [before, inside] = String.split(svg, ~s|<g clip-path="url(#picture-house)">|)
+      [inside, _after] = String.split(inside, "</g><text", parts: 2)
+      # The sky and the rain are in the clipped group, and not before it.
+      assert inside =~ "fill:rgb(16, 27, 51)"
+      assert inside =~ ~s(id="plan-ground")
+      refute before =~ "<path"
+    end
+
+    test "a sky over the house: the rain, the snow and the light of a sunset" do
+      build = pool_house()
+
+      for {time, weather, class} <- [
+            {"day", "rain", "p-rain"},
+            {"night", "snow", "p-snow"},
+            {"sunset", "clouds", "p-dusk"}
+          ] do
+        assert svg_of(build, %{time: time, weather: weather}) =~ ~s(class="#{class}")
+      end
+
+      assert {:ok, <<0x89, "PNG", _::binary>>} =
+               Picture.png(
+                 build,
+                 labeled(build, [{"ac", 6828, 908}], %{time: "sunset", weather: "rain"})
+               )
+    end
   end
 
   test "a house with no cost and no ZIP code" do

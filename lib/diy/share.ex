@@ -5,7 +5,7 @@ defmodule DIY.Share do
   shared house as JSON, compressed with raw DEFLATE, in base64url.
 
   The JSON has the stripped build (`strip/2`) and its summary
-  (`summary/3`). The picture and the title of the preview are in the
+  (`summary/5`). The picture and the title of the preview are in the
   language of the summary.
 
   The server keeps no copy of a shared house: it reads it only to answer
@@ -33,6 +33,11 @@ defmodule DIY.Share do
   @max_kwh 100_000
   @max_cost 10_000_000
 
+  # The most items with a label in the picture, and the longest id of an
+  # item.
+  @max_labels 6
+  @max_id 16
+
   # The fields of the build that a link never has. They are the links to
   # Home Assistant and to the makers, and the state of the app and of the
   # lesson. A decode puts these values back, whatever the link has.
@@ -52,7 +57,8 @@ defmodule DIY.Share do
           months: [non_neg_integer()],
           cost: non_neg_integer() | nil,
           locale: String.t(),
-          sky: %{time: String.t(), weather: String.t()}
+          sky: %{time: String.t(), weather: String.t()},
+          items: [%{id: String.t(), kwh: non_neg_integer(), cost: non_neg_integer() | nil}]
         }
 
   # The sky of a link with no sky: a link of an older version.
@@ -91,20 +97,37 @@ defmodule DIY.Share do
   - the cost of the year in dollars, or `nil`;
   - a locale of the app;
   - the sky of the picture: a time of day and a weather (`DIY.Sky`). A
-    sky that `DIY.Sky` does not know is a day with sun.
+    sky that `DIY.Sky` does not know is a day with sun;
+  - the items with the most kWh in a year, for the labels of the
+    picture. Each item is `{id, kwh, cost}`. The cost is the cost of the
+    year in dollars, or `nil`.
+    The summary keeps the 6 items with the most kWh, and no item with
+    less than 1 kWh.
 
   The numbers are rounded, and they stay in the range that a link
   accepts.
   """
-  @spec summary([number()], number() | nil, String.t(), map()) :: summary()
-  def summary(months, cost, locale, sky \\ @day) when length(months) == 12 do
+  @spec summary([number()], number() | nil, String.t(), map(), list()) :: summary()
+  def summary(months, cost, locale, sky \\ @day, items \\ []) when length(months) == 12 do
     %{
       months: Enum.map(months, &(&1 |> round() |> max(0) |> min(@max_kwh))),
-      cost: cost && cost |> round() |> max(0) |> min(@max_cost),
+      cost: cost && amount(cost),
       locale: if(locale in @locales, do: locale, else: "en"),
-      sky: if(sky?(sky), do: Map.take(sky, [:time, :weather]), else: @day)
+      sky: if(sky?(sky), do: Map.take(sky, [:time, :weather]), else: @day),
+      items:
+        for(
+          {id, kwh, cost} <- items,
+          is_binary(id) and byte_size(id) <= @max_id,
+          kwh = kwh |> round() |> min(12 * @max_kwh),
+          kwh >= 1,
+          do: %{id: id, kwh: kwh, cost: cost && amount(cost)}
+        )
+        |> Enum.sort_by(&(-&1.kwh))
+        |> Enum.take(@max_labels)
     }
   end
+
+  defp amount(dollars), do: dollars |> round() |> max(0) |> min(@max_cost)
 
   defp sky?(%{time: time, weather: weather}),
     do: time in DIY.Sky.times() and weather in DIY.Sky.weathers()
@@ -137,7 +160,8 @@ defmodule DIY.Share do
           "c" => summary.cost,
           "l" => summary.locale,
           "t" => summary.sky.time,
-          "w" => summary.sky.weather
+          "w" => summary.sky.weather,
+          "i" => Enum.map(summary.items, &[&1.id, &1.kwh, &1.cost])
         }
       })
 
@@ -192,19 +216,30 @@ defmodule DIY.Share do
   end
 
   defp read_summary(%{"m" => months, "c" => cost, "l" => locale} = s) when length(months) == 12 do
-    # A link of an older version has no sky: a day with sun.
+    # A link of an older version has no sky (a day with sun) and no items.
     sky = %{time: Map.get(s, "t", "day"), weather: Map.get(s, "w", "sun")}
+    items = Map.get(s, "i", [])
 
-    if Enum.all?(months, &(is_integer(&1) and &1 in 0..@max_kwh)) and
-         (cost == nil or (is_integer(cost) and cost in 0..@max_cost)) and
-         locale in @locales and sky?(sky) do
-      {:ok, %{months: months, cost: cost, locale: locale, sky: sky}}
+    if Enum.all?(months, &(is_integer(&1) and &1 in 0..@max_kwh)) and cost?(cost) and
+         locale in @locales and sky?(sky) and is_list(items) and
+         length(items) <= @max_labels and Enum.all?(items, &item?/1) do
+      items = for [id, kwh, cost] <- items, do: %{id: id, kwh: kwh, cost: cost}
+      {:ok, %{months: months, cost: cost, locale: locale, sky: sky, items: items}}
     else
       {:error, :summary}
     end
   end
 
   defp read_summary(_summary), do: {:error, :summary}
+
+  defp cost?(cost), do: cost == nil or (is_integer(cost) and cost in 0..@max_cost)
+
+  defp item?([id, kwh, cost]),
+    do:
+      is_binary(id) and byte_size(id) <= @max_id and is_integer(kwh) and
+        kwh in 1..(12 * @max_kwh) and cost?(cost)
+
+  defp item?(_item), do: false
 
   # A shared house has a house: the page of the link draws it. The count
   # of its items and rooms comes first: it costs nothing. The read gives

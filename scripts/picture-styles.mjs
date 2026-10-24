@@ -7,7 +7,9 @@
 // light theme. The file has the styles of each scene of the house
 // (data-scene: day, sunset and night). For each scene, "SCENE-snow" has
 // the classes that are different in snow (data-weather="snow"), with all
-// their properties.
+// their properties. "SCENE-inside" has the classes that are different in
+// the house cut open (no class cutaway-outside), with all their
+// properties.
 //
 //   MIX_ENV=test mix.com assets.build
 //   CHROMIUM=/path/to/chrome node scripts/picture-styles.mjs
@@ -41,14 +43,10 @@ export async function styles() {
     const page = await browser.newPage({ colorScheme: "light" })
     const result = {}
     for (const scene of ["day", "sunset", "night"]) {
-      const base = await read(page, scene, "sun")
-      const snow = await read(page, scene, "snow")
-      const changed = {}
-      for (const cls of new Set([...Object.keys(base), ...Object.keys(snow)])) {
-        if (JSON.stringify(base[cls]) !== JSON.stringify(snow[cls])) changed[cls] = snow[cls] ?? {}
-      }
+      const base = await read(page, scene, "sun", true)
       result[scene] = base
-      result[`${scene}-snow`] = changed
+      result[`${scene}-snow`] = changes(base, await read(page, scene, "snow", true))
+      result[`${scene}-inside`] = changes(base, await read(page, scene, "sun", false))
     }
     return result
   } finally {
@@ -56,11 +54,23 @@ export async function styles() {
   }
 }
 
-// The styles of the classes in a scene, with a weather.
-async function read(page, scene, weather) {
+// The classes of b that are not the same as in a, with all their
+// properties.
+function changes(a, b) {
+  const changed = {}
+  for (const cls of new Set([...Object.keys(a), ...Object.keys(b)])) {
+    if (JSON.stringify(a[cls]) !== JSON.stringify(b[cls])) changed[cls] = b[cls] ?? {}
+  }
+  return changed
+}
+
+// The styles of the classes in a scene, with a weather, for the house
+// from the outside or cut open.
+async function read(page, scene, weather, outside) {
+  const view = outside ? "cutaway cutaway-house cutaway-outside" : "cutaway cutaway-house"
   await page.setContent(
     `<!doctype html><html data-theme="light"><head><style>${css}</style></head><body>
-    <svg class="cutaway cutaway-house cutaway-outside" data-scene="${scene}" data-weather="${weather}" id="svg"><defs><linearGradient id="g"></linearGradient></defs></svg>
+    <svg class="${view}" data-scene="${scene}" data-weather="${weather}" id="svg"><defs><linearGradient id="g"></linearGradient></defs></svg>
     </body></html>`,
   )
   return await page.evaluate(({ classes, shape, stop, text }) => {
