@@ -3859,11 +3859,18 @@ pool room, three items for a pool and a search in the sheet Add.
   so the file of a different build does not change. A file with a
   different kind, or with a pool on the roof, gives a room that is not a
   pool.
-- A new pool is 30 ft by 15 ft (`DIY.Layout`). The box "A pool" in the
-  sheet New room makes a pool. The box "This room is a pool" in the
-  sheet of a room changes it later.
-- The plan and the house from outside fill the floor of a pool with
-  water: the color `--p-water` and a texture of waves (`tex-water`).
+- A new pool has water of 30 ft by 15 ft, with a deck around it
+  (`DIY.Layout.water/1`). The deck is 3 ft at the sides and at the front.
+  The deck at the back is 10 ft, for the equipment and a hot tub. A small
+  room has a narrower deck. The box "A pool" in the sheet New room makes
+  a pool. The box "This room is a pool" in the sheet of a room changes it
+  later.
+- A new item in a pool goes on the deck, not on the water
+  (`DIY.Layout`). The person can still drag it.
+- The plan and the house from outside draw the deck with pavers. The
+  water has the color `--p-water` and a texture of waves (`tex-water`).
+  The water is lower than the deck. So the eye sees the walls of the pool
+  (`--p-pool-wall`) at the far sides.
 
 ### The places of an item
 
@@ -3901,9 +3908,9 @@ Assistant.
 
 ### The search of the sheet Add
 
-- The sheet Add has a box of search. The text matches the name of a
-  kind or its more words (`Catalog.words/0`), with no difference of
-  capitals. For example "Tesla" and "wall connector" find the car, and
+- The sheet Add has a box of search. Each word of the text must be the
+  start of a word of a kind: of its name or of its more words
+  (`Catalog.words/0`). Capitals have no effect. For example "Tesla" and "wall connector" find the car, and
   "spa" finds the three items of a pool.
 - The list shows the kinds that fit the room and match the text. A pool
   room shows the items of a pool first.

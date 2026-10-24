@@ -867,7 +867,7 @@ defmodule DIYWeb.Inside do
         </label>
         <label class="label cursor-pointer gap-2 text-sm whitespace-normal">
           <input type="checkbox" name="room[pool]" value="true" class="checkbox checkbox-sm" />
-          A pool, inside or outside: 30 by 15 ft, with water.
+          A pool, inside or outside: water of 30 by 15 ft, with a deck around it.
         </label>
         <p class="text-xs opacity-70">The room goes to a free place. Then drag it where it is.</p>
         <button class="btn btn-sm btn-primary">Add the room</button>

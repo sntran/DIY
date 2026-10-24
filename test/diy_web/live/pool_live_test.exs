@@ -42,8 +42,10 @@ defmodule DIYWeb.PoolLiveTest do
 
     pool = room(view, "Pool")
     assert Build.pool?(pool)
-    assert {pool.plan.w, pool.plan.d} == {360, 180}
-    assert has_element?(view, "polygon.p-water[data-room=#{pool.id}]")
+    assert {pool.plan.w, pool.plan.d} == {432, 336}
+    assert has_element?(view, "polygon.p-paver[data-room=#{pool.id}]")
+    assert has_element?(view, "polygon.p-pool-wall")
+    assert has_element?(view, "polygon.p-water")
     assert has_element?(view, "#tex-water path.p-tex-wave")
 
     # An indoor pool.

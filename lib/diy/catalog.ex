@@ -1600,22 +1600,26 @@ defmodule DIY.Catalog do
   def words, do: @words
 
   @doc """
-  The kinds of the house that match a text. The text is in the name of
-  the kind or in its more words (`@words`), with no difference of
-  capitals. An empty text matches all the kinds.
+  The kinds of the house that match a text. Each word of the text must be
+  the start of a word of the kind: of its name or of its more words
+  (`@words`). Capitals have no effect. So "tes" finds the car, and "ump" finds
+  no pump. An empty text matches all the kinds.
   """
   def search(text, kinds \\ house_kinds()) do
-    case text |> String.downcase() |> String.trim() do
-      "" ->
+    case words_of(text) do
+      [] ->
         kinds
 
-      text ->
+      parts ->
         Enum.filter(kinds, fn kind ->
-          words = Enum.join([String.downcase(kind.name) | Map.get(@words, kind.type, [])], " ")
-          String.contains?(words, text)
+          words = words_of(Enum.join([kind.name | Map.get(@words, kind.type, [])], " "))
+          Enum.all?(parts, fn part -> Enum.any?(words, &String.starts_with?(&1, part)) end)
         end)
     end
   end
+
+  defp words_of(text),
+    do: text |> String.downcase() |> String.split(~r/[^\p{L}\p{N}]+/u, trim: true)
 
   @doc "The kinds that can go in the house: in a room, on the roof or in a pool."
   def house_kinds,

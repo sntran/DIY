@@ -27,7 +27,7 @@ defmodule DIY.PoolTest do
   end
 
   describe "a pool room" do
-    test "is a room of the kind pool, inside or outside, of 30 by 15 ft" do
+    test "is a room of the kind pool, inside or outside, with water of 30 by 15 ft" do
       {:ok, build, outdoor} = Build.add_room(build(), "Pool", "outside", :outdoor, "pool")
       {:ok, build, indoor} = Build.add_room(build, "Spa", "f1", :indoor, "pool")
       {:ok, out} = Build.room(build, outdoor)
@@ -35,9 +35,10 @@ defmodule DIY.PoolTest do
 
       assert Build.pool?(out) and Build.pool?(ins)
       refute Build.pool?(room(build, "Kitchen"))
-      assert {out.plan.w, out.plan.d} == {360, 180}
-      assert {ins.plan.w, ins.plan.d} == {360, 180}
-      assert Layout.max_room() >= 360
+      assert {out.plan.w, out.plan.d} == {432, 336}
+      assert {ins.plan.w, ins.plan.d} == {432, 336}
+      assert Layout.water(out.plan) == %{x: 36, y: 120, w: 360, d: 180}
+      assert Layout.max_room() >= 432
     end
 
     test "is never on the roof, and has no other kind" do
@@ -94,6 +95,40 @@ defmodule DIY.PoolTest do
     end
   end
 
+  describe "the deck of a pool" do
+    test "a small room has a narrow deck, and water in it" do
+      assert Layout.water(%{w: 24, d: 24}) == %{x: 4, y: 9, w: 16, d: 11}
+      assert Layout.water(%{w: 120, d: 120}) == %{x: 20, y: 45, w: 80, d: 55}
+    end
+
+    property "the water is in the room, with a deck on each side" do
+      check all(
+              w <- integer(Layout.min_room()..Layout.max_room()),
+              d <- integer(Layout.min_room()..Layout.max_room())
+            ) do
+        water = Layout.water(%{w: w, d: d})
+        assert water.x > 0 and water.y > 0 and water.w > 0 and water.d > 0
+        assert water.x + water.w < w and water.y + water.d < d
+      end
+    end
+
+    test "a new item of a pool goes on the deck, not on the water" do
+      {:ok, build, pool} = Build.add_room(build(), "Pool", "outside", :outdoor, "pool")
+      {:ok, room} = Build.room(build, pool)
+      water = Layout.water(room.plan)
+
+      build =
+        Enum.reduce(~w(pool_pump pool_heater hot_tub lights), build, fn type, build ->
+          {:ok, build, _id} = Build.add_item(build, pool, type)
+          build
+        end)
+
+      for item <- build.items, item.room == pool do
+        refute Layout.overlap?(Layout.item_box(item), water), "#{item.type} is on the water"
+      end
+    end
+  end
+
   describe "the items of a pool" do
     test "go outside or in a pool, not in a different room inside" do
       build = build()
@@ -127,6 +162,11 @@ defmodule DIY.PoolTest do
       assert "hot_tub" in types.("Jacuzzi")
       assert "fridge" in types.("refrigerator")
       assert types.("zzz") == []
+      # A word of the text is the start of a word.
+      assert "ev" in types.("tes")
+      assert "ev" in types.("TESLA, wall")
+      refute "pool_pump" in types.("ump")
+      assert types.("tesla zzz") == []
       assert length(Catalog.search("  ")) == length(Catalog.house_kinds())
       refute Enum.any?(Catalog.house_kinds(), &(&1.type == "van_fan"))
     end
