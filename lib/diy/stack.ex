@@ -8,9 +8,9 @@ defmodule DIY.Stack do
   The rules (`specs/Stack.tla`):
 
   - An item is on an item of its room. The center of its space on the
-    plan is over the item under it. The item is not larger than the item
-    under it, along each side of the plan. On a pool, the center is over
-    the coping, not over the water (`DIY.Layout.water/1`).
+    plan is over the item under it. The space of the item under it is at
+    least half of its space. On a pool, the center is over the coping,
+    not over the water (`DIY.Layout.water/1`).
   - No item is on itself, also through other items.
   - When an item moves, the items on it move with it. When it goes away,
     the items on it come down. When an item no longer holds an item, that
@@ -149,9 +149,9 @@ defmodule DIY.Stack do
   end
 
   # The items that can take an item, by room, each with its box and its
-  # top over the floor (inches). The places and the tops are those before
-  # a seat. The places do not change. The tops only choose between two
-  # items that hold an item.
+  # top over the floor (inches). These are the places and the tops before
+  # a seat. A seat does not change a place. When two items hold an item,
+  # the item goes on the higher one: a top that is old has no other effect.
   defp takers(items) do
     heights = heights(items)
 
@@ -191,9 +191,11 @@ defmodule DIY.Stack do
   end
 
   @doc """
-  True when an item can stand on a different item at their places. The
-  center of its space is over that item. It is not larger than that item
-  along each side. On a pool, the center is over the coping.
+  True when the item `base` can take the item `item` at their places. The
+  center of the space of `item` is over `base`. The space of `base` is at
+  least half of the space of `item`. So a TV can stand on a narrow stand,
+  but a fridge does not go on a microwave. On a pool, the center is over
+  the coping.
   """
   def holds?(%{at: %{}} = base, %{at: %{}} = item),
     do: holds_box?(base.type, Layout.item_box(base), Layout.item_box(item))
@@ -203,7 +205,7 @@ defmodule DIY.Stack do
   defp holds_box?(type, under, box) do
     center = {box.x + box.w / 2, box.y + box.d / 2}
 
-    box.w <= under.w and box.d <= under.d and inside?(center, under) and
+    box.w * box.d <= 2 * under.w * under.d and inside?(center, under) and
       not (type == "pool" and water?(center, under))
   end
 
@@ -290,7 +292,7 @@ defmodule DIY.Stack do
         {at, base && base.id}
 
       base ->
-        {onto(moved, base, room.plan), base.id}
+        {onto(moved, base, Enum.filter(others, &(on(&1) == base.id)), room.plan), base.id}
 
       true ->
         ids = above(items, item.id)
@@ -306,17 +308,23 @@ defmodule DIY.Stack do
   end
 
   # An item on an item: in its space, and at an end or at the center of it
-  # when it is near. On a pool, it stays where it is: the center of a pool
-  # is water.
-  defp onto(item, %{type: "pool"}, _plan), do: item.at
+  # when it is near. An item that is larger than the item under it is at
+  # its center. Then the item goes next to a near item on the same item
+  # (`siblings`), if the item under it still holds it there. On a pool, it
+  # stays where it is: the center of a pool is water.
+  defp onto(item, %{type: "pool"}, _siblings, _plan), do: item.at
 
-  defp onto(item, base, plan) do
+  defp onto(item, base, siblings, plan) do
     {w, d} = Layout.extent(item)
     under = Layout.item_box(base)
     x = axis(item.at.x, w, under.x, under.w)
     y = axis(item.at.y, d, under.y, under.d)
-    Layout.clamp(%{x: x, y: y}, item, plan)
+    at = Layout.clamp(%{x: x, y: y}, item, plan)
+    next = beside(%{item | at: at}, siblings, plan)
+    if holds?(base, %{item | at: next}), do: next, else: at
   end
+
+  defp axis(_a, size, from, length) when size >= length, do: from + div(length - size, 2)
 
   defp axis(a, size, from, length) do
     a = a |> max(from) |> min(from + length - size)

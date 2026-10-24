@@ -99,13 +99,33 @@ defmodule DIY.StackTest do
     assert item(build, cpap).at == %{x: top.x + 10, y: top.y}
     assert item(build, cpap).on == freezer
 
-    # An item that is larger than the item under it does not go on it. A
-    # TV (44 by 10) over the range (30 by 28) stays on the floor.
+    # A TV (44 by 10) on the range (30 by 28): the range is more than half
+    # of the space of the TV. The TV is at the center of the range along x.
     {build, tv} = add(build, "Kitchen", "tv")
-    {:ok, build} = drop(build, tv, "Kitchen", %{x: base.x - 7, y: base.y + 2})
-    refute Map.has_key?(item(build, tv), :on)
-    {:ok, build} = Build.place_item(build, tv, range.room, %{x: base.x - 7, y: base.y + 2})
-    refute Map.has_key?(item(build, tv), :on)
+    {:ok, build} = drop(build, tv, "Kitchen", %{x: base.x - 10, y: base.y + 2})
+    assert %{on: on, at: %{x: x}} = item(build, tv)
+    assert {on, x} == {range.id, base.x - 7}
+
+    # A fridge (33 by 33) over the microwave (24 by 19): the microwave is
+    # less than half of the space of the fridge. The fridge is on the floor.
+    microwave = first(build, "Kitchen", "microwave")
+    {build, fridge} = add(build, "Kitchen", "fridge")
+    {:ok, build} = drop(build, fridge, "Kitchen", %{x: microwave.at.x - 4, y: 0})
+    refute Map.has_key?(item(build, fridge), :on)
+  end
+
+  test "an item on an item goes next to an item on the same item" do
+    build = house()
+    washer = first(build, "Laundry", "washer")
+    {build, cpap} = add(build, "Laundry", "cpap")
+    {build, hub} = add(build, "Laundry", "home_assistant")
+    {:ok, build} = drop(build, cpap, "Laundry", washer.at)
+    assert item(build, cpap).at == washer.at
+
+    # The hub (4 by 4) 1 inch to the right of the cpap (10 by 6): next to it.
+    {:ok, build} = drop(build, hub, "Laundry", %{x: washer.at.x + 11, y: washer.at.y + 1})
+    assert item(build, hub).at == %{x: washer.at.x + 10, y: washer.at.y}
+    assert item(build, hub).on == washer.id
   end
 
   test "an item dropped near an item on the floor snaps to its side" do

@@ -3979,17 +3979,18 @@ station on a freezer, or a pool pump on the coping of a pool
 
 - An item has the key `on`: the id of the item under it. An item on the
   floor has no key. The file and the link keep the key.
-- An item holds a different item when two rules are true. The center of
-  the space of that item is over it. That item is not larger than it
-  along each side of the plan. A TV does not go on a router, and a fridge does not go on
-  a microwave. A pool holds an item only on its coping: an item over the
-  water is not on the pool.
+- An item A holds an item B when two rules are true. The center of the
+  space of B is over A. The space of A is at least half of the space of
+  B. So a TV goes on a narrow stand, and a dryer that turns stays on its
+  washer. But a fridge does not go on a microwave. A pool holds an item
+  only on its coping: an item over the water is not on the pool.
 - A drop on the plan puts the item on the item that holds it. When two
-  or more items hold it, it goes on the item with the highest top. The
-  item stays in the space of the item under it. Near an end of the item
-  under it (6 inches or less), it goes to that end. Near the center, it
-  goes to the center. On a pool, it stays where the person drops
-  it.
+  or more items hold it, it goes on the item with the highest top. Near
+  an end of the item under it (6 inches or less), it goes to that end.
+  Near the center, it goes to the center. An item that is larger than
+  the item under it goes to its center. Then it goes next to an item on
+  the same item, as on the floor. On a pool, it stays where the person
+  drops it.
 - A drop on the floor can move the item to the side of an item on the
   floor near it (6 inches or less). Then the two have no gap. Items on a
   wall or a ceiling have no effect on this, and they do not move this
@@ -4007,6 +4008,9 @@ station on a freezer, or a pool pump on the coping of a pool
   item that comes down goes on the highest item that holds it there, if
   there is one. The other items on the floor stay where they are: a new
   item does not take an old item on it.
+- Two items can overlap, on the floor or on the top of an item, as
+  before. For example, a full room gives a new item a place over an old
+  item. The snap helps the person to put the items side by side.
 - An item on an item is on its top: the picture adds the height of the
   item under it. A pool is in the floor, so an item on a pool is at the
   floor. An item over the top of an item has no shadow. The top item
