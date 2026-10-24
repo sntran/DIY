@@ -69,6 +69,7 @@ defmodule DIYWeb.HomeLive do
     {:ok,
      socket
      |> assign(:page_title, "Small Steps Home")
+     |> assign(:pool_key, 0)
      |> assign(:weather, %{zip: nil, status: :none, climate: nil})
      |> assign(:market, %{zip: nil, status: :none})
      |> assign(:estimate, %{ready: false, missing: []})
@@ -128,6 +129,8 @@ defmodule DIYWeb.HomeLive do
        if(params["add"] == socket.assigns[:add], do: socket.assigns[:add_query] || "", else: "")
      )
      |> assign(:room, params["room"])
+     # A new page has no refused change of the box of a pool.
+     |> assign(:pool_key, 0)
      |> assign(:sheet, params["sheet"])
      |> ha_rooms(socket.assigns.live_action, params["sheet"])
      |> assign(:van_id, params["id"])
@@ -776,14 +779,21 @@ defmodule DIYWeb.HomeLive do
   # The box "This room is a pool" of the sheet of a room.
   def handle_event("room_pool", %{"room_id" => id, "pool" => pool}, socket) do
     case Build.set_pool(socket.assigns.build, id, pool == "true") do
-      {:ok, build} -> {:noreply, put(socket, build)}
-      {:error, reason} -> {:noreply, put_flash(socket, :error, room_error(reason))}
+      {:ok, build} ->
+        {:noreply, put(socket, build)}
+
+      # The box renders again with the state of the room.
+      {:error, reason} ->
+        {:noreply,
+         socket |> update(:pool_key, &(&1 + 1)) |> put_flash(:error, room_error(reason))}
     end
   end
 
   # The search of the sheet Add (DIYWeb.Inside).
   def handle_event("add_search", %{"q" => q}, socket) when is_binary(q),
     do: {:noreply, assign(socket, :add_query, String.slice(q, 0, 40))}
+
+  def handle_event("add_search", _params, socket), do: {:noreply, socket}
 
   # The match of the rooms with Home Assistant (DIYWeb.HomeAssistant): the
   # app changes the build, and the hook adds the areas to Home Assistant.
@@ -1349,7 +1359,11 @@ defmodule DIYWeb.HomeLive do
   defp room_error(:level), do: gettext("Choose a floor of the house.")
   defp room_error(:place), do: gettext("Choose a place: inside, outside or the roof.")
   defp room_error(:house), do: gettext("Choose a house first.")
-  defp room_error(:pool_place), do: gettext("A pool is inside or outside, not on the roof.")
+
+  defp room_error(:pool_place),
+    do: gettext("A pool is inside or outside, not on the roof or in the attic.")
+
+  defp room_error(:room), do: gettext("This room is not in the house.")
 
   defp room_error(:items),
     do:
@@ -1734,6 +1748,7 @@ defmodule DIYWeb.HomeLive do
                 item={@item}
                 add={@add}
                 add_query={@add_query}
+                pool_key={@pool_key}
                 room={@room}
                 sheet={@sheet}
                 status={@status}

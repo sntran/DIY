@@ -452,7 +452,8 @@ defmodule DIY.Build do
          true <- level in levels(floors) || {:error, :level},
          true <- place in @places || {:error, :place},
          true <- kind in [nil, "pool"] || {:error, :kind},
-         true <- (kind == nil or place in [:indoor, :outdoor]) || {:error, :pool_place} do
+         true <-
+           (kind == nil or pool_place?(%{place: place, level: level})) || {:error, :pool_place} do
       {id, build} = next_id(build, "r")
       room = %{id: id, name: name, level: level, place: place, plan: nil}
       room = if kind, do: Map.put(room, :kind, kind), else: room
@@ -466,6 +467,13 @@ defmodule DIY.Build do
   def pool?(room), do: Map.get(room, :kind) == "pool"
 
   @doc """
+  True when a room can be a pool: a room inside or outside, not on the
+  level of the roof and the attic.
+  """
+  def pool_place?(%{place: place, level: level}),
+    do: place in [:indoor, :outdoor] and level != "roof"
+
+  @doc """
   Makes a room of the house a pool, or a room that is not a pool. A room
   inside with items that only a pool takes (a pool pump inside) stays a
   pool (`:items`): the person moves them first. A room on the roof is
@@ -474,7 +482,7 @@ defmodule DIY.Build do
   @spec set_pool(t(), String.t(), boolean()) :: {:ok, t()} | {:error, atom()}
   def set_pool(build, id, pool) when is_boolean(pool) do
     with {:ok, room} <- house_room(build, id),
-         true <- room.place in [:indoor, :outdoor] || {:error, :pool_place},
+         true <- pool_place?(room) || {:error, :pool_place},
          new = if(pool, do: Map.put(room, :kind, "pool"), else: Map.delete(room, :kind)),
          true <-
            Enum.all?(items_in(build, id), &Catalog.fits?(Catalog.kind(&1.type), new)) ||
@@ -1554,7 +1562,7 @@ defmodule DIY.Build do
 
       # A pool is inside or outside. A different kind is lost.
       {:house,
-       if(room["kind"] == "pool" and place in [:indoor, :outdoor],
+       if(room["kind"] == "pool" and pool_place?(new),
          do: Map.put(new, :kind, "pool"),
          else: new
        )}

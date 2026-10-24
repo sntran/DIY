@@ -723,7 +723,15 @@ defmodule DIY.Catalog do
           500,
           "Only for a gas heater. The label gives it, for example 400,000 BTU/h."
         ),
-        float("hours", "Hours in one day", "h", 4.0, 0.0, 24.0, nil),
+        float(
+          "hours",
+          "Hours in one day",
+          "h",
+          1.5,
+          0.0,
+          24.0,
+          "The mean of the season. A heater runs more in spring and fall, and little in summer."
+        ),
         season("warm")
       ]
     },
@@ -740,7 +748,7 @@ defmodule DIY.Catalog do
           5.0,
           0.0,
           40.0,
-          "A hot tub with a good cover uses near 3 to 8 kWh in one day, more in a cold month."
+          "A hot tub with a good cover uses near 3 to 8 kWh in one day. Give the mean of the year."
         ),
         season("all")
       ]
@@ -1585,7 +1593,7 @@ defmodule DIY.Catalog do
     "hot_tub" => ~w(hot tub spa jacuzzi),
     "fridge" => ~w(refrigerator),
     "freezer" => ~w(refrigerator),
-    "ac" => ~w(air conditioner hvac cooling),
+    "ac" => ~w(air conditioner hvac cooling heat pump),
     "mini_split" => ~w(heat pump ductless air conditioner),
     "furnace" => ~w(heater heating hvac),
     "water_heater" => ~w(tank tankless),

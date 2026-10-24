@@ -185,6 +185,10 @@ defmodule DIY.Profile do
   def watts(%{params: %{"watts" => watts}}), do: watts / 1
 
   @doc "True for an item with a motor that needs more power to start (a surge)."
+  # An electric pool heater is a resistance: it has no motor. A heat pump
+  # has a compressor, and a gas heater has a blower.
+  def motor?(%{type: "pool_heater", params: %{"fuel" => fuel}}), do: fuel != "electric"
+
   def motor?(%{type: type}),
-    do: type in ["ac", "mini_split", "fridge", "freezer", "pool_pump", "pool_heater"]
+    do: type in ["ac", "mini_split", "fridge", "freezer", "pool_pump"]
 end

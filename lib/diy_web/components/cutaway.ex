@@ -1286,7 +1286,7 @@ defmodule DIYWeb.Cutaway do
         <polygon
           :if={!texture?(class)}
           points={points}
-          class={[class, @room.id == @selected && "p-chosen"]}
+          class={[class, @room.id == @selected && outline?(class) && "p-chosen"]}
           data-room={@room.id}
           data-plan={@room.plan}
           data-origin={@room.origin}
@@ -1300,6 +1300,10 @@ defmodule DIYWeb.Cutaway do
   # The lines of a floor are for the eyes. A tap goes through them to the
   # floor, and they move with the group of their room.
   defp texture?(class), do: String.starts_with?(class, "p-tex ")
+
+  # The walls and the water of a pool are in its deck: only the deck gets
+  # the outline of the chosen room.
+  defp outline?(class), do: class not in ["p-floor p-pool-wall", "p-water"]
 
   # The outline of the room that the user chose, and a handle in the middle
   # of each wall.

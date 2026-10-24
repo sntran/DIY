@@ -73,7 +73,7 @@ defmodule DIYWeb.PoolLiveTest do
       })
       |> render_submit()
 
-    assert html =~ "A pool is inside or outside, not on the roof."
+    assert html =~ "A pool is inside or outside, not on the roof or in the attic."
   end
 
   test "the box of the sheet of a room makes it a pool, and keeps the items of a pool",
@@ -89,14 +89,30 @@ defmodule DIYWeb.PoolLiveTest do
     render_click(view, "add_item", %{"room" => kitchen, "type" => "hot_tub"})
     render_patch(view, ~p"/inside?#{[room: kitchen, sheet: "room"]}")
 
+    assert has_element?(view, "#pool-box-#{kitchen}-0[checked]")
     html = view |> form("#pool-#{kitchen}", %{"pool" => "false"}) |> render_change()
     assert html =~ "Move the items of the pool to a different room first."
     assert Build.pool?(room(view, "Kitchen"))
+    # The browser unchecked the box. The page draws a new box, checked.
+    assert has_element?(view, "#pool-box-#{kitchen}-1[checked]")
+    refute has_element?(view, "#pool-box-#{kitchen}-0")
+    # The new box gets the focus. A new page starts again at 0.
+    assert has_element?(view, "#pool-box-#{kitchen}-1[phx-mounted]")
+    render_patch(view, ~p"/inside?#{[room: kitchen, sheet: "room"]}")
+    assert has_element?(view, "#pool-box-#{kitchen}-0[checked]")
+    refute has_element?(view, "#pool-box-#{kitchen}-0[phx-mounted]")
 
-    # The roof has no box.
-    roof = room(view, "Roof").id
-    render_patch(view, ~p"/inside?#{[room: roof, sheet: "room"]}")
-    refute has_element?(view, "#pool-#{roof}")
+    # A stale room or a bad event shows an error, and no crash.
+    render_hook(view, "room_pool", %{"room_id" => "r999", "pool" => "true"})
+    assert render(view) =~ "This room is not in the house."
+    render_hook(view, "add_search", %{"q" => 5})
+
+    # The roof and the attic have no box.
+    for name <- ["Roof", "Attic"] do
+      id = room(view, name).id
+      render_patch(view, ~p"/inside?#{[room: id, sheet: "room"]}")
+      refute has_element?(view, "#pool-#{id}")
+    end
   end
 
   test "the search of the sheet Add finds an item, and tells where a different item goes",
@@ -118,8 +134,16 @@ defmodule DIYWeb.PoolLiveTest do
     refute has_element?(view, "#add-hot_tub")
     assert has_element?(view, "#elsewhere-hot_tub", "Hot tub: in a room outside or a pool.")
 
+    assert has_element?(view, "#add-count", "1 found. 3 go in a different place.")
+    assert has_element?(view, "#add-elsewhere h3", "Not for this room")
+
+    view |> form("#add-search", %{"q" => "jacuzzi"}) |> render_change()
+    assert has_element?(view, "#add-count", "0 found. 1 goes in a different place.")
+
     view |> form("#add-search", %{"q" => "zzz"}) |> render_change()
     assert has_element?(view, "#add-none")
+    # "Other" takes any name: it always shows.
+    assert has_element?(view, "#add-other")
 
     # The search stays while the sheet stays open. A new sheet starts with
     # no search.
@@ -129,6 +153,34 @@ defmodule DIYWeb.PoolLiveTest do
     render_patch(view, ~p"/inside?#{[add: backyard]}")
     assert has_element?(view, "#add-search input[value='']")
     assert has_element?(view, "#add-pool_pump")
+  end
+
+  test "an item of a pool can move to a different pool inside", %{conn: conn} do
+    {:ok, build, spa} = Build.add_room(house(), "Spa", "f1", :indoor, "pool")
+    {:ok, build, spa2} = Build.add_room(build, "Spa 2", "f1", :indoor, "pool")
+    {:ok, build, tub} = Build.add_item(build, spa, "hot_tub")
+    view = open(conn, ~p"/inside?#{[item: tub]}", build)
+
+    # The list of the rooms has the two pools and the rooms outside. Its
+    # own room is chosen. A room inside that is not a pool is not there.
+    assert has_element?(view, ~s(option[value="#{spa}"][selected]))
+    assert has_element?(view, ~s(option[value="#{spa2}"]))
+    assert has_element?(view, ~s(option[value="#{room(view, "Backyard").id}"]))
+    refute has_element?(view, ~s(option[value="#{room(view, "Kitchen").id}"]))
+  end
+
+  test "a pool heater shows the field of its fuel only", %{conn: conn} do
+    build = house()
+    backyard = Enum.find(build.rooms, &(&1.name == "Backyard")).id
+    {:ok, build, heater} = Build.add_item(build, backyard, "pool_heater")
+    view = open(conn, ~p"/inside?#{[item: heater]}", build)
+    assert has_element?(view, "#item-form input[name='item[watts]']")
+    refute has_element?(view, "#item-form input[name='item[kbtu]']")
+
+    {:ok, gas} = Build.update_item(build, heater, %{"fuel" => "gas"})
+    view = open(conn, ~p"/inside?#{[item: heater]}", gas)
+    refute has_element?(view, "#item-form input[name='item[watts]']")
+    assert has_element?(view, "#item-form input[name='item[kbtu]']")
   end
 
   test "a pool shows the items of a pool first", %{conn: conn} do

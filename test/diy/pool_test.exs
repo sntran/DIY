@@ -41,8 +41,13 @@ defmodule DIY.PoolTest do
       assert Layout.max_room() >= 432
     end
 
-    test "is never on the roof, and has no other kind" do
+    test "is never on the roof or in the attic, and has no other kind" do
       assert Build.add_room(build(), "Pool", "roof", :roof, "pool") == {:error, :pool_place}
+      assert Build.add_room(build(), "Pool", "roof", :indoor, "pool") == {:error, :pool_place}
+      attic = room(build(), "Attic").id
+      assert Build.set_pool(build(), attic, true) == {:error, :pool_place}
+      refute Build.pool_place?(room(build(), "Attic"))
+      assert Build.pool_place?(room(build(), "Kitchen"))
       assert Build.add_room(build(), "Pool", "outside", :outdoor, "lake") == {:error, :kind}
       assert Build.add_room(Build.new(), "Pool", "outside", :outdoor, "pool") == {:error, :house}
     end
@@ -57,7 +62,7 @@ defmodule DIY.PoolTest do
       rooms =
         Enum.map(map["rooms"], fn
           %{"id" => ^id} = room -> Map.put(room, "kind", "lake")
-          %{"name" => "Roof"} = room -> Map.put(room, "kind", "pool")
+          %{"name" => name} = room when name in ["Roof", "Attic"] -> Map.put(room, "kind", "pool")
           room -> room
         end)
 
@@ -165,6 +170,7 @@ defmodule DIY.PoolTest do
       # A word of the text is the start of a word.
       assert "ev" in types.("tes")
       assert "ev" in types.("TESLA, wall")
+      assert "ac" in types.("heat pump")
       refute "pool_pump" in types.("ump")
       assert types.("tesla zzz") == []
       assert length(Catalog.search("  ")) == length(Catalog.house_kinds())
@@ -232,7 +238,12 @@ defmodule DIY.PoolTest do
 
       assert Profile.watts(gas_item) == 300.0
       assert Profile.watts(tub_item) == 5_500.0
-      assert Profile.motor?(%{type: "pool_heater"})
+      # A heat pump has a compressor, and a gas heater has a blower. An
+      # electric heater has no motor.
+      assert Profile.motor?(%{type: "pool_heater", params: %{"fuel" => "heat_pump"}})
+      assert Profile.motor?(gas_item)
+      refute Profile.motor?(%{type: "pool_heater", params: %{"fuel" => "electric"}})
+      refute Profile.motor?(tub_item)
     end
 
     test "a Tesla Wall Connector charges at 11.5 kW" do
@@ -275,7 +286,7 @@ defmodule DIY.PoolTest do
           assert Catalog.fits?(Catalog.kind(item.type), room), "#{item.type} in #{room.name}"
         end
 
-        refute Enum.any?(build.rooms, &(Build.pool?(&1) and &1.place == :roof))
+        refute Enum.any?(build.rooms, &(Build.pool?(&1) and not Build.pool_place?(&1)))
       end
     end
   end

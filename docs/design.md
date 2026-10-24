@@ -3854,7 +3854,8 @@ pool room, three items for a pool and a search in the sheet Add.
 ### A pool room
 
 - A room inside or outside can be a pool: an indoor pool or a pool in
-  the yard. A room on the roof is never a pool (`:pool_place`).
+  the yard. A room on the roof or in the attic is never a pool
+  (`Build.pool_place?/1`, `:pool_place`).
 - A pool room has the key `kind: "pool"`. Only a pool room has the key,
   so the file of a different build does not change. A file with a
   different kind, or with a pool on the roof, gives a room that is not a
@@ -3866,7 +3867,8 @@ pool room, three items for a pool and a search in the sheet Add.
   a pool. The box "This room is a pool" in the sheet of a room changes it
   later.
 - A new item in a pool goes on the deck, not on the water
-  (`DIY.Layout`). The person can still drag it.
+  (`DIY.Layout`). The person can still drag it. On the plan, only the
+  deck of a chosen pool gets the outline of the choice.
 - The plan and the house from outside draw the deck with pavers. The
   water has the color `--p-water` and a texture of waves (`tex-water`).
   The water is lower than the deck. So the eye sees the walls of the pool
@@ -3885,20 +3887,29 @@ Assistant.
   pool. So a hot tub can go in an indoor spa, but not in the kitchen.
 - A room stops being a pool only when each of its items still fits
   (`:items`). Else, a hot tub stays in a room inside that is not a pool.
+  After this error, the box "This room is a pool" gets a new id. So the
+  page draws a new box, with the state of the room.
+- The list "Where it is" of an item also uses `fits?`. So a hot tub can
+  move from one indoor pool to a different indoor pool.
 - `specs/Pool.tla` checks these rules with TLC: each item fits its room,
   and no pool is on the roof. Two models have a fault.
   `Pool.nocheck.cfg` lets a room stop being a pool with no check of its
-  items. `Pool.roof.cfg` lets a room on the roof be a pool. A property
+  items. `Pool.roof.cfg` checks the place only, so the attic can be a
+  pool. A property
   test of `test/diy/pool_test.exs` does random steps on a build, with
   the same invariants.
 
 ### The new items
 
 - **Pool heater.** A heat pump or an electric heater uses its watts for
-  its hours in one day. The default is 5,500 W for 4 hours. A gas heater
+  its hours in one day. The default is 5,500 W for 1.5 hours, the mean
+  of the season. A heater runs more in spring and fall. The sheet shows
+  the watts or the kBTU/h of the heater, for its fuel. A gas heater
   uses no kWh for heat. It burns gas: kBTU/h × 1,000 × hours × days ÷
   100,000 gives the therms. Its blower uses near 300 W. The default
-  season is April to October.
+  season is April to October. A heat pump and a gas heater have a motor
+  for the check of the start of a station. An electric heater has no
+  motor.
 - **Hot tub.** The person gives the kWh of one day: 5 kWh is the
   default, for a tub with a good cover. The default season is all year.
 - **Tesla Wall Connector.** The charger of a car has the choice "Level
@@ -3917,7 +3928,10 @@ Assistant.
 - A kind that matches but does not fit the room shows under "Not for
   this room", with the places where it goes. An example is "Hot tub: in
   a room outside or a pool." So the person knows where to add it.
-- With no match, the sheet tells the person to use the item Other.
+- The item Other always shows: it takes any name and power. With no
+  match, the sheet tells the person to use it.
+- A status that only a screen reader reads tells the count of the
+  matches.
 - A new sheet Add starts with no text. The text has 40 characters at
   most.
 

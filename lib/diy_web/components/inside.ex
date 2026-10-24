@@ -33,6 +33,10 @@ defmodule DIYWeb.Inside do
   attr :add_query, :string, default: "", doc: "the text of the search of the sheet Add"
   attr :room, :string, default: nil, doc: "the room that the person chose"
 
+  attr :pool_key, :integer,
+    default: 0,
+    doc: "a new number after a refused change of the box of a pool: the box renders again"
+
   attr :sheet, :string,
     default: nil,
     doc: "\"room\" (change the room), \"new_room\" or \"ha_rooms\" (`DIYWeb.HomeAssistant`)"
@@ -260,7 +264,7 @@ defmodule DIYWeb.Inside do
         room={elem(Build.room(@build, @add), 1)}
         query={@add_query}
       />
-      <.room_sheet :if={@chosen && @sheet == "room"} room={@chosen} />
+      <.room_sheet :if={@chosen && @sheet == "room"} room={@chosen} pool_key={@pool_key} />
       <.new_room_sheet :if={@sheet == "new_room"} levels={@levels} />
       <HomeAssistant.rooms_sheet
         :if={@sheet == "ha_rooms"}
@@ -743,6 +747,7 @@ defmodule DIYWeb.Inside do
   defp state_note(nil), do: ""
 
   attr :room, :map, required: true
+  attr :pool_key, :integer, default: 0
 
   # The sheet of a room: its name, its size, and its removal.
   defp room_sheet(assigns) do
@@ -801,14 +806,19 @@ defmodule DIYWeb.Inside do
       </form>
 
       <form
-        :if={@room.place in [:indoor, :outdoor]}
+        :if={Build.pool_place?(@room)}
         id={"pool-#{@room.id}"}
         phx-change="room_pool"
       >
         <input type="hidden" name="room_id" value={@room.id} />
         <input type="hidden" name="pool" value="false" />
+        <%!-- After a refused change, the box gets a new id: the page then
+             draws a new box with the state of the room. The new box gets
+             the focus, so a keyboard user stays on it. --%>
         <label class="label cursor-pointer gap-2 text-sm whitespace-normal">
           <input
+            id={"pool-box-#{@room.id}-#{@pool_key}"}
+            phx-mounted={@pool_key > 0 && JS.focus()}
             type="checkbox"
             name="pool"
             value="true"
@@ -945,11 +955,11 @@ defmodule DIYWeb.Inside do
     # does not go from the house to a van (`DIY.Build.move_item/3`).
     rooms =
       if in_van,
-        do: Enum.filter(Build.zones(assigns.build, assigns.van.id), &(&1.place in kind.places)),
+        do: Enum.filter(Build.zones(assigns.build, assigns.van.id), &Catalog.fits?(kind, &1)),
         else:
           Enum.filter(
             assigns.build.rooms,
-            &(&1.place in kind.places and not Build.van_level?(&1.level))
+            &(Catalog.fits?(kind, &1) and not Build.van_level?(&1.level))
           )
 
     van = Enum.any?(assigns.build.items, &(&1.type == "camper_van"))
@@ -1918,6 +1928,13 @@ defmodule DIYWeb.Inside do
   # and the heat efficiency only for a unit that heats.
   defp shown?(%{key: "weight"}, _item, van), do: van
   defp shown?(%{key: "hspf2"}, item, _van), do: item.params["heat_pump"] == true
+
+  defp shown?(%{key: "watts"}, %{type: "pool_heater"} = item, _van),
+    do: item.params["fuel"] != "gas"
+
+  defp shown?(%{key: "kbtu"}, %{type: "pool_heater"} = item, _van),
+    do: item.params["fuel"] == "gas"
+
   defp shown?(_param, _item, _van), do: true
 
   defp month_name(month), do: Enum.at(Estimate.month_names(), month - 1)
@@ -2017,12 +2034,20 @@ defmodule DIYWeb.Inside do
         do: Enum.sort_by(fits, &(:pool not in &1.places)),
         else: fits
 
-    others =
-      if String.trim(assigns.query) == "",
-        do: [],
-        else: Enum.reject(Catalog.search(assigns.query), &(&1 in fits))
+    search? = String.trim(assigns.query) != ""
+    others = if search?, do: Enum.reject(Catalog.search(assigns.query), &(&1 in fits)), else: []
+    matched = Catalog.search(assigns.query, fits)
 
-    assigns = assign(assigns, kinds: Catalog.search(assigns.query, fits), others: others)
+    # "Other" takes any name and power: it always shows.
+    other = Enum.filter(fits, &(&1.type == "other" and &1 not in matched))
+
+    assigns =
+      assign(assigns,
+        kinds: matched ++ other,
+        others: others,
+        none: search? and matched == [] and others == [],
+        count: if(search?, do: count_text(length(matched), length(others)))
+      )
 
     ~H"""
     <.sheet id="add-sheet" title={"Add to #{@room.name}"}>
@@ -2054,11 +2079,12 @@ defmodule DIYWeb.Inside do
           </button>
         </li>
       </ul>
-      <p :if={@kinds == [] and @others == []} id="add-none" class="text-sm opacity-70">
-        No item has this name. Try "Other": it takes any name and power.
+      <p :if={@none} id="add-none" class="text-sm opacity-70">
+        No item has this name. Use "Other": it takes any name and power.
       </p>
+      <p id="add-count" role="status" class="sr-only">{@count}</p>
       <div :if={@others != []} id="add-elsewhere" class="space-y-1">
-        <p class="text-sm font-semibold">Not for this room</p>
+        <h3 class="text-sm font-semibold">Not for this room</h3>
         <ul class="space-y-1 text-sm">
           <li :for={kind <- @others} id={"elsewhere-#{kind.type}"} class="flex items-center gap-2">
             <Icon.item type={kind.type} class="size-6" />
@@ -2069,6 +2095,10 @@ defmodule DIYWeb.Inside do
     </.sheet>
     """
   end
+
+  # The count of the search, for a screen reader.
+  defp count_text(found, 1), do: "#{found} found. 1 goes in a different place."
+  defp count_text(found, others), do: "#{found} found. #{others} go in a different place."
 
   attr :id, :string, required: true
   attr :title, :string, required: true
