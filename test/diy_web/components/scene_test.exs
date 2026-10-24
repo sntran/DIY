@@ -76,6 +76,9 @@ defmodule DIYWeb.SceneTest do
     refute Scene.parts(spa).pool
     {yard, _} = add(build, room(build, "Backyard"), "pool")
     assert Scene.parts(yard).pool
+    {:ok, build, deck} = Build.add_room(build, "Roof deck", "roof", :outdoor)
+    {deck, _} = add(build, deck, "pool")
+    refute Scene.parts(deck).pool
   end
 
   test "a station on plugs gives no flow to the panel, and planned items do not show" do

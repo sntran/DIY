@@ -87,6 +87,7 @@ defmodule DIYWeb.Scene do
   def parts(build) do
     house = build |> Build.house_view() |> Build.today()
     places = Map.new(house.rooms, &{&1.id, &1.place})
+    yard = Map.new(house.rooms, &{&1.id, &1.place == :outdoor and &1.level == "outside"})
     of = fn type -> Enum.filter(house.items, &(&1.type == type)) end
     stations = of.("power_station")
 
@@ -110,8 +111,9 @@ defmodule DIYWeb.Scene do
       panel: Power.panel?(Power.system(house.items)),
       switch: of.("transfer_switch") != [],
       ac: Enum.any?(house.items, &(&1.type in ["ac", "mini_split"])),
-      # A pool in the yard. A spa inside does not show.
-      pool: Enum.any?(of.("pool"), &(places[&1.room] == :outdoor)),
+      # A pool in the yard. A spa inside, or a pool on a roof deck or a
+      # balcony, does not show.
+      pool: Enum.any?(of.("pool"), &(yard[&1.room] == true)),
       car: of.("ev") != [],
       van:
         case of.("camper_van") do
