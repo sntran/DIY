@@ -175,7 +175,7 @@ defmodule DIY.Layout do
 
   @doc """
   The water of a pool item (`DIY.Catalog`, the kind `"pool"`) in its box
-  `%{w, d}`: `%{x, y, w, d}` from the corner of the box, in inches. A
+  `%{w, d}`. It is `%{x, y, w, d}` from the corner of the box, in inches. A
   coping of 2 ft goes around the water. The coping of a small pool is
   narrower: an eighth of its short side.
   """

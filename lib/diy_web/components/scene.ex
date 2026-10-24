@@ -110,7 +110,8 @@ defmodule DIYWeb.Scene do
       panel: Power.panel?(Power.system(house.items)),
       switch: of.("transfer_switch") != [],
       ac: Enum.any?(house.items, &(&1.type in ["ac", "mini_split"])),
-      pool: of.("pool_pump") != [],
+      # A pool in the yard. A spa inside does not show.
+      pool: Enum.any?(of.("pool"), &(places[&1.room] == :outdoor)),
       car: of.("ev") != [],
       van:
         case of.("camper_van") do

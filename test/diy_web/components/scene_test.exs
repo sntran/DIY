@@ -54,6 +54,7 @@ defmodule DIYWeb.SceneTest do
 
     {build, _} = add(build, room(build, "Laundry"), "power_station")
     {build, _} = add(build, room(build, "Garage"), "transfer_switch")
+    {build, _} = add(build, room(build, "Backyard"), "pool")
     {build, _} = add(build, room(build, "Backyard"), "pool_pump")
     {build, _} = add(build, room(build, "Driveway"), "ev")
     html = picture(build)
@@ -65,6 +66,16 @@ defmodule DIYWeb.SceneTest do
     assert html =~ "s-flow-battery"
     assert html =~ "s-water"
     assert html =~ ~s(class="i-red-)
+  end
+
+  test "the picture has a pool when a pool is in the yard, not a spa inside" do
+    build = house()
+    {pumped, _} = add(build, room(build, "Backyard"), "pool_pump")
+    refute Scene.parts(pumped).pool
+    {spa, _} = add(build, room(build, "Kitchen"), "pool")
+    refute Scene.parts(spa).pool
+    {yard, _} = add(build, room(build, "Backyard"), "pool")
+    assert Scene.parts(yard).pool
   end
 
   test "a station on plugs gives no flow to the panel, and planned items do not show" do

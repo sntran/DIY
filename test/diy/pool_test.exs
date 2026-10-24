@@ -56,7 +56,7 @@ defmodule DIY.PoolTest do
       assert Enum.any?(Estimate.explain(item, 7, estimate), &(&1 =~ "uses no power"))
     end
 
-    test "is never on the roof or in the attic, and nor is a hot tub" do
+    test "is never in the attic, and nor is a hot tub; a roof deck takes them" do
       build = build()
 
       for name <- ["Roof", "Attic"], type <- ~w(pool hot_tub) do
@@ -66,6 +66,13 @@ defmodule DIY.PoolTest do
 
       {build, tub} = add(build, room(build, "Backyard").id, "hot_tub")
       assert Build.move_item(build, tub, room(build, "Attic").id) == {:error, :place}
+
+      # A roof deck: a room outside on the level of the roof.
+      {:ok, build, deck} = Build.add_room(build, "Roof deck", "roof", :outdoor)
+      assert {:ok, build} = Build.move_item(build, tub, deck)
+      {build, _pool} = add(build, deck, "pool")
+      {:ok, back} = build |> Build.to_json() |> Build.from_json()
+      assert Enum.count(back.items, &(&1.room == deck)) == 2
     end
 
     test "fills a room that is smaller than the pool" do
@@ -124,6 +131,37 @@ defmodule DIY.PoolTest do
       # A room of a different kind keeps no kind.
       {:ok, plain} = Build.from_json(old_file(build, &Map.put(&1, "kind", "lake")))
       refute Enum.any?(plain.items, &(&1.type == "pool"))
+
+      # A very large pool room gives a pool of the largest size. A pool
+      # room with no plan gives a pool of the typical size.
+      large =
+        old_file(build, fn
+          %{"id" => id} = room when id == yard.id ->
+            Map.merge(room, %{
+              "kind" => "pool",
+              "plan" => %{"x" => 0, "y" => 0, "w" => 1440, "d" => 600}
+            })
+
+          room ->
+            room
+        end)
+
+      {:ok, back} = Build.from_json(large)
+      assert [%{size: %{w: 1200, d: 444}}] = Enum.filter(back.items, &(&1.type == "pool"))
+
+      no_plan =
+        old_file(build, fn
+          %{"id" => id} = room when id == yard.id ->
+            Map.merge(room, %{"kind" => "pool", "plan" => nil})
+
+          room ->
+            room
+        end)
+
+      {:ok, back} = Build.from_json(no_plan)
+      assert [pool] = Enum.filter(back.items, &(&1.type == "pool"))
+      assert pool.room == yard.id
+      assert Layout.size(pool) == {408, 228, 6}
 
       # A bad room is the error of a bad room, as before.
       assert Build.from_json(old_file(build, fn _room -> 5 end)) == {:error, :rooms}

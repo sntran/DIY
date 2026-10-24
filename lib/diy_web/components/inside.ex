@@ -1304,7 +1304,7 @@ defmodule DIYWeb.Inside do
             A power station runs it (in an outage too)
           </.switch>
         </form>
-        <p class="stage-help">
+        <p :if={@features != []} class="stage-help">
           <span class="font-semibold">The app uses it for:</span> {features(@features)}.
         </p>
         <button
@@ -1877,8 +1877,7 @@ defmodule DIYWeb.Inside do
   defp gas_item?(%{params: params}), do: params["fuel"] == "gas"
 
   # The items that a station can run: the items that use power.
-  defp loads_power?(%{type: type}),
-    do: type not in ~w(power_station solar_panels transfer_switch smart_meter camper_van dc_bus)
+  defp loads_power?(%{type: type}), do: type not in DIY.Estimate.no_use()
 
   # A month that shows the work of an item: January for heat, July else.
   defp math_month(%{type: type}) when type in ["furnace", "heat_strips", "space_heater"], do: 1

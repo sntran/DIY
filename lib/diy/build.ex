@@ -1309,41 +1309,56 @@ defmodule DIY.Build do
   defp from_map(_map), do: {:error, :not_a_build}
 
   # A file of October 2026 can have a room of the kind "pool": then the
-  # room was the pool. Now a pool is an item of a room. The room stays, and
-  # it gets a pool item at the place of its water: the water of a room of
-  # w by d, with a deck of 3 ft at the sides and at the front, and of 10 ft
-  # at the back. A smaller room had a narrower deck. A room on the level of
-  # the roof gets no pool. The ids of the new items come after the largest
-  # id of the file.
+  # room was the pool. Now a pool is an item of a room. The room stays,
+  # and it gets a pool item at the place of its water. Around the water of
+  # a room of w by d, the deck was 3 ft at the sides and at the front. At
+  # the back, it was 10 ft. A smaller room had a narrower deck. A room with no
+  # plan gets a pool of the typical size, in a free place. A room on the
+  # level of the roof gets no pool. The ids of the new items come after
+  # the largest id of the file.
   defp pool_rooms(%{"rooms" => rooms, "items" => items} = map)
        when is_list(rooms) and is_list(items) do
     pools =
-      for %{"kind" => "pool", "id" => id, "plan" => %{"w" => w, "d" => d}} = room <- rooms,
-          is_binary(id) and is_integer(w) and is_integer(d) and w > 0 and d > 0,
+      for %{"kind" => "pool", "id" => id} = room <- rooms,
+          is_binary(id),
           room["place"] in ["indoor", "outdoor"] and room["level"] != "roof",
-          do: {id, w, d}
+          do: {id, room["plan"]}
 
     first = last_id(0, Enum.filter(rooms ++ items, &is_map/1)) + 1
 
     pool_items =
-      for {{room, w, d}, n} <- Enum.with_index(pools, first) do
-        {side, front, back} = {min(36, div(w, 6)), min(36, div(d, 6)), min(120, div(d * 3, 8))}
-
-        %{
-          "id" => "i#{n}",
-          "type" => "pool",
-          "room" => room,
-          "typical" => false,
-          "params" => %{},
-          "at" => %{"x" => side, "y" => back},
-          "size" => %{"w" => w - 2 * side, "d" => d - back - front, "h" => 6}
-        }
+      for {{room, plan}, n} <- Enum.with_index(pools, first) do
+        Map.merge(
+          %{
+            "id" => "i#{n}",
+            "type" => "pool",
+            "room" => room,
+            "typical" => false,
+            "params" => %{}
+          },
+          old_water(plan)
+        )
       end
 
     %{map | "rooms" => Enum.map(rooms, &without_kind/1), "items" => items ++ pool_items}
   end
 
   defp pool_rooms(map), do: map
+
+  # The place and the size of the water of an old pool room, in the room.
+  # The size is at most the largest size of an item.
+  defp old_water(%{"w" => w, "d" => d})
+       when is_integer(w) and is_integer(d) and w > 0 and d > 0 do
+    {side, front, back} = {min(36, div(w, 6)), min(36, div(d, 6)), min(120, div(d * 3, 8))}
+    size = fn n -> n |> min(Layout.max_size()) |> max(1) end
+
+    %{
+      "at" => %{"x" => side, "y" => back},
+      "size" => %{"w" => size.(w - 2 * side), "d" => size.(d - back - front), "h" => 6}
+    }
+  end
+
+  defp old_water(_plan), do: %{}
 
   defp without_kind(%{} = room), do: Map.delete(room, "kind")
   defp without_kind(room), do: room

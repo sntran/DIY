@@ -5,13 +5,13 @@
 (* A pool is an item of a room inside or outside: a spa is a pool in a     *)
 (* room inside. This is a decision of the owner (October 2026). A room has *)
 (* a place: inside, outside or the roof. The attic is inside, on the level *)
-(* of the roof. An item of a kind goes in a room when the place of the     *)
-(* room is a place of the kind. A heavy kind (a pool, a hot tub) does not  *)
-(* go on the level of the roof.                                            *)
+(* of the roof. A roof deck is outside, on the level of the roof. An item  *)
+(* of a kind goes in a room when the place of the room is a place of the   *)
+(* kind. A heavy kind (a pool, a hot tub) does not go in the attic.        *)
 (*                                                                         *)
 (* The rules:                                                              *)
 (* - The person adds an item, or moves it, only to a room where it fits.   *)
-(* - No pool and no hot tub is on the roof or in the attic.                *)
+(* - No pool and no hot tub is in the attic. A roof deck takes them.       *)
 (*                                                                         *)
 (* Two modes have a fault:                                                 *)
 (* - "nocheck": a move does not check the room. A dishwasher then goes     *)
@@ -21,13 +21,18 @@
 (***************************************************************************)
 EXTENDS TLC
 
-\* Four rooms: one inside, one outside, one on the roof and the attic. None
-\* is a model value: no item.
-CONSTANTS Inside, Outside, Roof, Attic, Items, Mode, None
+\* Five rooms: one inside, one outside, the roof, the attic and a roof
+\* deck. None is a model value: no item.
+CONSTANTS Inside, Outside, Roof, Attic, Deck, Items, Mode, None
 
-Rooms == {Inside, Outside, Roof, Attic}
-Place == (Inside :> "indoor") @@ (Outside :> "outdoor") @@ (Roof :> "roof") @@ (Attic :> "indoor")
-Level == (Inside :> "f1") @@ (Outside :> "outside") @@ (Roof :> "roof") @@ (Attic :> "roof")
+Rooms == {Inside, Outside, Roof, Attic, Deck}
+Place ==
+  (Inside :> "indoor") @@ (Outside :> "outdoor") @@ (Roof :> "roof") @@ (Attic :> "indoor")
+    @@ (Deck :> "outdoor")
+Level ==
+  (Inside :> "f1") @@ (Outside :> "outside") @@ (Roof :> "roof") @@ (Attic :> "roof")
+    @@ (Deck :> "roof")
+AtticRoom(r) == Level[r] = "roof" /\ Place[r] = "indoor"
 
 \* The kinds and their places, as in DIY.Catalog. A pool and a hot tub go
 \* inside or outside, and they are heavy. A dishwasher goes inside. The
@@ -40,7 +45,7 @@ Places(k) ==
 Heavy(k) == k \in {"pool", "hot_tub"}
 
 \* The rule of DIY.Catalog.fits?.
-Fits(k, r) == Place[r] \in Places(k) /\ ~(Heavy(k) /\ Level[r] = "roof")
+Fits(k, r) == Place[r] \in Places(k) /\ ~(Heavy(k) /\ AtticRoom(r))
 
 \* The check of a new place. The mode "light" checks the place only.
 Check(k, r) == IF Mode = "light" THEN Place[r] \in Places(k) ELSE Fits(k, r)
@@ -78,6 +83,6 @@ Spec == Init /\ [][Next]_vars
 \* Each item fits its room.
 Fit == \A i \in Items : item[i] # None => Fits(item[i].kind, item[i].room)
 
-\* No pool and no hot tub is on the roof or in the attic.
-NoRoofPool == \A i \in Items : item[i] # None /\ Heavy(item[i].kind) => Level[item[i].room] # "roof"
+\* No pool and no hot tub is in the attic.
+NoAtticPool == \A i \in Items : item[i] # None /\ Heavy(item[i].kind) => ~AtticRoom(item[i].room)
 =============================================================================

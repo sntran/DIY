@@ -141,4 +141,22 @@ defmodule DIYWeb.PoolLiveTest do
     refute has_element?(view, "#item-form input[name='item[watts]']")
     assert has_element?(view, "#item-form input[name='item[kbtu]']")
   end
+
+  test "the sheet of a pool has no switch of a station and no use", %{conn: conn} do
+    build = house()
+    backyard = Enum.find(build.rooms, &(&1.name == "Backyard")).id
+    garage = Enum.find(build.rooms, &(&1.name == "Garage")).id
+    {:ok, build, _station} = Build.add_item(build, garage, "power_station")
+    {:ok, build, pool} = Build.add_item(build, backyard, "pool")
+    {:ok, build, pump} = Build.add_item(build, backyard, "pool_pump")
+
+    view = open(conn, ~p"/inside?#{[item: pool]}", build)
+    assert has_element?(view, "#item-stage", "Pool")
+    refute render(view) =~ "A power station runs it"
+    refute render(view) =~ "The app uses it for"
+
+    view = open(conn, ~p"/inside?#{[item: pump]}", build)
+    assert render(view) =~ "A power station runs it"
+    assert render(view) =~ "The app uses it for"
+  end
 end

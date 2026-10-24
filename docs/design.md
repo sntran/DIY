@@ -3928,11 +3928,13 @@ a pool to the backyard. The yard stays a yard, with the grass around the
 pool.
 
 - The kind `"pool"` goes in a room inside or outside. It is heavy: it
-  does not go on the level of the roof, so not in the attic. A hot tub is
-  heavy too.
-- A new pool has water of 30 by 15 ft, with a coping of 2 ft around it:
-  an item of 34 by 19 ft (`DIY.Catalog`). In a room that is smaller, a
-  new pool fills the room. The person changes its size in its sheet, as
+  does not go in the attic. A roof deck (a room outside on the level of
+  the roof) takes it. A hot tub is heavy too.
+- A new pool has water of 30 by 15 ft, with a coping of 2 ft around it.
+  So the item is 34 by 19 ft (`DIY.Catalog`). In a room that is smaller,
+  a new pool fills the room. A room with no plan gets a pool of the
+  typical size. A very large room gives a pool of the largest size of an
+  item. The person changes its size in its sheet, as
   for each item, and drags it on the plan.
 - The water is in the box of the item (`DIY.Layout.water/1`). The coping
   is an eighth of the short side of a small pool. New items go next to
@@ -3945,24 +3947,24 @@ pool.
   The estimate counts them, not the pool.
 - A file or a link of October 2026 can have a room of the kind `"pool"`.
   The read keeps the room, with no kind. It adds a pool item at the place
-  of its water: a deck of 3 ft at the sides and at the front, and of
-  10 ft at the back. A room on the level of the roof gets no pool. The
-  new item gets an id after the largest id of the file.
+  of its water. The deck of the water was 3 ft at the sides and at the
+  front, and 10 ft at the back. A room on the level of the roof gets no
+  pool. The new item gets an id after the largest id of the file.
 
 ### The places of an item
 
 A kind has places (`DIY.Catalog`). `Catalog.fits?(kind, room)` is true
-when the place of the room is a place of the kind, and a heavy kind is
-not on the level of the roof. Each check of a place uses this function.
+when the place of the room is a place of the kind. A heavy kind also
+must not be in the attic. Each check of a place uses this function.
 These are a new item, a move, a file, the home of a station and the
 devices of Home Assistant.
 
 - The pool pump, the pool heater and the hot tub go in a room inside or
   outside, next to a pool. So a pool pump of Home Assistant can be a
   ghost in a room inside.
-- `specs/Pool.tla` checks these rules with TLC: each item fits its room,
-  and no pool and no hot tub is on the roof or in the attic. Two models
-  have a fault. `Pool.nocheck.cfg` moves an item with no check of the
+- `specs/Pool.tla` checks these rules with TLC. Each item fits its room.
+  No pool and no hot tub is in the attic, and a roof deck takes them. Two
+  models have a fault. `Pool.nocheck.cfg` moves an item with no check of the
   room. `Pool.light.cfg` checks the place only, so a pool goes in the
   attic. A property test of `test/diy/pool_test.exs` does random steps
   on a build, with the same invariants. It also reads the file of each

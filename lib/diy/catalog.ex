@@ -682,7 +682,7 @@ defmodule DIY.Catalog do
     },
     # A pool is an item of a room inside or outside: a spa is a pool in a
     # room inside. It is the water and a coping around it. It uses no
-    # electricity: its pump, its heater and a hot tub are items next to
+    # electricity. Its pump, its heater and a hot tub are items next to
     # it. It is heavy: it does not go in the attic (`fits?/2`).
     %{
       type: "pool",
@@ -1591,11 +1591,14 @@ defmodule DIY.Catalog do
   @doc """
   True when an item of a kind can go in a room: the place of the room is
   a place of the kind. A heavy kind (`heavy: true`: a pool and a hot tub)
-  does not go on the level of the roof, so not in the attic.
+  does not go in the attic. The attic is a room inside on the level of the
+  roof. A heavy kind can go on a roof deck: a room outside on that level.
   """
   def fits?(%{places: places} = kind, room) do
-    room.place in places and not (Map.get(kind, :heavy, false) and room.level == "roof")
+    room.place in places and not (Map.get(kind, :heavy, false) and attic?(room))
   end
+
+  defp attic?(room), do: room.level == "roof" and room.place == :indoor
 
   @doc "The kinds that can go in a room (`fits?/2`)."
   def kinds_for_room(room), do: Enum.filter(@kinds, &fits?(&1, room))
