@@ -1,0 +1,29 @@
+# The NIF of DIY.Picture: resvg in WebAssembly for beam.com. It draws the
+# SVG of the picture of a shared house to a PNG. scripts/nif.sh builds
+# priv/resvg.wasm from it.
+[package]
+name = "resvg_nif"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# Text with the two fonts of fonts/, in the file. No system fonts, no
+# files and no raster images.
+resvg = { version = "=0.48.1", default-features = false, features = ["text"] }
+rustler = { version = "=0.38.0", default-features = false, features = ["nif_version_2_15"] }
+
+# rustler with the change of BEAM.com for wasm32-wasip1 (native/rustler.patch):
+# scripts/nif.sh puts it in target/rustler.
+[patch.crates-io]
+rustler = { path = "target/rustler" }
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

@@ -35,6 +35,15 @@ which `beam.com` has. A `_build` from a different Elixir installation has
 that NIF as a native library, which `beam.com` cannot load: delete
 `_build` before the first `mix.com test`.
 
+The picture of a shared house uses a NIF of resvg in WebAssembly
+(`priv/resvg.wasm`, in the repository). The build of the app does not
+need Rust. After a change of `native/resvg` or of its fonts, build the
+file again with `sh scripts/nif.sh` (it needs rustup). After a change of
+the styles of the pictures in `app.css`, write `priv/picture/styles.json`
+again: `MIX_ENV=test mix.com assets.build`, then `CHROMIUM=/path/to/chrome
+node scripts/picture-styles.mjs`. The browser test fails when the file is
+not the same as `app.css`.
+
 The browser test builds a house in Chromium, with axe-core on each
 screen. It signs in on a fake Home Assistant on this computer
 (`test/browser/fake_ha.mjs`). It needs the assets of the tests and a

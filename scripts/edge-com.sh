@@ -56,3 +56,8 @@ beam mix assets.deploy
 rm -rf _build/prod/rel/diy
 RELEASE_ERTS=false beam mix release --overwrite
 beam _build/prod/rel/diy -o edge.com --target wasm32 --cacerts "$CACERTS"
+# A Worker cannot compile WebAssembly at run time: Wrangler compiles the
+# NIF libraries of nifs/ at the build (the NIF of DIY.Picture), and
+# worker.js gives them to serve().
+rm -rf nifs nifs.js
+beam --nif-modules edge.com "$ROOT"

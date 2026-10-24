@@ -60,6 +60,15 @@ defmodule DIYWeb.Front do
 
       <.whatif :if={@whatif} whatif={@whatif} gas={@gas} />
 
+      <.link
+        :if={@bill}
+        patch={~p"/?#{[sheet: "share"]}"}
+        id="share-open"
+        class="btn btn-outline w-full"
+      >
+        <.icon name="hero-share" class="size-5" /> {gettext("Share this house")}
+      </.link>
+
       <.real build={@build} price={@price} ha_meter={@ha_meter} />
 
       <.van build={@build} />

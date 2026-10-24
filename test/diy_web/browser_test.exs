@@ -39,4 +39,13 @@ defmodule DIYWeb.BrowserTest do
 
     assert status == 0, output
   end
+
+  # The styles of the picture of a shared house (DIYWeb.Picture) are the
+  # styles of app.css.
+  test "priv/picture/styles.json is the same as app.css" do
+    {output, status} =
+      System.cmd("node", ["scripts/picture-styles.mjs", "--check"], stderr_to_stdout: true)
+
+    assert status == 0, output
+  end
 end

@@ -7,6 +7,7 @@ import topbar from "../vendor/topbar"
 import {deviceHook, storeOf, CHANNEL} from "./device.js"
 import {planHook} from "./plan.js"
 import {sheetHook} from "./sheet.js"
+import {shareHook} from "./share.js"
 import {stageHook} from "./stage.js"
 import {topHook} from "./top.js"
 import {usageHook} from "./usage.js"
@@ -28,6 +29,8 @@ const liveSocket = new LiveSocket("/live", Socket, {
     Plan: planHook,
     // A sheet over the page: the Escape key and the focus (assets/js/sheet.js).
     Sheet: sheetHook,
+    // The share of the link of a house (assets/js/share.js).
+    Share: shareHook,
     Stage: stageHook(),
     // A new page starts at its top (assets/js/top.js).
     Top: topHook,

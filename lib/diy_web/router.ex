@@ -24,6 +24,13 @@ defmodule DIYWeb.Router do
     post "/pecron/command/:id", RelayController, :pecron_command
   end
 
+  # The picture of a shared house, for the preview of its link
+  # (DIYWeb.PictureController): no session, no cookie. A site that reads
+  # the picture can send any Accept field, so the scope has no pipeline.
+  scope "/s", DIYWeb do
+    get "/:data/picture.png", PictureController, :show
+  end
+
   scope "/", DIYWeb do
     pipe_through :browser
 
@@ -43,6 +50,8 @@ defmodule DIYWeb.Router do
       live "/plans", HomeLive, :plans
       live "/van", HomeLive, :van
       live "/settings", HomeLive, :settings
+      # The page of the link of a shared house (DIY.Share).
+      live "/s/:data", HomeLive, :shared
     end
 
     # The sign-in page of Home Assistant, in its own tab: it needs no build.

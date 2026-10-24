@@ -419,6 +419,52 @@ async function build(context, name) {
   assert.match(await page.textContent("#bill-month"), new RegExp(`${names[first]}: \\$`))
   await check(page, `${name} front, a month of the chart`)
 
+  // The share of the house (docs/design.md, "A shared house"): the sheet,
+  // the picture of its preview, the box of the ZIP code, and the button.
+  // Chromium on Linux has no share sheet, so the link goes into the
+  // clipboard.
+  await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: site })
+  await page.click("#share-open")
+  await page.waitForSelector("#share-sheet li:has-text('ZIP code 75070')")
+  await page.waitForFunction(() => {
+    const img = document.querySelector("#share-sheet img")
+    return img.complete && img.naturalWidth === 1200 && img.naturalHeight === 630
+  }, null, { timeout: 30000 })
+  await check(page, `${name} share`)
+  await page.click("#share-zip input[type=checkbox]")
+  await page.waitForFunction(() => !document.querySelector("#share-sheet").textContent.includes("ZIP code 75070"))
+  await page.click("#share-zip input[type=checkbox]")
+  await page.waitForSelector("#share-sheet li:has-text('ZIP code 75070')")
+  const link = await page.inputValue("#share-link")
+  assert.match(link, new RegExp(`^${site}/s/1[A-Za-z0-9_-]+$`))
+  await page.click("#share-button")
+  await page.waitForSelector("#share-status:has-text('The link is in the clipboard.')")
+  assert.equal(await page.evaluate(() => navigator.clipboard.readText()), link)
+  await page.click("#share-sheet [data-close]")
+  await page.waitForSelector("#share-sheet", { state: "detached" })
+
+  // The page of the link in a new tab, as a neighbor sees it. It has the
+  // tags and the picture of the preview. The button asks first, because
+  // this device has a house.
+  const shared = await context.newPage()
+  shared.on("pageerror", (error) => { faults++; console.log(`${name} shared: page error: ${error.message}`) })
+  await shared.goto(link)
+  await connected(shared)
+  await shared.waitForSelector("#shared h1:has-text('A shared house')")
+  const image = await shared.getAttribute('meta[property="og:image"]', "content")
+  assert.equal(image, `${link}/picture.png`)
+  const picture = await shared.request.get(image)
+  assert.equal(picture.status(), 200)
+  assert.equal(picture.headers()["content-type"], "image/png")
+  await check(shared, `${name} shared house`)
+  await shared.waitForSelector("#adopt:not([disabled])")
+  await shared.click("#adopt")
+  await shared.waitForSelector("#adopt-confirm")
+  await check(shared, `${name} shared house, the question`)
+  await shared.click("#adopt-cancel")
+  await shared.waitForSelector("#adopt-confirm", { state: "detached" })
+  await shared.close()
+
   await page.click("#go-in")
   await page.waitForSelector("#plan-svg")
   await page.click("#plan-hint button")

@@ -6,6 +6,8 @@
 #   request changes the models or the code that they check.
 # - The browser test: a person builds a house in Chrome, with axe-core on
 #   each screen (mix test --only browser).
+# - scripts/nif.sh: the NIF of the picture of a shared house, when the
+#   pull request changes it. The bytes must be the same as priv/resvg.wasm.
 # - The build for Cloudflare Workers (npm run build), its size (wrangler
 #   deploy --dry-run), and a request to it in workerd (wrangler dev).
 #
@@ -115,6 +117,20 @@ jobs:
             echo "No change in the models or in the code that they check."
           else
             scripts/tlc.sh
+          fi
+
+      # The NIF of the picture of a shared house (priv/resvg.wasm) is in the
+      # repository. A pull request that changes its crate or its fonts
+      # builds it again, and the bytes must be the same.
+      - name: The NIF of the picture
+        run: |
+          if [ "${{ github.event_name }}" = pull_request ] &&
+            git diff --quiet HEAD^1 HEAD -- native scripts/nif.sh priv/resvg.wasm; then
+            echo "No change in the NIF."
+          else
+            rustup toolchain install 1.97.0 --profile minimal --target wasm32-wasip1
+            sh scripts/nif.sh
+            git diff --exit-code priv/resvg.wasm
           fi
 
       # The Chrome of the runner, with the server of the tests.
