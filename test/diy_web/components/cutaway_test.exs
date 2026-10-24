@@ -398,7 +398,7 @@ defmodule DIYWeb.CutawayTest do
     assert_paints_first(build, pool, pump)
   end
 
-  test "a pool through a wall paints before the wall, and the walls keep their order" do
+  test "a pool through a wall paints before a pump on it, and the walls keep their order" do
     # A pool (223 inches) in the laundry (78 wide) goes through its wall
     # into the garage. The wall of the garage stays behind the water heater.
     build = house()
@@ -408,11 +408,17 @@ defmodule DIYWeb.CutawayTest do
     {:ok, build} = Build.place_item(build, pool, laundry, %{x: 0, y: 22})
     heater = Enum.find(build.items, &(&1.type == "water_heater")).id
     garage = room(build, "Garage")
+
+    # A pump on its coping. The pool is on the two sides of the wall. So an
+    # item in the garage near the wall can make a cycle with the pool, and
+    # then no order is right (docs/design.md).
+    {build, pump} = add(build, laundry, "pool_pump")
+    {:ok, build} = Build.place_item(build, pump, laundry, %{x: 20, y: 30}, true)
     [ground | _] = Cutaway.view(build).levels
     ids = Enum.map(ground.objects, & &1.id)
-    wall = Enum.find_index(ids, &(&1 == "ground-#{garage}-x0-0"))
-    assert Enum.find_index(ids, &(&1 == pool)) < wall
-    assert wall < Enum.find_index(ids, &(&1 == heater))
+    index = fn id -> Enum.find_index(ids, &(&1 == id)) end
+    assert index.("ground-#{garage}-x0-0") < index.(heater)
+    assert index.(pool) < index.(pump)
   end
 
   defp assert_paints_first(build, first, last) do

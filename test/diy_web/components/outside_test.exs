@@ -306,6 +306,26 @@ defmodule DIYWeb.OutsideTest do
     assert at.(pool) < at.(pump)
   end
 
+  test "a pool on a balcony beside a room of floor 2 paints before a pump on it or over it" do
+    # The balcony is at the left of the house. The slab of the bathroom of
+    # floor 2 has its top at the height of the pool.
+    {:ok, build, deck} = Build.add_room(house(), "Balcony", "f2", :outdoor)
+    {:ok, build} = Build.move_room(build, deck, -240, 0)
+    {:ok, build, pool} = Build.add_item(build, deck, "pool")
+    {:ok, build} = Build.size_item(build, pool, %{w: 180, d: 120, h: 6})
+    {:ok, build} = Build.place_item(build, pool, deck, %{x: 0, y: 120})
+    {:ok, build, pump} = Build.add_item(build, deck, "pool_pump")
+
+    # On the coping, and on the water.
+    for at <- [%{x: 100, y: 122}, %{x: 150, y: 220}] do
+      {:ok, build} = Build.place_item(build, pump, deck, at, true)
+      ids = ids(Outside.view(build))
+      index = fn id -> Enum.find_index(ids, &(&1 == id)) end
+      assert index.("slab-" <> deck) < index.(pool)
+      assert index.(pool) < index.(pump), inspect(at)
+    end
+  end
+
   test "you stand in front of the door, also when a room is in front of a part of the wall" do
     # The laundry is in front of the right part of the living room. The
     # door is on the left part, and you are in front of it.

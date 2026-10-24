@@ -195,39 +195,14 @@ defmodule DIYWeb.Camera do
   the fewest boxes before it comes first.
 
   An object with `flat: true` is in the floor (a pool), also when it is
-  loose. Some objects are wholly under it and cover the same part of the
-  screen, for example the slab of a balcony. It comes just after the last
-  of them. With no such object, it comes first. The eye looks down, so it does not
-  cover an object on its floor. The other objects keep their order: the
-  flat object adds no rule to it.
+  loose. Each object that goes lower than it comes before it, for example
+  the slab of a balcony. Each object that rises over it comes after it,
+  for example a pump on its coping. A flat object at the same height (a
+  rug) has no rule with it. These two rules make no cycle by themselves:
+  an object lower than it is behind each object over it, along z. A flat
+  object through a wall can still be in a cycle with that wall.
   """
   def order(objects, camera) do
-    {flat, objects} = Enum.split_with(objects, &Map.get(&1, :flat, false))
-    ordered = standing(objects, camera)
-
-    # From the last place to the first, so that each place stays right. At
-    # one place, the flat objects go in the order of their keys.
-    flat
-    |> Enum.map(&{under(&1, ordered, camera), &1})
-    |> Enum.sort_by(fn {at, f} -> {at, f.key, f.id} end, :desc)
-    |> Enum.reduce(ordered, fn {at, f}, list -> List.insert_at(list, at, f) end)
-  end
-
-  # The place of a flat object in the order: just after the last object
-  # that is wholly under it and that covers the same part of the screen.
-  defp under(%{box: {_, _, z0, _, _, _}} = flat, ordered, camera) do
-    screen = screen(camera, flat.polys)
-
-    ordered
-    |> Enum.with_index(1)
-    |> Enum.filter(fn {%{box: {_, _, _, _, _, z1}} = o, _at} ->
-      z1 <= z0 + 1.0e-6 and cover?(screen(camera, o.polys), screen)
-    end)
-    |> Enum.map(&elem(&1, 1))
-    |> Enum.max(fn -> 0 end)
-  end
-
-  defp standing(objects, camera) do
     screens = Map.new(objects, &{&1.id, screen(camera, &1.polys)})
 
     after_ =
@@ -236,9 +211,8 @@ defmodule DIYWeb.Camera do
          for(
            b <- objects,
            b.id != a.id,
-           not a.loose and not b.loose,
            cover?(screens[a.id], screens[b.id]),
-           behind?(a.box, b.box) and not behind?(b.box, a.box),
+           before?(a, b),
            do: b.id
          )}
       end)
@@ -247,6 +221,36 @@ defmodule DIYWeb.Camera do
     count = after_ |> Map.values() |> List.flatten() |> Enum.frequencies()
     paint(Enum.sort_by(objects, &{&1.key, &1.id}), count, after_, [])
   end
+
+  # The object a must paint before the object b (they cover the same part
+  # of the screen).
+  defp before?(a, b) do
+    case {flat?(a), flat?(b)} do
+      {true, true} ->
+        false
+
+      {true, false} ->
+        rises_over?(b.box, a.box)
+
+      {false, true} ->
+        goes_lower?(a.box, b.box)
+
+      {false, false} ->
+        not a.loose and not b.loose and behind?(a.box, b.box) and not behind?(b.box, a.box)
+    end
+  end
+
+  defp flat?(object), do: Map.get(object, :flat, false)
+
+  # The box a starts at or over the top of the flat box f, and rises over
+  # it.
+  defp rises_over?({_, _, az0, _, _, az1}, {_, _, _, _, _, fz1}),
+    do: az0 >= fz1 - 1.0e-6 and az1 > fz1 + 1.0e-6
+
+  # The box a ends at or under the bottom of the flat box f, and goes lower
+  # than it.
+  defp goes_lower?({_, _, az0, _, _, az1}, {_, _, fz0, _, _, _}),
+    do: az1 <= fz0 + 1.0e-6 and az0 < fz0 - 1.0e-6
 
   # Kahn: the next object is the first one (by key) with no object before
   # it. With none (a cycle), the one with the fewest objects before it.
