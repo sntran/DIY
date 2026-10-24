@@ -31,19 +31,23 @@ defmodule DIYWeb.ConnCase do
     end
   end
 
+  # The sky of the house is a clear day at noon (DIY.Stubs.sky/1). A test
+  # can stub a different sky.
   setup _tags do
+    DIY.Stubs.sky()
     {:ok, conn: Phoenix.ConnTest.build_conn()}
   end
 
   @doc """
-  Waits until the page has the answers of the weather and of the market
-  (no request is open), for 10 seconds at most. A fixed sleep fails when
-  the computer is slow.
+  Waits until the page has the answers of the weather, of the sky and of
+  the market: no request is open. It waits for 10 seconds at most. A
+  fixed sleep fails when the computer is slow.
   """
   def settle(view, tries \\ 500) do
     assigns = :sys.get_state(view.pid).socket.assigns
 
-    if tries > 0 and :loading in [assigns.weather.status, assigns.market.status] do
+    if tries > 0 and
+         :loading in [assigns.weather.status, assigns.sky.status, assigns.market.status] do
       Process.sleep(20)
       settle(view, tries - 1)
     else

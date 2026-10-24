@@ -165,7 +165,8 @@ defmodule DIY.ShareTest do
       assert Share.summary(List.duplicate(1, 12), nil, "fr") == %{
                months: List.duplicate(1, 12),
                cost: nil,
-               locale: "en"
+               locale: "en",
+               sky: %{time: "day", weather: "sun"}
              }
 
       assert Share.summary(List.duplicate(1, 12), -5, "es").cost == 0
@@ -185,6 +186,32 @@ defmodule DIY.ShareTest do
       assert s == summary()
     end
 
+    test "a link carries the sky of its picture" do
+      s = Share.summary(List.duplicate(900, 12), 1200, "en", %{time: "night", weather: "rain"})
+
+      assert {:ok, _build, %{sky: %{time: "night", weather: "rain"}}} =
+               house() |> encode!(s) |> Share.decode()
+
+      # A sky that DIY.Sky does not know is a day with sun.
+      assert Share.summary(List.duplicate(1, 12), nil, "en", %{time: "noon", weather: "sun"}).sky ==
+               %{time: "day", weather: "sun"}
+
+      assert Share.summary(List.duplicate(1, 12), nil, "en", nil).sky == %{
+               time: "day",
+               weather: "sun"
+             }
+    end
+
+    test "a link of an older version has no sky: a day with sun" do
+      old = Map.drop(@s, ["t", "w"])
+
+      assert {:ok, _build, %{sky: %{time: "day", weather: "sun"}}} =
+               Share.decode(data(json(house(), old)))
+
+      assert Share.decode(data(json(house(), Map.put(@s, "t", "noon")))) == {:error, :summary}
+      assert Share.decode(data(json(house(), Map.put(@s, "w", 3)))) == {:error, :summary}
+    end
+
     test "a link with no ZIP code" do
       {:ok, decoded, _s} = house() |> encode!(summary(nil), zip: false) |> Share.decode()
       assert decoded.zip == nil
@@ -200,11 +227,13 @@ defmodule DIY.ShareTest do
               link? <- boolean(),
               months <- list_of(float(min: 0.0, max: 9_000.0), length: 12),
               cost <- one_of([constant(nil), float(min: 0.0, max: 50_000.0)]),
-              locale <- member_of(["en", "es", "vi"])
+              locale <- member_of(["en", "es", "vi"]),
+              time <- member_of(DIY.Sky.times()),
+              weather <- member_of(DIY.Sky.weathers())
             ) do
         build = house(size: size, floors: floors, heat: heat, door: door)
         build = if link?, do: linked(build), else: build
-        s = Share.summary(months, cost, locale)
+        s = Share.summary(months, cost, locale, %{time: time, weather: weather})
 
         assert {:ok, decoded, ^s} = build |> encode!(s, zip: zip?) |> Share.decode()
         assert decoded == Share.strip(build, zip: zip?)

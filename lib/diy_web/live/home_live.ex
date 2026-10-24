@@ -24,6 +24,11 @@ defmodule DIYWeb.HomeLive do
 
   @power_types ~w(power_station solar_panels transfer_switch ev)
 
+  # The time to ask for the sky at the house again: 30 minutes, or sooner
+  # at the next change of the time of day. After an error: 5 minutes.
+  @sky_again 30 * 60 * 1000
+  @sky_retry 5 * 60 * 1000
+
   # The sides of the size of an item, for − and +.
   @sides %{"w" => {:w, "Width"}, "d" => {:d, "Depth"}, "h" => {:h, "Height"}}
 
@@ -71,6 +76,10 @@ defmodule DIYWeb.HomeLive do
      |> assign(:page_title, "Small Steps Home")
      |> assign(:pool_key, 0)
      |> assign(:weather, %{zip: nil, status: :none, climate: nil})
+     # The sky at the house now (DIY.Sky). Also the sky that the person
+     # chose for the picture: "now", or a time of day and a weather.
+     |> assign(:sky, %{zip: nil, status: :none, now: nil, timer: nil})
+     |> assign(:sky_pick, %{"time" => "now", "weather" => "now"})
      |> assign(:market, %{zip: nil, status: :none})
      |> assign(:estimate, %{ready: false, missing: []})
      |> assign(:full, %{ready: false, missing: []})
@@ -1092,6 +1101,18 @@ defmodule DIYWeb.HomeLive do
 
   def handle_event("upload", _params, socket), do: {:noreply, socket}
 
+  # The time of day and the weather of the picture (DIYWeb.Outside.sky_form):
+  # on the page House and in the sheet of the share. A value that is not
+  # known is "now".
+  def handle_event("sky_pick", params, socket) do
+    pick = %{
+      "time" => if(params["time"] in DIY.Sky.times(), do: params["time"], else: "now"),
+      "weather" => if(params["weather"] in DIY.Sky.weathers(), do: params["weather"], else: "now")
+    }
+
+    {:noreply, socket |> assign(:sky_pick, pick) |> share()}
+  end
+
   # The box of the ZIP code in the sheet of the share.
   def handle_event("share_zip", %{"zip" => zip}, socket),
     do: {:noreply, socket |> assign(:share_zip, zip == "true") |> share()}
@@ -1421,6 +1442,7 @@ defmodule DIYWeb.HomeLive do
     socket
     |> item_frames()
     |> load_weather()
+    |> load_sky()
     |> load_market()
     |> estimate()
     |> pictures()
@@ -1496,6 +1518,33 @@ defmodule DIYWeb.HomeLive do
     |> assign(:weather, %{zip: zip, status: :loading, climate: nil})
     |> start_async({:weather, zip}, fn -> Weather.climate(place.lat, place.lon) end)
   end
+
+  # The sky of the ZIP code, for the picture of the house
+  # (specs/Sky.tla). A new ZIP code has no sky until its answer comes. The
+  # page asks again after an answer, with one timer: a new timer cancels
+  # the one before. While the page asks again, the picture keeps the sky
+  # of before.
+  defp load_sky(%{assigns: %{build: %{zip: nil}}} = socket) do
+    cancel_sky_timer(socket)
+    assign(socket, :sky, %{zip: nil, status: :none, now: nil, timer: nil})
+  end
+
+  defp load_sky(%{assigns: %{build: %{zip: zip}, sky: %{zip: zip}}} = socket), do: socket
+
+  defp load_sky(%{assigns: %{build: %{zip: zip}}} = socket) do
+    cancel_sky_timer(socket)
+    ask_sky(assign(socket, :sky, %{zip: zip, status: :loading, now: nil, timer: nil}))
+  end
+
+  defp ask_sky(%{assigns: %{sky: %{zip: zip}}} = socket) do
+    {:ok, place} = DIY.Zip.lookup(zip)
+    start_async(socket, {:sky, zip}, fn -> DIY.Sky.now(place.lat, place.lon) end)
+  end
+
+  defp cancel_sky_timer(%{assigns: %{sky: %{timer: timer}}}) when is_reference(timer),
+    do: Process.cancel_timer(timer)
+
+  defp cancel_sky_timer(_socket), do: :ok
 
   # The page asks for the market of a Texas ZIP code when the build has
   # none. It does not ask again while it waits for an answer. It also does
@@ -1591,6 +1640,16 @@ defmodule DIYWeb.HomeLive do
   # draws the ghosts again.
   def handle_info(:ha_devices, socket), do: {:noreply, pictures(socket)}
 
+  # The sky again, 30 minutes after an answer, when the ZIP code is the
+  # same. The cache of DIY.Sky has a new key then. The picture keeps the
+  # sky of before until the answer comes.
+  def handle_info({:sky_again, zip}, %{assigns: %{sky: %{zip: zip} = sky}} = socket) do
+    cancel_sky_timer(socket)
+    {:noreply, socket |> assign(:sky, %{sky | status: :loading, timer: nil}) |> ask_sky()}
+  end
+
+  def handle_info({:sky_again, _zip}, socket), do: {:noreply, socket}
+
   # New energy data of Home Assistant (`new_meter_months/1`). The data can
   # come before the build of the device, for example after a reconnect.
   # Then the build gets the new months when it comes (`build_changed/1`).
@@ -1666,6 +1725,33 @@ defmodule DIYWeb.HomeLive do
       do: {:noreply, socket |> assign(:weather, weather) |> estimate()},
       else: {:noreply, socket}
   end
+
+  # The answer of the sky of a ZIP code that the build does not have now
+  # goes away. The page asks again in 30 minutes, or at the next change of
+  # the time of day. An error keeps the sky of before (with no sky, the
+  # picture is a day with sun), and the page asks again in 5 minutes.
+  def handle_async({:sky, zip}, result, %{assigns: %{sky: %{zip: zip} = sky}} = socket) do
+    cancel_sky_timer(socket)
+
+    {status, now, wait} =
+      case result do
+        {:ok, {:ok, %{next: next} = now}} when is_integer(next) ->
+          {:ok, now, min(@sky_again, (next + 1) * 1000)}
+
+        {:ok, {:ok, now}} ->
+          {:ok, now, @sky_again}
+
+        # The sky of before, with the clock of now.
+        _error ->
+          {:error, sky.now && DIY.Sky.at(sky.now.answer, DateTime.utc_now()), @sky_retry}
+      end
+
+    timer = Process.send_after(self(), {:sky_again, zip}, wait)
+    sky = %{zip: zip, status: status, now: now, timer: timer}
+    {:noreply, socket |> assign(:sky, sky) |> share()}
+  end
+
+  def handle_async({:sky, _zip}, _result, socket), do: {:noreply, socket}
 
   def handle_async({:market, zip}, result, socket) do
     build = socket.assigns.build
@@ -1853,6 +1939,9 @@ defmodule DIYWeb.HomeLive do
           <% true -> %>
             <div lang="en" class="contents">
               <DIYWeb.Front.front
+                sky={DIY.Sky.pick(@sky_pick, @sky.now)}
+                sky_pick={@sky_pick}
+                sky_now={@sky.now}
                 build={@build}
                 estimate={@estimate}
                 bill={@bill}
@@ -1864,7 +1953,12 @@ defmodule DIYWeb.HomeLive do
                 bill_month={@bill_month}
                 ha_meter={DIYWeb.HomeAssistant.meter_offer(%{ha_energy: @ha_energy, build: @build})}
               />
-              <DIYWeb.Share.sheet :if={@share} share={@share} />
+              <DIYWeb.Share.sheet
+                :if={@share}
+                share={@share}
+                sky_pick={@sky_pick}
+                sky_now={if @share_zip, do: @sky.now}
+              />
             </div>
         <% end %>
       <% end %>
@@ -1875,7 +1969,8 @@ defmodule DIYWeb.HomeLive do
   # The sheet of the share (DIYWeb.Share): the link of the house of today,
   # with the numbers of the page. The picture and the title are in the
   # language of the page. The link changes only when the sheet opens, when
-  # the box of the ZIP code changes, and when the numbers change.
+  # the box of the ZIP code changes, and when the numbers change. It also
+  # changes with the choice of the sky, and with a new sky of now.
   defp share(
          %{
            assigns: %{
@@ -1888,7 +1983,10 @@ defmodule DIYWeb.HomeLive do
            socket
        ) do
     assigns = socket.assigns
-    summary = Share.summary(Enum.map(bill.months, & &1.kwh), bill.cost, assigns.locale)
+    # A link with no ZIP code carries no sky of now: "now" is a day with
+    # sun. The sky of now with the time of the post can tell the place.
+    sky = DIY.Sky.pick(assigns.sky_pick, if(assigns.share_zip, do: assigns.sky.now))
+    summary = Share.summary(Enum.map(bill.months, & &1.kwh), bill.cost, assigns.locale, sky)
     zip? = assigns.share_zip
     shared = if zip?, do: build, else: %{build | zip: nil}
     share = %{build: build, summary: summary, zip: zip?, title: Picture.title(shared, summary)}

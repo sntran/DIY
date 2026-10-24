@@ -40,18 +40,23 @@ defmodule DIYWeb.PictureTest do
     end)
   end
 
+  # Each sky of a picture: each time of day with each weather.
+  @skies for time <- DIY.Sky.times(),
+             weather <- DIY.Sky.weathers(),
+             do: %{time: time, weather: weather}
+
   # The SVG of the house from the outside, with its classes.
-  defp svg_of(build) do
-    %{__changed__: nil, view: Outside.view(build)}
+  defp svg_of(build, sky \\ %{time: "day", weather: "sun"}) do
+    %{__changed__: nil, view: Outside.view(build), sky: sky}
     |> Outside.house()
     |> Phoenix.HTML.Safe.to_iodata()
     |> IO.iodata_to_binary()
   end
 
   # The classes of the SVG of the house from the outside.
-  defp classes(build) do
+  defp classes(build, sky) do
     build
-    |> svg_of()
+    |> svg_of(sky)
     |> then(&Regex.scan(~r/ class="([^"]*)"/, &1))
     |> Enum.flat_map(fn [_, c] -> String.split(c) end)
     |> MapSet.new()
@@ -60,7 +65,9 @@ defmodule DIYWeb.PictureTest do
   # The classes of the picture that have no style on the page: the frame
   # of the SVG and the group of an item. The class of the textures has
   # only `stroke: none`, as a shape with no class.
-  @plain ~w(block w-full cutaway cutaway-house cutaway-outside p-item p-tex)
+  # The groups of the rain and the snow move on the page only.
+  @plain ~w(block w-full cutaway cutaway-house cutaway-outside p-item p-tex) ++
+           ~w(p-fall p-fall-sun p-fall-clouds p-fall-rain p-fall-snow)
 
   test "each class of the picture of a house has a style" do
     builds = [
@@ -70,8 +77,12 @@ defmodule DIYWeb.PictureTest do
       pool_house()
     ]
 
-    for build <- builds, class <- classes(build), class not in @plain do
-      assert Map.has_key?(Picture.styles(), class), "#{class} has no style"
+    for build <- builds,
+        sky <- @skies,
+        styles = Picture.styles(sky.time, sky.weather),
+        class <- classes(build, sky),
+        class not in @plain do
+      assert Map.has_key?(styles, class), "#{class} has no style in #{inspect(sky)}"
     end
   end
 
@@ -85,14 +96,16 @@ defmodule DIYWeb.PictureTest do
           house(%{floors: 3, size: 5200, lot: 9000}),
           pool_house()
         ],
-        html = svg_of(build),
+        sky <- @skies,
+        styles = Picture.styles(sky.time, sky.weather),
+        html = svg_of(build, sky),
         [_, classes] <- Regex.scan(~r/ class="([^"]*)"/, html),
         list = String.split(classes),
         a <- list,
         b <- list,
         a < b,
-        {prop, value} <- Map.get(Picture.styles(), a, %{}),
-        other = Map.get(Picture.styles(), b, %{})[prop],
+        {prop, value} <- Map.get(styles, a, %{}),
+        other = Map.get(styles, b, %{})[prop],
         other != nil do
       assert other == value, "#{a} and #{b} set #{prop} to #{value} and #{other}"
     end
@@ -118,6 +131,25 @@ defmodule DIYWeb.PictureTest do
     svg = Picture.svg(pool_house(), summary())
     assert svg =~ "fill:rgb(111, 191, 224)"
     assert {:ok, <<0x89, "PNG", _::binary>>} = Picture.png(pool_house(), summary())
+  end
+
+  test "the picture has the sky of the link: its colors follow the time of day" do
+    night =
+      Share.summary(Enum.map(1..12, &(&1 * 100)), 1500, "en", %{time: "night", weather: "sun"})
+
+    svg = Picture.svg(house(), night)
+    assert svg =~ ~s|style="fill:rgb(16, 27, 51)"|
+    assert svg =~ "fill:rgb(242, 196, 107)"
+
+    snow = %{night | sky: %{time: "day", weather: "snow"}}
+    svg = Picture.svg(house(), snow)
+    assert svg =~ "fill:rgb(230, 236, 241)"
+    refute svg =~ "fill:rgb(16, 27, 51)"
+    assert {:ok, <<0x89, "PNG", _::binary>>} = Picture.png(house(), snow)
+
+    # Snow changes some classes; the other classes keep the style of the scene.
+    assert Picture.styles("night", "snow")["p-grass"] != Picture.styles("night")["p-grass"]
+    assert Picture.styles("night", "snow")["p-pane"] == Picture.styles("night")["p-pane"]
   end
 
   test "a house with no cost and no ZIP code" do

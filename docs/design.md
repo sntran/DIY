@@ -231,6 +231,7 @@ focus in the sheet with the Tab key, and gives the focus back at the close.
 |---|---|---|
 | The state and the center of a ZIP code | US Census Bureau: the 2024 Gazetteer of the ZCTAs, and the 2020 ZCTA to county file | `priv/data/zips.bin`, `DIY.Zip` |
 | The weather: degree days, temperature, sun, by month, 10 years | NASA POWER, monthly API, no key | `DIY.Weather` |
+| The sky now: the time of day, the weather, the sunrise and the sunset | Open-Meteo, forecast API, no key | `DIY.Sky` |
 | Retail choice in Texas, the utility, the median price at 1,000 kWh | Power to Choose (PUCT), the API of its plans | `DIY.Market` |
 | The average price for homes of a state | EIA, Electric Power Monthly, table 5.6.B | `DIY.Prices` |
 
@@ -238,7 +239,8 @@ The VM gets the weather and the plans with Req. On Cloudflare, the VM
 sends this HTTP through `fetch()` of the Worker. The cache of the VM
 (`DIY.Cache`) keeps the answers: they have no person in them. It keeps at
 most 200 answers: the weather of one place is near 28 KB, and the
-memory of a Durable Object is 128 MB.
+memory of a Durable Object is 128 MB. The sky of a place has one key,
+and its answer is good for 30 minutes: then the cache asks again.
 
 The page asks Power to Choose when the build has a Texas ZIP code and no
 market. It does not ask again while it waits, or after an error for the
@@ -2071,7 +2073,8 @@ The page of a link has the tags of Open Graph:
 - `og:image`: `/s/DATA/picture.png`, a PNG of 1200 × 630 pixels.
 
 The picture is the house from the outside, the numbers of the year, and
-the bars of the months (`DIYWeb.Picture`). The server makes the SVG, and
+the bars of the months (`DIYWeb.Picture`). The house has the sky of the
+link ("The sky at the house"). The server makes the SVG, and
 the NIF resvg draws it (`DIY.Picture.NIF`, `native/resvg`,
 `priv/resvg.wasm`, `scripts/nif.sh`).
 
@@ -2088,7 +2091,8 @@ the NIF resvg draws it (`DIY.Picture.NIF`, `native/resvg`,
 - resvg reads no CSS of the page: no variables and no `color-mix`. Thus
   the SVG of the picture has the style of each shape in its attributes.
   `scripts/picture-styles.mjs` asks Chromium for the style of each class
-  of the picture in `app.css`, and writes `priv/picture/styles.json`.
+  of the picture in `app.css`, for each scene of the sky. It writes
+  `priv/picture/styles.json`.
   The browser test checks that the file is the same as the style of
   `app.css`. A stroke that does not scale on the page
   (`vector-effect: non-scaling-stroke`) gets the width for the scale of
@@ -3934,6 +3938,89 @@ Assistant.
   matches.
 - A new sheet Add starts with no text. The text has 40 characters at
   most.
+
+## The sky at the house
+
+The picture of the house from the outside shows the sky at the house:
+day, sunset or night, with sun, clouds, rain or snow. The page keeps the
+theme of the phone. Only the picture follows the time at the house.
+
+### The sky of now
+
+- `DIY.Sky.now/3` asks Open-Meteo (https://open-meteo.com) for the
+  weather of now. The service is free and needs no key. The request has
+  a point on a grid of 0.25°, as for the weather history
+  (`DIY.Weather`). So many ZIP codes have the same point.
+- The answer has the code of the weather of the WMO and the temperature.
+  It also has the offset of the time of the place, and the sunrise and
+  the sunset of the day.
+- The time of day comes from the clock of the server and the offset of
+  the place, not from the time of the answer. It is "sunset" from 30
+  minutes before to 30 minutes after the sunset or the sunrise. Between
+  them, it is "day". Else it is "night". Near the sunrise, the form says
+  "Sunrise"; the picture is the same as at a sunset.
+- With no sunrise and no sunset in the day (near a pole), it is "day" or
+  "night" all day, from `is_day` of Open-Meteo. In a polar night, the
+  sunrise and the sunset are the same time. In a polar day, the sunset is
+  24 hours or more after the sunrise.
+- The code of the weather gives "sun" (0 and 1), "clouds" (2, 3 and
+  fog), "rain" (drizzle, rain, showers and storms) or "snow".
+- The cache keeps the answer of a point for 30 minutes, under one key.
+
+### The page
+
+- The page asks for the sky when the build gets a ZIP code. Until the
+  answer comes, the picture is a day with sun.
+- After an answer, the page asks again in 30 minutes, or sooner at the
+  next change of the time of day. It keeps the sky of before until the
+  new answer comes.
+- An error keeps the answer of before, with the clock of now: the time
+  of day can change while the service does not answer. With no answer
+  of before, the picture is a day with sun. Then the page asks again in
+  5 minutes.
+- A new timer cancels the timer before, and a new ZIP code cancels it
+  too. A message of a timer for a different ZIP code asks nothing.
+- An answer for a ZIP code that the page left goes away.
+- `specs/Sky.tla` checks these rules with TLC: the page shows the sky of
+  its ZIP code or no sky, and one timer waits at most. In the model, a
+  cancel cannot take back the message of a timer that ended. Two models
+  have a fault. `Sky.nocheck.cfg` takes each answer, and
+  `Sky.nocancel.cfg` keeps the old timer.
+
+### The choice of the sky
+
+- Under the picture, the person can choose a time of day (Now, Day,
+  Sunset or Night) and a weather (Now, Sun, Clouds, Rain or Snow). "Now"
+  is the sky at the house. The sheet of the share has the same choice.
+  The person does not have to wait for the night to share a picture of
+  the night.
+- The link of a share carries the sky of its picture ("t" and "w" in
+  its summary). A link of an older version has no sky: a day with sun.
+- A link with no ZIP code carries no sky of now: there, "Now" is a day
+  with sun. The sky of now and the time of the post can tell the place.
+  A sky that the person chooses stays in the link. The sheet then shows
+  no sky of now.
+
+### The drawing
+
+- `DIYWeb.Outside.sky/2` gives the shapes of the sky. Behind the house:
+  the sky, the sun or the moon, the stars and the clouds. Over the house:
+  the rain or the snow, in a group that moves, and then the warm light
+  of a sunset, which does not move.
+- The SVG has `data-scene` (the time of day) and `data-weather`. The
+  colors of the plan follow the scene, not the theme of the page. A day
+  and a sunset have the light colors, and a night has the dark colors
+  and the warm light in the windows. The selectors of a scene are
+  stronger than the selectors of the theme (app.css).
+- Snow covers the yard and the roof.
+- The rain and the snow fall for 4.8 seconds, and then they stop (WCAG
+  2.2.2). With "reduce motion", they do not move.
+- The form of the sky has the language of the page (`lang`). Its text is
+  translated, but the part of the page around it is in English.
+- The picture of a link (`DIYWeb.Picture`) has the styles of its scene.
+  `priv/picture/styles.json` has the styles of each scene, and the
+  classes that snow changes. The tests check the styles of each class in
+  each sky.
 
 ## In a car
 

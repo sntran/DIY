@@ -465,6 +465,32 @@ async function build(context, name) {
   assert.match(await page.textContent("#bill-month"), new RegExp(`${names[first]}: \\$`))
   await check(page, `${name} front, a month of the chart`)
 
+  // The sky at the house (docs/design.md, "The sky at the house"). The
+  // stubs of the server give a clear day; the Worker asks Open-Meteo. A
+  // choice of a night with rain changes the picture. Its colors follow the
+  // scene, not the theme of the page: by day, the sky is light also in the
+  // dark theme.
+  const skyFill = () => page.$eval("#house-picture .p-sky", (el) => getComputedStyle(el).fill)
+  const paneFill = () => page.$eval("#house-picture .p-pane", (el) => getComputedStyle(el).fill)
+  if (process.env.DIY_STUBS) {
+    await page.waitForSelector("#sky-form option[value=now]:has-text('Now (Day)')", { state: "attached" })
+    await page.waitForSelector("#sky-form-now:has-text('Now at the house: 59 °F, day, sun.')")
+  }
+  await page.selectOption("#sky-form select[name=time]", "night")
+  await page.selectOption("#sky-form select[name=weather]", "rain")
+  await page.waitForSelector("#house-picture svg[data-scene=night][data-weather=rain]")
+  assert.equal(await skyFill(), "rgb(16, 27, 51)")
+  assert.equal(await paneFill(), "rgb(242, 196, 107)")
+  await check(page, `${name} night with rain`)
+  await page.selectOption("#sky-form select[name=time]", "day")
+  await page.selectOption("#sky-form select[name=weather]", "sun")
+  await page.waitForSelector("#house-picture svg[data-scene=day][data-weather=sun]")
+  assert.equal(await skyFill(), "rgb(217, 235, 248)")
+  assert.equal(await paneFill(), "rgb(185, 220, 245)")
+  await page.selectOption("#sky-form select[name=time]", "now")
+  await page.selectOption("#sky-form select[name=weather]", "now")
+  await page.waitForSelector("#sky-form option[value=now][selected]", { state: "attached" })
+
   // The share of the house (docs/design.md, "A shared house"): the sheet,
   // the picture of its preview, the box of the ZIP code, and the button.
   // Chromium on Linux has no share sheet, so the link goes into the
@@ -477,6 +503,18 @@ async function build(context, name) {
     return img.complete && img.naturalWidth === 1200 && img.naturalHeight === 630
   }, null, { timeout: 30000 })
   await check(page, `${name} share`)
+  // A picture of a sunset with snow: the link and its picture change.
+  const before = await page.inputValue("#share-link")
+  await page.selectOption("#share-sky select[name=time]", "sunset")
+  await page.selectOption("#share-sky select[name=weather]", "snow")
+  await page.waitForFunction((before) => document.querySelector("#share-link").value !== before, before)
+  await page.waitForFunction(() => {
+    const img = document.querySelector("#share-sheet img")
+    return img.complete && img.naturalWidth === 1200 && img.getAttribute("src").endsWith("/picture.png")
+  }, null, { timeout: 30000 })
+  await page.selectOption("#share-sky select[name=time]", "now")
+  await page.selectOption("#share-sky select[name=weather]", "now")
+  await page.waitForFunction((before) => document.querySelector("#share-link").value === before, before)
   await page.click("#share-zip input[type=checkbox]")
   await page.waitForFunction(() => !document.querySelector("#share-sheet").textContent.includes("ZIP code 75070"))
   await page.click("#share-zip input[type=checkbox]")

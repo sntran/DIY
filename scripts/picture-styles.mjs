@@ -3,7 +3,11 @@
 // of a shared house uses it (DIYWeb.Picture, docs/design.md, "The preview
 // of a link"). resvg reads no CSS variables and no color-mix(). Thus
 // Chromium gives the values. For each class, the file has the properties
-// that are not the same as on a shape with no class. The theme is light.
+// that are not the same as on a shape with no class. The page has the
+// light theme. The file has the styles of each scene of the house
+// (data-scene: day, sunset and night). For each scene, "SCENE-snow" has
+// the classes that are different in snow (data-weather="snow"), with all
+// their properties.
 //
 //   MIX_ENV=test mix.com assets.build
 //   CHROMIUM=/path/to/chrome node scripts/picture-styles.mjs
@@ -35,59 +39,75 @@ export async function styles() {
   const browser = await chromium.launch({ executablePath: process.env.CHROMIUM })
   try {
     const page = await browser.newPage({ colorScheme: "light" })
-    await page.setContent(
-      `<!doctype html><html data-theme="light"><head><style>${css}</style></head><body>
-      <svg class="cutaway cutaway-house cutaway-outside" id="svg"><defs><linearGradient id="g"></linearGradient></defs></svg>
-      </body></html>`,
-    )
-    return await page.evaluate(({ classes, shape, stop, text }) => {
-      const ns = "http://www.w3.org/2000/svg"
-      const svg = document.getElementById("svg")
-      const gradient = document.getElementById("g")
-      const read = (tag, parent, names, cls) => {
-        const bare = document.createElementNS(ns, tag)
-        const el = document.createElementNS(ns, tag)
-        el.setAttribute("class", cls)
-        parent.append(bare, el)
-        const a = getComputedStyle(bare)
-        const b = getComputedStyle(el)
-        const props = {}
-        for (const name of names) {
-          const v = b.getPropertyValue(name)
-          if (v !== a.getPropertyValue(name)) props[name] = v.replace(/url\("?#([^")]+)"?\)/g, "url(#$1)")
-        }
-        bare.remove()
-        el.remove()
-        return props
+    const result = {}
+    for (const scene of ["day", "sunset", "night"]) {
+      const base = await read(page, scene, "sun")
+      const snow = await read(page, scene, "snow")
+      const changed = {}
+      for (const cls of new Set([...Object.keys(base), ...Object.keys(snow)])) {
+        if (JSON.stringify(base[cls]) !== JSON.stringify(snow[cls])) changed[cls] = snow[cls] ?? {}
       }
-      // A color as rgb() or rgba(): resvg reads no oklab(). A canvas gives
-      // the color in sRGB.
-      const canvas = document.createElement("canvas").getContext("2d", { willReadFrequently: true })
-      const rgb = (value) => {
-        if (value === "none" || value.startsWith("url(")) return value
-        canvas.clearRect(0, 0, 1, 1)
-        canvas.fillStyle = value
-        canvas.fillRect(0, 0, 1, 1)
-        const [r, g, b, a] = canvas.getImageData(0, 0, 1, 1).data
-        return a === 255 ? `rgb(${r}, ${g}, ${b})` : `rgba(${r}, ${g}, ${b}, ${Math.round((a / 255) * 100) / 100})`
-      }
-      const result = {}
-      for (const cls of classes) {
-        const props = {
-          ...read("polygon", svg, shape, cls),
-          ...read("stop", gradient, stop, cls),
-          ...read("text", svg, text, cls),
-        }
-        for (const name of ["fill", "stroke", "stop-color"]) {
-          if (name in props) props[name] = rgb(props[name])
-        }
-        if (Object.keys(props).length > 0) result[cls] = props
-      }
-      return result
-    }, { classes, shape, stop, text })
+      result[scene] = base
+      result[`${scene}-snow`] = changed
+    }
+    return result
   } finally {
     await browser.close()
   }
+}
+
+// The styles of the classes in a scene, with a weather.
+async function read(page, scene, weather) {
+  await page.setContent(
+    `<!doctype html><html data-theme="light"><head><style>${css}</style></head><body>
+    <svg class="cutaway cutaway-house cutaway-outside" data-scene="${scene}" data-weather="${weather}" id="svg"><defs><linearGradient id="g"></linearGradient></defs></svg>
+    </body></html>`,
+  )
+  return await page.evaluate(({ classes, shape, stop, text }) => {
+    const ns = "http://www.w3.org/2000/svg"
+    const svg = document.getElementById("svg")
+    const gradient = document.getElementById("g")
+    const read = (tag, parent, names, cls) => {
+      const bare = document.createElementNS(ns, tag)
+      const el = document.createElementNS(ns, tag)
+      el.setAttribute("class", cls)
+      parent.append(bare, el)
+      const a = getComputedStyle(bare)
+      const b = getComputedStyle(el)
+      const props = {}
+      for (const name of names) {
+        const v = b.getPropertyValue(name)
+        if (v !== a.getPropertyValue(name)) props[name] = v.replace(/url\("?#([^")]+)"?\)/g, "url(#$1)")
+      }
+      bare.remove()
+      el.remove()
+      return props
+    }
+    // A color as rgb() or rgba(): resvg reads no oklab(). A canvas gives
+    // the color in sRGB.
+    const canvas = document.createElement("canvas").getContext("2d", { willReadFrequently: true })
+    const rgb = (value) => {
+      if (value === "none" || value.startsWith("url(")) return value
+      canvas.clearRect(0, 0, 1, 1)
+      canvas.fillStyle = value
+      canvas.fillRect(0, 0, 1, 1)
+      const [r, g, b, a] = canvas.getImageData(0, 0, 1, 1).data
+      return a === 255 ? `rgb(${r}, ${g}, ${b})` : `rgba(${r}, ${g}, ${b}, ${Math.round((a / 255) * 100) / 100})`
+    }
+    const result = {}
+    for (const cls of classes) {
+      const props = {
+        ...read("polygon", svg, shape, cls),
+        ...read("stop", gradient, stop, cls),
+        ...read("text", svg, text, cls),
+      }
+      for (const name of ["fill", "stroke", "stop-color"]) {
+        if (name in props) props[name] = rgb(props[name])
+      }
+      if (Object.keys(props).length > 0) result[cls] = props
+    }
+    return result
+  }, { classes, shape, stop, text })
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

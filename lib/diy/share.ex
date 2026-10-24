@@ -51,8 +51,12 @@ defmodule DIY.Share do
   @type summary :: %{
           months: [non_neg_integer()],
           cost: non_neg_integer() | nil,
-          locale: String.t()
+          locale: String.t(),
+          sky: %{time: String.t(), weather: String.t()}
         }
+
+  # The sky of a link with no sky: a link of an older version.
+  @day %{time: "day", weather: "sun"}
 
   @doc "The largest `DATA` of a link."
   def max_data, do: @max_data
@@ -85,19 +89,27 @@ defmodule DIY.Share do
 
   - the kWh of each month (12 numbers, January first);
   - the cost of the year in dollars, or `nil`;
-  - a locale of the app.
+  - a locale of the app;
+  - the sky of the picture: a time of day and a weather (`DIY.Sky`). A
+    sky that `DIY.Sky` does not know is a day with sun.
 
   The numbers are rounded, and they stay in the range that a link
   accepts.
   """
-  @spec summary([number()], number() | nil, String.t()) :: summary()
-  def summary(months, cost, locale) when length(months) == 12 do
+  @spec summary([number()], number() | nil, String.t(), map()) :: summary()
+  def summary(months, cost, locale, sky \\ @day) when length(months) == 12 do
     %{
       months: Enum.map(months, &(&1 |> round() |> max(0) |> min(@max_kwh))),
       cost: cost && cost |> round() |> max(0) |> min(@max_cost),
-      locale: if(locale in @locales, do: locale, else: "en")
+      locale: if(locale in @locales, do: locale, else: "en"),
+      sky: if(sky?(sky), do: Map.take(sky, [:time, :weather]), else: @day)
     }
   end
+
+  defp sky?(%{time: time, weather: weather}),
+    do: time in DIY.Sky.times() and weather in DIY.Sky.weathers()
+
+  defp sky?(_sky), do: false
 
   @doc "The kWh of the year of a summary."
   def year(%{months: months}), do: Enum.sum(months)
@@ -120,7 +132,13 @@ defmodule DIY.Share do
     json =
       Jason.encode!(%{
         "b" => map,
-        "s" => %{"m" => summary.months, "c" => summary.cost, "l" => summary.locale}
+        "s" => %{
+          "m" => summary.months,
+          "c" => summary.cost,
+          "l" => summary.locale,
+          "t" => summary.sky.time,
+          "w" => summary.sky.weather
+        }
       })
 
     data = Base.url_encode64(deflate(json), padding: false)
@@ -173,11 +191,14 @@ defmodule DIY.Share do
     end
   end
 
-  defp read_summary(%{"m" => months, "c" => cost, "l" => locale}) when length(months) == 12 do
+  defp read_summary(%{"m" => months, "c" => cost, "l" => locale} = s) when length(months) == 12 do
+    # A link of an older version has no sky: a day with sun.
+    sky = %{time: Map.get(s, "t", "day"), weather: Map.get(s, "w", "sun")}
+
     if Enum.all?(months, &(is_integer(&1) and &1 in 0..@max_kwh)) and
          (cost == nil or (is_integer(cost) and cost in 0..@max_cost)) and
-         locale in @locales do
-      {:ok, %{months: months, cost: cost, locale: locale}}
+         locale in @locales and sky?(sky) do
+      {:ok, %{months: months, cost: cost, locale: locale, sky: sky}}
     else
       {:error, :summary}
     end

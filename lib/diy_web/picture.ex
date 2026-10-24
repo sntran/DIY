@@ -33,8 +33,15 @@ defmodule DIYWeb.Picture do
   @doc "The size of the picture in pixels."
   def size, do: {@width, @height}
 
-  @doc "The style of each class of the picture (`priv/picture/styles.json`)."
-  def styles, do: @styles
+  @doc """
+  The style of each class of the picture in a scene (`day`, `sunset` or
+  `night`) and a weather, from `priv/picture/styles.json`. Snow changes
+  the style of some classes.
+  """
+  def styles(scene \\ "day", weather \\ "sun")
+
+  def styles(scene, "snow"), do: Map.merge(styles(scene), Map.fetch!(@styles, scene <> "-snow"))
+  def styles(scene, _weather), do: Map.fetch!(@styles, scene)
 
   @doc """
   The SVG of the picture of a shared house. The texts are in the locale
@@ -43,19 +50,20 @@ defmodule DIYWeb.Picture do
   @spec svg(DIY.Build.t(), Share.summary()) :: String.t()
   def svg(build, summary) do
     view = Outside.view(build)
+    sky = summary.sky
     {_x, _y, w, h} = view.box
     {hx, hy, hw, hh} = @house
     scale = min(hw / w, hh / h)
 
     house =
-      %{__changed__: nil, view: view}
+      %{__changed__: nil, view: view, sky: sky}
       |> Outside.house()
       |> Phoenix.HTML.Safe.to_iodata()
       |> IO.iodata_to_binary()
       # HEEx marks the root of a component with `phx-r`, an attribute with
       # no value: XML does not allow it.
       |> String.replace(~r/ phx-r(?=[\s>\/])/, "")
-      |> inline(scale)
+      |> inline(scale, sky)
       |> String.replace("<svg ", ~s(<svg x="#{hx}" y="#{hy}" width="#{hw}" height="#{hh}" ),
         global: false
       )
@@ -175,16 +183,18 @@ defmodule DIYWeb.Picture do
   (`vector-effect: non-scaling-stroke`) gets the width for the scale of
   the picture: resvg does not know `vector-effect`.
   """
-  @spec inline(String.t(), number()) :: String.t()
-  def inline(svg, scale) do
+  @spec inline(String.t(), number(), map()) :: String.t()
+  def inline(svg, scale, sky \\ %{time: "day", weather: "sun"}) do
+    styles = styles(sky.time, sky.weather)
+
     Regex.replace(~r/ class="([^"]*)"/, svg, fn _all, classes ->
-      classes |> String.split() |> style(scale)
+      classes |> String.split() |> style(scale, styles)
     end)
   end
 
-  defp style(classes, scale) do
+  defp style(classes, scale, styles) do
     props =
-      Enum.reduce(classes, %{}, fn class, acc -> Map.merge(acc, Map.get(@styles, class, %{})) end)
+      Enum.reduce(classes, %{}, fn class, acc -> Map.merge(acc, Map.get(styles, class, %{})) end)
 
     props =
       case Map.pop(props, "vector-effect") do

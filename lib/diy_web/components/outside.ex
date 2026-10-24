@@ -660,15 +660,154 @@ defmodule DIYWeb.Outside do
     {x0 - margin, y0 - margin, x1 - x0 + 2 * margin, y1 - y0 + 2 * margin}
   end
 
+  ## The sky
+
+  # The places of the stars, in parts of the width and the height of the
+  # picture. The sequence fills the top of the sky with no clumps.
+  @stars (fn ->
+            frac = fn n -> n - Float.floor(n) end
+            for i <- 1..16, do: {frac.(i * 0.7548776662), frac.(i * 0.5698402910) * 0.4}
+          end).()
+
+  defp frac(n), do: n - Float.floor(n)
+
+  @doc """
+  The sky of a picture (`view/1`) at a time of day and with a weather
+  (`DIY.Sky`). `back` paints before the house: the sky, the sun or the
+  moon, the stars and the clouds. `fall` paints after it: the rain or the
+  snow, in a group that moves. `glow` paints last: the warm light of a
+  sunset, which does not move. Each shape is `{tag, attributes}`.
+
+  The sun and the moon are at the top left: the grid and its label are at
+  the right. The rain and the snow cover all the picture.
+  """
+  def sky({x, y, w, h}, %{time: time, weather: weather}) do
+    s = min(w, h)
+    dark? = weather in ["rain", "snow"]
+
+    back =
+      [{:rect, %{x: x, y: y, w: w, h: h, class: "p-sky"}}] ++
+        light(time, weather, x, y, w, h, s) ++
+        stars(time, weather, x, y, w, h, s) ++
+        clouds(weather, dark?, x, y, w, h, s)
+
+    glow =
+      if time == "sunset", do: [{:rect, %{x: x, y: y, w: w, h: h, class: "p-dusk"}}], else: []
+
+    %{back: back, fall: fall(weather, x, y, w, h, s), glow: glow}
+  end
+
+  # The sun by day (not in rain or snow), the low sun at a sunset, and the
+  # moon at night. The moon is a disc, and a disc of the sky covers a part
+  # of it.
+  defp light("night", weather, x, y, w, h, s) when weather in ~w(sun clouds) do
+    {cx, cy, r} = {x + 0.12 * w, y + 0.14 * h, 0.035 * s}
+
+    [
+      {:circle, %{cx: cx, cy: cy, r: r, class: "p-moon"}},
+      {:circle, %{cx: cx + 0.45 * r, cy: cy - 0.25 * r, r: r * 0.85, class: "p-sky-cut"}}
+    ]
+  end
+
+  defp light("sunset", weather, x, y, w, h, s) when weather in ~w(sun clouds),
+    do: [{:circle, %{cx: x + 0.1 * w, cy: y + 0.3 * h, r: 0.06 * s, class: "p-sun-low"}}]
+
+  defp light("day", weather, x, y, w, h, s) when weather in ~w(sun clouds),
+    do: [{:circle, %{cx: x + 0.12 * w, cy: y + 0.14 * h, r: 0.045 * s, class: "p-sun"}}]
+
+  defp light(_time, _weather, _x, _y, _w, _h, _s), do: []
+
+  # The stars of a night with no rain and no snow: fewer with clouds.
+  defp stars("night", weather, x, y, w, h, s) when weather in ~w(sun clouds) do
+    count = if weather == "sun", do: 16, else: 6
+
+    for {fx, fy} <- Enum.take(@stars, count),
+        do: {:circle, %{cx: x + fx * w, cy: y + 0.02 * h + fy * h, r: 0.004 * s, class: "p-star"}}
+  end
+
+  defp stars(_time, _weather, _x, _y, _w, _h, _s), do: []
+
+  # The clouds: a flat base and three round tops. Rain and snow have more
+  # clouds, and darker.
+  defp clouds("sun", _dark?, _x, _y, _w, _h, _s), do: []
+
+  defp clouds(_weather, dark?, x, y, w, h, s) do
+    class = if dark?, do: "p-cloud-dark", else: "p-cloud"
+    places = [{0.22, 0.1, 1.0}, {0.52, 0.06, 0.8}, {0.74, 0.16, 1.1}]
+    places = if dark?, do: [{0.06, 0.2, 0.9} | places], else: places
+
+    for {fx, fy, size} <- places,
+        u = 0.05 * s * size,
+        {cx, cy} = {x + fx * w, y + fy * h},
+        shape <- [
+          {:ellipse, %{cx: cx, cy: cy + 0.5 * u, rx: 2.2 * u, ry: 0.55 * u, class: class}},
+          {:circle, %{cx: cx - 1.0 * u, cy: cy + 0.2 * u, r: 0.75 * u, class: class}},
+          {:circle, %{cx: cx + 0.1 * u, cy: cy - 0.2 * u, r: 1.0 * u, class: class}},
+          {:circle, %{cx: cx + 1.1 * u, cy: cy + 0.25 * u, r: 0.7 * u, class: class}}
+        ],
+        do: shape
+  end
+
+  # The rain: short lines that fall to the left. The snow: small flakes.
+  # They are in a group that moves for a short time (app.css).
+  defp fall("rain", x, y, w, h, s) do
+    d =
+      Enum.map_join(1..60, " ", fn i ->
+        {px, py} = {x + frac(i * 0.7548776662) * w, y + frac(i * 0.5698402910) * h}
+
+        "M#{Camera.round1(px)} #{Camera.round1(py)}l#{Camera.round1(-0.01 * s)} #{Camera.round1(0.045 * s)}"
+      end)
+
+    [{:path, %{d: d, class: "p-rain"}}]
+  end
+
+  defp fall("snow", x, y, w, h, s) do
+    for i <- 1..70 do
+      {px, py} = {x + frac(i * 0.7548776662) * w, y + frac(i * 0.5698402910) * h}
+      {:circle, %{cx: px, cy: py, r: 0.006 * s, class: "p-snow"}}
+    end
+  end
+
+  defp fall(_weather, _x, _y, _w, _h, _s), do: []
+
+  @doc """
+  The sky of a picture in words, for a screen reader: for example "a
+  night with rain".
+  """
+  def sky_label(%{time: time, weather: weather}) do
+    times = %{"day" => "a day", "sunset" => "a sunset", "night" => "a night"}
+    weathers = %{"sun" => "a clear sky", "clouds" => "clouds", "rain" => "rain", "snow" => "snow"}
+    "#{times[time]} with #{weathers[weather]}"
+  end
+
   attr :view, :map, required: true, doc: "the picture (`view/1`)"
 
-  @doc "The SVG of the house from the outside, in the look of the plan."
+  attr :sky, :map,
+    default: %{time: "day", weather: "sun"},
+    doc: "the time of day and the weather (`DIY.Sky.pick/2`)"
+
+  @doc """
+  The SVG of the house from the outside, in the look of the plan, with its
+  sky. The colors of the house follow the time of day of the sky (app.css,
+  `data-scene`), not the theme of the page.
+  """
   def house(assigns) do
-    assigns = assign(assigns, :box, Cutaway.box_text(assigns.view.box))
+    assigns =
+      assign(assigns,
+        box: Cutaway.box_text(assigns.view.box),
+        shapes: sky(assigns.view.box, assigns.sky)
+      )
 
     ~H"""
-    <svg viewBox={@box} class="cutaway cutaway-house cutaway-outside block w-full" aria-hidden="true">
+    <svg
+      viewBox={@box}
+      class="cutaway cutaway-house cutaway-outside block w-full"
+      data-scene={@sky.time}
+      data-weather={@sky.weather}
+      aria-hidden="true"
+    >
       <Cutaway.defs camera={@view.camera} />
+      <.shapes list={@shapes.back} />
       <polygon :for={{points, class} <- @view.level.ground} points={points} class={class} />
       <g :for={room <- @view.level.low}>
         <polygon :for={{points, class} <- room.polys} points={points} class={class} />
@@ -694,7 +833,99 @@ defmodule DIYWeb.Outside do
         />
         <text x={chip.x} y={chip.y} text-anchor="middle" class="p-chip-text">{chip.text}</text>
       </g>
+      <g class={"p-fall p-fall-#{@sky.weather}"}><.shapes list={@shapes.fall} /></g>
+      <.shapes list={@shapes.glow} />
     </svg>
     """
   end
+
+  attr :id, :string, required: true
+  attr :pick, :map, required: true, doc: "the choice: `\"now\"` or a value of `DIY.Sky`"
+  attr :now, :map, default: nil, doc: "the sky at the house now (`DIY.Sky.now/3`), or nil"
+
+  @doc """
+  The choice of the sky of the picture: a time of day and a weather. The
+  first value of each is the sky at the house now. It sends `sky_pick`.
+  """
+  def sky_form(assigns) do
+    ~H"""
+    <form id={@id} phx-change="sky_pick" class="space-y-1" lang={Gettext.get_locale(DIY.Gettext)}>
+      <div class="grid grid-cols-2 gap-2">
+        <label class="text-sm">
+          <span class="block font-semibold">{gettext("Time of day")}</span>
+          <select name="time" class="select select-sm w-full">
+            <option value="now" selected={@pick["time"] == "now"}>
+              {now_name(@now && now_time(@now))}
+            </option>
+            <option :for={time <- DIY.Sky.times()} value={time} selected={@pick["time"] == time}>
+              {time_name(time)}
+            </option>
+          </select>
+        </label>
+        <label class="text-sm">
+          <span class="block font-semibold">{gettext("Weather")}</span>
+          <select name="weather" class="select select-sm w-full">
+            <option value="now" selected={@pick["weather"] == "now"}>
+              {now_name(@now && weather_name(@now.weather))}
+            </option>
+            <option
+              :for={weather <- DIY.Sky.weathers()}
+              value={weather}
+              selected={@pick["weather"] == weather}
+            >
+              {weather_name(weather)}
+            </option>
+          </select>
+        </label>
+      </div>
+      <p :if={@now} id={"#{@id}-now"} class="text-xs opacity-70">
+        {gettext("Now at the house: %{temp} °F, %{time}, %{weather}.",
+          temp: round(@now.temp),
+          time: String.downcase(now_time(@now)),
+          weather: String.downcase(weather_name(@now.weather))
+        )}
+      </p>
+    </form>
+    """
+  end
+
+  defp now_name(nil), do: gettext("Now")
+  defp now_name(name), do: gettext("Now (%{name})", name: name)
+
+  # Near the sunrise, the sky of now is a sunrise: the picture is the same
+  # as at a sunset.
+  defp now_time(%{time: "sunset", dawn: true}), do: gettext("Sunrise")
+  defp now_time(%{time: time}), do: time_name(time)
+
+  defp time_name("day"), do: gettext("Day")
+  defp time_name("sunset"), do: gettext("Sunset")
+  defp time_name("night"), do: gettext("Night")
+
+  defp weather_name("sun"), do: gettext("Sun")
+  defp weather_name("clouds"), do: gettext("Clouds")
+  defp weather_name("rain"), do: gettext("Rain")
+  defp weather_name("snow"), do: gettext("Snow")
+
+  attr :list, :list, required: true
+
+  # The shapes of the sky (`sky/2`), in their order.
+  defp shapes(assigns) do
+    ~H"""
+    <%= for {tag, a} <- @list do %>
+      <rect :if={tag == :rect} x={r(a.x)} y={r(a.y)} width={r(a.w)} height={r(a.h)} class={a.class} />
+      <circle :if={tag == :circle} cx={r(a.cx)} cy={r(a.cy)} r={r(a.r)} class={a.class} />
+      <ellipse
+        :if={tag == :ellipse}
+        cx={r(a.cx)}
+        cy={r(a.cy)}
+        rx={r(a.rx)}
+        ry={r(a.ry)}
+        class={a.class}
+      />
+      <path :if={tag == :path} d={a.d} class={a.class} />
+    <% end %>
+    """
+  end
+
+  defp r(n), do: Camera.round1(n)
 end
