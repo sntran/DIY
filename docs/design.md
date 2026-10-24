@@ -3951,6 +3951,10 @@ pool.
   water has the color `--p-water` and a texture of waves (`tex-water`).
   The water is lower than the coping. So the eye sees the walls of the
   pool (`--p-pool-wall`) at the far sides.
+- A pool is flat, in the floor. It paints before the items on it, also
+  when it is larger than its room. An item larger than its room paints
+  by the depth of its center only. So before, a turned pool covered a
+  pump on its coping, and a tap on the pump opened the pool.
 - A pool uses no power: its pump and its heater are items next to it.
   The estimate counts them, not the pool.
 - A file or a link of October 2026 can have a room of the kind `"pool"`.

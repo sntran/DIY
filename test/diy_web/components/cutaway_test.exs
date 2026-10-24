@@ -377,6 +377,34 @@ defmodule DIYWeb.CutawayTest do
              )
   end
 
+  test "a pool larger than its room paints before the items over it" do
+    build = house()
+    yard = room(build, "Backyard")
+    {build, pool} = add(build, yard, "pool")
+    {build, pump} = add(build, yard, "pool_pump")
+
+    # After a turn, the pool (228 by 408) is larger than the yard (300
+    # deep). The pump goes on its coping, and on its water. The pool still
+    # paints first: the pump stays on the top of the plan, and a tap on it
+    # opens the pump.
+    {:ok, build} = Build.turn_item(build, pool)
+    {:ok, %{at: at}} = Build.item(build, pool)
+    {:ok, build} = Build.place_item(build, pump, yard, %{x: at.x + 100, y: at.y + 8}, true)
+    {:ok, %{on: ^pool}} = Build.item(build, pump)
+    assert_paints_first(build, pool, pump)
+    {:ok, build} = Build.place_item(build, pump, yard, %{x: at.x + 100, y: at.y + 150}, true)
+    {:ok, on_water} = Build.item(build, pump)
+    refute Map.has_key?(on_water, :on)
+    assert_paints_first(build, pool, pump)
+  end
+
+  defp assert_paints_first(build, first, last) do
+    [ground | _] = Cutaway.view(build).levels
+    ids = Enum.map(ground.objects, & &1.id)
+    assert Enum.find_index(ids, &(&1 == first)) < Enum.find_index(ids, &(&1 == last))
+    refute Enum.find(ground.objects, &(&1.id == first)).loose
+  end
+
   test "a soft shadow under an item on a floor, and none under an item on a wall" do
     build = house()
     kitchen = room(build, "Kitchen")
