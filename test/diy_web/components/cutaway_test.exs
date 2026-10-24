@@ -409,16 +409,23 @@ defmodule DIYWeb.CutawayTest do
     heater = Enum.find(build.items, &(&1.type == "water_heater")).id
     garage = room(build, "Garage")
 
-    # A pump on its coping. The pool is on the two sides of the wall. So an
-    # item in the garage near the wall can make a cycle with the pool, and
-    # then no order is right (docs/design.md).
+    # A pump on its coping, and a low item in the garage. The pool is on the
+    # two sides of the wall: near the wall, the low item makes a cycle with
+    # the pool (docs/design.md). In a cycle, the pool comes first, so it
+    # does not cover the pump.
     {build, pump} = add(build, laundry, "pool_pump")
     {:ok, build} = Build.place_item(build, pump, laundry, %{x: 20, y: 30}, true)
-    [ground | _] = Cutaway.view(build).levels
-    ids = Enum.map(ground.objects, & &1.id)
-    index = fn id -> Enum.find_index(ids, &(&1 == id)) end
-    assert index.("ground-#{garage}-x0-0") < index.(heater)
-    assert index.(pool) < index.(pump)
+    {build, low} = add(build, garage, "other")
+    {:ok, build} = Build.size_item(build, low, %{w: 12, d: 12, h: 4})
+
+    for at <- [%{x: 60, y: 270}, %{x: 0, y: 250}, %{x: 100, y: 200}, %{x: 0, y: 150}] do
+      {:ok, build} = Build.place_item(build, low, garage, at)
+      [ground | _] = Cutaway.view(build).levels
+      ids = Enum.map(ground.objects, & &1.id)
+      index = fn id -> Enum.find_index(ids, &(&1 == id)) end
+      assert index.("ground-#{garage}-x0-0") < index.(heater)
+      assert index.(pool) < index.(pump), inspect(at)
+    end
   end
 
   defp assert_paints_first(build, first, last) do

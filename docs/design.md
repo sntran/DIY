@@ -3961,7 +3961,8 @@ pool.
   an item on its floor. These rules make no cycle with the items of its
   room. A pool can go through a wall: then it is on the two sides of that
   wall. With the items near the wall, it can be in a cycle. Then no order
-  is right. (An item larger than its room
+  is right, and the pool comes first. An item that goes lower than the
+  pool can cover its edge, but the pool does not cover an item on it. (An item larger than its room
   paints by the depth of its center only. A pool that did so covered a
   pump on its coping, and a tap on the pump opened the pool.)
 - A pool uses no power: its pump and its heater are items next to it.

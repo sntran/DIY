@@ -197,8 +197,8 @@ defmodule DIYWeb.Camera do
   An object with `flat: true` is in the floor (a pool), also when it is
   loose. Each object that goes lower than it comes before it, for example
   the slab of a balcony. Each object that rises over it comes after it,
-  for example a pump on its coping. A flat object at the same height (a
-  rug) has no rule with it. These two rules make no cycle by themselves:
+  for example a pump on its coping. An object at the same height (a rug)
+  has no rule with it. These two rules make no cycle by themselves:
   an object lower than it is behind each object over it, along z. A flat
   object through a wall can still be in a cycle with that wall.
   """
@@ -253,13 +253,15 @@ defmodule DIYWeb.Camera do
     do: az1 <= fz0 + 1.0e-6 and az0 < fz0 - 1.0e-6
 
   # Kahn: the next object is the first one (by key) with no object before
-  # it. With none (a cycle), the one with the fewest objects before it.
+  # it. With none (a cycle), the one with the fewest objects before it. A
+  # flat object comes first in a cycle: then an object that goes lower than
+  # it can cover its edge, but it does not cover an item on it.
   defp paint([], _count, _after, done), do: Enum.reverse(done)
 
   defp paint(todo, count, after_, done) do
     next =
       Enum.find(todo, &(Map.get(count, &1.id, 0) == 0)) ||
-        Enum.min_by(todo, &Map.get(count, &1.id, 0))
+        Enum.min_by(todo, &{not flat?(&1), Map.get(count, &1.id, 0)})
 
     count = Enum.reduce(after_[next.id], count, &Map.update!(&2, &1, fn n -> n - 1 end))
     paint(List.delete(todo, next), count, after_, [next | done])
