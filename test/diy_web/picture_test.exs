@@ -289,6 +289,7 @@ defmodule DIYWeb.PictureTest do
       label = named(String.duplicate(family, 4) <> "Big fan")
       assert label.name == "Big fan"
       assert label.w >= drawn_width("Big fan", 12)
+      assert named("Big 🇺🇸 fan ").name == "Big fan"
       assert named("空调").name == "…"
       assert named("Điều hòa").name == "Điều hòa"
 

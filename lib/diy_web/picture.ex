@@ -227,14 +227,17 @@ defmodule DIYWeb.Picture do
     do: gettext("%{kwh} · %{cost} a year", kwh: Format.kwh(kwh), cost: Format.money(cost))
 
   # The name of a label: only the letters of the fonts of the NIF, because
-  # resvg draws nothing for a different letter. A name of more than 24
-  # letters has its first 23 letters and "…". A name with no letter of the
-  # fonts is "…".
+  # resvg draws nothing for a different letter. The spaces that stay
+  # together become one space. A name of more than 24 letters has its first
+  # 23 letters and "…". A name with no letter of the fonts is "…".
   defp short(name) do
-    name = for(<<c::utf8 <- name>>, Map.has_key?(@widths, c), into: "", do: <<c::utf8>>)
+    name =
+      for(<<c::utf8 <- name>>, Map.has_key?(@widths, c), into: "", do: <<c::utf8>>)
+      |> String.replace(~r/\s+/u, " ")
+      |> String.trim()
 
     cond do
-      String.trim(name) == "" -> "…"
+      name == "" -> "…"
       String.length(name) > 24 -> String.slice(name, 0, 23) <> "…"
       true -> name
     end
