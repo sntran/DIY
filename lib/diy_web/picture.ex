@@ -21,6 +21,13 @@ defmodule DIYWeb.Picture do
   @external_resource @styles_path
   @styles @styles_path |> File.read!() |> Jason.decode!()
 
+  # The width of each letter of the fonts of the NIF, in parts of the size
+  # of the font (`scripts/inter-widths.mjs`), and the widest.
+  @widths_path Path.expand("../../priv/picture/inter_widths.json", __DIR__)
+  @external_resource @widths_path
+  @widths @widths_path |> File.read!() |> Jason.decode!() |> Map.new(fn [c, w] -> {c, w} end)
+  @widest @widths |> Map.values() |> Enum.max()
+
   @width 1200
   @height 630
 
@@ -219,36 +226,28 @@ defmodule DIYWeb.Picture do
   defp label_numbers(kwh, cost),
     do: gettext("%{kwh} · %{cost} a year", kwh: Format.kwh(kwh), cost: Format.money(cost))
 
-  # A name of more than 24 letters: its first 23 letters and "…".
+  # The name of a label: only the letters of the fonts of the NIF, because
+  # resvg draws nothing for a different letter. A name of more than 24
+  # letters has its first 23 letters and "…". A name with no letter of the
+  # fonts is "…".
   defp short(name) do
-    if String.length(name) > 24, do: String.slice(name, 0, 23) <> "…", else: name
+    name = for(<<c::utf8 <- name>>, Map.has_key?(@widths, c), into: "", do: <<c::utf8>>)
+
+    cond do
+      String.trim(name) == "" -> "…"
+      String.length(name) > 24 -> String.slice(name, 0, 23) <> "…"
+      true -> name
+    end
   end
 
   @doc false
-  # The width of a text, at most. Each letter has the width of the widest
-  # letter of its kind in Inter, regular or bold. The widths are parts of
-  # the size of the font:
-  # - M, W, m, w, @, %, Æ and æ: 1.04;
-  # - a different capital of ASCII, or a capital of Latin with a mark:
-  #   0.78;
-  # - a different letter, number or sign of ASCII, or a letter of Latin
-  #   with a mark: 0.68;
-  # - each different letter: 1.04. The widest letter of the fonts of the
-  #   NIF is W (1.038).
-  # The test checks each letter of the fonts (test/fixtures/inter_widths.json,
-  # from scripts/inter-widths.mjs).
+  # The width of a text: the sum of the widths of its code points, because
+  # resvg moves on for each code point. Each width is the larger width of
+  # the letter in Inter regular and bold (`priv/picture/inter_widths.json`).
+  # A letter that is not in the fonts gets the width of W, the widest.
   def width(text, size) do
-    text |> String.graphemes() |> Enum.map(&letter/1) |> Enum.sum() |> Kernel.*(size)
+    for(<<c::utf8 <- text>>, reduce: 0, do: (sum -> sum + Map.get(@widths, c, @widest))) * size
   end
-
-  defp letter(letter) when letter in ~w(M W m w @ % Æ æ), do: 1.04
-
-  defp letter(<<c::utf8, _rest::binary>> = letter)
-       when c < 0x80 or c in 0xC0..0x024F or c in 0x1E00..0x1EFF do
-    if String.downcase(letter) != letter, do: 0.78, else: 0.68
-  end
-
-  defp letter(_letter), do: 1.04
 
   # The line from a label down to the top of its item. All the lines are
   # under all the labels.

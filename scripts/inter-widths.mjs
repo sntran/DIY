@@ -1,9 +1,9 @@
-// Writes test/fixtures/inter_widths.json: the width of each letter of the
+// Writes priv/picture/inter_widths.json: the width of each letter of the
 // fonts of the NIF of the picture (native/resvg/fonts), in parts of the
 // size of the font. Each row is [code point, width]. The width is the
 // width of the letter in Inter Regular or in Inter Bold, the larger one.
-// The test of DIYWeb.Picture checks that the width of each letter in the
-// picture is not less (docs/design.md, "The preview of a link").
+// DIYWeb.Picture gives each label the width of its text with these
+// widths (docs/design.md, "The preview of a link").
 //
 //   node scripts/inter-widths.mjs
 //
@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..")
 const fonts = join(root, "native/resvg/fonts")
-const out = join(root, "test/fixtures/inter_widths.json")
+const out = join(root, "priv/picture/inter_widths.json")
 
 // The width of each code point of an OTF file.
 function widths(file) {

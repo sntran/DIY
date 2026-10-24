@@ -2116,20 +2116,17 @@ only the total. This is a decision of the owner (October 2026):
   (`Labels.nocheck.cfg`). One does not keep a place in the box
   (`Labels.noclamp.cfg`).
 - The size of a text in resvg is not known before the draw. Thus the
-  width of a label comes from its letters. Each letter has the width of
-  the widest letter of its kind in Inter. The widths are parts of the
-  size of the font:
-  - M, W, m, w, @, %, Æ and æ: 1.04;
-  - a different capital of ASCII, or a capital of Latin with a mark: 0.78;
-  - a different letter, number or sign of ASCII, or a letter of Latin
-    with a mark: 0.68;
-  - each different letter: 1.04. The widest letter of the fonts is W
-    (1.038).
-
-  `scripts/inter-widths.mjs` reads the width of each letter of the fonts
-  of the NIF (311 letters). It writes `test/fixtures/inter_widths.json`,
-  and a test checks each letter. So a label is not narrower than its
-  text. A name of more than 24 letters ends in "…".
+  width of a label comes from its letters. `scripts/inter-widths.mjs`
+  reads the width of each letter of the fonts of the NIF (311 letters,
+  Inter regular and bold, the larger one). It writes
+  `priv/picture/inter_widths.json`. resvg moves on for each code point.
+  Thus the width of a text is the sum of the widths of its code points.
+- resvg draws nothing for a letter that is not in the fonts, for example
+  an emoji or a Chinese letter. Thus the name of a label keeps only the
+  letters of the fonts. A name with no such letter is "…". A name of more
+  than 24 letters ends in "…". A different text of a label gets the
+  width of W (1.038) for each letter that is not in the fonts. So a label
+  is not narrower than its text.
 - The box of the house clips the sky, the rain and the snow
   (`clipPath`). They do not go on the paper around the box.
 

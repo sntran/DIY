@@ -251,34 +251,53 @@ defmodule DIYWeb.PictureTest do
       assert svg =~ "6,828 kWh · $908 mỗi năm"
     end
 
-    test "a long name ends in an ellipsis, and a label is never narrower than its text" do
+    # The label of an item Other with a name.
+    defp named(name) do
       build = house()
       kitchen = Enum.find(build.rooms, &(&1.name == "Kitchen")).id
       {:ok, build, other} = Build.add_item(build, kitchen, "other")
-      {:ok, build} = Build.update_item(build, other, %{"name" => String.duplicate("W", 32)})
+      {:ok, build} = Build.update_item(build, other, %{"name" => name})
 
       {_parts, [label]} =
         Picture.parts(build, %{summary() | items: [%{id: other, kwh: 900, cost: 120}]})
 
-      assert label.name == String.duplicate("W", 23) <> "…"
-      # Inter bold has W of 1.038 of the size of the font.
-      assert label.w >= 24 * 1.038 * 12
-
-      assert Picture.width("ௌ", 10) == 10.4
-      assert Picture.width("", 10) == 0
+      label
     end
 
-    # Each letter of the fonts of the NIF, with its width in Inter Regular
-    # or Bold (scripts/inter-widths.mjs).
-    @widths "test/fixtures/inter_widths.json" |> File.read!() |> Jason.decode!()
+    # The width of each letter of the fonts of the NIF, in Inter Regular or
+    # Bold, the larger one (scripts/inter-widths.mjs).
+    @widths "priv/picture/inter_widths.json"
+            |> File.read!()
+            |> Jason.decode!()
+            |> Map.new(fn [c, w] -> {c, w} end)
 
-    test "the width of each letter of the fonts is not less than its width in Inter" do
-      assert length(@widths) > 300
+    # The width of a text in resvg: each code point moves on by its width.
+    # A code point that is not in the fonts moves on by the width of
+    # .notdef (0.656).
+    defp drawn_width(text, size),
+      do:
+        for(<<c::utf8 <- text>>, reduce: 0, do: (sum -> sum + Map.get(@widths, c, 0.656))) * size
 
-      for [code, width] <- @widths do
-        assert Picture.width(<<code::utf8>>, 1) >= width,
-               "#{<<code::utf8>>} (U+#{Integer.to_string(code, 16)}) is #{width} wide"
-      end
+    test "a long name ends in an ellipsis, and a label is never narrower than its text" do
+      label = named(String.duplicate("W", 32))
+      assert label.name == String.duplicate("W", 23) <> "…"
+      assert label.w >= drawn_width(label.name, 12)
+
+      # resvg draws nothing for a letter that is not in the fonts: the name
+      # has no such letter. An emoji of a family is 7 code points.
+      family = "👨‍👩‍👧‍👦"
+      label = named(String.duplicate(family, 4) <> "Big fan")
+      assert label.name == "Big fan"
+      assert label.w >= drawn_width("Big fan", 12)
+      assert named("空调").name == "…"
+      assert named("Điều hòa").name == "Điều hòa"
+
+      # The width of a text with a letter that is not in the fonts is
+      # larger than in resvg.
+      assert Picture.width(family, 10) >= drawn_width(family, 10)
+      assert Picture.width("ௌW", 10) == 2 * 10.38
+      assert Picture.width("", 10) == 0
+      assert map_size(@widths) == 311
     end
 
     test "the box of the house clips the sky, the rain and the snow" do

@@ -712,32 +712,32 @@ msgid "%{cost} for the electricity of a year. Small Steps Home shows where the e
 msgstr "%{cost} tiền điện trong một năm. Small Steps Home cho thấy điện của một ngôi nhà đi đâu."
 
 #: lib/diy_web/components/share.ex:46
-#: lib/diy_web/picture.ex:217
+#: lib/diy_web/picture.ex:224
 #, elixir-autogen, elixir-format
 msgid "%{kwh} a year"
 msgstr "%{kwh} mỗi năm"
 
-#: lib/diy_web/picture.ex:369
+#: lib/diy_web/picture.ex:368
 #, elixir-autogen, elixir-format
 msgid "A"
 msgstr "4"
 
-#: lib/diy_web/picture.ex:327
+#: lib/diy_web/picture.ex:326
 #, elixir-autogen, elixir-format
 msgid "A house of %{size} sq ft"
 msgstr "Nhà %{size} ft²"
 
-#: lib/diy_web/picture.ex:323
+#: lib/diy_web/picture.ex:322
 #, elixir-autogen, elixir-format
 msgid "A house of %{size} sq ft in %{zip}"
 msgstr "Nhà %{size} ft² ở %{zip}"
 
-#: lib/diy_web/picture.ex:307
+#: lib/diy_web/picture.ex:306
 #, elixir-autogen, elixir-format
 msgid "A house of %{size} sq ft in %{zip}: %{kwh} kWh a year"
 msgstr "Nhà %{size} ft² ở %{zip}: %{kwh} kWh mỗi năm"
 
-#: lib/diy_web/picture.ex:314
+#: lib/diy_web/picture.ex:313
 #, elixir-autogen, elixir-format
 msgid "A house of %{size} sq ft: %{kwh} kWh a year"
 msgstr "Nhà %{size} ft²: %{kwh} kWh mỗi năm"
@@ -767,7 +767,7 @@ msgstr "Hãy sao chép liên kết trong ô."
 msgid "Cost in a year"
 msgstr "Chi phí trong một năm"
 
-#: lib/diy_web/picture.ex:377
+#: lib/diy_web/picture.ex:376
 #, elixir-autogen, elixir-format
 msgid "D"
 msgstr "12"
@@ -782,7 +782,7 @@ msgstr "Tháng 12"
 msgid "Electricity in a year"
 msgstr "Điện trong một năm"
 
-#: lib/diy_web/picture.ex:367
+#: lib/diy_web/picture.ex:366
 #, elixir-autogen, elixir-format
 msgid "F"
 msgstr "2"
@@ -797,7 +797,7 @@ msgstr "Tháng 2"
 msgid "Go to Small Steps Home"
 msgstr "Đến Small Steps Home"
 
-#: lib/diy_web/picture.ex:366
+#: lib/diy_web/picture.ex:365
 #, elixir-autogen, elixir-format
 msgid "J"
 msgstr "1"
@@ -827,7 +827,7 @@ msgstr "Hãy lưu một tệp của nhà bạn trước."
 msgid "Keep my house"
 msgstr "Giữ nhà của tôi"
 
-#: lib/diy_web/picture.ex:368
+#: lib/diy_web/picture.ex:367
 #, elixir-autogen, elixir-format
 msgid "M"
 msgstr "3"
@@ -842,7 +842,7 @@ msgstr "Tháng 3"
 msgid "May"
 msgstr "Tháng 5"
 
-#: lib/diy_web/picture.ex:376
+#: lib/diy_web/picture.ex:375
 #, elixir-autogen, elixir-format
 msgid "N"
 msgstr "11"
@@ -857,7 +857,7 @@ msgstr "Không có trong liên kết: các kết nối của bạn với Home As
 msgid "November"
 msgstr "Tháng 11"
 
-#: lib/diy_web/picture.ex:375
+#: lib/diy_web/picture.ex:374
 #, elixir-autogen, elixir-format
 msgid "O"
 msgstr "10"
@@ -872,7 +872,7 @@ msgstr "Tháng 10"
 msgid "Put the ZIP code in the link. The weather and the plans need it."
 msgstr "Đưa mã ZIP vào liên kết. Thời tiết và các gói điện cần mã này."
 
-#: lib/diy_web/picture.ex:374
+#: lib/diy_web/picture.ex:373
 #, elixir-autogen, elixir-format
 msgid "S"
 msgstr "9"
@@ -959,35 +959,35 @@ msgstr "Liên kết này không có ngôi nhà"
 msgid "ZIP code %{zip}"
 msgstr "Mã ZIP %{zip}"
 
-#: lib/diy_web/picture.ex:333
+#: lib/diy_web/picture.ex:332
 #, elixir-autogen, elixir-format
 msgid "for the electricity of a year"
 msgstr "tiền điện trong một năm"
 
-#: lib/diy_web/picture.ex:342
+#: lib/diy_web/picture.ex:341
 #, elixir-autogen, elixir-format
 msgid "of electricity in a year"
 msgstr "điện trong một năm"
 
-#: lib/diy_web/picture.ex:373
+#: lib/diy_web/picture.ex:372
 #, elixir-autogen, elixir-format
 msgctxt "August"
 msgid "A"
 msgstr "8"
 
-#: lib/diy_web/picture.ex:372
+#: lib/diy_web/picture.ex:371
 #, elixir-autogen, elixir-format
 msgctxt "July"
 msgid "J"
 msgstr "7"
 
-#: lib/diy_web/picture.ex:371
+#: lib/diy_web/picture.ex:370
 #, elixir-autogen, elixir-format
 msgctxt "June"
 msgid "J"
 msgstr "6"
 
-#: lib/diy_web/picture.ex:370
+#: lib/diy_web/picture.ex:369
 #, elixir-autogen, elixir-format
 msgctxt "May"
 msgid "M"
@@ -1083,7 +1083,7 @@ msgstr "Thời tiết"
 msgid "Sunrise"
 msgstr "Bình minh"
 
-#: lib/diy_web/picture.ex:220
+#: lib/diy_web/picture.ex:227
 #, elixir-autogen, elixir-format
 msgid "%{kwh} · %{cost} a year"
 msgstr "%{kwh} · %{cost} mỗi năm"
