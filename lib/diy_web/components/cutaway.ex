@@ -926,18 +926,18 @@ defmodule DIYWeb.Cutaway do
   ## The items
 
   @doc """
-  The items with the height of the item under each, in inches (`:on_top`,
+  The items with the height of the item under each, in inches (`:base_top`,
   `DIY.Stack.heights/1`), for `item_view/4`.
   """
   def stacked(items) do
     heights = DIY.Stack.heights(items)
-    Enum.map(items, &Map.put(&1, :on_top, Map.get(heights, &1.id, 0)))
+    Enum.map(items, &Map.put(&1, :base_top, Map.get(heights, &1.id, 0)))
   end
 
   @doc """
   An item: its shapes at its place, size and turn in its room, on a floor
   at a height (meters), for a camera. An item on an item stands on its top
-  (`:on_top`, `stacked/1`). It has its box in the world, for the order of
+  (`:base_top`, `stacked/1`). It has its box in the world, for the order of
   the paint.
   """
   def item_view(item, room, z, camera) do
@@ -969,7 +969,7 @@ defmodule DIYWeb.Cutaway do
               do: {:poly, corners, class}
 
         {type, nil} ->
-          base = z + (Catalog.lift(type) + Map.get(item, :on_top, 0)) * @m
+          base = z + (Catalog.lift(type) + Map.get(item, :base_top, 0)) * @m
 
           Shapes.placed(Shapes.look(item), %{
             at: {x * @m, y * @m, base},
@@ -992,7 +992,7 @@ defmodule DIYWeb.Cutaway do
     # A soft shadow on the floor under an item that stands on it. A pool is
     # in the floor.
     shadow =
-      if roof == nil and Catalog.lift(item.type) == 0 and Map.get(item, :on_top, 0) == 0 and
+      if roof == nil and Catalog.lift(item.type) == 0 and Map.get(item, :base_top, 0) == 0 and
            item.type != "pool" do
         {x0, y0, x1, y1} = {(x - 3) * @m, (y - 3) * @m, (x + ew + 3) * @m, (y + ed + 3) * @m}
 

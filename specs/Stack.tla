@@ -15,21 +15,26 @@
 (*   that does not fit the room stays, with the items on it.               *)
 (* - Move: the list of the sheet moves the item to a room, at any spot.    *)
 (*   The items on it stay.                                                 *)
+(* - Shift: the item gets a new spot in its room, and the items on it      *)
+(*   stay. A turn, a new size or a new wall of the room does this.         *)
 (* - Delete: the item goes away.                                           *)
-(* After each step, an item that is not over the item under it, or that   *)
-(* is in a different room, or in a loop, comes down to the floor           *)
-(* (normalize/1).                                                          *)
+(* After each step, some items come down (normalize/2). An item that is  *)
+(* not over the item under it comes down. An item in a different room or  *)
+(* in a loop comes down too. Then each item on the floor goes on an item   *)
+(* at its spot that is not on it.                                          *)
 (*                                                                         *)
 (* Some items do not go in the room Out (InsideOnly): a TV does not go    *)
 (* outside.                                                                *)
 (*                                                                         *)
-(* Three modes have a fault:                                               *)
+(* Four modes have a fault:                                                *)
 (* - "noloop": a drop can put an item on an item that is on it, and the    *)
 (*   check does not see a loop (Stack.noloop.cfg).                         *)
 (* - "nodrop": a delete does not bring down the items on the item          *)
 (*   (Stack.nodrop.cfg).                                                   *)
 (* - "nofit": the items on an item go with it, also to a room that they do *)
 (*   not fit (Stack.nofit.cfg).                                            *)
+(* - "noseat": an item that comes down stays on the floor, also in an item *)
+(*   (Stack.noseat.cfg).                                                   *)
 (***************************************************************************)
 EXTENDS Integers, FiniteSets
 
@@ -66,13 +71,27 @@ Valid(i, o, p, r, s) ==
   /\ s[o[i]] = s[i]
   /\ (Mode = "noloop" \/ i \notin Under(o, i, N))
 
+\* Each item on the floor, one by one, goes on an item at its spot that is
+\* not on it. The code takes the highest such item; the model takes any.
+RECURSIVE Seat(_, _, _, _, _)
+Seat(o, todo, p, r, s) ==
+  IF todo = {} THEN o
+  ELSE LET i == CHOOSE i \in todo : TRUE
+           bases == {b \in p : b # i /\ r[b] = r[i] /\ s[b] = s[i] /\ b \notin Above(o, i)}
+           o2 == IF i \in p /\ o[i] = None /\ bases # {} /\ Mode # "noseat"
+                 THEN [o EXCEPT ![i] = CHOOSE b \in bases : TRUE]
+                 ELSE o
+       IN Seat(o2, todo \ {i}, p, r, s)
+
 Normalize(o, p, r, s) ==
-  [i \in Items |-> IF o[i] # None /\ Valid(i, o, p, r, s) THEN o[i] ELSE None]
+  Seat([i \in Items |-> IF o[i] # None /\ Valid(i, o, p, r, s) THEN o[i] ELSE None],
+       Items, p, r, s)
 
 Init ==
   /\ present = Items
   /\ room \in {r \in [Items -> Rooms] : \A i \in Items : Fits(i, r[i])}
-  /\ spot \in [Items -> Spots]
+  \* At the start, each item is at a different spot, on the floor.
+  /\ spot \in {s \in [Items -> Spots] : \A i, j \in Items : i # j => s[i] # s[j]}
   /\ on = [i \in Items |-> None]
 
 \* An item goes to spot x of room r. It goes on an item there, or on the
@@ -111,6 +130,14 @@ Move(i, r) ==
           /\ on' = Normalize(on, present, r2, s2)
   /\ UNCHANGED present
 
+\* A turn, a new size or a new wall: the item gets a new spot in its room.
+\* The items on it do not move.
+Shift(i, x) ==
+  /\ i \in present
+  /\ spot' = [spot EXCEPT ![i] = x]
+  /\ on' = Normalize(on, present, room, spot')
+  /\ UNCHANGED <<present, room>>
+
 \* The item goes away. With a fault, the items on it stay on it.
 Delete(i) ==
   /\ i \in present
@@ -125,6 +152,7 @@ Done == present = {} /\ UNCHANGED vars
 Next ==
   \/ \E i \in Items, r \in Rooms, x \in Spots : Drop(i, r, x)
   \/ \E i \in Items, r \in Rooms : Move(i, r)
+  \/ \E i \in Items, x \in Spots : Shift(i, x)
   \/ \E i \in Items : Delete(i)
   \/ Done
 
@@ -145,6 +173,11 @@ OnExists ==
 
 \* Each item fits its room.
 Fit == \A i \in present : Fits(i, room[i])
+
+\* No item is on the floor in an item: each item at its spot is on it.
+NoInside ==
+  \A i \in present : on[i] = None =>
+    \A b \in present : (b # i /\ room[b] = room[i] /\ spot[b] = spot[i]) => b \in Above(on, i)
 
 \* No item is under itself, also through other items.
 NoLoop == \A i \in present : i \notin Under(on, i, N)

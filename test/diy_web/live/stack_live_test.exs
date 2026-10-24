@@ -75,16 +75,19 @@ defmodule DIYWeb.StackLiveTest do
     backyard = room(build, "Backyard")
     {:ok, build, pool} = Build.add_item(build, backyard.id, "pool")
     {:ok, build, tub} = Build.add_item(build, backyard.id, "hot_tub")
-    spot = item(build, pool).at
 
-    {:ok, build} =
-      Build.place_item(build, tub, backyard.id, %{x: spot.x + 30, y: spot.y + 30}, true)
+    # Its center is on the coping at the front of the pool, 12 inches from
+    # the front. The hot tub is 84 by 84.
+    box = Layout.item_box(item(build, pool))
+    at = %{x: box.x + 20, y: box.y + box.d - 12 - 42}
+    {:ok, build} = Build.place_item(build, tub, backyard.id, at, true)
+    assert item(build, tub).at == at
 
     assert item(build, tub).on == pool
 
     # The hot tub is on the coping of the pool. A pool is in the floor:
     # the hot tub is at the floor.
-    assert [%{on_top: 0}] = Enum.filter(Cutaway.stacked(build.items), &(&1.id == tub))
+    assert [%{base_top: 0}] = Enum.filter(Cutaway.stacked(build.items), &(&1.id == tub))
 
     objects = Outside.view(build).level.objects
     %{box: {_, _, _, _, _, top}} = Enum.find(objects, &(&1.id == pool))

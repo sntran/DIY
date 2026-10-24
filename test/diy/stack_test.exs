@@ -45,9 +45,9 @@ defmodule DIY.StackTest do
     for type <- ~w(solar_panels camper_van pool ev smart_meter ceiling_fan),
         do: refute(Stack.goes_on?(%{type: type}))
 
-    for type <- ~w(washer range pool ev other), do: assert(Stack.takes?(%{type: type}))
+    for type <- ~w(washer range pool other), do: assert(Stack.takes?(%{type: type}))
 
-    for type <- ~w(solar_panels camper_van smart_meter mini_split),
+    for type <- ~w(solar_panels camper_van ev smart_meter mini_split),
         do: refute(Stack.takes?(%{type: type}))
   end
 
@@ -99,13 +99,13 @@ defmodule DIY.StackTest do
     assert item(build, cpap).at == %{x: top.x + 10, y: top.y}
     assert item(build, cpap).on == freezer
 
-    # An item larger than the item under it is at its center. A tv (44 by
-    # 10) on the range (30 by 28): at the center along x.
+    # An item that is larger than the item under it does not go on it. A
+    # TV (44 by 10) over the range (30 by 28) stays on the floor.
     {build, tv} = add(build, "Kitchen", "tv")
-    {:ok, build} = drop(build, tv, "Kitchen", %{x: base.x - 10, y: base.y + 2})
-    tv = item(build, tv)
-    assert tv.on == range.id
-    assert tv.at.x == base.x - 7
+    {:ok, build} = drop(build, tv, "Kitchen", %{x: base.x - 7, y: base.y + 2})
+    refute Map.has_key?(item(build, tv), :on)
+    {:ok, build} = Build.place_item(build, tv, range.room, %{x: base.x - 7, y: base.y + 2})
+    refute Map.has_key?(item(build, tv), :on)
   end
 
   test "an item dropped near an item on the floor snaps to its side" do
@@ -157,7 +157,7 @@ defmodule DIY.StackTest do
     build = house()
     {build, pump} = add(build, "Laundry", "pool_pump")
     {build, cpap} = add(build, "Laundry", "cpap")
-    {build, bus} = add(build, "Laundry", "dc_bus")
+    {build, bus} = add(build, "Laundry", "home_assistant")
     {:ok, build} = drop(build, pump, "Laundry", %{x: 0, y: 80})
     {:ok, build} = drop(build, cpap, "Laundry", item(build, pump).at)
     {:ok, build} = drop(build, bus, "Laundry", item(build, cpap).at)
@@ -200,7 +200,48 @@ defmodule DIY.StackTest do
     assert item(build, dryer).on == washer.id
   end
 
-  test "a file keeps the item under an item, and drops a bad one" do
+  test "the items of the roof and of a van do not stack" do
+    build = house()
+    roof = room(build, "Roof")
+    {build, ac} = add(build, "Roof", "ac")
+    {build, ac2} = add(build, "Roof", "ac")
+    {:ok, build} = drop(build, ac, "Roof", %{x: 100, y: 100})
+    {:ok, build} = drop(build, ac2, "Roof", %{x: 102, y: 100})
+    refute Map.has_key?(item(build, ac2), :on)
+    assert roof.place == :roof
+
+    # A file with a pump on a tank in a van: the van has no stack.
+    {:ok, build, van} = Build.add_item(build, room(build, "Driveway").id, "camper_van")
+    galley = Build.zone(build, van, :galley).id
+    {:ok, build, tank} = Build.add_item(build, galley, "water_tank")
+    {:ok, build, pump} = Build.add_item(build, galley, "water_pump")
+    {:ok, build} = Build.place_item(build, pump, galley, item(build, tank).at, true)
+    refute Map.has_key?(item(build, pump), :on)
+
+    map = Jason.decode!(Build.to_json(build))
+    items = Enum.map(map["items"], &if(&1["id"] == pump, do: Map.put(&1, "on", tank), else: &1))
+    {:ok, read} = Build.from_json(Jason.encode!(%{map | "items" => items}))
+    refute Map.has_key?(item(read, pump), :on)
+  end
+
+  test "the floor snap does not see an item on a wall or a ceiling, and such an item does not snap" do
+    build = house()
+    living = room(build, "Living room")
+    {build, fan} = add(build, "Living room", "ceiling_fan")
+    {:ok, build} = Build.place_item(build, fan, living.id, %{x: 100, y: 100})
+    {build, other} = add(build, "Living room", "other")
+
+    # 3 inches from the right side of the fan, which is up on the ceiling:
+    # no snap.
+    {:ok, build} = drop(build, other, "Living room", %{x: 155, y: 110})
+    assert item(build, other).at == %{x: 155, y: 110}
+
+    # The fan near the item on the floor: no snap.
+    {:ok, build} = drop(build, fan, "Living room", %{x: 100, y: 113})
+    assert item(build, fan).at == %{x: 100, y: 113}
+  end
+
+  test "a file keeps the item under an item, and repairs a bad one" do
     build = house()
     washer = first(build, "Laundry", "washer")
     {build, dryer} = add(build, "Laundry", "dryer")
@@ -211,30 +252,85 @@ defmodule DIY.StackTest do
 
     map = Jason.decode!(Build.to_json(build))
 
-    for bad <- ["nothing", dryer, 42] do
+    # A bad item under the dryer goes away. The dryer is over the washer,
+    # so it goes on it again. Far from the washer, it is on the floor.
+    for bad <- ["nothing", dryer, 42], at <- [washer.at, %{x: 0, y: 70}] do
       items =
-        Enum.map(map["items"], &if(&1["id"] == dryer, do: Map.put(&1, "on", bad), else: &1))
+        Enum.map(map["items"], fn item ->
+          if item["id"] == dryer,
+            do: Map.merge(item, %{"on" => bad, "at" => at}),
+            else: item
+        end)
 
       {:ok, read} = Build.from_json(Jason.encode!(%{map | "items" => items}))
-      refute Map.has_key?(item(read, dryer), :on)
+      assert Map.get(item(read, dryer), :on) == if(at == washer.at, do: washer.id)
     end
   end
 
-  test "normalize drops an item on itself, a loop, an item in another room, and an item that is not over" do
+  test "normalize drops an on that breaks a rule, and puts an item on the floor on the item under it" do
     a = %{id: "a", type: "washer", room: "r1", at: %{x: 0, y: 0}, size: nil, turn: 0, params: %{}}
     b = %{a | id: "b", type: "dryer"}
+    rooms = %{"r1" => %{place: :indoor, level: "f1"}, "r2" => %{place: :indoor, level: "f1"}}
+    on = &Map.put(&1, :on, &2)
 
-    assert Stack.normalize([Map.put(a, :on, "a")]) == [a]
-    assert Stack.normalize([Map.put(a, :on, "b"), Map.put(b, :on, "a")]) == [a, b]
-    assert Stack.normalize([a, Map.put(%{b | room: "r2"}, :on, "a")]) == [a, %{b | room: "r2"}]
+    # An item on itself, and a loop: the on goes away. Then the items go on
+    # each other again, with no loop.
+    assert Stack.normalize([on.(a, "a")], rooms) == [a]
+    assert Stack.normalize([on.(a, "b"), on.(b, "a")], rooms) == [a, on.(b, "a")]
+
+    # A loop under an item: the loop goes away, and the item stays on it.
+    # An item on an item that is not there comes down.
+    c = %{b | id: "c", type: "cpap"}
+    result = Stack.normalize([on.(a, "b"), on.(b, "a"), on.(c, "a")], rooms)
+    assert Enum.find(result, &(&1.id == "c")).on == "a"
+    assert Stack.normalize([on.(a, "x"), on.(c, "a")], rooms) == [a, on.(c, "a")]
+
+    # In a different room, not over, or with no place: the item is on the
+    # floor.
+    other = %{b | room: "r2"}
+    assert Stack.normalize([a, on.(other, "a")], rooms) == [a, other]
     far = %{b | at: %{x: 100, y: 0}}
-    assert Stack.normalize([a, Map.put(far, :on, "a")]) == [a, far]
-    assert Stack.normalize([a, Map.put(%{b | at: nil}, :on, "a")]) == [a, %{b | at: nil}]
+    assert Stack.normalize([a, on.(far, "a")], rooms) == [a, far]
+    loose = %{b | at: nil}
+    assert Stack.normalize([a, on.(loose, "a")], rooms) == [a, loose]
+
+    # Kinds that do not stack, a larger item, and a room with no stack (the
+    # roof, a van, a room that is not there).
     panels = %{b | type: "solar_panels"}
-    assert Stack.normalize([a, Map.put(panels, :on, "a")]) == [a, panels]
-    good = Map.put(b, :on, "a")
-    assert Stack.normalize([a, good]) == [a, good]
+    assert Stack.normalize([a, on.(panels, "a")], rooms) == [a, panels]
+    # The freezer is larger than the washer: the washer goes on it.
+    freezer = %{b | type: "freezer"}
+    assert Stack.normalize([a, on.(freezer, "a")], rooms) == [on.(a, "b"), freezer]
+
+    for room <- [%{place: :roof, level: "roof"}, %{place: :living, level: "van:v1"}, nil] do
+      assert Stack.normalize([a, on.(b, "a")], %{"r1" => room}) == [a, b]
+    end
+
+    # A dryer on the floor in the washer goes on it.
+    good = on.(b, "a")
+    assert Stack.normalize([a, b], rooms) == [a, good]
+    assert Stack.normalize([a, good], rooms) == [a, good]
     assert Stack.heights([a, good]) == %{"b" => 39}
+  end
+
+  test "a pool takes an item on its coping, not on its water" do
+    pool = %{
+      id: "p",
+      type: "pool",
+      room: "r1",
+      at: %{x: 0, y: 0},
+      size: nil,
+      turn: 0,
+      params: %{}
+    }
+
+    pump = %{pool | id: "q", type: "pool_pump", at: %{x: 100, y: 0}}
+    # The coping is 24 inches. The pump (25 by 8) at the back: its center
+    # is on the coping. In the middle: on the water.
+    assert Stack.holds?(pool, pump)
+    refute Stack.holds?(pool, %{pump | at: %{x: 100, y: 100}})
+    refute Stack.holds?(pool, %{pump | at: nil})
+    assert Stack.heights([pool, Map.put(pump, :on, "p")]) == %{"q" => 0}
   end
 
   test "carry with an item that has no place moves only the item" do
@@ -242,9 +338,10 @@ defmodule DIY.StackTest do
     assert Stack.carry([a], a, %{a | room: "r2"}, %{"r2" => %{plan: nil}}) == [%{a | room: "r2"}]
   end
 
-  # The rules of a stack (`specs/Stack.tla`): each item on an item is on
-  # an item of its room that is there, over it, and of kinds that stack,
-  # and no item is under itself. Each item fits its room.
+  # The rules of a stack (`specs/Stack.tla`). Each item on an item is on
+  # an item of its room that is there and holds it. The two kinds stack.
+  # No item is under itself. No item is on the floor in an item that holds
+  # it. Each item fits its room. A file gives the same items.
   defp check_rules(build) do
     by_id = Map.new(build.items, &{&1.id, &1})
     rooms = Map.new(build.rooms, &{&1.id, &1})
@@ -257,11 +354,24 @@ defmodule DIY.StackTest do
       assert base, "#{item.id} is on #{on}, which is not there"
       assert base.room == item.room
       assert Stack.goes_on?(item) and Stack.takes?(base)
-      assert over?(item, base)
+      assert over?(item, base) and Stack.holds?(base, item)
 
       chain = Stream.iterate(on, &(by_id[&1] && Map.get(by_id[&1], :on)))
       refute item.id in Enum.take(chain, length(build.items) + 1), "#{item.id} is in a loop"
     end
+
+    for item <- build.items,
+        Map.get(item, :on) == nil and item.at != nil and Stack.goes_on?(item) and
+          Stack.stacks?(rooms[item.room]),
+        base <- build.items,
+        base.id != item.id and base.room == item.room and Stack.takes?(base) and
+          Stack.holds?(base, item) do
+      assert base.id in Stack.above(build.items, item.id),
+             "#{item.id} is on the floor in #{base.id}"
+    end
+
+    {:ok, read} = Build.from_json(Build.to_json(build))
+    assert read.items == build.items
   end
 
   defp step do
@@ -272,7 +382,9 @@ defmodule DIY.StackTest do
       ),
       tuple({constant(:delete), integer(0..9)}),
       tuple({constant(:move), integer(0..9), member_of(["Kitchen", "Laundry", "Backyard"])}),
-      tuple({constant(:turn), integer(0..9)})
+      tuple({constant(:turn), integer(0..9)}),
+      tuple({constant(:size), integer(0..9), integer(4..80), integer(4..80)}),
+      tuple({constant(:room), member_of(["Kitchen", "Laundry"]), integer(40..200)})
     ])
   end
 
@@ -287,7 +399,15 @@ defmodule DIY.StackTest do
 
   defp run(build, ids, {:turn, i}), do: Build.turn_item(build, Enum.at(ids, i))
 
-  property "drops, moves, turns and deletes keep the rules of a stack" do
+  defp run(build, ids, {:size, i, w, d}),
+    do: Build.size_item(build, Enum.at(ids, i), %{w: w, d: d, h: 30})
+
+  defp run(build, _ids, {:room, name, w}) do
+    room = room(build, name)
+    Build.size_room(build, room.id, %{room.plan | w: w})
+  end
+
+  property "drops, moves, turns, sizes and deletes keep the rules of a stack" do
     types = ~w(washer dryer microwave cpap computer tv pool_pump hot_tub other space_heater)
 
     check all(steps <- list_of(step(), max_length: 30), max_runs: 60) do
