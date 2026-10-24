@@ -67,6 +67,27 @@ defmodule DIY.PlanTest do
     Map.new([500, 1000, 2000], &{&1, Float.round(Plan.bill(plan, &1).cents, 1)})
   end
 
+  # An average of an EFL is off by 0.05¢ at most. So the bill of 500 kWh
+  # is off by $0.25, and the bill of 2,000 kWh by $1.00. The fit of the
+  # charge of each kWh is then off by (1.00 + 0.25) / 15 = 0.083¢. The
+  # charge of each month is off by 0.25 + 5 × 0.083 = $0.67.
+  @cents_error 1.25 / 15
+  @base_error 0.25 + 5 * 1.25 / 15
+
+  test "a charge of each month under $0.67 can come under 0 from the round averages" do
+    truth =
+      plan(%{
+        base: 18.67087957682088,
+        energy: [{0, 20.0}],
+        tdu_base: 0.625,
+        tdu_cents: 1.6887985810171813
+      })
+
+    efl = %{truth | tdu_base: nil, tdu_cents: nil, averages: averages(truth)}
+    assert Plan.fit_tdu(efl) == nil
+    assert 0.625 < @base_error
+  end
+
   property "the delivery charges from the averages give the averages back" do
     check all(
             base <- float(min: 0.0, max: 20.0),
@@ -80,7 +101,7 @@ defmodule DIY.PlanTest do
       case Plan.fit_tdu(efl) do
         # The averages are round numbers: a charge can come a little under 0.
         nil ->
-          assert tdu_base < 0.6 or tdu_cents < 0.1
+          assert tdu_base < @base_error or tdu_cents < @cents_error
 
         # The fit gives the averages at 500 and 2,000 kWh. At 1,000 kWh,
         # the error of the two round averages adds to the error of the
