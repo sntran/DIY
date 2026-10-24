@@ -44,5 +44,11 @@ npm-debug.log
 
 # The build for Cloudflare Workers (npm run build), and the tools of npm.
 /edge.com
+/nifs.js
+/nifs/
 /node_modules/
 /.wrangler/
+
+# The build of the NIF of DIY.Picture (scripts/nif.sh). priv/resvg.wasm
+# is in the repository.
+/native/resvg/target/

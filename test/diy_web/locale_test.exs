@@ -346,7 +346,9 @@ defmodule DIYWeb.LocaleTest do
   end
 
   # The texts that are the same in each language: names and units.
-  @same ~w(Gas Home\ Assistant)
+  # The letters of the months under the bars of a shared house
+  # (DIYWeb.Picture.month_letters/0) are the same in Spanish.
+  @same ~w(Gas Home\ Assistant A D F J M N O S)
 
   defp keys(text), do: ~r/%\{(\w+)\}/ |> Regex.scan(text) |> Enum.map(&List.last/1) |> Enum.sort()
 

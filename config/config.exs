@@ -66,6 +66,11 @@ config :logger, :default_formatter,
 # Use Jason for JSON parsing in Phoenix
 config :phoenix, :json_library, Jason
 
+# The logs of Phoenix and LiveView show no password and no shared house.
+# The parameter `data` of the link of a shared house is the house
+# (docs/design.md, "The link").
+config :phoenix, :filter_parameters, ["password", "data"]
+
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.
 import_config "#{config_env()}.exs"

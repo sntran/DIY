@@ -14,8 +14,12 @@ defmodule DIY.MixProject do
       listeners: [Phoenix.CodeReloader],
       # mix test --cover: each line of the app must run. The wait of
       # DIYWeb.ConnCase (a help of the tests) runs only when an answer is
-      # slow, so it is not in the count.
-      test_coverage: [summary: [threshold: 100], ignore_modules: [DIYWeb.ConnCase]],
+      # slow, so it is not in the count. The NIF replaces the function of
+      # DIY.Picture.NIF, so its line never runs.
+      test_coverage: [
+        summary: [threshold: 100],
+        ignore_modules: [DIYWeb.ConnCase, DIY.Picture.NIF]
+      ],
       # RELEASE_ERTS=false: a release with no ERTS, for beam.com (see
       # scripts/edge-com.sh).
       releases: [diy: [include_erts: System.get_env("RELEASE_ERTS") != "false"]]

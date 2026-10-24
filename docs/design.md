@@ -1959,6 +1959,176 @@ camera and the same look. A tap on the picture opens the plan.
   box paints after a box in front of it. The browser test taps the
   picture and goes in.
 
+## A shared house
+
+A person can share a house with a link. The link shows the house and its
+numbers to a different person, for example on Nextdoor. This is a request
+of the owner (October 2026): a real house with real numbers is easier to
+understand than a text about the app.
+
+### The link
+
+The link has the house in its path: `/s/DATA`. `DATA` is the shared
+house as JSON, compressed with raw DEFLATE, in base64url (`DIY.Share`).
+The first character of `DATA` is the version of the format (`1`).
+
+The link carries the house. The server keeps no copy of it:
+
+- The server reads a shared house only to answer a request for its link
+  or its picture. It writes the house nowhere: no database, no file, no
+  cache of the server.
+- The log of the requests does not show the path of a link
+  (`DIYWeb.Endpoint.log_level/1`). The invocation logs of Cloudflare stay
+  off.
+- This changes the rule of "The build on the device" for a shared house
+  only: the server sees a shared house while it answers. The owner
+  accepted this (October 2026). Before, the plan put the house after `#`
+  in the link, where the server never sees it. But a site that shows a
+  preview of a link reads only the page that the server gives. The part
+  after `#` does not get to the server.
+
+The shared house is the build with these changes (`DIY.Share.strip/2`):
+
+- No link to Home Assistant or to a maker: `areas`, `devices` and `units`
+  are empty. The data of these links is never necessary for the numbers.
+- No state of the app of the person: no `revision`, `stamp`, `lesson`,
+  `lesson_plan` or `hints`. No plans of the lesson (`plans`): the
+  numbers of the link do not need them.
+- The ZIP code stays, because the weather and the plans need it. The
+  sheet of the share tells this, and it has a box that removes it.
+- The bill, the prices and the real months of the meter stay: they give
+  the numbers. The sheet tells that the link has the months of the meter,
+  and it shows the numbers of the year.
+
+The link also has a summary:
+
+- the kWh of each month and of the year;
+- the cost of the year, when the app knows a price;
+- the language of the person who shares.
+
+The LiveView of the person who shares makes the summary from the
+numbers of the bill on the page House. Thus the server needs no weather
+and no price to answer a link. The link shows the numbers that the
+person saw. The picture and the title of the preview are in the
+language of the link. The page of the link is in the language of the
+person who opens it.
+
+Any person can write a link with any summary. A link shows only its own
+numbers, and the server checks that each number is in its range.
+
+A typical house gives a link of about 1,400 characters and 8 KB of JSON
+(October 2026). A link has these limits (`DIY.Share.decode/1`):
+
+- a `DATA` of 6,000 characters at most;
+- a JSON of 32 KiB at most after the inflate;
+- 150 items and 50 rooms at most.
+
+The decode counts the items and the rooms before it reads the house. It
+counts the rooms again after the read, because the read gives each van
+its zones. So a small link cannot become a large house. This is important, because
+the one VM serves all the pages. The picture of a house with 900 items
+takes about 8 times the time of a typical house. The sheet of the share
+uses the same limits. A house that a link cannot carry gets a message,
+and no link.
+
+### The share
+
+The page House has the button **Share this house**. It opens a sheet:
+
+- The facts that the link shows: the house, the numbers of the year, and
+  the ZIP code. A box removes the ZIP code from the link.
+- The button **Share**. On a phone, it opens the share sheet of the
+  phone (`navigator.share`). Else it copies the link
+  (`navigator.clipboard`) and tells it.
+
+### The page of a link
+
+A link opens the page of the shared house (`DIYWeb.HomeLive`, the action
+`:shared`). It shows the house from the outside, the numbers of the year
+and a bar for each month. It changes nothing on the device until the
+person taps **Start from this house**.
+
+- **Start from this house** puts the shared house in the place of the
+  build of the device. The import of a file does the same
+  (`DIY.Build.import/2`).
+  So the device saves it with the protocol of "The build on the device".
+  This needs no new state, and the model `specs/Device.tla` does not
+  change.
+- When the device has a house, the button asks first: the house of the
+  device goes away. The sheet has the link to keep a file of it.
+- A link that is not a house shows the page "This link has no house",
+  with a link to the first screen. Examples: a bad text, a bad version,
+  a number out of its range.
+
+### The preview of a link
+
+The page of a link has the tags of Open Graph:
+
+- `og:title`: the house and its year, for example "A house of 2,400 sq ft
+  in 75070: 14,200 kWh a year".
+- `og:description`: the cost of the year, when the link has it, and a
+  line about the app.
+- `og:image`: `/s/DATA/picture.png`, a PNG of 1200 × 630 pixels.
+
+The picture is the house from the outside, the numbers of the year, and
+the bars of the months (`DIYWeb.Picture`). The server makes the SVG, and
+the NIF resvg draws it (`DIY.Picture.NIF`, `native/resvg`,
+`priv/resvg.wasm`, `scripts/nif.sh`).
+
+- A site that shows a preview reads PNG and JPEG, not SVG.
+- The NIF is resvg 0.48.1 in WebAssembly, as in mkfifo.com, with the text
+  of resvg. Two fonts are in the file: Inter, regular and bold
+  (`native/resvg/fonts`). Each font has only the letters of English,
+  Spanish and Vietnamese, so it is 85 KB. The NIF reads the fonts one
+  time. It reads no file and no image. It refuses entities of a DTD and a
+  picture of more than 1,048,576 pixels. A panic of resvg is a trap of
+  the module: beam.com raises an error in the process of that request
+  only (docs/NIFS.md of BEAM.com). The NIF of mkfifo.com has no text, so
+  DIY has its own NIF. This is a decision of the owner (October 2026).
+- resvg reads no CSS of the page: no variables and no `color-mix`. Thus
+  the SVG of the picture has the style of each shape in its attributes.
+  `scripts/picture-styles.mjs` asks Chromium for the style of each class
+  of the picture in `app.css`, and writes `priv/picture/styles.json`.
+  The browser test checks that the file is the same as the style of
+  `app.css`. A stroke that does not scale on the page
+  (`vector-effect: non-scaling-stroke`) gets the width for the scale of
+  the picture.
+- In workerd, the request of the picture of a typical house takes about
+  0.25 s: the decode, the SVG and the draw. The NIF adds about 3 MB to the
+  Worker (October 2026).
+- The answer has `Cache-Control: public, max-age=31536000, immutable`:
+  the picture of a link never changes. A site that shows previews keeps
+  the picture in its own cache.
+- The sheet of the share makes its link when it opens, when the box of
+  the ZIP code changes, and when the numbers change. A render of the page
+  does not make the link again.
+
+### The tests of a shared house
+
+- Properties: a stripped build gives the same build after an encode and
+  a decode. A stripped build has no data of a link. A text of random
+  bytes gives an error and never a crash. A decode never inflates more
+  than its limit, and a stream that ends early is an error.
+- The picture: the SVG has no class and no `<style>`, and each class of
+  the picture has a style in `priv/picture/styles.json`. Two classes of
+  one shape never set a property to two values. The NIF gives a PNG of
+  1200 × 630 pixels. It refuses a bad SVG, entities, a large picture and
+  a text that is not UTF-8.
+- The limits: a property gives houses with more items and rooms. Each
+  house within the limits gives the same house after a decode, and each
+  other house gives an error.
+- The LiveView: the share sheet and its box of the ZIP code. The page of
+  a link, a bad link, and the tags of Open Graph. The button Start from
+  this house, with a house on the device and with no house.
+- The log: a request for a link, its picture and the mount of its page
+  write no line with the house.
+- JavaScript: the hook of the share, with and without `navigator.share`.
+- The browser walk: a share from the page House, the page of its link,
+  its picture, and **Start from this house**. On the Worker, the walk
+  draws the picture in workerd.
+- CI builds the NIF again when a pull request changes `native/resvg`, and
+  the bytes must be the same as `priv/resvg.wasm`.
+
 ## Home Assistant
 
 Many people keep their rooms, their devices and their meters in Home

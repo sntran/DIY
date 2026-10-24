@@ -40,7 +40,9 @@ defmodule DIYWeb.Endpoint do
   end
 
   plug Plug.RequestId
-  plug Plug.Telemetry, event_prefix: [:phoenix, :endpoint]
+  # The log of a request has its path, except for the link of a shared
+  # house: the path has the house (docs/design.md, "The link").
+  plug Plug.Telemetry, event_prefix: [:phoenix, :endpoint], log: {__MODULE__, :log_level, []}
 
   plug Plug.Parsers,
     parsers: [:urlencoded, :multipart, :json],
@@ -51,4 +53,8 @@ defmodule DIYWeb.Endpoint do
   plug Plug.Head
   plug Plug.Session, @session_options
   plug DIYWeb.Router
+
+  @doc "The level of the log of a request: none for the link of a shared house."
+  def log_level(%Plug.Conn{path_info: ["s" | _]}), do: false
+  def log_level(_conn), do: :info
 end

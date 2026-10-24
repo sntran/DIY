@@ -45,12 +45,24 @@ defmodule DIYWeb.HomeLive do
     Plan,
     Power,
     Prices,
+    Share,
     Usage,
     Van,
     Weather
   }
 
-  alias DIYWeb.{Cutaway, Device, Format, HomeAssistant, Inside, Outside, Scene, Stage, VanCutaway}
+  alias DIYWeb.{
+    Cutaway,
+    Device,
+    Format,
+    HomeAssistant,
+    Inside,
+    Outside,
+    Picture,
+    Scene,
+    Stage,
+    VanCutaway
+  }
 
   @impl true
   def mount(_params, _session, socket) do
@@ -85,6 +97,7 @@ defmodule DIYWeb.HomeLive do
      |> assign(:room, nil)
      |> assign(:sheet, nil)
      |> assign(:status, nil)
+     |> assign(shared: nil, meta: nil, adopt: nil, share: nil, share_zip: true, origin: "")
      |> allow_upload(:build_file,
        accept: ~w(.json),
        max_entries: 1,
@@ -95,7 +108,7 @@ defmodule DIYWeb.HomeLive do
   end
 
   @impl true
-  def handle_params(params, _uri, socket) do
+  def handle_params(params, uri, socket) do
     sheets? = socket.assigns.live_action in [:inside, :van]
     item = if sheets?, do: params["item"]
 
@@ -116,8 +129,65 @@ defmodule DIYWeb.HomeLive do
      |> pictures()
      |> assign(:lesson_step, parse_int(params["step"]))
      |> assign(checks: nil, answers: %{})
-     |> assign(:hint, false)}
+     |> assign(:hint, false)
+     |> assign(:origin, origin(uri))
+     |> shared(params)
+     |> share()}
   end
+
+  # The scheme, the host and the port of the page, for the full links of
+  # a shared house.
+  defp origin(uri), do: URI.to_string(%{URI.parse(uri) | path: nil, query: nil, fragment: nil})
+
+  # The page of the link of a shared house (DIY.Share): the house, its
+  # title, and the tags of the preview. The title and the preview are in
+  # the language of the link.
+  defp shared(%{assigns: %{live_action: :shared}} = socket, %{"data" => data}) do
+    case Share.decode(data) do
+      {:ok, build, summary} ->
+        {title, description} =
+          Gettext.with_locale(DIY.Gettext, summary.locale, fn ->
+            {Picture.title(build, summary), share_description(summary)}
+          end)
+
+        origin = socket.assigns.origin
+
+        socket
+        |> assign(:page_title, title)
+        |> assign(:adopt, nil)
+        |> assign(
+          :shared,
+          {:ok, %{build: build, summary: summary, title: title, view: Outside.view(build)}}
+        )
+        |> assign(:meta, %{
+          title: title,
+          description: description,
+          image: origin <> ~p"/s/#{data}/picture.png",
+          url: origin <> ~p"/s/#{data}"
+        })
+
+      {:error, reason} ->
+        socket
+        |> assign(:page_title, "Small Steps Home")
+        |> assign(:shared, {:error, reason})
+        |> assign(:meta, nil)
+    end
+  end
+
+  defp shared(%{assigns: %{shared: nil}} = socket, _params), do: socket
+
+  defp shared(socket, _params),
+    do: assign(socket, shared: nil, meta: nil, adopt: nil, page_title: "Small Steps Home")
+
+  defp share_description(%{cost: nil}),
+    do: gettext("Small Steps Home shows where the electricity of a house goes.")
+
+  defp share_description(%{cost: cost}),
+    do:
+      gettext(
+        "%{cost} for the electricity of a year. Small Steps Home shows where the electricity of a house goes.",
+        cost: Format.money(cost)
+      )
 
   # The frames of the model of the open item (DIYWeb.Stage), on the page
   # Rooms and on the page Van. The LiveView keeps them while the item is
@@ -994,6 +1064,34 @@ defmodule DIYWeb.HomeLive do
 
   def handle_event("upload", _params, socket), do: {:noreply, socket}
 
+  # The box of the ZIP code in the sheet of the share.
+  def handle_event("share_zip", %{"zip" => zip}, socket),
+    do: {:noreply, socket |> assign(:share_zip, zip == "true") |> share()}
+
+  # Start from a shared house: it takes the place of the build of the
+  # device, as the import of a file does. When the device has a house, the
+  # page asks first.
+  def handle_event(
+        "adopt",
+        params,
+        %{assigns: %{shared: {:ok, shared}, build: %Build{} = build}} = socket
+      ) do
+    if build.house != nil and params["sure"] != "true" do
+      {:noreply, assign(socket, :adopt, :confirm)}
+    else
+      {:ok, build} = Build.import(build, Build.to_json(shared.build))
+
+      {:noreply,
+       socket
+       |> put(build)
+       |> assign(:bill_month, nil)
+       |> put_flash(:info, gettext("This house is your house now. Change it to your own house."))
+       |> push_patch(to: ~p"/")}
+    end
+  end
+
+  def handle_event("adopt_cancel", _params, socket), do: {:noreply, assign(socket, :adopt, nil)}
+
   def handle_event(_event, _params, socket), do: {:noreply, socket}
 
   defp add_plan(socket, plan) do
@@ -1413,6 +1511,7 @@ defmodule DIYWeb.HomeLive do
     |> assign(:bill, bill)
     |> assign(:whatif, whatif)
     |> assign(:shares, shares)
+    |> share()
   end
 
   # The part of the power of each month at night, for each plan with a
@@ -1568,7 +1667,7 @@ defmodule DIYWeb.HomeLive do
     ~H"""
     <Layouts.app
       flash={@flash}
-      nav={nav?(@build)}
+      nav={nav?(@build) and @live_action != :shared}
       power={power?(@build)}
       plans={plans?(@build)}
       action={@live_action}
@@ -1584,11 +1683,13 @@ defmodule DIYWeb.HomeLive do
         </p>
       </noscript>
 
-      <p :if={is_nil(@build)} class="py-16 text-center opacity-70">
+      <DIYWeb.Share.page :if={@live_action == :shared} shared={@shared} build={@build} adopt={@adopt} />
+
+      <p :if={is_nil(@build) and @live_action != :shared} class="py-16 text-center opacity-70">
         {gettext("The page reads your build from this device.")}
       </p>
 
-      <%= if @build do %>
+      <%= if @build && @live_action != :shared do %>
         <%= cond do %>
           <% is_nil(@build.door) -> %>
             <DIYWeb.Start.doors locale={@locale} />
@@ -1722,12 +1823,51 @@ defmodule DIYWeb.HomeLive do
                 bill_month={@bill_month}
                 ha_meter={DIYWeb.HomeAssistant.meter_offer(%{ha_energy: @ha_energy, build: @build})}
               />
+              <DIYWeb.Share.sheet :if={@share} share={@share} />
             </div>
         <% end %>
       <% end %>
     </Layouts.app>
     """
   end
+
+  # The sheet of the share (DIYWeb.Share): the link of the house of today,
+  # with the numbers of the page. The picture and the title are in the
+  # language of the page. The link changes only when the sheet opens, when
+  # the box of the ZIP code changes, and when the numbers change.
+  defp share(
+         %{
+           assigns: %{
+             live_action: :front,
+             sheet: "share",
+             bill: %{} = bill,
+             build: %Build{} = build
+           }
+         } =
+           socket
+       ) do
+    assigns = socket.assigns
+    summary = Share.summary(Enum.map(bill.months, & &1.kwh), bill.cost, assigns.locale)
+    zip? = assigns.share_zip
+    shared = if zip?, do: build, else: %{build | zip: nil}
+    share = %{build: build, summary: summary, zip: zip?, title: Picture.title(shared, summary)}
+
+    share =
+      case Share.encode(Build.today(build), summary, zip: zip?) do
+        {:ok, data} ->
+          Map.merge(share, %{
+            url: assigns.origin <> ~p"/s/#{data}",
+            picture: ~p"/s/#{data}/picture.png"
+          })
+
+        {:error, :too_large} ->
+          Map.merge(share, %{url: nil, picture: nil})
+      end
+
+    assign(socket, :share, share)
+  end
+
+  defp share(socket), do: assign(socket, :share, nil)
 
   defp nav?(%Build{house: house}) when is_map(house), do: true
   defp nav?(_build), do: false
@@ -1753,6 +1893,7 @@ defmodule DIYWeb.HomeLive do
 
   # The page that the person sees: its name, the step of the lesson, and
   # the van. When it changes, the page goes to its top (the hook Top).
+  defp page_key(%{live_action: :shared}), do: "shared"
   defp page_key(%{build: nil}), do: "load"
 
   defp page_key(%{build: build} = assigns) do
