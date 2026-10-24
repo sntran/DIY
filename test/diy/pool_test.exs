@@ -64,6 +64,16 @@ defmodule DIY.PoolTest do
       refute back.rooms |> Enum.any?(&Build.pool?/1)
     end
 
+    test "a link of a shared house keeps the pool" do
+      {:ok, build, id} = Build.add_room(build(), "Pool", "outside", :outdoor, "pool")
+      {:ok, build, _tub} = Build.add_item(build, id, "hot_tub")
+      summary = DIY.Share.summary(List.duplicate(1000, 12), 1500, "en")
+      {:ok, data} = DIY.Share.encode(build, summary)
+      {:ok, shared, _s} = DIY.Share.decode(data)
+      assert {:ok, %{kind: "pool"}} = Build.room(shared, id)
+      assert Enum.any?(shared.items, &(&1.type == "hot_tub" and &1.room == id))
+    end
+
     test "turns on and off; a pool inside keeps the items that only a pool takes" do
       kitchen = room(build(), "Kitchen").id
       {:ok, build} = Build.set_pool(build(), kitchen, true)
