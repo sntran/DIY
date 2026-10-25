@@ -84,6 +84,39 @@ defmodule DIYWeb.ShareLiveTest do
       assert first.cost == round(DIYWeb.Format.cost(year, assigns.price.cents))
     end
 
+    test "with a night at 0 cents, the labels give the cost of the hours when the items run", %{
+      conn: conn
+    } do
+      build = house()
+      driveway = Enum.find(build.rooms, &(&1.name == "Driveway")).id
+      {:ok, build, car} = Build.add_item(build, driveway, "ev")
+
+      {:ok, build} =
+        Build.update_item(build, car, %{"miles" => 40, "charger" => "l1", "when" => "night"})
+
+      build =
+        Build.set_power(build, %{build.power | night_cents: 0.0, night_from: 21, night_to: 9})
+
+      {:ok, build} = Build.set_price(build, 35.4)
+
+      {:ok, view, _html} = live(conn, ~p"/?sheet=share")
+      restore(view, build)
+      settle(view)
+
+      url = view |> element("#share-link") |> render() |> attr("value")
+      "http://www.example.com/s/" <> data = url
+      {:ok, _shared, s} = Share.decode(data)
+
+      # The car charges in the hours at 0 cents: its label costs nothing. The
+      # fridge runs at all hours: it costs less than at the price of the
+      # day.
+      assert %{cost: 0, kwh: kwh} = Enum.find(s.items, &(&1.id == car))
+      assert kwh > 4000
+      fridge = Enum.find(build.items, &(&1.type == "fridge")).id
+      assert %{cost: cost, kwh: kwh} = Enum.find(s.items, &(&1.id == fridge))
+      assert cost > 0 and cost < kwh * 0.354
+    end
+
     test "the box of the ZIP code takes it out of the link", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/?sheet=share")
       restore(view, house())

@@ -268,6 +268,19 @@ the degree days. A month with no sun keeps its degree days.
 - A water heater: 15 gallons for each person in one day, from the
   temperature of the ground to 120 °F.
 - The other items: power × hours, or the kWh in one year of the label.
+- A washer and dryer in one (a combo, common in apartments). A load
+  uses 0.25 kWh to wash (the motor, as a washer) and the kWh to dry. To
+  dry, the app divides a load of 8.45 lb by the combined energy factor
+  (CEF, lb for each kWh). The DOE tests a standard dryer with this load.
+  - With a heat pump: 6.00, the CEF of the GE Profile PFQ97HS*V
+    (ENERGY STAR, ID 2407727). This gives 1.41 kWh. Its 399 kWh to dry in
+    one year of 283 loads give the same.
+  - With a heater: 3.93, the least CEF of ENERGY STAR for a standard
+    dryer, with a vent or with no vent. This gives 2.15 kWh. The combos
+    with no heat pump in the list of ENERGY STAR have a CEF near 3.93.
+  - The app uses these kWh with two decimals, so that the math adds up.
+  The size is that of the GE combo: 28 by 32 by 46.7 in (ENERGY STAR). A
+  combo does not go on an item, and no item goes on it.
 - A fridge or a freezer in a room around the house (a garage, a shed).
   The label of a fridge comes from a test that stands for a kitchen near
   72 °F (10 CFR 430, subpart B, appendix A). The heat that comes in
@@ -692,6 +705,26 @@ A bank with no such chain gives no power to the house: it does not
 count. This is a simple model of the app. It does not check that a
 station can take the power of its busbar: the person tells it with the
 wires. The power view tells the banks on the busbar of the stations.
+
+### The cost of an item
+
+The sheet of an item, the list of the rooms and the labels of a shared
+picture give the cost of an item. The cost of a month is the kWh of the
+item in that month at the price of the hours when the item runs
+(`DIY.Power.item_cost/4`). The hours come from the day of the month of
+`DIY.Power` (`DIY.Profile`): the same hours as the bill of the page Power.
+For example, with a price of 0¢ from 21:00 to 9:00, a car that charges
+at night costs $0. A fridge runs at all hours, so half of its day is at
+0¢.
+With no price at night, the cost is the kWh at the price of the day.
+
+This is the cost of the item on the grid. A station and panels can give
+the power of an item at different hours. The page Power shows them, and
+the cost of the year on the page House has them. So with a station or
+panels, the costs of the items can add up to a different number. With
+no station and no panels, the items of the house of today add up to the
+cost of the year (a property of `test/diy/power_test.exs`). The page
+Rooms also shows the planned items.
 
 ### The power view and the safety
 
@@ -2041,8 +2074,9 @@ The link also has a summary:
   picture. Each item has its id, its kWh of a year, and its cost of a
   year. The numbers are of the house of today, as the numbers of the
   year: with a planned item, the page Rooms can show different numbers.
-  The cost uses the price of the page Rooms. An item with less than 1 kWh
-  has no label. A link of an older version has no items: its
+  The cost is at the price of the hours when the item runs
+  (`DIY.Power.item_cost/4`, "The cost of an item"). An item with less
+  than 1 kWh has no label. A link of an older version has no items: its
   picture has no labels.
 
 The LiveView of the person who shares makes the summary from the
@@ -4091,8 +4125,8 @@ station on a freezer, or a pool pump on the coping of a pool
   item under it. A pool is in the floor, so an item on a pool is at the
   floor. An item over the top of an item has no shadow. The top item
   paints after the item under it (`DIYWeb.Camera.order/2`).
-- Solar panels, a camper van, a car and an item on a wall or a ceiling
-  do not stack. A pool holds an item, but it does not go on an item. The
+- Solar panels, a camper van, a car, a washer and dryer in one and an
+  item on a wall or a ceiling do not stack. A pool holds an item, but it does not go on an item. The
   items of the roof and of a van do not stack.
 - When a file moves an item from a van to the house, the item gets a
   free place in the house (`DIY.Layout.fill/1`).

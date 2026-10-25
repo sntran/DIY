@@ -40,7 +40,8 @@ defmodule DIY.HomeAssistantDevicesTest do
     # Two words that make one appliance.
     assert kind("Microwave Oven") == "microwave"
     assert kind("Dish washer") == "dishwasher"
-    assert kind("Washer Dryer") == "dryer"
+    assert kind("Washer Dryer") == "washer_dryer"
+    assert kind("Washer Dryer Combo") == "washer_dryer"
     assert kind("Fridge Freezer") == "fridge"
     assert kind("TV backlight") == "lights"
     # The last word wins, and of two words that end at one place, the

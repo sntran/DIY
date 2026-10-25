@@ -919,6 +919,36 @@ defmodule DIYWeb.HomeLiveTest do
     assert has_element?(view, "#part-how", "For one month: July")
   end
 
+  test "with a night at 0 cents, an item costs the price of the hours when it runs", %{
+    conn: conn
+  } do
+    build = house()
+    driveway = Enum.find(build.rooms, &(&1.name == "Driveway")).id
+    {:ok, build, car} = Build.add_item(build, driveway, "ev")
+    {:ok, build} = Build.update_item(build, car, %{"charger" => "l1", "when" => "night"})
+    build = Build.set_power(build, %{build.power | night_cents: 0.0, night_from: 21, night_to: 9})
+    {:ok, build} = Build.set_price(build, 35.4)
+
+    view = open(conn, ~p"/inside", build)
+    settle(view)
+
+    # The car charges in the hours at 0 cents: its sheet and its line cost
+    # nothing.
+    render_patch(view, ~p"/inside?#{[item: car]}")
+    assert has_element?(view, "#part-cost .stage-month", "$0.00 a month")
+    assert has_element?(view, "#item-year", ~r/kWh and \$0 in one year/)
+    assert has_element?(view, "#plan-list", ~r/Electric car: [\d,]+ kWh, \$0 a month/)
+
+    # The fridge runs at all hours. It costs less than its kWh at the price
+    # of the day. Its sheet gives the cost of DIY.Power.
+    %{estimate: estimate} = :sys.get_state(view.pid).socket.assigns
+    fridge = Enum.find(build.items, &(&1.type == "fridge"))
+    cost = DIY.Power.item_cost(fridge, estimate, build.power, 35.4)
+    assert cost < DIYWeb.Format.cost(estimate.items[fridge.id].year, 35.4)
+    render_patch(view, ~p"/inside?#{[item: fridge.id]}")
+    assert has_element?(view, "#item-year", "and #{DIYWeb.Format.money(cost)} in one year")
+  end
+
   test "a house with a van: the front gives a link to the build of each van", %{conn: conn} do
     build = house()
     view = open(conn, ~p"/", build)
