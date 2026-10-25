@@ -71,6 +71,7 @@ defmodule DIYWeb.Scene do
     roof: %{station: 0, grid: 0},
     yard: %{station: 0, grid: 0},
     stations: [],
+    bank_kwh: 0.0,
     panel: false,
     switch: false,
     ac: true,
@@ -108,6 +109,9 @@ defmodule DIYWeb.Scene do
           stations,
           &{&1.params["kwh"] + &1.params["extra_kwh"], &1.params["extra_kwh"] > 0}
         ),
+      # The battery banks on the busbar of the stations (`DIY.Power.banks/2`):
+      # the label of the kWh counts them.
+      bank_kwh: Power.system(house.items, house.wires).kwh - Power.system(stations).kwh,
       panel: Power.panel?(Power.system(house.items)),
       switch: of.("transfer_switch") != [],
       ac: Enum.any?(house.items, &(&1.type in ["ac", "mini_split"])),
@@ -949,7 +953,7 @@ defmodule DIYWeb.Scene do
       [{:chip, Geometry.add(pole, {0, 0, 0.9}), "Grid", "s-chip"}] ++
         if(roof > 0, do: [{:chip, {4.6, 5.6, h + 1.9}, kw(roof), "s-chip"}], else: []) ++
         if(yard_w > 0, do: [{:chip, yard_chip(yard_w), kw(yard_w), "s-chip"}], else: []) ++
-        if(stations, do: [{:chip, @kwh_chip, kwh(parts.stations), "s-chip"}], else: [])
+        if(stations, do: [{:chip, @kwh_chip, kwh(parts), "s-chip"}], else: [])
 
     # A thin line goes from the label of the kWh to the stations.
     leader = if stations, do: [{:line, [@kwh_chip, {6.6, @d + 0.7, 0.0}], "s-leader"}], else: []
@@ -969,9 +973,9 @@ defmodule DIYWeb.Scene do
   defp station_top(parts),
     do: if(Enum.any?(parts.stations, &elem(&1, 1)), do: 1.02, else: 0.62)
 
-  defp kwh(stations),
+  defp kwh(parts),
     do:
-      "#{stations |> Enum.map(&elem(&1, 0)) |> Enum.sum() |> Kernel./(1) |> Float.round(1) |> Format.value()} kWh"
+      "#{parts.stations |> Enum.map(&elem(&1, 0)) |> Enum.sum() |> Kernel.+(Map.get(parts, :bank_kwh, 0.0)) |> Float.round(1) |> Format.value()} kWh"
 
   defp kw(watts) when watts >= 1000, do: "#{Format.value(Float.round(watts / 1000, 1))} kW"
   defp kw(watts), do: "#{watts} W"

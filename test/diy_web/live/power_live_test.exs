@@ -574,4 +574,56 @@ defmodule DIYWeb.PowerLiveTest do
     view = open(conn, ~p"/power", flag(plan, "ac", :planned))
     assert render(view) =~ "The page shows the power when the house has its estimate."
   end
+
+  test "the power view names the battery bank on the busbar of the stations", %{conn: conn} do
+    {build, station} = add(house(), "Garage", "power_station")
+    {build, bank} = add(build, "Garage", "van_battery", %{"ah" => "280", "volts" => "48"})
+    {build, lynx} = add(build, "Garage", "dc_bus")
+    {:ok, build, _wire} = Build.add_wire(build, bank, lynx)
+    {:ok, build, _wire} = Build.add_wire(build, station, lynx)
+
+    view = open(conn, ~p"/power", build)
+    assert has_element?(view, "#view-banks", "(with 1 battery bank on the busbar)")
+    # 2 kWh of the station and 280 Ah × 48 V × 90% ÷ 95% of the bank.
+    assert has_element?(view, "#view", "1 power station: 14.7 kWh")
+    # The label of the picture of the page has the same kWh.
+    assert render(view) =~ ">14.7 kWh<"
+
+    # The picture of the house from the outside tells the bank.
+    view = open(conn, ~p"/", build)
+    assert render(view) =~ "1 power station and 1 battery bank of 14.7 kWh"
+
+    # The sheet of the bank tells what it does in the house.
+    render_patch(view, ~p"/inside?#{[item: bank]}")
+
+    assert render(view) =~
+             "the hours of backup in an outage, the view of what feeds what, and the permit notes, the checks of its wires (NEC)"
+  end
+
+  test "a wire of a bank through a switch asks for a breaker only at the bank", %{conn: conn} do
+    {build, station} = add(house(), "Garage", "power_station")
+    {build, bank} = add(build, "Garage", "van_battery", %{"ah" => "280", "volts" => "48"})
+    {build, switch} = add(build, "Garage", "battery_switch")
+    {build, lynx} = add(build, "Garage", "dc_bus")
+    {:ok, build, to_switch} = Build.add_wire(build, bank, switch)
+    {:ok, build, to_lynx} = Build.add_wire(build, switch, lynx)
+    {:ok, build, _wire} = Build.add_wire(build, station, lynx)
+
+    view = open(conn, ~p"/inside?#{[item: switch]}", build)
+    html = render(view)
+
+    assert html =~
+             "The fuse at the battery protects it (for example a class T fuse of 40 A). So this wire must carry 40 A, as the wire of the battery does."
+
+    assert html =~ "no breaker, because the fuse at the battery protects it."
+
+    # A class T fuse of 250 A, and a wire of 10 AWG from the switch to the
+    # busbar. The fuse does not protect this wire.
+    {:ok, build} = Build.update_wire(build, to_switch, %{"from_ocpd" => "250"})
+    {:ok, build} = Build.update_wire(build, to_lynx, %{"awg" => "10"})
+    view = open(conn, ~p"/inside?#{[item: switch]}", build)
+
+    assert render(view) =~
+             "The fuse at the battery does not protect this wire: 10 AWG takes 30 A at most, and the fuse is 250 A."
+  end
 end

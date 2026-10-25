@@ -20,7 +20,8 @@ defmodule DIY.Wire do
 
   The ends tell the smallest fuse that the item at each end takes
   (`from_min`, `to_min`, A): a busbar with fuse holders takes only some
-  sizes.
+  sizes. On the wire of a battery to a busbar, they also tell the fuse at
+  the battery (`bank`).
 
   The rules:
 
@@ -70,15 +71,28 @@ defmodule DIY.Wire do
           to_dc: number() | nil
         }
 
-  @type ends :: %{from_min: non_neg_integer(), to_min: non_neg_integer()}
+  @typedoc """
+  The fuse at the battery of a chain. `fuse` is the rating that the person
+  has (nil when not known). `least` is the smallest rating for the current
+  of the wire of the battery.
+  """
+  @type bank :: %{fuse: pos_integer() | nil, least: pos_integer()}
+
+  @type ends :: %{
+          required(:from_min) => non_neg_integer(),
+          required(:to_min) => non_neg_integer(),
+          optional(:free) => [:from | :to],
+          optional(:bank) => bank() | nil
+        }
 
   @type advice :: %{
           need: float(),
-          from: pos_integer(),
+          from: pos_integer() | nil,
           to: pos_integer() | nil,
           awg: awg() | nil,
           drop: float() | nil,
-          highest: float() | nil
+          highest: float() | nil,
+          bank: pos_integer() | nil
         }
 
   @type fault ::
@@ -88,6 +102,7 @@ defmodule DIY.Wire do
           | {:no_ocpd, :from | :to, nil}
           | {:dc_rating, :from | :to, number()}
           | {:drop, nil, float()}
+          | {:bank_big, nil, pos_integer()}
 
   # Each size has its ampacity in the 75 °C column of NEC Table 310.16
   # (A). It also has the DC resistance of stranded copper in NEC Chapter
@@ -177,6 +192,10 @@ defmodule DIY.Wire do
   @spec largest(awg()) :: pos_integer()
   def largest(awg), do: Map.get(@small, awg) || rating(ampacity(awg))
 
+  @doc "The current of a wire with the margin of a load all the time (A)."
+  @spec need(wire()) :: float()
+  def need(wire), do: wire.amps * @continuous
+
   @doc "The smallest standard rating at or above some amps."
   @spec rating(number()) :: pos_integer()
   def rating(amps), do: Enum.find(@ratings, &(&1 >= amps))
@@ -195,7 +214,20 @@ defmodule DIY.Wire do
 
   # The kinds that can feed a fault at the far end: a battery, and a
   # busbar (it has a battery on it).
-  @two_way ~w(van_battery dc_bus)
+  @two_way ~w(van_battery dc_bus battery_switch battery_monitor)
+
+  # The parts of a busbar: a busbar, and the parts on the wire of a battery
+  # to a busbar. These parts are a battery switch and a battery monitor.
+  # Their wires have the voltage of the batteries of their node.
+  @bus ~w(dc_bus battery_switch battery_monitor)
+
+  # The parts on the wire of a battery to a busbar. The fuse at the
+  # battery protects this wire to the busbar: these parts have no fuse.
+  @inline ~w(battery_switch battery_monitor)
+
+  @doc "True for a busbar, or a part on the wire of a battery to a busbar."
+  @spec bus?(map()) :: boolean()
+  def bus?(item), do: item.type in @bus
 
   @doc "True for an item that can give current at the far end of a wire."
   @spec gives_current?(map()) :: boolean()
@@ -230,7 +262,7 @@ defmodule DIY.Wire do
   """
   @spec end_system(String.t(), map(), map(), %{String.t() => String.t()}) :: String.t()
   def end_system(system, from, to, highs) do
-    bus = Enum.find_value([from, to], &(&1.type == "dc_bus" and highs[&1.id]))
+    bus = Enum.find_value([from, to], &(bus?(&1) and highs[&1.id]))
     battery = Enum.find([from, to], &(&1.type == "van_battery"))
 
     cond do
@@ -241,7 +273,7 @@ defmodule DIY.Wire do
       bus ->
         bus
 
-      Enum.any?([from, to], &(&1.type == "dc_bus")) and not dc?(system) ->
+      Enum.any?([from, to], &bus?/1) and not dc?(system) ->
         "12"
 
       true ->
@@ -251,8 +283,8 @@ defmodule DIY.Wire do
 
   @doc """
   The typical numbers of a new wire from an item to an item: 30 A and 6
-  ft. The system is the system of a battery at an end. At a busbar, it is
-  12 V DC. At a transfer switch or a shore power inlet, it is 120 V AC.
+  ft. The system is the system of a battery at an end. At a busbar, a
+  battery switch or a battery monitor, it is 12 V DC. At a transfer switch or a shore power inlet, it is 120 V AC.
   Else it is 12 V DC. On DC, a wire to a battery or to a busbar has two ways.
   The person has nothing yet.
   """
@@ -261,7 +293,7 @@ defmodule DIY.Wire do
     system =
       cond do
         system = battery_system(from, to) -> system
-        Enum.any?([from, to], &(&1.type == "dc_bus")) -> "12"
+        Enum.any?([from, to], &bus?/1) -> "12"
         Enum.any?([from, to], &(&1.type in ~w(transfer_switch shore_power))) -> "120"
         true -> "12"
       end
@@ -280,11 +312,36 @@ defmodule DIY.Wire do
   end
 
   @doc """
-  The smallest fuse that the item at each end takes (A): the number of a
-  busbar, else 0.
+  The ends of a wire, for the advice and the check:
+
+  - `from_min` and `to_min`: the smallest fuse that the item at each end
+    takes (A): the number of a busbar, else 0;
+  - `bank`: the fuse at the battery of the chain of the wire, or nil (see
+    `inline?/1`);
+  - `free`: the ends that need no breaker. A wire with an end at a battery
+    switch or a battery monitor is on the wire of a battery to a busbar.
+    When a battery is on this chain, the fuse at the battery protects all
+    of it (for example a class T fuse). So only its end at a battery needs
+    a breaker. Each wire of the chain must then carry the fuse at the
+    battery.
   """
-  @spec ends(map(), map()) :: ends()
-  def ends(from, to), do: %{from_min: fuse_min(from), to_min: fuse_min(to)}
+  @spec ends(map(), map(), bank() | nil) :: ends()
+  def ends(from, to, bank \\ nil) do
+    chain = bank != nil and (inline?(from) or inline?(to))
+
+    free =
+      for {side, item} <- [from: from, to: to], chain and item.type != "van_battery", do: side
+
+    %{from_min: fuse_min(from), to_min: fuse_min(to), free: free, bank: if(chain, do: bank)}
+  end
+
+  @doc """
+  True for a part on the wire of a battery to a busbar: a battery switch or
+  a battery monitor. The fuse at the battery protects the wires of these
+  parts (`DIY.Build.wire_ends/2` finds it).
+  """
+  @spec inline?(map()) :: boolean()
+  def inline?(item), do: item.type in @inline
 
   defp fuse_min(%{type: "dc_bus", params: params}), do: params["fuse_min"]
   defp fuse_min(_item), do: 0
@@ -383,17 +440,22 @@ defmodule DIY.Wire do
   - `awg` and `drop`: the smallest wire that the breakers protect, with a
     drop of 3% or less, and its drop. They are nil when no size of 4/0 or
     less is enough;
-  - `highest`: the highest volts for the DC rating (nil on AC).
+  - `highest`: the highest volts for the DC rating (nil on AC);
+  - `bank`: on the wire of a battery to a busbar, the fuse at the battery
+    that protects the wire. It is the fuse of the person, else the
+    smallest rating. The wire must carry it. Else it is nil.
   """
   @spec advise(wire(), ends()) :: advice()
   def advise(wire, ends) do
-    need = wire.amps * @continuous
-    from = rating(max(need, ends.from_min))
-    to = if two_way?(wire), do: rating(max(need, ends.to_min))
+    need = need(wire)
+    free = Map.get(ends, :free, [])
+    from = if :from not in free, do: rating(max(need, ends.from_min))
+    to = if two_way?(wire) and :to not in free, do: rating(max(need, ends.to_min))
+    bank = bank_fuse(ends)
 
     awg =
       Enum.find(sizes(), fn awg ->
-        ampacity(awg) >= need and largest(awg) >= max(from, to || 0) and
+        ampacity(awg) >= need and largest(awg) >= max(max(from || 0, to || 0), bank || 0) and
           drop(awg, wire.amps, wire.feet, wire.system) <= @max_drop
       end)
 
@@ -403,9 +465,13 @@ defmodule DIY.Wire do
       to: to,
       awg: awg,
       drop: awg && drop(awg, wire.amps, wire.feet, wire.system),
-      highest: highest(wire.system)
+      highest: highest(wire.system),
+      bank: bank
     }
   end
+
+  defp bank_fuse(%{free: [_ | _], bank: %{fuse: fuse, least: least}}), do: fuse || least
+  defp bank_fuse(_ends), do: nil
 
   @doc """
   The faults of what the person has, in the order of the rules. Each
@@ -422,19 +488,33 @@ defmodule DIY.Wire do
   - `:dc_rating`: the DC rating of the breaker is less than the highest
     volts of the battery. The number is the highest volts.
   - `:drop`: the drop is more than 3% (advice). The number is the drop.
+  - `:bank_big`: on the wire of a battery to a busbar, the fuse at the
+    battery is more than the wire takes. Then it does not protect the
+    wire. The number is the fuse at the battery.
 
   A check needs its values: with no wire size, the app checks only the
-  breakers.
+  breakers. An end that needs no breaker (`free` of `ends/2`) has no
+  fault of a breaker.
   """
-  @spec check(wire()) :: [fault()]
-  def check(wire) do
-    need = wire.amps * @continuous
-    ends = if two_way?(wire), do: [:from, :to], else: [:from]
+  @spec check(wire(), ends()) :: [fault()]
+  def check(wire, ends \\ %{from_min: 0, to_min: 0}) do
+    need = need(wire)
+    free = Map.get(ends, :free, [])
+    sides = if(two_way?(wire), do: [:from, :to], else: [:from]) -- free
 
     wire_small(wire, need) ++
-      Enum.flat_map(ends, &ocpd_faults(wire, &1, need)) ++
+      Enum.flat_map(sides, &ocpd_faults(wire, &1, need)) ++
+      bank_fault(wire, free, ends[:bank]) ++
       drop_fault(wire)
   end
+
+  # The fuse at the battery protects the free ends: the wire must carry it.
+  defp bank_fault(%{awg: awg}, [_ | _], %{fuse: fuse})
+       when is_binary(awg) and is_integer(fuse) do
+    if fuse > largest(awg), do: [{:bank_big, nil, fuse}], else: []
+  end
+
+  defp bank_fault(_wire, _free, _bank), do: []
 
   defp wire_small(%{awg: nil}, _need), do: []
 

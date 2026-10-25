@@ -450,7 +450,7 @@ defmodule DIYWeb.WiresLiveTest do
     assert has_element?(
              view,
              "p#wire-#{id}-system",
-             "System: 48 V DC, the voltage of the battery at DC busbar or distributor. Change it in the part of the battery."
+             "System: 48 V DC, the voltage of the battery that DC busbar or distributor connects to. Change it in the part of the battery."
            )
 
     assert has_element?(view, "#wire-#{id}-advice", "rated for DC at 58.4 V or more.")
@@ -464,7 +464,7 @@ defmodule DIYWeb.WiresLiveTest do
     assert has_element?(
              view,
              "p#wire-#{link}-system",
-             "System: 48 V DC, the voltage of the battery at DC busbar or distributor."
+             "System: 48 V DC, the voltage of the battery that DC busbar or distributor connects to."
            )
 
     refute has_element?(view, "#wire-volts p")

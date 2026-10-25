@@ -687,6 +687,25 @@ Power). With a station, panels on the grid, or a price at night, it also
 shows the bill of each month from the power of the grid at the prices of
 the house, with its range.
 
+### A battery bank in the house
+
+"Battery bank" (`van_battery`) is a kind of a van and also of the house.
+In the house, a bank gives power through the stations. A chain of wires
+joins the bank to a station, through busbars, battery switches, battery
+monitors, stations and banks (`DIY.Power.banks/2`). Then the bank adds
+its kWh to the stations. A bank gives its Ah × its volts × 90% for
+LiFePO4 (50% for AGM), as on the page of a van. A station gives 95% of
+its label, so the bank adds this number ÷ 95% to the kWh of the labels of
+the stations. For example, the owner has 4 batteries of 12.8 V and 280
+Ah in series: 51.2 V and 280 Ah. The app counts 48 V (the system of the
+bank), so they add 12.7 kWh. This is less than the true 13.6 kWh: on the
+safe side.
+
+A bank with no such chain gives no power to the house: it does not
+count. This is a simple model of the app. It does not check that a
+station can take the power of its busbar: the person tells it with the
+wires. The power view tells the banks on the busbar of the stations.
+
 ### The cost of an item
 
 The sheet of an item, the list of the rooms and the labels of a shared
@@ -3728,6 +3747,41 @@ positions (`DIYWeb.Icon.Shapes.look/1`). The positions share the width
 of the case, so each number of positions has the same size on the plan. The
 panel tells how many positions have a wire. When more wires connect to
 the busbar than it has positions, the panel shows a fault.
+
+### The switch and the monitor of a battery
+
+A battery bank often goes to a busbar through two parts on its wire:
+
+- "Battery switch" (`battery_switch`): it connects the bank to the
+  busbar, or cuts it off. Its number is the current that it carries all
+  the time (A). The Victron battery switch (VBS127010010) carries 275 A,
+  and it is 69.5 by 76.3 by 69.5 mm (retailer listings).
+- "Battery monitor (shunt)" (`battery_monitor`): it measures the current
+  of the bank, for example the Victron SmartShunt. Its number is the most
+  current of its shunt: 500 A, 1,000 A or 2,000 A. The SmartShunt of 500
+  A is 120 by 54 by 46 mm (the listings of retailers).
+
+These parts use no power: the estimate does not count them. A wire to
+them is as a wire to a busbar (`DIY.Wire.bus?/1`). It gets the voltage of
+the batteries of its node, and it has two ways.
+
+The fuse at the bank (for example a class T fuse) protects the wire of
+the bank to the busbar, through these parts. The wires between switches
+and monitors make a chain (`DIY.Build.wire_ends/2`). When a wire joins a
+bank to the chain, the rules of the chain are:
+
+- A wire with an end at a switch or a monitor needs a breaker only at its
+  end at a bank (`DIY.Wire.ends/3`). Its other ends need none: the advice
+  says so, and the check finds no fault of a breaker there.
+- The fuse at the bank protects each wire of the chain, so each wire must
+  carry this fuse (NEC 240.4). The advice gives a wire that the fuse
+  protects. With no fuse yet, it uses the smallest fuse for the wire of
+  the bank. The check gives a fault when the fuse is more than the wire
+  takes (`:bank_big`).
+- With more than one bank on the chain, the largest fuse counts.
+
+A chain with no bank (for example a station wired only to a switch) has
+no fuse at a bank. Then each end needs its breaker, as on any wire.
 
 ### The rules
 

@@ -481,6 +481,9 @@ defmodule DIYWeb.PowerPage do
               decimals: 1
             )} kWh, {Format.int(@sys.output_w)} W
           </span>
+          <span :if={@sys.banks != []} id="view-banks">
+            (with {Format.count(length(@sys.banks), "battery bank")} on the busbar)
+          </span>
           <span :if={@sys.station_panels_w > 0}>
             (with {Format.int(
               Enum.sum(for p <- @panels, p.params["to"] == "station", do: p.params["watts"])
