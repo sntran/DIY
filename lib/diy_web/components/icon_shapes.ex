@@ -1492,6 +1492,29 @@ defmodule DIYWeb.Icon.Shapes do
       cylinder({w - 0.04, d / 2, h}, 0.018, 0.025, "dark")
   end
 
+  # A battery switch, as the Victron battery switch: a black body with a
+  # red knob and its handle on the top.
+  def model("battery_switch") do
+    {w, d, h} = {0.076, 0.076, 0.076}
+
+    rbox({0, 0, 0}, {w, d, h * 0.6}, 0.008, "dark") ++
+      cylinder({w / 2, d / 2, h * 0.6}, 0.024, h * 0.2, "red") ++
+      box({w / 2 - 0.02, d / 2 - 0.006, h * 0.8}, {0.04, 0.012, h * 0.2}, "red")
+  end
+
+  # A battery monitor, as the Victron SmartShunt: a long blue body, a bolt
+  # for a cable at each end, and its label in front.
+  def model("battery_monitor") do
+    {w, d, h} = {0.127, 0.041, 0.051}
+
+    rbox({0.018, 0, 0}, {w - 0.036, d, h}, 0.006, "blue") ++
+      box({0, 0.008, 0}, {0.018, d - 0.016, h * 0.4}, "steel") ++
+      box({w - 0.018, 0.008, 0}, {0.018, d - 0.016, h * 0.4}, "steel") ++
+      cylinder({0.009, d / 2, h * 0.4}, 0.005, 0.014, "steel") ++
+      cylinder({w - 0.009, d / 2, h * 0.4}, 0.005, 0.014, "steel") ++
+      [front({0.03, d, h * 0.35}, {w - 0.06, h * 0.4}, "i-white-t")]
+  end
+
   # An inverter and charger: a blue body with round corners, its window with
   # a display and lights, its switch, and the fins on its side.
   def model("inverter") do

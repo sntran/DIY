@@ -163,6 +163,104 @@ defmodule DIY.PowerTest do
     end
   end
 
+  describe "a battery bank on the busbar of a station" do
+    # A bank of 4 batteries of 12.8 V and 280 Ah in series: 48 V, 280 Ah.
+    # It goes to a busbar through a switch and a monitor, as in the house
+    # of the owner.
+    defp bank_build(joined?) do
+      {build, station} = add(house(), "Garage", "power_station", %{"kwh" => "5.12"})
+      {build, bank} = add(build, "Garage", "van_battery", %{"ah" => "280", "volts" => "48"})
+      {build, switch} = add(build, "Garage", "battery_switch")
+      {build, monitor} = add(build, "Garage", "battery_monitor")
+      {build, lynx} = add(build, "Garage", "dc_bus")
+
+      chain =
+        [{bank, switch}, {switch, monitor}, {monitor, lynx}] ++
+          if(joined?, do: [{station, lynx}], else: [])
+
+      Enum.reduce(chain, build, fn {from, to}, build ->
+        {:ok, build, _wire} = Build.add_wire(build, from, to)
+        build
+      end)
+    end
+
+    test "adds its kWh to the stations, through a switch and a monitor" do
+      build = bank_build(true)
+      sys = Power.system(build.items, build.wires)
+      assert [%{type: "van_battery"}] = sys.banks
+      # 280 Ah × 48 V × 90% (LiFePO4) ÷ 95% (the part of a station).
+      assert_in_delta sys.kwh, 5.12 + 280 * 48 / 1_000 * 0.9 / 0.95, 1.0e-9
+
+      # The wires of the chain have the voltage of the bank.
+      assert Enum.all?(build.wires, &(&1.system == "48"))
+
+      # The page Power runs with the bank: an outage gives more hours.
+      {build, fridge} = {build, of_type(build, "fridge").id}
+      build = flag(build, fridge, :backup)
+      alone = flag(bank_build(false), of_type(build, "fridge").id, :backup)
+      with_bank = run(build).months |> hd()
+      without = run(alone).months |> hd()
+      assert with_bank.outage == :days or with_bank.outage > without.outage
+    end
+
+    test "with no wire to a station, a bank adds nothing" do
+      build = bank_build(false)
+      sys = Power.system(build.items, build.wires)
+      assert sys.banks == []
+      assert sys.kwh == 5.12
+
+      # A bank and a station with no wires: nothing either.
+      assert Power.system(build.items).banks == []
+    end
+  end
+
+  property "a bank counts when a chain of wires joins it to a station" do
+    types = ~w(power_station van_battery dc_bus battery_switch battery_monitor fridge)
+
+    check all(
+            kinds <- list_of(member_of(types), min_length: 2, max_length: 8),
+            pairs <- list_of({integer(0..7), integer(0..7)}, max_length: 12),
+            max_runs: 200
+          ) do
+      items =
+        for {type, i} <- Enum.with_index(kinds),
+            do: %{
+              id: "i#{i}",
+              type: type,
+              params: %{
+                "ah" => 100,
+                "volts" => "12",
+                "chemistry" => "lifepo4",
+                "kwh" => 1.0,
+                "extra_kwh" => 0.0
+              }
+            }
+
+      n = length(items)
+      wires = for {a, b} <- pairs, a < n, b < n, a != b, do: %{from: "i#{a}", to: "i#{b}"}
+
+      # The reference: a search from each station that goes on only through
+      # a part of a busbar, a station or a bank. A fridge stops it.
+      pass = ~w(power_station van_battery dc_bus battery_switch battery_monitor)
+      by_id = Map.new(items, &{&1.id, &1})
+
+      step = fn seen ->
+        for w <- wires,
+            {a, b} <- [{w.from, w.to}, {w.to, w.from}],
+            a in seen,
+            by_id[b].type in pass,
+            into: seen,
+            do: b
+      end
+
+      start = MapSet.new(for i <- items, i.type == "power_station", do: i.id)
+      joined = Enum.reduce(1..n, start, fn _, seen -> step.(seen) end)
+      expected = for i <- items, i.type == "van_battery", MapSet.member?(joined, i.id), do: i.id
+
+      assert Enum.map(Power.banks(items, wires), & &1.id) == expected
+    end
+  end
+
   describe "a month of power" do
     test "a house with no equipment takes its use from the grid" do
       result = run(house())

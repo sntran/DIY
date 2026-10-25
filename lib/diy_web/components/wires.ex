@@ -225,8 +225,8 @@ defmodule DIYWeb.Wires do
     buses = assigns.buses
     # A busbar with a battery gives its voltage, as in
     # `DIY.Wire.end_system/4`. A busbar with no battery is on DC.
-    bus = Enum.find([from, to], &(&1.type == "dc_bus" and Map.has_key?(buses, &1.id)))
-    dc_only = Enum.any?([from, to], &(&1.type == "dc_bus"))
+    bus = Enum.find([from, to], &(Wire.bus?(&1) and Map.has_key?(buses, &1.id)))
+    dc_only = Enum.any?([from, to], &Wire.bus?/1)
     names = %{from.id => Catalog.name(from), to.id => Catalog.name(to)}
 
     assigns =

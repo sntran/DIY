@@ -674,6 +674,23 @@ Power). With a station, panels on the grid, or a price at night, it also
 shows the bill of each month from the power of the grid at the prices of
 the house, with its range.
 
+### A battery bank in the house
+
+"Battery bank" (`van_battery`) is a kind of a van and also of the house.
+In the house, a bank gives power through the stations. A chain of wires
+joins the bank to a station, through busbars, battery switches, battery
+monitors, stations and banks (`DIY.Power.banks/2`). Then the bank adds
+its kWh to the stations: its Ah × its volts × 90% for LiFePO4 (50% for
+AGM), as on the page of a van. A station gives 95% of its label, so the
+bank adds this number ÷ 95% to the kWh of the labels of the stations.
+For example, the owner has 4 batteries of 12.8 V and 280 Ah in series
+(48 V and 280 Ah). They add 12.7 kWh.
+
+A bank with no such chain gives no power to the house: it does not
+count. This is a simple model of the app. It does not check that a
+station can take the power of its busbar: the person tells it with the
+wires. The power view tells the banks on the busbar of the stations.
+
 ### The power view and the safety
 
 The page Power shows what feeds what. It shows the grid, the main panel
@@ -3694,6 +3711,25 @@ positions (`DIYWeb.Icon.Shapes.look/1`). The positions share the width
 of the case, so each number of positions has the same size on the plan. The
 panel tells how many positions have a wire. When more wires connect to
 the busbar than it has positions, the panel shows a fault.
+
+### The switch and the monitor of a battery
+
+A battery bank often goes to a busbar through two parts on its wire:
+
+- "Battery switch" (`battery_switch`): it connects the bank to the
+  busbar, or cuts it off. Its number is the current that it carries all
+  the time (A). The Victron battery switch carries 275 A, and it is 69 by
+  69 by 73 mm (the brochure of Victron, VBS127010010).
+- "Battery monitor (shunt)" (`battery_monitor`): it measures the current
+  of the bank, for example the Victron SmartShunt. Its number is the most
+  current of its shunt: 500 A, 1,000 A or 2,000 A. The SmartShunt of 500
+  A is 120 by 54 by 46 mm (the listings of retailers).
+
+These parts use no power: the estimate does not count them. A wire to
+them is as a wire to a busbar (`DIY.Wire.bus?/1`). It gets the voltage of
+the batteries of its node, and it has two ways. The fuse at the bank, for
+example a class T fuse, is the breaker of the wire at the end of the
+bank.
 
 ### The rules
 

@@ -1231,7 +1231,7 @@ defmodule DIY.Catalog do
     %{
       type: "van_battery",
       name: "Battery bank",
-      places: [:bay, :bed],
+      places: [:bay, :bed, :indoor, :outdoor],
       features: [:weight, :van_power, :safety, :wires],
       params: [
         int(
@@ -1314,6 +1314,42 @@ defmodule DIY.Catalog do
           "The smallest fuse that its fuse holders take, or 0 with no fuse holders. A Victron Lynx Distributor takes MEGA fuses. The smallest MEGA fuse of Victron for 48 V is 40 A (80 V, part CIP138040020)."
         ),
         weight(5)
+      ]
+    },
+    %{
+      type: "battery_switch",
+      name: "Battery switch",
+      places: [:indoor, :outdoor, :bay],
+      features: [:weight, :wires],
+      params: [
+        int(
+          "amps",
+          "Rating",
+          "A",
+          275,
+          1,
+          2000,
+          "The current that it carries all the time. The Victron battery switch carries 275 A."
+        ),
+        weight(1)
+      ]
+    },
+    %{
+      type: "battery_monitor",
+      name: "Battery monitor (shunt)",
+      places: [:indoor, :outdoor, :bay],
+      features: [:weight, :wires],
+      params: [
+        int(
+          "amps",
+          "Rating",
+          "A",
+          500,
+          1,
+          6000,
+          "The most current of its shunt. A Victron SmartShunt is for 500 A, 1,000 A or 2,000 A."
+        ),
+        weight(1)
       ]
     },
     %{
@@ -1494,6 +1530,11 @@ defmodule DIY.Catalog do
     # Victron Lynx Distributor: 290 by 170 by 80 mm, 2.2 kg (the manual of
     # Victron). It is on a wall: 80 mm is its depth.
     "dc_bus" => {11, 3, 7},
+    # Victron battery switch 275 A: 69 by 69 by 73 mm (the brochure of
+    # Victron, VBS127010010).
+    "battery_switch" => {3, 3, 3},
+    # Victron SmartShunt 500 A: 120 by 54 by 46 mm (retailer listings).
+    "battery_monitor" => {5, 2, 2},
     # No source: an inlet and its charger.
     "shore_power" => {6, 3, 6},
     # One panel of 400 W, as the solar panels of a house.
@@ -1621,7 +1662,10 @@ defmodule DIY.Catalog do
     "computer" => ~w(pc laptop desk),
     "always_on" => ~w(router modem standby),
     "solar_panels" => ~w(solar pv),
-    "power_station" => ~w(battery backup ecoflow pecron generator)
+    "power_station" => ~w(battery backup ecoflow pecron generator),
+    "van_battery" => ~w(lifepo4 lithium diy pack),
+    "battery_switch" => ~w(disconnect cutoff isolator),
+    "battery_monitor" => ~w(shunt smartshunt bmv)
   }
 
   @doc "The more words of the kinds (`@words`), for the tests."

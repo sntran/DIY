@@ -227,8 +227,9 @@ defmodule DIY.Build do
     }
   end
 
-  # The items of a node of DC: a battery and a busbar.
-  @dc_ends ~w(van_battery dc_bus)
+  # The items of a node of DC: a battery, a busbar, and the parts on the
+  # wire of a battery to a busbar (DIY.Wire.bus?/1).
+  @dc_ends ~w(van_battery dc_bus battery_switch battery_monitor)
 
   # Only the wires with an item at each end stay. A wire with a battery at
   # an end gets the voltage of the battery as its system: a change of the
@@ -287,7 +288,7 @@ defmodule DIY.Build do
 
   defp bus_voltages(nodes, by_id) do
     for {id, node} <- nodes,
-        by_id[id].type == "dc_bus",
+        Wire.bus?(by_id[id]),
         voltages = node_voltages(node, by_id),
         MapSet.size(voltages) > 0,
         into: %{},

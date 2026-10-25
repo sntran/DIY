@@ -574,4 +574,17 @@ defmodule DIYWeb.PowerLiveTest do
     view = open(conn, ~p"/power", flag(plan, "ac", :planned))
     assert render(view) =~ "The page shows the power when the house has its estimate."
   end
+
+  test "the power view names the battery bank on the busbar of the stations", %{conn: conn} do
+    {build, station} = add(house(), "Garage", "power_station")
+    {build, bank} = add(build, "Garage", "van_battery", %{"ah" => "280", "volts" => "48"})
+    {build, lynx} = add(build, "Garage", "dc_bus")
+    {:ok, build, _wire} = Build.add_wire(build, bank, lynx)
+    {:ok, build, _wire} = Build.add_wire(build, station, lynx)
+
+    view = open(conn, ~p"/power", build)
+    assert has_element?(view, "#view-banks", "(with 1 battery bank on their busbar)")
+    # 2 kWh of the station and 280 Ah × 48 V × 90% ÷ 95% of the bank.
+    assert has_element?(view, "#view", "1 power station: 14.7 kWh")
+  end
 end

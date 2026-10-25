@@ -60,7 +60,7 @@ defmodule DIY.Power do
   is false.
   """
 
-  alias DIY.{Bill, Build, Estimate, Profile}
+  alias DIY.{Bill, Build, Estimate, Profile, Van, Wire}
 
   @modes [
     {"backup", "Keep the batteries full for an outage"},
@@ -252,15 +252,22 @@ defmodule DIY.Power do
   batteries, outputs and inputs add up), the panels on the stations and on
   the grid (in watts, with their direction), the interlock or transfer
   switch, and the items that the stations run.
+
+  The battery banks on the busbar of a station (`banks/2`) add their kWh
+  to the stations. A bank gives 90% of LiFePO4 (`DIY.Van.usable/1`), and
+  a station gives 95% of its label (`usable/0`). So the bank adds its Ah ×
+  its volts × 90% ÷ 95%: the same power as on the page of a van.
   """
-  def system(items) do
+  def system(items, wires \\ []) do
     stations = Enum.filter(items, &(&1.type == "power_station"))
+    banks = banks(items, wires)
     panels = Enum.filter(items, &(&1.type == "solar_panels"))
     cars = Enum.filter(items, &(&1.type == "ev"))
 
     %{
       stations: stations,
-      kwh: sum(stations, &(&1.params["kwh"] + &1.params["extra_kwh"])),
+      kwh: sum(stations, &(&1.params["kwh"] + &1.params["extra_kwh"])) + sum(banks, &bank_kwh/1),
+      banks: banks,
       output_w: sum(stations, & &1.params["output_w"]),
       charge_w: sum(stations, & &1.params["charge_w"]),
       solar_in_w: sum(stations, & &1.params["solar_w"]),
@@ -271,6 +278,49 @@ defmodule DIY.Power do
       backup: if(stations == [], do: [], else: Enum.filter(items, & &1.backup))
     }
   end
+
+  @doc """
+  The battery banks on the busbar of a station. A wire joins the bank to a
+  station, or a chain of wires through busbars, battery switches, battery
+  monitors (`DIY.Wire.bus?/1`), stations and banks. A bank with no such
+  chain does not count: it does not give power to a station.
+  """
+  @spec banks([map()], [map()]) :: [map()]
+  def banks(items, wires) do
+    by_id = Map.new(items, &{&1.id, &1})
+
+    links =
+      for wire <- wires, by_id[wire.from] && by_id[wire.to], reduce: %{} do
+        links ->
+          links
+          |> Map.update(wire.from, [wire.to], &[wire.to | &1])
+          |> Map.update(wire.to, [wire.from], &[wire.from | &1])
+      end
+
+    start = for item <- items, item.type == "power_station", do: item.id
+    joined = reach(start, MapSet.new(start), links, by_id)
+    Enum.filter(items, &(&1.type == "van_battery" and MapSet.member?(joined, &1.id)))
+  end
+
+  # The items that a chain of wires joins to the items of `todo`. A chain
+  # goes on through a part of a busbar, a station or a bank.
+  defp reach([], seen, _links, _by_id), do: seen
+
+  defp reach([id | todo], seen, links, by_id) do
+    next =
+      for to <- Map.get(links, id, []),
+          not MapSet.member?(seen, to),
+          item = by_id[to],
+          Wire.bus?(item) or item.type in ["power_station", "van_battery"],
+          uniq: true,
+          do: to
+
+    reach(next ++ todo, MapSet.union(seen, MapSet.new(next)), links, by_id)
+  end
+
+  # The kWh of a bank, as kWh of the label of a station.
+  defp bank_kwh(%{params: p}),
+    do: p["ah"] * String.to_integer(p["volts"]) / 1_000 * Van.usable(p["chemistry"]) / @usable
 
   # The watts of panels in full sun, with their direction.
   defp panel_w(%{params: p}), do: p["watts"] * Map.fetch!(@facing, p["facing"])
@@ -286,7 +336,7 @@ defmodule DIY.Power do
   def run(%Build{} = build, %{ready: true} = estimate, climate, cents) do
     build = Build.house_view(build)
     settings = build.power
-    sys = system(build.items)
+    sys = system(build.items, build.wires)
     night_cents = settings.night_cents || cents
 
     months =

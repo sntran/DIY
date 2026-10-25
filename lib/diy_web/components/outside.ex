@@ -23,7 +23,7 @@ defmodule DIYWeb.Outside do
   """
   use DIYWeb, :html
 
-  alias DIY.{Build, Catalog, Layout}
+  alias DIY.{Build, Catalog, Layout, Power}
   alias DIYWeb.{Camera, Cutaway, Decor, Format, Geometry}
   alias DIYWeb.Icon.Shapes
 
@@ -533,8 +533,9 @@ defmodule DIYWeb.Outside do
 
   # The power of the house. It has the watts of the panels on the roof of
   # the picture (`roofs`) and of the other panels. It also has the count
-  # and the kWh of the stations. A room on the roof of a garage or of a
-  # porch does not show: its panels are with the other panels.
+  # and the kWh of the stations, with the battery banks on their busbar
+  # (`DIY.Power.system/2`). A room on the roof of a garage or of a porch
+  # does not show: its panels are with the other panels.
   defp power(house, roofs) do
     on_roof = MapSet.new(roofs, & &1.id)
     of = fn type -> Enum.filter(house.items, &(&1.type == type)) end
@@ -542,7 +543,7 @@ defmodule DIYWeb.Outside do
     watts = fn panels -> panels |> Enum.map(& &1.params["watts"]) |> Enum.sum() end
 
     stations = of.("power_station")
-    kwh = for(s <- stations, do: s.params["kwh"] + s.params["extra_kwh"]) |> Enum.sum()
+    kwh = Power.system(house.items, Map.get(house, :wires, [])).kwh
 
     %{
       roof: watts.(roof),

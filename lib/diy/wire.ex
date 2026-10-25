@@ -195,7 +195,16 @@ defmodule DIY.Wire do
 
   # The kinds that can feed a fault at the far end: a battery, and a
   # busbar (it has a battery on it).
-  @two_way ~w(van_battery dc_bus)
+  @two_way ~w(van_battery dc_bus battery_switch battery_monitor)
+
+  # The parts of a busbar: a busbar, and the parts on the wire of a battery
+  # to a busbar (a battery switch and a battery monitor). Their wires have
+  # the voltage of the batteries of their node.
+  @bus ~w(dc_bus battery_switch battery_monitor)
+
+  @doc "True for a busbar, or a part on the wire of a battery to a busbar."
+  @spec bus?(map()) :: boolean()
+  def bus?(item), do: item.type in @bus
 
   @doc "True for an item that can give current at the far end of a wire."
   @spec gives_current?(map()) :: boolean()
@@ -230,7 +239,7 @@ defmodule DIY.Wire do
   """
   @spec end_system(String.t(), map(), map(), %{String.t() => String.t()}) :: String.t()
   def end_system(system, from, to, highs) do
-    bus = Enum.find_value([from, to], &(&1.type == "dc_bus" and highs[&1.id]))
+    bus = Enum.find_value([from, to], &(bus?(&1) and highs[&1.id]))
     battery = Enum.find([from, to], &(&1.type == "van_battery"))
 
     cond do
@@ -241,7 +250,7 @@ defmodule DIY.Wire do
       bus ->
         bus
 
-      Enum.any?([from, to], &(&1.type == "dc_bus")) and not dc?(system) ->
+      Enum.any?([from, to], &bus?/1) and not dc?(system) ->
         "12"
 
       true ->
@@ -251,8 +260,8 @@ defmodule DIY.Wire do
 
   @doc """
   The typical numbers of a new wire from an item to an item: 30 A and 6
-  ft. The system is the system of a battery at an end. At a busbar, it is
-  12 V DC. At a transfer switch or a shore power inlet, it is 120 V AC.
+  ft. The system is the system of a battery at an end. At a busbar, a
+  battery switch or a battery monitor, it is 12 V DC. At a transfer switch or a shore power inlet, it is 120 V AC.
   Else it is 12 V DC. On DC, a wire to a battery or to a busbar has two ways.
   The person has nothing yet.
   """
@@ -261,7 +270,7 @@ defmodule DIY.Wire do
     system =
       cond do
         system = battery_system(from, to) -> system
-        Enum.any?([from, to], &(&1.type == "dc_bus")) -> "12"
+        Enum.any?([from, to], &bus?/1) -> "12"
         Enum.any?([from, to], &(&1.type in ~w(transfer_switch shore_power))) -> "120"
         true -> "12"
       end
