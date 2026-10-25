@@ -112,6 +112,12 @@ defmodule DIY.LayoutTest do
     assert Layout.panel() == {45, 68}
     assert Layout.panels(100) == 1
     assert Layout.panel_grid(100) == {1, 1}
+
+    # Panels of 550 W: 1,650 W is 3 panels in a row. A panel of 550 W is
+    # longer: 68 in × 550 ÷ 400 = 94 in.
+    big = %{panels | params: %{"watts" => 1650, "panel_watts" => 550}}
+    assert %{count: 3, cols: 3, rows: 1, panel: {45, 94}} = Layout.array(big)
+    assert Layout.size(big) == {135, 94, 2}
   end
 
   test "an item stays in its room" do

@@ -227,6 +227,43 @@ defmodule DIY.PowerTest do
       assert small.year.grid > solar.year.grid
     end
 
+    test "panels on a tracker get the sun of a tracker in each month" do
+      fixed = %{"watts" => "1000", "to" => "grid", "facing" => "south"}
+      {south, _id} = add(house(), "Backyard", "solar_panels", fixed)
+      {track, id} = add(house(), "Backyard", "solar_panels", Map.put(fixed, "mount", "tracker"))
+      sys = Power.system(track.items)
+      assert {sys.grid_panels_w, sys.grid_track_w} == {0.0, 1000.0}
+      assert Power.grid_tie?(sys)
+      assert [:grid_tie] == Power.permits(sys)
+
+      # Each month: the sun of a tracker ÷ the sun of a fixed panel that
+      # faces south (110% of a flat one).
+      climate = climate()
+      [s, t] = Enum.map([south, track], &run/1)
+
+      for {a, b, m} <- Enum.zip([s.months, t.months, 1..12]) do
+        month = climate.months[m]
+        assert_in_delta b.sun / a.sun, month.track / (month.sun * 1.1), 1.0e-9
+      end
+
+      assert t.year.sun > s.year.sun
+
+      # With no data of a tracker, a tracker is a fixed panel to the south.
+      assert Power.track(%{sun: 4.0, track: nil}) == 4.4
+      assert Power.track(%{sun: 4.0, track: 5.5}) == 5.5
+      assert Power.track(%{}) == 0.0
+      {:ok, item} = Build.item(track, id)
+      assert item.params["mount"] == "tracker"
+
+      # A tracker that charges a station.
+      {build, _id} = station()
+      on_station = Map.merge(fixed, %{"watts" => "1650", "to" => "station", "mount" => "tracker"})
+      {build, _id} = add(build, "Backyard", "solar_panels", on_station)
+      sys = Power.system(build.items)
+      assert {sys.station_panels_w, sys.station_track_w} == {0.0, 1650.0}
+      assert run(build).year.sun > 0
+    end
+
     test "panels on the grid give to the house first, and the rest goes to the grid" do
       {build, _id} = add(house(), "Roof", "solar_panels", %{"watts" => "8000", "to" => "grid"})
       paid = run(power(build, %{buyback_cents: 7.0}))

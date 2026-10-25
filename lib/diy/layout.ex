@@ -122,9 +122,9 @@ defmodule DIY.Layout do
   """
   # The watts of solar panels give their size, also when a stored build
   # gives them a size.
-  def size(%{type: "solar_panels", params: %{"watts" => watts}}) do
-    {cols, rows} = panel_grid(watts)
-    {cols * @panel_w, rows * @panel_d, 2}
+  def size(%{type: "solar_panels"} = item) do
+    %{cols: cols, rows: rows, panel: {w, d}} = array(item)
+    {cols * w, rows * d, 2}
   end
 
   # A camper van: the size of its model, and its space has the mirrors too
@@ -147,19 +147,39 @@ defmodule DIY.Layout do
   array is near a square; the last row can have fewer panels.
   """
   def panel_grid(watts) do
-    n = panels(watts)
-    cols = n |> Kernel.*(2) |> :math.sqrt() |> Float.ceil() |> trunc() |> min(n)
-    {cols, div(n + cols - 1, cols)}
+    %{cols: cols, rows: rows} = array(%{params: %{"watts" => watts}})
+    {cols, rows}
   end
 
   @doc "The watts of one solar panel."
   def panel_watts, do: @panel_watts
 
   @doc "The count of panels for a power: about 400 W each."
-  def panels(watts), do: max(1, round(watts / @panel_watts))
+  def panels(watts), do: array(%{params: %{"watts" => watts}}).count
 
   @doc "The size of one solar panel on the plan, in inches: `{w, d}`."
   def panel, do: {@panel_w, @panel_d}
+
+  @doc """
+  The array of a solar panel item: the count of its panels, its columns,
+  its rows, and the size of one panel (`{w, d}`, inches). The watts of one
+  panel (`panel_watts`, 400 W with no number) give the count. A panel of
+  more watts is longer: its side of 68 in grows with its watts. For
+  example, a panel of 550 W is 45 by 94 in. The panels of the market are
+  near this: a panel of 550 W is near 45 by 90 in.
+  """
+  def array(%{params: %{"watts" => watts} = p}) do
+    one = Map.get(p, "panel_watts", @panel_watts)
+    n = max(1, round(watts / one))
+    cols = n |> Kernel.*(2) |> :math.sqrt() |> Float.ceil() |> trunc() |> min(n)
+
+    %{
+      count: n,
+      cols: cols,
+      rows: div(n + cols - 1, cols),
+      panel: {@panel_w, round(@panel_d * one / @panel_watts)}
+    }
+  end
 
   @doc "The space of an item on its floor, after its turn: `{w, d}`."
   def extent(item) do

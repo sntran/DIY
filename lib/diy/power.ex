@@ -256,6 +256,13 @@ defmodule DIY.Power do
   def system(items) do
     stations = Enum.filter(items, &(&1.type == "power_station"))
     panels = Enum.filter(items, &(&1.type == "solar_panels"))
+    tracker? = &(&1.params["mount"] == "tracker")
+
+    fixed = fn panels, to ->
+      Enum.filter(panels, &(&1.params["to"] == to and not tracker?.(&1)))
+    end
+
+    tracked = fn panels, to -> Enum.filter(panels, &(&1.params["to"] == to and tracker?.(&1))) end
     cars = Enum.filter(items, &(&1.type == "ev"))
 
     %{
@@ -264,16 +271,21 @@ defmodule DIY.Power do
       output_w: sum(stations, & &1.params["output_w"]),
       charge_w: sum(stations, & &1.params["charge_w"]),
       solar_in_w: sum(stations, & &1.params["solar_w"]),
-      station_panels_w: sum(Enum.filter(panels, &(&1.params["to"] == "station")), &panel_w/1),
-      grid_panels_w: sum(Enum.filter(panels, &(&1.params["to"] == "grid")), &panel_w/1),
+      station_panels_w: sum(fixed.(panels, "station"), &panel_w/1),
+      grid_panels_w: sum(fixed.(panels, "grid"), &panel_w/1),
+      station_track_w: sum(tracked.(panels, "station"), & &1.params["watts"]),
+      grid_track_w: sum(tracked.(panels, "grid"), & &1.params["watts"]),
       switch: Enum.find(items, &(&1.type == "transfer_switch")),
       chargers: Enum.filter(cars, &(&1.params["charger"] in ["l2", "l2_48"])),
       backup: if(stations == [], do: [], else: Enum.filter(items, & &1.backup))
     }
   end
 
-  # The watts of panels in full sun, with their direction.
+  # The watts of fixed panels in full sun, with their direction.
   defp panel_w(%{params: p}), do: p["watts"] * Map.fetch!(@facing, p["facing"])
+
+  @doc "True with panels on a grid-tie inverter: fixed, or on a tracker."
+  def grid_tie?(sys), do: sys.grid_panels_w + sys.grid_track_w > 0
 
   defp sum(list, fun), do: list |> Enum.map(fun) |> Enum.sum() |> Kernel./(1)
 
@@ -292,6 +304,7 @@ defmodule DIY.Power do
     months =
       for m <- estimate.months do
         sun = (climate.months[m.month].sun || 0.0) * @derate
+        track = track(climate.months[m.month]) * @derate
         shape = Profile.sun(climate.lat, m.month)
         loads = loads(build.items, m, settings)
         {backup, house} = Enum.split_with(loads, fn {item, _} -> item in sys.backup end)
@@ -300,10 +313,15 @@ defmodule DIY.Power do
 
         # The sun of the panels on the stations, and the part of it that
         # the solar input of the stations takes.
-        pv_panels = for s <- shape, do: s * sun * sys.station_panels_w / 1_000
+        pv_panels =
+          for s <- shape,
+              do: s * (sun * sys.station_panels_w + track * sys.station_track_w) / 1_000
+
         pv_station = for pv <- pv_panels, do: min(pv, sys.solar_in_w / 1_000)
         cut = Enum.sum(pv_panels) - Enum.sum(pv_station)
-        pv_grid = for s <- shape, do: s * sun * sys.grid_panels_w / 1_000
+
+        pv_grid =
+          for s <- shape, do: s * (sun * sys.grid_panels_w + track * sys.grid_track_w) / 1_000
 
         day =
           day(
@@ -354,6 +372,14 @@ defmodule DIY.Power do
       motors: Enum.filter(sys.backup, &Profile.motor?/1)
     }
   end
+
+  @doc """
+  The sun of a month on a panel on a tracker with two axes, in kWh/m² in
+  one day: the direct sun and the light of the sky (`DIY.Weather`). With
+  no such data, it is the sun of a fixed panel that faces south.
+  """
+  def track(%{track: track}) when is_number(track), do: track
+  def track(month), do: (month[:sun] || 0.0) * @facing["south"]
 
   # The mean price of one kWh from the grid, with the hours of the day and
   # of the night.
@@ -745,7 +771,7 @@ defmodule DIY.Power do
     [
       (panel and is_nil(sys.switch)) && :backfeed,
       permits(sys) != [] && :permit,
-      (panel and sys.grid_panels_w > 0) && :grid_tie,
+      (panel and grid_tie?(sys)) && :grid_tie,
       (sys.stations != [] and watts > sys.output_w) && :overload,
       motors != [] && :surge
     ]
@@ -761,7 +787,7 @@ defmodule DIY.Power do
   def permits(sys) do
     [
       (panel?(sys) or sys.switch != nil) && :panel,
-      sys.grid_panels_w > 0 && :grid_tie,
+      grid_tie?(sys) && :grid_tie,
       sys.chargers != [] && :charger
     ]
     |> Enum.filter(& &1)

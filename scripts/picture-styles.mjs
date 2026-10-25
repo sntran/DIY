@@ -9,7 +9,8 @@
 // the classes that are different in snow (data-weather="snow"), with all
 // their properties. "SCENE-inside" has the classes that are different in
 // the house cut open (no class cutaway-outside), with all their
-// properties.
+// properties. The picture does not move: the page has reduced motion, so
+// the styles are those after the loops.
 //
 //   MIX_ENV=test mix.com assets.build
 //   CHROMIUM=/path/to/chrome node scripts/picture-styles.mjs
@@ -40,7 +41,7 @@ const text = ["font-size", "font-weight", "text-anchor", "dominant-baseline", "l
 export async function styles() {
   const browser = await chromium.launch({ executablePath: process.env.CHROMIUM })
   try {
-    const page = await browser.newPage({ colorScheme: "light" })
+    const page = await browser.newPage({ colorScheme: "light", reducedMotion: "reduce" })
     const result = {}
     for (const scene of ["day", "sunset", "night"]) {
       const base = await read(page, scene, "sun", true)

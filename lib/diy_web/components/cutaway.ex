@@ -951,11 +951,19 @@ defmodule DIYWeb.Cutaway do
     polys =
       case {item.type, roof} do
         {"solar_panels", nil} ->
-          Shapes.placed_model(rack(item), %{
-            at: {x * @m, y * @m, z},
-            turn: item.turn,
-            camera: camera
-          })
+          if item.params["mount"] == "tracker" do
+            Shapes.placed_model(tracker(item, {ew, ed}), %{
+              at: {x * @m, y * @m, z},
+              turn: 0,
+              camera: camera
+            })
+          else
+            Shapes.placed_model(rack(item), %{
+              at: {x * @m, y * @m, z},
+              turn: item.turn,
+              camera: camera
+            })
+          end
 
         {"solar_panels", roof} ->
           on_roof(item, roof, z)
@@ -1039,13 +1047,11 @@ defmodule DIYWeb.Cutaway do
   # The panels on a roof: on its surface, in rows. A panel over the ridge
   # has two parts.
   defp on_roof(item, roof, z) do
-    {cols, rows} = Layout.panel_grid(item.params["watts"])
-    {w, d} = Layout.panel()
+    %{cols: cols, rows: rows, count: count, panel: {w, d}} = Layout.array(item)
     {pw, pd} = if rem(item.turn, 2) == 0, do: {w, d}, else: {d, w}
     {cols, rows} = if rem(item.turn, 2) == 0, do: {cols, rows}, else: {rows, cols}
     {ax, ay} = {roof.plan.x + item.at.x, roof.plan.y + item.at.y}
     ridge = roof.plan.y + roof.plan.d / 2
-    count = Layout.panels(item.params["watts"])
 
     for k <- 0..(count - 1),
         {col, row} = panel_cell(k, cols, rows, item.turn),
@@ -1065,9 +1071,7 @@ defmodule DIYWeb.Cutaway do
   # The panels in a yard: rows on a rack, on a pad of gravel. A panel faces
   # the front of the item (y), up at 30°.
   defp rack(item) do
-    {cols, rows} = Layout.panel_grid(item.params["watts"])
-    count = Layout.panels(item.params["watts"])
-    {pw, pd} = Layout.panel()
+    %{cols: cols, rows: rows, count: count, panel: {pw, pd}} = Layout.array(item)
     {w, d} = {cols * pw * @m, rows * pd * @m}
 
     pad = {:face, [{0, 0, 0.01}, {w, 0, 0.01}, {w, d, 0.01}, {0, d, 0.01}], {0, 0, 1}, "p-pad"}
@@ -1085,6 +1089,84 @@ defmodule DIYWeb.Cutaway do
 
     [pad | panels]
   end
+
+  # The positions of the panels of a tracker: the solar hour of the sun
+  # that they face, and the class of each position. The page shows one
+  # position for the time of day of the scene (assets/css/app.css): "day"
+  # at 13:00, "sunset" at 19:00, and "night" flat. The other positions are
+  # the steps of the turn with the sun when the picture shows.
+  @track [
+    {7, "p-track-7"},
+    {9, "p-track-9"},
+    {11, "p-track-11"},
+    {13, "p-track-day"},
+    {15, "p-track-15"},
+    {17, "p-track-17"},
+    {19, "p-track-sunset"},
+    {nil, "p-track-night"}
+  ]
+
+  # The latitude of the sun of the positions (°): the middle of Texas. The
+  # sun is that of an equinox. The panels of a tracker do not go lower
+  # than 20° over the horizon: so they tilt 70° at most.
+  @track_latitude 30
+  @track_low 20
+
+  # Panels on a tracker with two axes: a pole with a footing, and the
+  # panels on a frame at its top. The frame faces the sun at each position
+  # (`@track`). South is the front of the plan (y), and east is its right
+  # (x). The frame does not turn with the item: it turns with the sun.
+  defp tracker(item, {ew, ed}) do
+    %{cols: cols, rows: rows, count: count, panel: {pw, pd}} = Layout.array(item)
+    {pw, pd} = {pw * @m, pd * @m}
+    {w, d} = {cols * pw, rows * pd}
+    {cx, cy} = {ew * @m / 2, ed * @m / 2}
+    top = max(w, d) / 2 + 0.5
+
+    footing = {:box, {cx - 0.2, cy - 0.2, 0}, {0.4, 0.4, 0.1}, "p-pad"}
+    pole = {:box, {cx - 0.06, cy - 0.06, 0.1}, {0.12, 0.12, top - 0.1}, "steel"}
+
+    frames =
+      for {hour, class} <- @track,
+          {u, v} = track_axes(sun(hour)),
+          k <- 0..(count - 1) do
+        {col, row} = {rem(k, cols), div(k, cols)}
+        {a0, a1} = {-w / 2 + col * pw + 0.02, -w / 2 + (col + 1) * pw - 0.02}
+        {b0, b1} = {-d / 2 + row * pd + 0.02, -d / 2 + (row + 1) * pd - 0.02}
+        at = fn a, b -> add({cx, cy, top}, add(scale(u, a), scale(v, b))) end
+        {:face, [at.(a0, b0), at.(a1, b0), at.(a1, b1), at.(a0, b1)], nil, "i-pv " <> class}
+      end
+
+    [footing, pole | frames]
+  end
+
+  # The direction of the sun at a solar hour, as a unit vector: x to the
+  # east, y to the south, z up. At night, the panels lie flat.
+  defp sun(nil), do: {0.0, 0.0, 1.0}
+
+  defp sun(hour) do
+    lat = @track_latitude * :math.pi() / 180
+    w = (hour - 12) * 15 * :math.pi() / 180
+    high = max(:math.asin(:math.cos(lat) * :math.cos(w)), @track_low * :math.pi() / 180)
+    # The azimuth from the north: the sun is in the east before noon.
+    cos_a = -:math.sin(high) * :math.sin(lat) / (:math.cos(high) * :math.cos(lat))
+    a = :math.acos(min(max(cos_a, -1.0), 1.0))
+    a = if hour < 12, do: a, else: 2 * :math.pi() - a
+    {:math.cos(high) * :math.sin(a), -:math.cos(high) * :math.cos(a), :math.sin(high)}
+  end
+
+  # The two axes of a frame that faces a direction: `u` is level, and `v`
+  # goes up the frame.
+  defp track_axes({nx, ny, nz}) do
+    len = :math.sqrt(nx * nx + ny * ny)
+
+    u = if len < 1.0e-6, do: {1.0, 0.0, 0.0}, else: {-ny / len, nx / len, 0.0}
+    {ux, uy, uz} = u
+    {u, {ny * uz - nz * uy, nz * ux - nx * uz, nx * uy - ny * ux}}
+  end
+
+  defp add({a, b, c}, {x, y, z}), do: {a + x, b + y, c + z}
+  defp scale({x, y, z}, k), do: {x * k, y * k, z * k}
 
   ## The box
 
