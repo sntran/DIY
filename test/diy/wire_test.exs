@@ -303,7 +303,7 @@ defmodule DIY.WireTest do
     assert Wire.check(%{thin | awg: nil}, ends) == []
 
     # With no fuse at the bank yet, the advice uses the smallest fuse for
-    # the wire of the bank, and the check waits for the fuse.
+    # the wire of the bank. The check waits for the fuse.
     ends = Wire.ends(switch, monitor, %{fuse: nil, least: 200})
     assert Wire.advise(wire, ends).awg == "3/0"
     assert Wire.check(thin, ends) == []

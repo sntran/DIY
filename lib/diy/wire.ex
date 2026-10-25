@@ -72,9 +72,9 @@ defmodule DIY.Wire do
         }
 
   @typedoc """
-  The fuse at the battery of a chain: the rating that the person has
-  (`fuse`, nil when not known), and the smallest rating for the current
-  of the wire of the battery (`least`).
+  The fuse at the battery of a chain. `fuse` is the rating that the person
+  has (nil when not known). `least` is the smallest rating for the current
+  of the wire of the battery.
   """
   @type bank :: %{fuse: pos_integer() | nil, least: pos_integer()}
 
@@ -442,8 +442,8 @@ defmodule DIY.Wire do
     less is enough;
   - `highest`: the highest volts for the DC rating (nil on AC);
   - `bank`: on the wire of a battery to a busbar, the fuse at the battery
-    that protects the wire (the fuse of the person, else the smallest
-    rating). The wire must carry it. Else nil.
+    that protects the wire. It is the fuse of the person, else the
+    smallest rating. The wire must carry it. Else it is nil.
   """
   @spec advise(wire(), ends()) :: advice()
   def advise(wire, ends) do
@@ -489,8 +489,8 @@ defmodule DIY.Wire do
     volts of the battery. The number is the highest volts.
   - `:drop`: the drop is more than 3% (advice). The number is the drop.
   - `:bank_big`: on the wire of a battery to a busbar, the fuse at the
-    battery is more than the wire takes: it does not protect the wire. The
-    number is the fuse at the battery.
+    battery is more than the wire takes. Then it does not protect the
+    wire. The number is the fuse at the battery.
 
   A check needs its values: with no wire size, the app checks only the
   breakers. An end that needs no breaker (`free` of `ends/2`) has no

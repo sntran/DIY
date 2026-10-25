@@ -618,7 +618,7 @@ defmodule DIYWeb.PowerLiveTest do
     assert html =~ "no breaker, because the fuse at the battery protects it."
 
     # A class T fuse of 250 A, and a wire of 10 AWG from the switch to the
-    # busbar: the fuse does not protect this wire.
+    # busbar. The fuse does not protect this wire.
     {:ok, build} = Build.update_wire(build, to_switch, %{"from_ocpd" => "250"})
     {:ok, build} = Build.update_wire(build, to_lynx, %{"awg" => "10"})
     view = open(conn, ~p"/inside?#{[item: switch]}", build)
