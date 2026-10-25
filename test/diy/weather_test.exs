@@ -70,6 +70,33 @@ defmodule DIY.WeatherTest do
     assert climate.months[7].sun > 5
   end
 
+  test "the sun of a panel on a tracker: the direct sun and the light of the sky" do
+    Stubs.weather()
+    assert {:ok, climate} = Weather.climate(18.0, -18.0, @today)
+
+    # A tracker gets more sun than a flat panel, and more in winter: the sun
+    # is low, and a flat panel gets little of it. The stub is the weather of
+    # Plano: in a year, near 1.4 times the sun of a flat panel.
+    for m <- 1..12, do: assert(climate.months[m].track > climate.months[m].sun)
+    ratio = fn m -> climate.months[m].track / climate.months[m].sun end
+    assert ratio.(12) > ratio.(6)
+    year = Enum.sum(for m <- 1..12, do: climate.months[m].track)
+    assert_in_delta year / Enum.sum(for(m <- 1..12, do: climate.months[m].sun)), 1.4, 0.1
+
+    # A month with no direct sun has no sun of a tracker.
+    body =
+      update_in(Stubs.power(), ["properties", "parameter", "ALLSKY_SFC_SW_DNI"], fn dni ->
+        Map.new(dni, fn {key, value} ->
+          {key, if(String.ends_with?(key, "12"), do: -999.0, else: value)}
+        end)
+      end)
+
+    Stubs.weather(body)
+    assert {:ok, climate} = Weather.climate(19.0, -19.0, @today)
+    assert climate.months[12].track == nil
+    assert climate.months[12].sun > 0
+  end
+
   test "a month with no temperature is not in the series" do
     body = update_in(Stubs.power(), ["properties", "parameter", "T2M", "201601"], fn _ -> nil end)
     Stubs.weather(body)

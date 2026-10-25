@@ -1005,67 +1005,67 @@ msgstr "Los meses de su medidor."
 msgid "This house is too large for a link. A link can have 150 items and 50 rooms at most."
 msgstr "Esta casa es demasiado grande para un enlace. Un enlace puede tener 150 aparatos y 50 cuartos como máximo."
 
-#: lib/diy_web/components/outside.ex:913
+#: lib/diy_web/components/outside.ex:921
 #, elixir-autogen, elixir-format
 msgid "Clouds"
 msgstr "Nubes"
 
-#: lib/diy_web/components/outside.ex:908
+#: lib/diy_web/components/outside.ex:916
 #, elixir-autogen, elixir-format
 msgid "Day"
 msgstr "Día"
 
-#: lib/diy_web/components/outside.ex:910
+#: lib/diy_web/components/outside.ex:918
 #, elixir-autogen, elixir-format
 msgid "Night"
 msgstr "Noche"
 
-#: lib/diy_web/components/outside.ex:900
+#: lib/diy_web/components/outside.ex:908
 #, elixir-autogen, elixir-format
 msgid "Now"
 msgstr "Ahora"
 
-#: lib/diy_web/components/outside.ex:901
+#: lib/diy_web/components/outside.ex:909
 #, elixir-autogen, elixir-format
 msgid "Now (%{name})"
 msgstr "Ahora (%{name})"
 
-#: lib/diy_web/components/outside.ex:890
+#: lib/diy_web/components/outside.ex:898
 #, elixir-autogen, elixir-format
 msgid "Now at the house: %{temp} °F, %{time}, %{weather}."
 msgstr "Ahora en la casa: %{temp} °F, %{time}, %{weather}."
 
-#: lib/diy_web/components/outside.ex:914
+#: lib/diy_web/components/outside.ex:922
 #, elixir-autogen, elixir-format
 msgid "Rain"
 msgstr "Lluvia"
 
-#: lib/diy_web/components/outside.ex:915
+#: lib/diy_web/components/outside.ex:923
 #, elixir-autogen, elixir-format
 msgid "Snow"
 msgstr "Nieve"
 
-#: lib/diy_web/components/outside.ex:912
+#: lib/diy_web/components/outside.ex:920
 #, elixir-autogen, elixir-format
 msgid "Sun"
 msgstr "Sol"
 
-#: lib/diy_web/components/outside.ex:909
+#: lib/diy_web/components/outside.ex:917
 #, elixir-autogen, elixir-format
 msgid "Sunset"
 msgstr "Atardecer"
 
-#: lib/diy_web/components/outside.ex:863
+#: lib/diy_web/components/outside.ex:871
 #, elixir-autogen, elixir-format
 msgid "Time of day"
 msgstr "Hora del día"
 
-#: lib/diy_web/components/outside.ex:874
+#: lib/diy_web/components/outside.ex:882
 #, elixir-autogen, elixir-format
 msgid "Weather"
 msgstr "Clima"
 
-#: lib/diy_web/components/outside.ex:905
+#: lib/diy_web/components/outside.ex:913
 #, elixir-autogen, elixir-format
 msgid "Sunrise"
 msgstr "Amanecer"

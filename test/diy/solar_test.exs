@@ -29,6 +29,38 @@ defmodule DIY.SolarTest do
     build
   end
 
+  test "the sun that the panels of a tracker face" do
+    # The azimuth from the north, and the height over the horizon (°).
+    angles = fn {x, y, z} ->
+      {:math.atan2(x, -y) * 180 / :math.pi(), :math.asin(z) * 180 / :math.pi()}
+    end
+
+    # 7:00: the sun is in the east, 12.9° high: the panels stop at 20°.
+    {a, h} = angles.(Solar.track_sun(7))
+    assert_in_delta a, 97.6, 0.1
+    assert_in_delta h, 20.0, 1.0e-9
+
+    # 13:00: to the south and a little to the west, 57° high.
+    {a, h} = angles.(Solar.track_sun(13))
+    assert a > 180 or a < -150
+    assert_in_delta h, 56.8, 0.5
+
+    # 17:00 and 18:00: to the west. At 18:00 the sun is at the horizon.
+    {a17, _h} = angles.(Solar.track_sun(17))
+    {a18, h18} = angles.(Solar.track_sun(18))
+    assert_in_delta a17, -97.6, 0.1
+    assert_in_delta a18, -90.0, 1.0e-6
+    assert_in_delta h18, 20.0, 1.0e-9
+
+    # At night, the panels lie flat. Each direction is a unit vector.
+    assert Solar.track_sun(nil) == {0.0, 0.0, 1.0}
+
+    for hour <- 6..18 do
+      {x, y, z} = Solar.track_sun(hour)
+      assert_in_delta x * x + y * y + z * z, 1.0, 1.0e-9
+    end
+  end
+
   test "the panels of 400 W that one side of a roof holds" do
     # The top floor has 900 sq ft. One side is half of the roof, × 1.12
     # for the slope. The panels use 2/3 of it, 21.25 sq ft for each panel.

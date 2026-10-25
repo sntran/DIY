@@ -883,6 +883,25 @@ defmodule DIY.Catalog do
           50000,
           "The sum of the watts on the labels of the panels."
         ),
+        int(
+          "panel_watts",
+          "One panel",
+          "W",
+          400,
+          50,
+          1000,
+          "The label of one panel gives its watts. The app draws a larger panel for more watts."
+        ),
+        choice(
+          "mount",
+          "They are on",
+          [
+            {"fixed", "A roof or a rack"},
+            {"tracker", "A tracker that turns them to the sun (two axes)"}
+          ],
+          "fixed",
+          "A tracker turns the panels to the sun all day: the direction has no effect. A tracker stands in a yard. On a roof, the panels are fixed."
+        ),
         choice(
           "facing",
           "They face",

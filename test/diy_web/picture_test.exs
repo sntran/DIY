@@ -182,6 +182,17 @@ defmodule DIYWeb.PictureTest do
 
     # Snow changes some classes; the other classes keep the style of the scene.
     assert Picture.styles("night", "snow")["p-grass"] != Picture.styles("night")["p-grass"]
+
+    # A tracker shows one position in each scene: the position of the
+    # scene. The other positions have no display.
+    positions =
+      ~w(p-track-7 p-track-9 p-track-11 p-track-day p-track-15 p-track-17 p-track-sunset p-track-night)
+
+    for scene <- ~w(day sunset night) do
+      shown = Enum.reject(positions, &(Picture.styles(scene)[&1]["display"] == "none"))
+      assert shown == ["p-track-#{scene}"]
+    end
+
     assert Picture.styles("night", "snow")["p-pane"] == Picture.styles("night")["p-pane"]
     # Inside, a window at night has the color of the night.
     assert Picture.styles("night", "snow", true)["p-pane"] != Picture.styles("night")["p-pane"]

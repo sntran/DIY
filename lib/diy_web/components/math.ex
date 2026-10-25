@@ -6,7 +6,7 @@ defmodule DIYWeb.Math do
   """
   use DIYWeb, :html
 
-  alias DIY.{Catalog, Estimate, Usage}
+  alias DIY.{Catalog, Estimate, Power, Usage}
   alias DIYWeb.{Format, Icon}
 
   attr :build, :map, required: true, doc: "the house of today (no planned item)"
@@ -151,7 +151,7 @@ defmodule DIYWeb.Math do
   # True when the equipment or the prices make the bill different from the
   # use times the price.
   defp changed?(%{system: sys, settings: settings}) do
-    sys.stations != [] or sys.grid_panels_w > 0 or settings.night_cents != nil
+    sys.stations != [] or Power.grid_tie?(sys) or settings.night_cents != nil
   end
 
   attr :power, :map, required: true

@@ -8,6 +8,15 @@ defmodule DIY.Weather do
     18.3 °C (65 °F). The app uses °F: one degree day in °C is 1.8 in °F.
   - `T2M`: the mean air temperature at 2 m.
   - `ALLSKY_SFC_SW_DWN`: the sun on a flat surface, in kWh/m² in one day.
+  - `ALLSKY_SFC_SW_DNI`: the direct sun on a surface that faces the sun
+    (the direct normal irradiance).
+  - `ALLSKY_SFC_SW_DIFF`: the light of the sky on a flat surface (the
+    diffuse irradiance).
+
+  The sum of the last two is the sun of a panel on a tracker with two
+  axes (`track`). This panel always faces the sun. The panel sees a
+  little less of the sky than a flat surface, and the ground gives a little
+  light. The app does not count these two: it is a simple model.
 
   The data has a grid of 0.5° of latitude and 0.625° of longitude, so the
   app asks for the point on a grid of 0.25°, and the cache keeps it for all
@@ -17,10 +26,16 @@ defmodule DIY.Weather do
   alias DIY.Cache
 
   @url "https://power.larc.nasa.gov/api/temporal/monthly/point"
-  @params "CDD18_3,HDD18_3,T2M,ALLSKY_SFC_SW_DWN"
+  @params "CDD18_3,HDD18_3,T2M,ALLSKY_SFC_SW_DWN,ALLSKY_SFC_SW_DNI,ALLSKY_SFC_SW_DIFF"
   @years 10
 
-  @type month :: %{cdd: float(), hdd: float(), t: float(), sun: float() | nil}
+  @type month :: %{
+          cdd: float(),
+          hdd: float(),
+          t: float(),
+          sun: float() | nil,
+          track: float() | nil
+        }
   @type t :: %{
           lat: float(),
           lon: float(),
@@ -108,12 +123,13 @@ defmodule DIY.Weather do
   def parse(_body, _lat, _lon, _first, _last),
     do: {:error, "The weather service gave an answer that the app cannot read."}
 
-  # The values of one month of one year, in °F, or nil with no degree days
-  # or no temperature (the fill value of POWER is -999). The sun comes
-  # later than the rest in the data: a month with no sun has `sun: nil`.
+  # The values of one month of one year, in °F. They are nil with no degree
+  # days or no temperature (the fill value of POWER is -999). The sun comes
+  # later than the rest in the data. A month with no sun has `sun: nil`.
+  # A month with no direct or no diffuse sun has `track: nil`.
   defp value(parameter, key) do
     values =
-      for name <- ~w(CDD18_3 HDD18_3 T2M ALLSKY_SFC_SW_DWN) do
+      for name <- ~w(CDD18_3 HDD18_3 T2M ALLSKY_SFC_SW_DWN ALLSKY_SFC_SW_DNI ALLSKY_SFC_SW_DIFF) do
         case get_in(parameter, [name, key]) do
           value when is_number(value) and value > -999 -> value
           _ -> nil
@@ -121,8 +137,14 @@ defmodule DIY.Weather do
       end
 
     case values do
-      [cdd, hdd, t, sun] when is_number(cdd) and is_number(hdd) and is_number(t) ->
-        %{cdd: cdd * 1.8, hdd: hdd * 1.8, t: t * 1.8 + 32, sun: sun && sun / 1}
+      [cdd, hdd, t, sun, dni, diff] when is_number(cdd) and is_number(hdd) and is_number(t) ->
+        %{
+          cdd: cdd * 1.8,
+          hdd: hdd * 1.8,
+          t: t * 1.8 + 32,
+          sun: sun && sun / 1,
+          track: dni && diff && (dni + diff) / 1
+        }
 
       _ ->
         nil
@@ -139,7 +161,8 @@ defmodule DIY.Weather do
         cdd: mean(Enum.map(values, & &1.cdd)),
         hdd: mean(Enum.map(values, & &1.hdd)),
         t: mean(Enum.map(values, & &1.t)),
-        sun: values |> Enum.map(& &1.sun) |> Enum.reject(&is_nil/1) |> mean()
+        sun: values |> Enum.map(& &1.sun) |> Enum.reject(&is_nil/1) |> mean(),
+        track: values |> Enum.map(& &1.track) |> Enum.reject(&is_nil/1) |> mean()
       }
     end
   end

@@ -161,7 +161,7 @@ defmodule DIYWeb.PowerPage do
             In this mode, the batteries can be empty at 18:00. The mode "Keep the batteries full for an outage" gives more hours.
           </p>
           <p
-            :if={@sys.grid_panels_w > 0 and not Power.panel?(@sys)}
+            :if={Power.grid_tie?(@sys) and not Power.panel?(@sys)}
             id="backup-grid-panels"
             class="text-sm"
           >
@@ -484,7 +484,7 @@ defmodule DIYWeb.PowerPage do
           <span :if={@sys.banks != []} id="view-banks">
             (with {Format.count(length(@sys.banks), "battery bank")} on the busbar)
           </span>
-          <span :if={@sys.station_panels_w > 0}>
+          <span :if={@sys.station_panels_w + @sys.station_track_w > 0}>
             (with {Format.int(
               Enum.sum(for p <- @panels, p.params["to"] == "station", do: p.params["watts"])
             )} W of panels)
@@ -507,7 +507,7 @@ defmodule DIYWeb.PowerPage do
         <%= if @sys.switch.params["device"] == "interlock" do %>
           <p class="font-semibold">The steps in an outage</p>
           <ol class="list-decimal pl-5">
-            <li :if={@sys.grid_panels_w > 0}>Turn off the breaker of the grid-tie inverter.</li>
+            <li :if={Power.grid_tie?(@sys)}>Turn off the breaker of the grid-tie inverter.</li>
             <li>Turn off the main breaker.</li>
             <li>Connect the station to the inlet.</li>
             <li>Turn on the breaker of the inlet (the interlock lets it on now).</li>
@@ -519,12 +519,12 @@ defmodule DIYWeb.PowerPage do
             <li>Turn off the breaker of the inlet.</li>
             <li>Disconnect the station from the inlet.</li>
             <li>Turn on the main breaker.</li>
-            <li :if={@sys.grid_panels_w > 0}>Turn on the breaker of the grid-tie inverter.</li>
+            <li :if={Power.grid_tie?(@sys)}>Turn on the breaker of the grid-tie inverter.</li>
           </ol>
         <% else %>
           <p class="font-semibold">The steps in an outage</p>
           <ol class="list-decimal pl-5">
-            <li :if={@sys.grid_panels_w > 0}>Turn off the breaker of the grid-tie inverter.</li>
+            <li :if={Power.grid_tie?(@sys)}>Turn off the breaker of the grid-tie inverter.</li>
             <li>Connect the station to the inlet.</li>
             <li>Turn on the station.</li>
             <li>Move the transfer switch from the grid to the station. The main breaker stays on.</li>
@@ -534,7 +534,7 @@ defmodule DIYWeb.PowerPage do
             <li>Move the transfer switch from the station to the grid.</li>
             <li>Turn off the station.</li>
             <li>Disconnect the station from the inlet.</li>
-            <li :if={@sys.grid_panels_w > 0}>Turn on the breaker of the grid-tie inverter.</li>
+            <li :if={Power.grid_tie?(@sys)}>Turn on the breaker of the grid-tie inverter.</li>
           </ol>
         <% end %>
       </div>
@@ -777,7 +777,7 @@ defmodule DIYWeb.PowerPage do
       assign(assigns,
         settings: assigns.build.power,
         stations: assigns.power.system.stations != [],
-        grid_panels: assigns.power.system.grid_panels_w > 0
+        grid_panels: Power.grid_tie?(assigns.power.system)
       )
 
     ~H"""

@@ -1590,11 +1590,16 @@ defmodule DIYWeb.Inside do
   field applies at once.
   """
   def place(assigns) do
-    {pw, pd} = Layout.panel()
+    {pw, pd} =
+      if assigns.item.type == "solar_panels",
+        do: Layout.array(assigns.item).panel,
+        else: Layout.panel()
+
+    one = Map.get(assigns.item.params, "panel_watts", Layout.panel_watts())
 
     assigns =
       assign(assigns,
-        panel: "#{pw} by #{pd}",
+        panel: "#{pw} by #{pd} inches for each panel of #{one} W",
         sides: size_fields(assigns.item),
         max: Layout.max_size()
       )
@@ -1629,7 +1634,7 @@ defmodule DIYWeb.Inside do
       <p id="item-where" class="stage-help" aria-live="polite">{where(@item, @room, @items)}</p>
       <.room_map item={@item} room={@room} items={@items} />
       <p :if={@item.type == "solar_panels"} class="stage-help">
-        The watts give the size of the panels on the roof: {@panel} inches for each panel of 400 W.
+        The watts give the size of the panels: {@panel}.
       </p>
       <p :if={@item.type == "camper_van"} class="stage-help">
         The model of the van gives its size, with its mirrors.

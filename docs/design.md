@@ -577,6 +577,39 @@ The shape of the day of each kind of item, and the running watts of an
 item (for the check of the output of a station), are a simple model of
 the app, not a measurement (`DIY.Profile`).
 
+#### Panels on a tracker
+
+A tracker with two axes turns its panels to the sun all day. Its sun has
+two parts. The first part is the direct sun on a surface that faces the
+sun (the direct normal irradiance, `ALLSKY_SFC_SW_DNI` of NASA POWER).
+The second part is the light of the sky (the diffuse irradiance,
+`ALLSKY_SFC_SW_DIFF`). The app takes these numbers of each month from
+POWER, with the sun of a flat panel (`DIY.Weather`). The direction of the
+panels then has no effect. Two parts are not in the model. The panel sees
+a little less of the sky than a flat surface, and the ground gives a
+little light.
+
+A tracker stands on a pole in a yard. On a roof, solar panels are fixed:
+they lie on the slope, and their direction counts. So the build sets
+panels on a roof to "fixed" (`DIY.Build.change/2`).
+
+For example, look at the house of the owner in 77041 (POWER, 2001 to
+2025). In a year, the sun of a tracker is 1.34 times the sun of a flat
+panel. It
+goes from 1.17 in July to 1.74 in December. A fixed panel that faces
+south is 1.10 in the app, so the tracker gives near 22% more. Humid air
+makes more light of the sky and less direct sun, so a tracker gives less
+in a humid place. Houston is humid.
+
+The day of a tracker has the shape of the day of a flat panel: a simple
+model. A real tracker gives more in the morning and in the evening. A
+month with no such data in POWER uses the sun of a fixed panel to the
+south.
+
+The watts of one panel (400 W with no number) give the count of the
+panels, for the picture. A panel of more watts is longer: its side of 68
+in grows with its watts (`DIY.Layout.array/1`).
+
 ### The what-if
 
 `DIY.Power.whatif/6` runs the house of today and the house with the
@@ -1581,6 +1614,21 @@ its turn. A length is in inches.
   (`DIYWeb.Icon.Shapes.placed/2`). A turn turns the model, and a face
   that looks away does not show. Solar panels on a roof lie on its slope.
   In a yard, they stand in rows on a rack.
+- Solar panels on a tracker stand on a pole, on a frame that faces the
+  sun (`DIYWeb.Cutaway`). South is the front of the plan, and east is
+  its right. The sun is the sun of an equinox at 30° of latitude (the
+  middle of Texas). The frame does not go lower than 20° over the
+  horizon. It has 8 positions, each with a class. The positions are the
+  sun of 7:00, 9:00 and 11:00, the day (13:00), 15:00 and 17:00, the
+  sunset, and the night (flat). At the sunset (18:00), the sun is at the
+  horizon in the west, and the frame stops at 20°. The page shows the
+  position of the time of day of the scene. The picture of a link has it
+  too (`priv/picture/styles.json`).
+- When the picture shows, the frame turns with the sun. It steps from
+  7:00 to the position of the scene, one step each 0.5 second, and then
+  it stops (WCAG 2.2.2: at most 3.5 seconds). With "reduce motion", it
+  does not turn. The script of the styles of a picture reads the styles
+  with reduced motion, because the picture does not move.
 - The details of the plan:
   - A floor has the lines of its material. Wood has planks (6 inches
     wide), and tile has tiles of 18 inches. Concrete has slabs, a deck

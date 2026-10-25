@@ -815,7 +815,9 @@ defmodule DIYWeb.Outside do
       aria-hidden="true"
     >
       <Cutaway.defs camera={@view.camera} />
-      <.shapes list={@shapes.back} />
+      <%!-- One group for the shapes of the sky: a new weather adds shapes,
+      and the objects after them do not move. --%>
+      <g id="outside-back"><.shapes list={@shapes.back} /></g>
       <polygon :for={{points, class} <- @view.level.ground} points={points} class={class} />
       <g :for={room <- @view.level.low}>
         <polygon :for={{points, class} <- room.polys} points={points} class={class} />
@@ -824,7 +826,13 @@ defmodule DIYWeb.Outside do
       <g :for={room <- @view.level.rooms}>
         <polygon :for={{points, class} <- room.polys} points={points} class={class} />
       </g>
-      <g :for={object <- @view.level.objects} class={object.kind == :item && "p-item"}>
+      <%!-- An id for each object: an update of the page (a new weather) keeps
+      its polygons, so a loop of an item does not start again. --%>
+      <g
+        :for={object <- @view.level.objects}
+        id={"outside-#{object.id}"}
+        class={object.kind == :item && "p-item"}
+      >
         <polygon :for={{points, class} <- object.polys} points={points} class={class} />
       </g>
       <polygon :for={{points, class} <- @view.meter} points={points} class={class} />

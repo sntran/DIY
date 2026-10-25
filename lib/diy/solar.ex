@@ -35,6 +35,36 @@ defmodule DIY.Solar do
 
   alias DIY.{Build, Estimate, Layout, Power}
 
+  # The sun of the positions of a tracker in a picture (`track_sun/1`): the
+  # sun of an equinox at 30° of latitude (the middle of Texas). A tracker
+  # does not tilt its panels lower than 20° over the horizon.
+  @track_latitude 30
+  @track_low 20
+
+  @doc """
+  The direction that the panels of a tracker face at a solar hour, as a
+  unit vector. The x goes to the east, y to the south, and z up. It is the direction of
+  the sun of an equinox at 30° of latitude. The height of the sun gives
+  its azimuth. Then the panels do not go lower than 20° over the horizon.
+  At 18:00, the sun is at the horizon in the west, so the panels face the
+  west at 20°. With no hour (the night), the panels lie flat.
+  """
+  @spec track_sun(number() | nil) :: {float(), float(), float()}
+  def track_sun(nil), do: {0.0, 0.0, 1.0}
+
+  def track_sun(hour) do
+    lat = @track_latitude * :math.pi() / 180
+    w = (hour - 12) * 15 * :math.pi() / 180
+    high = :math.asin(:math.cos(lat) * :math.cos(w))
+    # The azimuth from the north (the declination is 0 at an equinox): the
+    # sun is in the east before noon.
+    cos_a = -:math.sin(high) * :math.sin(lat) / (:math.cos(high) * :math.cos(lat))
+    a = :math.acos(min(max(cos_a, -1.0), 1.0))
+    a = if hour < 12, do: a, else: 2 * :math.pi() - a
+    high = max(high, @track_low * :math.pi() / 180)
+    {:math.cos(high) * :math.sin(a), -:math.cos(high) * :math.cos(a), :math.sin(high)}
+  end
+
   @slope 1.12
   @usable 2 / 3
 
