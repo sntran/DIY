@@ -268,6 +268,19 @@ the degree days. A month with no sun keeps its degree days.
 - A water heater: 15 gallons for each person in one day, from the
   temperature of the ground to 120 °F.
 - The other items: power × hours, or the kWh in one year of the label.
+- A washer and dryer in one (a combo, common in apartments). A load
+  uses 0.25 kWh to wash (the motor, as a washer) and the kWh to dry. To
+  dry, the app divides a load of 8.45 lb by the combined energy factor
+  (CEF, lb for each kWh). The DOE tests a standard dryer with this load.
+  - With a heat pump: 6.00, the CEF of the GE Profile PFQ97HS*V
+    (ENERGY STAR, ID 2407727). This gives 1.41 kWh. Its 399 kWh to dry in
+    one year of 283 loads give the same.
+  - With a heater: 3.93, the least CEF of ENERGY STAR for a standard
+    dryer, with a vent or with no vent. This gives 2.15 kWh. The combos
+    with no heat pump in the list of ENERGY STAR have a CEF near 3.93.
+  - The app uses these kWh with two decimals, so that the math adds up.
+  The size is that of the GE combo: 28 by 32 by 46.7 in (ENERGY STAR). A
+  combo does not go on an item, and no item goes on it.
 - A fridge or a freezer in a room around the house (a garage, a shed).
   The label of a fridge comes from a test that stands for a kitchen near
   72 °F (10 CFR 430, subpart B, appendix A). The heat that comes in
@@ -4058,8 +4071,8 @@ station on a freezer, or a pool pump on the coping of a pool
   item under it. A pool is in the floor, so an item on a pool is at the
   floor. An item over the top of an item has no shadow. The top item
   paints after the item under it (`DIYWeb.Camera.order/2`).
-- Solar panels, a camper van, a car and an item on a wall or a ceiling
-  do not stack. A pool holds an item, but it does not go on an item. The
+- Solar panels, a camper van, a car, a washer and dryer in one and an
+  item on a wall or a ceiling do not stack. A pool holds an item, but it does not go on an item. The
   items of the roof and of a van do not stack.
 - When a file moves an item from a van to the house, the item gets a
   free place in the house (`DIY.Layout.fill/1`).
