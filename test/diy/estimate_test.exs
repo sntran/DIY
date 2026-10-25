@@ -301,7 +301,7 @@ defmodule DIY.EstimateTest do
     {build, _id} = add(build, "Kitchen", "range", %{"fuel" => "electric"})
     {build, _id} = add(build, "Laundry", "dryer", %{"fuel" => "gas"})
     {build, _id} = add(build, "Laundry", "dryer", %{"fuel" => "electric"})
-    {build, _id} = add(build, "Laundry", "washer_dryer", %{"dry" => "condenser"})
+    {build, _id} = add(build, "Laundry", "washer_dryer", %{"dry" => "heater"})
     {build, _id} = add(build, "Backyard", "ac", %{"heat_pump" => "true", "tons" => "1"})
 
     {build, _id} =
@@ -654,26 +654,34 @@ defmodule DIY.EstimateTest do
 
   test "a washer and dryer in one: the wash, and the dry of a heat pump or of a heater" do
     {build, pump} = add(build(), "Laundry", "washer_dryer", %{"loads" => "7"})
-
-    {build, heater} =
-      add(build, "Laundry", "washer_dryer", %{"loads" => "7", "dry" => "condenser"})
-
+    {build, heater} = add(build, "Laundry", "washer_dryer", %{"loads" => "7", "dry" => "heater"})
     estimate = Estimate.run(build, climate())
 
-    # 7 loads in one week: one load each day.
-    assert_in_delta estimate.items[pump].year, 365 * (0.25 + 8.45 / 6.0), 1.0e-6
-    assert_in_delta estimate.items[heater].year, 365 * (0.25 + 8.45 / 2.68), 1.0e-6
+    # 7 loads in one week: one load each day. The kWh to dry have two
+    # decimals: 8.45 lb ÷ 6.00 is 1.41 kWh, and 8.45 lb ÷ 3.93 is 2.15 kWh.
+    assert_in_delta estimate.items[pump].year, 365 * (0.25 + 1.41), 1.0e-6
+    assert_in_delta estimate.items[heater].year, 365 * (0.25 + 2.15), 1.0e-6
 
-    # The heat pump dries a load with 1.41 kWh: the 399 kWh of ENERGY STAR
-    # in one year of 283 loads.
-    assert_in_delta 8.45 / 6.0, 399 / 283, 0.01
-
+    # The math gives the numbers that it uses, so it adds up on the page.
     {:ok, item} = Build.item(build, pump)
-    assert [_cef, line] = Estimate.explain(item, 1, estimate) |> Enum.drop(-1)
-    assert line =~ "(0.25 kWh to wash + 1.4 kWh to dry)"
+    assert [cef, line, _last] = Estimate.explain(item, 1, estimate)
+    assert cef =~ "GE Profile PFQ97HS*V"
+    assert cef =~ "÷ 6.00 lb for each kWh = 1.41 kWh to dry one load."
+
+    assert line =~
+             "7 loads in one week × 31 days ÷ 7 × (0.25 kWh to wash + 1.41 kWh to dry) = 51.5 kWh."
+
     assert DIY.Profile.watts(item) == 1_320.0
+
     {:ok, item} = Build.item(build, heater)
-    assert DIY.Profile.watts(item) == 1_800.0
+    assert [cef, line, _last] = Estimate.explain(item, 1, estimate)
+    assert cef =~ "÷ 3.93 lb for each kWh = 2.15 kWh to dry one load."
+    assert line =~ "(0.25 kWh to wash + 2.15 kWh to dry) = 74.4 kWh."
+    assert DIY.Profile.watts(item) == 5_000.0
+
+    # A combo does not stack: it goes on no item, and it takes no item.
+    refute DIY.Stack.goes_on?(item)
+    refute DIY.Stack.takes?(item)
   end
 
   test "the format of a number" do

@@ -38,11 +38,11 @@ defmodule DIY.Stack do
 
   @doc "True when an item of a kind can go on an item."
   def goes_on?(%{type: type}),
-    do: type not in ~w(solar_panels camper_van ev pool) and Catalog.lift(type) == 0
+    do: type not in ~w(solar_panels camper_van ev pool washer_dryer) and Catalog.lift(type) == 0
 
   @doc "True when an item of a kind can take an item on it."
   def takes?(%{type: type}),
-    do: type not in ~w(solar_panels camper_van ev) and Catalog.lift(type) == 0
+    do: type not in ~w(solar_panels camper_van ev washer_dryer) and Catalog.lift(type) == 0
 
   @doc "True when the items of a room can stack: not on the roof, not in a van."
   def stacks?(%{place: place, level: level}),

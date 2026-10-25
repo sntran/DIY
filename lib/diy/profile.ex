@@ -158,11 +158,11 @@ defmodule DIY.Profile do
   def watts(%{type: "dishwasher"}), do: 1_200.0
   def watts(%{type: "washer"}), do: 500.0
 
-  # The GE Profile PFQ97HSPVDS: 1,320 W to wash, on 120 V (its spec sheet).
-  # The heat of a combo with no heat pump is near the most of an outlet of
-  # 120 V and 15 A (1,800 W).
+  # A combo with a heat pump: 1,320 W to wash, on 120 V (a seller gives it
+  # for the GE Profile PFQ97HSPVRS). A combo with a heater: the power of an
+  # electric dryer.
   def watts(%{type: "washer_dryer", params: p}),
-    do: if(p["dry"] == "heat_pump", do: 1_320.0, else: 1_800.0)
+    do: if(p["dry"] == "heat_pump", do: 1_320.0, else: 5_000.0)
 
   def watts(%{type: "dryer", params: p}),
     do: if(p["fuel"] == "electric", do: 5_000.0, else: 300.0)

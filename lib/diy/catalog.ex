@@ -583,10 +583,10 @@ defmodule DIY.Catalog do
           "How it dries",
           [
             {"heat_pump", "With a heat pump"},
-            {"condenser", "With a heater and water (no heat pump)"}
+            {"heater", "With a heater (no heat pump)"}
           ],
           "heat_pump",
-          "The label or the manual tells it. A unit with a heat pump uses less than half of the power to dry."
+          "The label or the manual tells it. A heat pump uses less energy to dry."
         )
       ]
     },

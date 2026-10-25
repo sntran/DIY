@@ -88,13 +88,16 @@ defmodule DIY.Estimate do
   @stove 0.055
   @dryer 0.073
 
-  # The kWh to dry one load in a washer and dryer in one: a load of 8.45 lb
-  # (the test load of a standard dryer of the DOE) ÷ the combined energy
-  # factor (CEF, lb for each kWh). With a heat pump: 6.00, the CEF of the GE
-  # Profile PFQ97HS*V (ENERGY STAR, ID 2407727): 1.41 kWh, the same as its
-  # 399 kWh to dry in one year of 283 loads. With no heat pump: 2.68, the
-  # least CEF of ENERGY STAR for a dryer with no vent (compact, 240 V).
-  @combo_cef %{"heat_pump" => 6.0, "condenser" => 2.68}
+  # The kWh to dry one load in a washer and dryer in one. It is a load of
+  # 8.45 lb ÷ the combined energy factor (CEF, lb for each kWh). The DOE
+  # tests a standard dryer with this load.
+  # - With a heat pump: 6.00, the CEF of the GE Profile PFQ97HS*V (ENERGY
+  #   STAR, ID 2407727). This gives 1.41 kWh. Its 399 kWh to dry in one
+  #   year of 283 loads give the same.
+  # - With a heater: 3.93, the least CEF of ENERGY STAR for a standard
+  #   dryer, with a vent or with no vent. This gives 2.15 kWh.
+  # The app uses the kWh with two decimals, so that the math adds up.
+  @combo_cef %{"heat_pump" => {"6.00", 6.0}, "heater" => {"3.93", 3.93}}
   @dry_load 8.45
   @therm 100_000
 
@@ -652,7 +655,10 @@ defmodule DIY.Estimate do
 
   defp other(kwh), do: %{kwh: kwh / 1, part: :other, full: false}
 
-  defp combo_dry(dry), do: @dry_load / Map.fetch!(@combo_cef, dry)
+  defp combo_dry(dry) do
+    {_text, cef} = Map.fetch!(@combo_cef, dry)
+    Float.round(@dry_load / cef, 2)
+  end
 
   # The label of a fridge comes from a test at 90 °F with closed doors.
   # This test stands for a kitchen near 72 °F, with doors that open (10
@@ -927,17 +933,19 @@ defmodule DIY.Estimate do
   end
 
   defp steps(%{type: "washer_dryer", params: p}, m, _data, _estimate) do
-    {source, cef} =
+    source =
       case p["dry"] do
-        "heat_pump" -> {"ENERGY STAR gives the CEF of a combo with a heat pump", "6.00"}
-        "condenser" -> {"The least CEF of ENERGY STAR for a dryer with no vent", "2.68"}
+        "heat_pump" -> "The GE Profile PFQ97HS*V dries with a heat pump (ENERGY STAR)"
+        "heater" -> "The least of ENERGY STAR for a standard dryer"
       end
 
+    {cef, _value} = Map.fetch!(@combo_cef, p["dry"])
     dry = combo_dry(p["dry"])
+    dry_text = :erlang.float_to_binary(dry, decimals: 2)
 
     [
-      "#{source}: 8.45 lb (the test load of a standard dryer) ÷ #{cef} lb for each kWh = #{number_text(dry)} kWh to dry one load.",
-      "#{num(p["loads"])} loads in one week × #{m.days} days ÷ 7 × (0.25 kWh to wash + #{number_text(dry)} kWh to dry) = #{number_text(p["loads"] * m.days / 7 * (0.25 + dry))} kWh. The hot water of the wash is on the water heater."
+      "#{source}: 8.45 lb (the test load of a standard dryer) ÷ #{cef} lb for each kWh = #{dry_text} kWh to dry one load.",
+      "#{num(p["loads"])} loads in one week × #{m.days} days ÷ 7 × (0.25 kWh to wash + #{dry_text} kWh to dry) = #{number_text(p["loads"] * m.days / 7 * (0.25 + dry))} kWh. The hot water of the wash is on the water heater."
     ]
   end
 
