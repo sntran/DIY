@@ -482,7 +482,7 @@ defmodule DIYWeb.PowerPage do
             )} kWh, {Format.int(@sys.output_w)} W
           </span>
           <span :if={@sys.banks != []} id="view-banks">
-            (with {Format.count(length(@sys.banks), "battery bank")} on their busbar)
+            (with {Format.count(length(@sys.banks), "battery bank")} on the busbar)
           </span>
           <span :if={@sys.station_panels_w > 0}>
             (with {Format.int(

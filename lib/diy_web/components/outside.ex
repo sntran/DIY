@@ -543,13 +543,14 @@ defmodule DIYWeb.Outside do
     watts = fn panels -> panels |> Enum.map(& &1.params["watts"]) |> Enum.sum() end
 
     stations = of.("power_station")
-    kwh = Power.system(house.items, Map.get(house, :wires, [])).kwh
+    sys = Power.system(house.items, house.wires)
 
     %{
       roof: watts.(roof),
       other: watts.(other),
       stations: length(stations),
-      kwh: Format.value(Float.round(kwh / 1, 1))
+      banks: length(sys.banks),
+      kwh: Format.value(Float.round(sys.kwh / 1, 1))
     }
   end
 
@@ -626,13 +627,19 @@ defmodule DIYWeb.Outside do
       power.roof > 0 && "solar panels of #{kw(power.roof)} on the roof",
       power.other > 0 && "other solar panels of #{kw(power.other)}",
       names != [] && "outside: #{Enum.join(names, ", ")}",
-      power.stations > 0 && "#{Format.count(power.stations, "power station")} of #{power.kwh} kWh",
+      power.stations > 0 && "#{stations_text(power)} of #{power.kwh} kWh",
       wire && "the wire of the grid",
       door && "you in front of the door"
     ]
     |> Enum.filter(& &1)
     |> Enum.join(", ")
   end
+
+  # The stations, with the battery banks on their busbar.
+  defp stations_text(%{stations: n, banks: 0}), do: Format.count(n, "power station")
+
+  defp stations_text(%{stations: n, banks: banks}),
+    do: Format.count(n, "power station") <> " and " <> Format.count(banks, "battery bank")
 
   # A label at a point of the world: a pill with its text. The width of the
   # pill comes from the count of the letters.

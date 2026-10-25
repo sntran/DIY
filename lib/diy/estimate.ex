@@ -952,7 +952,7 @@ defmodule DIY.Estimate do
 
   defp steps(%{type: "van_battery"}, _m, _data, _estimate),
     do: [
-      "A battery bank keeps power: it uses none. On the busbar of a station, it adds its kWh to the station (the page Power)."
+      "A battery bank keeps power: it uses none. A bank on the busbar of a station adds its kWh to the station (the page Power)."
     ]
 
   defp steps(%{type: "battery_switch"}, _m, _data, _estimate),

@@ -70,11 +70,15 @@ defmodule DIY.Wire do
           to_dc: number() | nil
         }
 
-  @type ends :: %{from_min: non_neg_integer(), to_min: non_neg_integer()}
+  @type ends :: %{
+          required(:from_min) => non_neg_integer(),
+          required(:to_min) => non_neg_integer(),
+          optional(:free) => [:from | :to]
+        }
 
   @type advice :: %{
           need: float(),
-          from: pos_integer(),
+          from: pos_integer() | nil,
           to: pos_integer() | nil,
           awg: awg() | nil,
           drop: float() | nil,
@@ -198,9 +202,13 @@ defmodule DIY.Wire do
   @two_way ~w(van_battery dc_bus battery_switch battery_monitor)
 
   # The parts of a busbar: a busbar, and the parts on the wire of a battery
-  # to a busbar (a battery switch and a battery monitor). Their wires have
-  # the voltage of the batteries of their node.
+  # to a busbar. These parts are a battery switch and a battery monitor.
+  # Their wires have the voltage of the batteries of their node.
   @bus ~w(dc_bus battery_switch battery_monitor)
+
+  # The parts on the wire of a battery to a busbar. The fuse at the
+  # battery protects this wire to the busbar: these parts have no fuse.
+  @inline ~w(battery_switch battery_monitor)
 
   @doc "True for a busbar, or a part on the wire of a battery to a busbar."
   @spec bus?(map()) :: boolean()
@@ -289,11 +297,24 @@ defmodule DIY.Wire do
   end
 
   @doc """
-  The smallest fuse that the item at each end takes (A): the number of a
-  busbar, else 0.
+  The ends of a wire, for the advice and the check:
+
+  - `from_min` and `to_min`: the smallest fuse that the item at each end
+    takes (A): the number of a busbar, else 0;
+  - `free`: the ends that need no breaker. A wire with an end at a battery
+    switch or a battery monitor is on the wire of a battery to a busbar.
+    The fuse at the battery protects all of it (for example a class T
+    fuse). So only its end at a battery needs a breaker.
   """
   @spec ends(map(), map()) :: ends()
-  def ends(from, to), do: %{from_min: fuse_min(from), to_min: fuse_min(to)}
+  def ends(from, to) do
+    chain = from.type in @inline or to.type in @inline
+
+    free =
+      for {side, item} <- [from: from, to: to], chain and item.type != "van_battery", do: side
+
+    %{from_min: fuse_min(from), to_min: fuse_min(to), free: free}
+  end
 
   defp fuse_min(%{type: "dc_bus", params: params}), do: params["fuse_min"]
   defp fuse_min(_item), do: 0
@@ -397,12 +418,13 @@ defmodule DIY.Wire do
   @spec advise(wire(), ends()) :: advice()
   def advise(wire, ends) do
     need = wire.amps * @continuous
-    from = rating(max(need, ends.from_min))
-    to = if two_way?(wire), do: rating(max(need, ends.to_min))
+    free = Map.get(ends, :free, [])
+    from = if :from not in free, do: rating(max(need, ends.from_min))
+    to = if two_way?(wire) and :to not in free, do: rating(max(need, ends.to_min))
 
     awg =
       Enum.find(sizes(), fn awg ->
-        ampacity(awg) >= need and largest(awg) >= max(from, to || 0) and
+        ampacity(awg) >= need and largest(awg) >= max(from || 0, to || 0) and
           drop(awg, wire.amps, wire.feet, wire.system) <= @max_drop
       end)
 
@@ -433,12 +455,13 @@ defmodule DIY.Wire do
   - `:drop`: the drop is more than 3% (advice). The number is the drop.
 
   A check needs its values: with no wire size, the app checks only the
-  breakers.
+  breakers. An end that needs no breaker (`free` of `ends/2`) has no
+  fault of a breaker.
   """
-  @spec check(wire()) :: [fault()]
-  def check(wire) do
+  @spec check(wire(), ends()) :: [fault()]
+  def check(wire, ends \\ %{from_min: 0, to_min: 0}) do
     need = wire.amps * @continuous
-    ends = if two_way?(wire), do: [:from, :to], else: [:from]
+    ends = if(two_way?(wire), do: [:from, :to], else: [:from]) -- Map.get(ends, :free, [])
 
     wire_small(wire, need) ++
       Enum.flat_map(ends, &ocpd_faults(wire, &1, need)) ++

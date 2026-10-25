@@ -229,8 +229,41 @@ defmodule DIY.WireTest do
     assert Wire.battery_system(battery, inverter) == "24"
     assert Wire.battery_system(station, bus) == nil
 
-    assert Wire.ends(station, bus) == %{from_min: 0, to_min: 80}
-    assert Wire.ends(bus, inverter) == %{from_min: 80, to_min: 0}
+    assert Wire.ends(station, bus) == %{from_min: 0, to_min: 80, free: []}
+    assert Wire.ends(bus, inverter) == %{from_min: 80, to_min: 0, free: []}
+  end
+
+  test "the wire of a bank to a busbar: only its end at the bank needs a breaker" do
+    bank = %{id: "b", type: "van_battery", params: %{"volts" => "48"}}
+    switch = %{id: "s", type: "battery_switch", params: %{}}
+    monitor = %{id: "m", type: "battery_monitor", params: %{}}
+    lynx = %{id: "l", type: "dc_bus", params: %{"fuse_min" => 40}}
+
+    assert Wire.ends(bank, switch).free == [:to]
+    assert Wire.ends(switch, bank).free == [:from]
+    assert Wire.ends(switch, monitor).free == [:from, :to]
+    assert Wire.ends(monitor, lynx).free == [:from, :to]
+
+    # The chain of the owner: a class T fuse of 200 A at the bank, wire of
+    # 4/0 AWG (230 A), 150 A. The other ends have no fuse: no fault.
+    chain = [{bank, switch}, {switch, monitor}, {monitor, lynx}]
+
+    for {from, to} <- chain do
+      wire = %{Wire.defaults(from, to) | system: "48", amps: 150.0, feet: 3.0, awg: "4/0"}
+      wire = if from.type == "van_battery", do: %{wire | from_ocpd: 200, from_dc: 125}, else: wire
+      assert wire.two_way
+      ends = Wire.ends(from, to)
+      assert Wire.check(wire, ends) == []
+
+      # The advice asks for a breaker only at the bank.
+      advice = Wire.advise(wire, ends)
+      assert advice.from == if(from.type == "van_battery", do: 200)
+      assert advice.to == nil
+      assert advice.awg
+
+      # With no ends, the same wire asks for a breaker at each end.
+      assert Enum.any?(Wire.check(wire), &match?({:no_ocpd, _, _}, &1))
+    end
   end
 
   test "the numbers of a wire from a form or from JSON" do

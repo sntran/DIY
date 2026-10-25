@@ -1530,8 +1530,8 @@ defmodule DIY.Catalog do
     # Victron Lynx Distributor: 290 by 170 by 80 mm, 2.2 kg (the manual of
     # Victron). It is on a wall: 80 mm is its depth.
     "dc_bus" => {11, 3, 7},
-    # Victron battery switch 275 A: 69 by 69 by 73 mm (the brochure of
-    # Victron, VBS127010010).
+    # Victron battery switch 275 A (VBS127010010): 69.5 by 76.3 by 69.5 mm
+    # (retailer listings).
     "battery_switch" => {3, 3, 3},
     # Victron SmartShunt 500 A: 120 by 54 by 46 mm (retailer listings).
     "battery_monitor" => {5, 2, 2},

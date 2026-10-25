@@ -194,13 +194,25 @@ defmodule DIY.PowerTest do
       # The wires of the chain have the voltage of the bank.
       assert Enum.all?(build.wires, &(&1.system == "48"))
 
-      # The page Power runs with the bank: an outage gives more hours.
-      {build, fridge} = {build, of_type(build, "fridge").id}
-      build = flag(build, fridge, :backup)
-      alone = flag(bank_build(false), of_type(build, "fridge").id, :backup)
-      with_bank = run(build).months |> hd()
-      without = run(alone).months |> hd()
-      assert with_bank.outage == :days or with_bank.outage > without.outage
+      # The page Power runs with the bank: an outage gives more hours. A
+      # station of 5.12 kWh runs a fridge for about 4 days. With the bank,
+      # it runs it for more than the 7 days of the model.
+      fridge = of_type(build, "fridge").id
+      with_bank = run(flag(build, fridge, :backup)).months |> hd()
+      without = run(flag(bank_build(false), fridge, :backup)).months |> hd()
+      assert is_number(without.outage) and without.outage > 48
+      assert with_bank.outage == :days
+    end
+
+    test "a wire to an item that is not in the house does not count" do
+      build = bank_build(true)
+      [lynx] = for i <- build.items, i.type == "dc_bus", do: i.id
+
+      # A station in a van: the house has no item at that end of its wire.
+      wires = build.wires ++ [%{id: "w99", from: "gone", to: lynx}]
+      sys = Power.system(build.items, wires)
+      assert [%{type: "van_battery"}] = sys.banks
+      assert Power.banks(build.items, [%{id: "w98", from: "gone", to: "lost"}]) == []
     end
 
     test "with no wire to a station, a bank adds nothing" do
