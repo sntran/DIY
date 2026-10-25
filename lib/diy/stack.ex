@@ -17,8 +17,8 @@ defmodule DIY.Stack do
     item comes down. An item that comes down goes on the item that holds
     it there, or on the floor.
   - Some kinds do not go on an item, and do not take an item on them.
-    These are solar panels, a camper van, a car, and an item on a wall or
-    a ceiling (`DIY.Catalog.lift/1`). A pool takes an item, but it does
+    These are solar panels, a camper van, a car, a washer and dryer in
+    one, and an item on a wall or a ceiling (`DIY.Catalog.lift/1`). A pool takes an item, but it does
     not go on an item.
   - The items of the roof and of a van do not stack.
 

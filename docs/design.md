@@ -4050,8 +4050,8 @@ station on a freezer, or a pool pump on the coping of a pool
   item under it. A pool is in the floor, so an item on a pool is at the
   floor. An item over the top of an item has no shadow. The top item
   paints after the item under it (`DIYWeb.Camera.order/2`).
-- Solar panels, a camper van, a car and an item on a wall or a ceiling
-  do not stack. A pool holds an item, but it does not go on an item. The
+- Solar panels, a camper van, a car, a washer and dryer in one and an
+  item on a wall or a ceiling do not stack. A pool holds an item, but it does not go on an item. The
   items of the roof and of a van do not stack.
 - When a file moves an item from a van to the house, the item gets a
   free place in the house (`DIY.Layout.fill/1`).

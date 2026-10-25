@@ -936,7 +936,7 @@ defmodule DIY.Estimate do
     source =
       case p["dry"] do
         "heat_pump" -> "The GE Profile PFQ97HS*V dries with a heat pump (ENERGY STAR)"
-        "heater" -> "The least of ENERGY STAR for a standard dryer"
+        "heater" -> "The least CEF of ENERGY STAR for a standard dryer"
       end
 
     {cef, _value} = Map.fetch!(@combo_cef, p["dry"])
