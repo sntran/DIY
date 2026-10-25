@@ -1656,7 +1656,10 @@ its turn. A length is in inches.
   sunset, and the night (flat). At the sunset (18:00), the sun is at the
   horizon in the west, and the frame stops at 20°. The page shows the
   position of the time of day of the scene. The picture of a link has it
-  too (`priv/picture/styles.json`).
+  too (`priv/picture/styles.json`). The pole goes up to the middle of the
+  frame, behind the panels. When the camera sees the front of the
+  panels, they paint after the pole and hide its top. When it sees their
+  back, they paint before the pole.
 - When the picture shows, the frame turns with the sun. It steps from
   7:00 to the position of the scene, one step each 0.5 second, and then
   it stops (WCAG 2.2.2: at most 3.5 seconds). With "reduce motion", it

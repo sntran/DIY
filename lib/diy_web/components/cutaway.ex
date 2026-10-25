@@ -955,7 +955,7 @@ defmodule DIYWeb.Cutaway do
             # The model of a tracker has its pole at the middle of the item.
             # Its box is the box of all its positions: the place of the low
             # corner of that box keeps the pole at its place.
-            model = tracker(item, {ew, ed})
+            model = tracker(item, {ew, ed}, camera)
             {{lx, ly, lz}, _high} = Shapes.bounds(model)
 
             Shapes.placed_model(model, %{
@@ -1117,7 +1117,14 @@ defmodule DIYWeb.Cutaway do
   # panels on a frame at its top. The frame faces the sun at each position
   # (`@track`). South is the front of the plan (y), and east is its right
   # (x). The frame does not turn with the item: it turns with the sun.
-  defp tracker(item, {ew, ed}) do
+  #
+  # The pole goes up to the middle of the frame, behind the panels. Its box
+  # crosses the box of the frame, so the order of the boxes cannot tell
+  # which paints first. The pole and the frames are thus one group in a
+  # fixed order. When the camera sees the front of the panels of a
+  # position, these panels paint after the pole and hide its top. When it
+  # sees their back, they paint before the pole.
+  defp tracker(item, {ew, ed}, camera) do
     %{cols: cols, rows: rows, count: count, panel: {pw, pd}} = Layout.array(item)
     {pw, pd} = {pw * @m, pd * @m}
     {w, d} = {cols * pw, rows * pd}
@@ -1127,18 +1134,27 @@ defmodule DIYWeb.Cutaway do
     footing = {:box, {cx - 0.2, cy - 0.2, 0}, {0.4, 0.4, 0.1}, "p-pad"}
     pole = {:box, {cx - 0.06, cy - 0.06, 0.1}, {0.12, 0.12, top - 0.1}, "steel"}
 
-    frames =
-      for {hour, class} <- @track,
-          {u, v} = track_axes(Solar.track_sun(hour)),
-          k <- 0..(count - 1) do
-        {col, row} = {rem(k, cols), div(k, cols)}
-        {a0, a1} = {-w / 2 + col * pw + 0.02, -w / 2 + (col + 1) * pw - 0.02}
-        {b0, b1} = {-d / 2 + row * pd + 0.02, -d / 2 + (row + 1) * pd - 0.02}
-        at = fn a, b -> add({cx, cy, top}, add(scale(u, a), scale(v, b))) end
-        {:face, [at.(a0, b0), at.(a1, b0), at.(a1, b1), at.(a0, b1)], nil, "i-pv " <> class}
-      end
+    {front, back} =
+      @track
+      |> Enum.map(fn {hour, class} ->
+        sun = Solar.track_sun(hour)
+        {u, v} = track_axes(sun)
 
-    [footing, pole | frames]
+        faces =
+          for k <- 0..(count - 1) do
+            {col, row} = {rem(k, cols), div(k, cols)}
+            {a0, a1} = {-w / 2 + col * pw + 0.02, -w / 2 + (col + 1) * pw - 0.02}
+            {b0, b1} = {-d / 2 + row * pd + 0.02, -d / 2 + (row + 1) * pd - 0.02}
+            at = fn a, b -> add({cx, cy, top}, add(scale(u, a), scale(v, b))) end
+            {:face, [at.(a0, b0), at.(a1, b0), at.(a1, b1), at.(a0, b1)], nil, "i-pv " <> class}
+          end
+
+        {Camera.shows?(camera, sun), faces}
+      end)
+      |> Enum.split_with(&elem(&1, 0))
+
+    faces = &Enum.flat_map(&1, fn {_front, faces} -> faces end)
+    [footing, {:group, faces.(back) ++ [pole | faces.(front)]}]
   end
 
   # The two axes of a frame that faces a direction: `u` is level, and `v`

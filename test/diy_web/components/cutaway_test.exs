@@ -60,6 +60,27 @@ defmodule DIYWeb.CutawayTest do
     mid_x = fn class -> object.polys |> Enum.filter(&(elem(&1, 1) =~ class)) |> mean_x() end
     assert_in_delta mid_x.("p-pad"), mid_x.("p-shadow"), 1.0
 
+    # The pole goes up to the middle of the frame, behind the panels. When
+    # the camera sees the front of the panels, the pole paints first, so
+    # the panels hide its top. When the camera sees their back, the pole
+    # paints after them.
+    classes = Enum.map(object.polys, &elem(&1, 1))
+    pole = Enum.find_index(classes, &(&1 =~ "i-steel"))
+
+    for {hour, class} <-
+          [{7, "p-track-7"}, {13, "p-track-day"}, {18, "p-track-sunset"}] ++
+            [{nil, "p-track-night"}] do
+      frames = for {c, i} <- Enum.with_index(classes), c =~ class, do: i
+      front? = DIYWeb.Camera.shows?(DIYWeb.Camera.house(), DIY.Solar.track_sun(hour))
+
+      if front?,
+        do: assert(Enum.all?(frames, &(&1 > pole)), class),
+        else: assert(Enum.all?(frames, &(&1 < pole)), class)
+    end
+
+    # By day, the camera sees the front of the panels.
+    assert DIYWeb.Camera.shows?(DIYWeb.Camera.house(), DIY.Solar.track_sun(13))
+
     # A turn of the item does not turn the frame: it faces the sun.
     [{_, item}] = for i <- build.items, i.type == "solar_panels", do: {i.id, i}
 
