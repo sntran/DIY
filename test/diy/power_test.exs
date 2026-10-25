@@ -255,6 +255,23 @@ defmodule DIY.PowerTest do
       {:ok, item} = Build.item(track, id)
       assert item.params["mount"] == "tracker"
 
+      # On a roof, the panels are fixed: they lie on the slope, and they
+      # get the sun of their direction. A stored build does the same.
+      {:ok, roof} = Build.move_item(track, id, room(track, "Roof"))
+      {:ok, item} = Build.item(roof, id)
+      assert item.params["mount"] == "fixed"
+      assert Power.system(roof.items).grid_panels_w == 1100.0
+      {:ok, roof} = Build.update_item(roof, id, %{"mount" => "tracker"})
+      assert {:ok, %{params: %{"mount" => "fixed"}}} = Build.item(roof, id)
+
+      stored =
+        update_in(roof.items, fn items ->
+          Enum.map(items, &if(&1.id == id, do: put_in(&1.params["mount"], "tracker"), else: &1))
+        end)
+
+      {:ok, again} = Build.from_json(Build.to_json(stored))
+      assert {:ok, %{params: %{"mount" => "fixed"}}} = Build.item(again, id)
+
       # A tracker that charges a station.
       {build, _id} = station()
       on_station = Map.merge(fixed, %{"watts" => "1650", "to" => "station", "mount" => "tracker"})

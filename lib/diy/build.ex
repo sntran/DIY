@@ -211,7 +211,7 @@ defmodule DIY.Build do
     %__MODULE__{} = changed = Layout.fill(changed)
     # An item stays on an item only when the two still stack (`DIY.Stack`).
     rooms = Map.new(changed.rooms, &{&1.id, &1})
-    changed = %{changed | items: DIY.Stack.normalize(changed.items, rooms)}
+    changed = %{changed | items: changed.items |> DIY.Stack.normalize(rooms) |> fit_mounts(rooms)}
     # An item that went away takes its links and its wires with it.
     ids = Enum.map(changed.items, & &1.id)
     devices = Map.take(changed.devices, ids)
@@ -225,6 +225,17 @@ defmodule DIY.Build do
         devices: devices,
         units: units
     }
+  end
+
+  # A tracker stands on a pole in a yard. On a roof, solar panels are
+  # fixed: they lie on the slope, and their direction counts.
+  defp fit_mounts(items, rooms) do
+    for item <- items do
+      if item.type == "solar_panels" and item.params["mount"] == "tracker" and
+           match?(%{place: :roof}, rooms[item.room]),
+         do: put_in(item.params["mount"], "fixed"),
+         else: item
+    end
   end
 
   # The items of a node of DC: a battery and a busbar.
@@ -1320,9 +1331,10 @@ defmodule DIY.Build do
        |> repair_vans()
        |> fit_wires()
        |> Layout.fill()
-       |> then(
-         &%{&1 | items: DIY.Stack.normalize(&1.items, Map.new(&1.rooms, fn r -> {r.id, r} end))}
-       )}
+       |> then(fn build ->
+         rooms = Map.new(build.rooms, &{&1.id, &1})
+         %{build | items: build.items |> DIY.Stack.normalize(rooms) |> fit_mounts(rooms)}
+       end)}
     end
   end
 

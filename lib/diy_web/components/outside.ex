@@ -807,7 +807,9 @@ defmodule DIYWeb.Outside do
       aria-hidden="true"
     >
       <Cutaway.defs camera={@view.camera} />
-      <.shapes list={@shapes.back} />
+      <%!-- One group for the shapes of the sky: a new weather adds shapes,
+      and the objects after them do not move. --%>
+      <g id="outside-back"><.shapes list={@shapes.back} /></g>
       <polygon :for={{points, class} <- @view.level.ground} points={points} class={class} />
       <g :for={room <- @view.level.low}>
         <polygon :for={{points, class} <- room.polys} points={points} class={class} />

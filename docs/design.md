@@ -589,6 +589,10 @@ panels then has no effect. Two parts are not in the model. The panel sees
 a little less of the sky than a flat surface, and the ground gives a
 little light.
 
+A tracker stands on a pole in a yard. On a roof, solar panels are fixed:
+they lie on the slope, and their direction counts. So the build sets
+panels on a roof to "fixed" (`DIY.Build.change/2`).
+
 For example, look at the house of the owner in 77041 (POWER, 2001 to
 2025). In a year, the sun of a tracker is 1.34 times the sun of a flat
 panel. It
@@ -1600,8 +1604,7 @@ its turn. A length is in inches.
   sunset, and the night (flat). At the sunset (18:00), the sun is at the
   horizon in the west, and the frame stops at 20°. The page shows the
   position of the time of day of the scene. The picture of a link has it
-  too (`priv/picture/styles.json`). A tracker on a roof lies flat on the
-  slope, as fixed panels do.
+  too (`priv/picture/styles.json`).
 - When the picture shows, the frame turns with the sun. It steps from
   7:00 to the position of the scene, one step each 0.5 second, and then
   it stops (WCAG 2.2.2: at most 3.5 seconds). With "reduce motion", it

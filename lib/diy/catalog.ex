@@ -900,7 +900,7 @@ defmodule DIY.Catalog do
             {"tracker", "A tracker that turns them to the sun (two axes)"}
           ],
           "fixed",
-          "A tracker turns the panels to the sun all day: the direction has no effect."
+          "A tracker turns the panels to the sun all day: the direction has no effect. A tracker stands in a yard. On a roof, the panels are fixed."
         ),
         choice(
           "facing",
