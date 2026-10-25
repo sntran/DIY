@@ -947,6 +947,8 @@ defmodule DIYWeb.Inside do
     features =
       cond do
         in_van -> Enum.filter(kind.features, &(&1 in [:wires | @van_features]))
+        # A bank in the house gives power through the stations.
+        kind.type == "van_battery" -> [:backup, :power_view, :wires]
         van -> kind.features
         true -> kind.features -- @van_features
       end

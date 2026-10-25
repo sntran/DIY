@@ -238,8 +238,9 @@ defmodule DIY.Build do
     end
   end
 
-  # The items of a node of DC: a battery and a busbar.
-  @dc_ends ~w(van_battery dc_bus)
+  # The items of a node of DC: a battery, a busbar, and the parts on the
+  # wire of a battery to a busbar (DIY.Wire.bus?/1).
+  @dc_ends ~w(van_battery dc_bus battery_switch battery_monitor)
 
   # Only the wires with an item at each end stay. A wire with a battery at
   # an end gets the voltage of the battery as its system: a change of the
@@ -298,7 +299,7 @@ defmodule DIY.Build do
 
   defp bus_voltages(nodes, by_id) do
     for {id, node} <- nodes,
-        by_id[id].type == "dc_bus",
+        Wire.bus?(by_id[id]),
         voltages = node_voltages(node, by_id),
         MapSet.size(voltages) > 0,
         into: %{},
@@ -1137,6 +1138,64 @@ defmodule DIY.Build do
   @doc "The wires with an item at one end, in their order."
   @spec wires_of(t(), String.t()) :: [wire()]
   def wires_of(build, item_id), do: Enum.filter(build.wires, &(item_id in [&1.from, &1.to]))
+
+  @doc """
+  The ends of a wire for its checks (`DIY.Wire.ends/3`). The wires between
+  battery switches and battery monitors make a chain. When a wire joins a
+  battery to this chain, the fuse at the battery protects all of the
+  chain. The ends then get this fuse: the largest fuse of the batteries of
+  the chain. With no battery on the chain, each end needs a breaker.
+  """
+  @spec wire_ends(t(), wire()) :: Wire.ends()
+  def wire_ends(build, wire) do
+    by_id = Map.new(build.items, &{&1.id, &1})
+    from = by_id[wire.from]
+    to = by_id[wire.to]
+    parts = for item <- [from, to], Wire.inline?(item), do: item.id
+    Wire.ends(from, to, chain_bank(build.wires, by_id, parts))
+  end
+
+  defp chain_bank(_wires, _by_id, []), do: nil
+
+  defp chain_bank(wires, by_id, parts) do
+    chain = chain(parts, MapSet.new(parts), wires, by_id)
+
+    banks =
+      for wire <- wires,
+          {battery, part, fuse} <- [
+            {wire.from, wire.to, wire.from_ocpd},
+            {wire.to, wire.from, wire.to_ocpd}
+          ],
+          match?(%{type: "van_battery"}, by_id[battery]),
+          MapSet.member?(chain, part),
+          do: {fuse, Wire.rating(Wire.need(wire))}
+
+    if banks != [] do
+      fuses = for {fuse, _least} <- banks, fuse, do: fuse
+
+      %{
+        fuse: Enum.max(fuses, fn -> nil end),
+        least: banks |> Enum.map(&elem(&1, 1)) |> Enum.max()
+      }
+    end
+  end
+
+  # The battery switches and the battery monitors that a chain of wires
+  # joins to the parts of `todo`.
+  defp chain([], seen, _wires, _by_id), do: seen
+
+  defp chain([id | todo], seen, wires, by_id) do
+    next =
+      for wire <- wires,
+          id in [wire.from, wire.to],
+          other = if(wire.from == id, do: wire.to, else: wire.from),
+          not MapSet.member?(seen, other),
+          by_id[other] && Wire.inline?(by_id[other]),
+          uniq: true,
+          do: other
+
+    chain(next ++ todo, MapSet.union(seen, MapSet.new(next)), wires, by_id)
+  end
 
   @doc "The most wires of a build, and of an item."
   @spec max_wires() :: {pos_integer(), pos_integer()}

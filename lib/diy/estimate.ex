@@ -103,7 +103,8 @@ defmodule DIY.Estimate do
 
   # The kinds that use no power of the house by themselves (`no_use/0`). A
   # pool uses no power: its pump and its heater are items.
-  @no_use ~w(power_station solar_panels transfer_switch smart_meter camper_van dc_bus pool)
+  @no_use ~w(power_station solar_panels transfer_switch smart_meter camper_van dc_bus pool) ++
+            ~w(van_battery battery_switch battery_monitor)
 
   @hvac_range 0.15
   @typical_range 0.20
@@ -985,6 +986,19 @@ defmodule DIY.Estimate do
 
   defp steps(%{type: "dc_bus"}, _m, _data, _estimate),
     do: ["A busbar connects the wires of the batteries and of the loads. It uses no power."]
+
+  defp steps(%{type: "van_battery"}, _m, _data, _estimate),
+    do: [
+      "A battery bank keeps power: it uses none. A bank on the busbar of a station adds its kWh to the station (the page Power)."
+    ]
+
+  defp steps(%{type: "battery_switch"}, _m, _data, _estimate),
+    do: ["A battery switch connects the battery to the busbar, or cuts it off. It uses no power."]
+
+  defp steps(%{type: "battery_monitor"}, _m, _data, _estimate),
+    do: [
+      "A battery monitor measures the current of the battery through its shunt. Its power is too small to show."
+    ]
 
   defp steps(%{type: "pool"}, _m, _data, _estimate),
     do: ["The water uses no power. Its pump, its heater and a hot tub are items next to it."]

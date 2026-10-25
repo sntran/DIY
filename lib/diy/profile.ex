@@ -185,6 +185,9 @@ defmodule DIY.Profile do
              "transfer_switch",
              "camper_van",
              "dc_bus",
+             "van_battery",
+             "battery_switch",
+             "battery_monitor",
              "pool"
            ],
       do: 0.0

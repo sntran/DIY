@@ -163,6 +163,152 @@ defmodule DIY.PowerTest do
     end
   end
 
+  describe "a battery bank on the busbar of a station" do
+    # A bank of 4 batteries of 12.8 V and 280 Ah in series: 48 V, 280 Ah.
+    # It goes to a busbar through a switch and a monitor, as in the house
+    # of the owner.
+    defp bank_build(joined?) do
+      {build, station} = add(house(), "Garage", "power_station", %{"kwh" => "5.12"})
+      {build, bank} = add(build, "Garage", "van_battery", %{"ah" => "280", "volts" => "48"})
+      {build, switch} = add(build, "Garage", "battery_switch")
+      {build, monitor} = add(build, "Garage", "battery_monitor")
+      {build, lynx} = add(build, "Garage", "dc_bus")
+
+      chain =
+        [{bank, switch}, {switch, monitor}, {monitor, lynx}] ++
+          if(joined?, do: [{station, lynx}], else: [])
+
+      Enum.reduce(chain, build, fn {from, to}, build ->
+        {:ok, build, _wire} = Build.add_wire(build, from, to)
+        build
+      end)
+    end
+
+    test "each wire of the chain gets the fuse at the bank" do
+      build = bank_build(true)
+      [to_switch, to_monitor, to_lynx, station] = build.wires
+
+      # No fuse at the bank yet: the smallest fuse for 30 A (40 A).
+      for wire <- [to_switch, to_monitor, to_lynx] do
+        assert Build.wire_ends(build, wire).bank == %{fuse: nil, least: 40}
+      end
+
+      # The wire of the station has no switch and no monitor.
+      assert Build.wire_ends(build, station) == %{from_min: 0, to_min: 40, free: [], bank: nil}
+
+      # A class T fuse of 250 A at the bank: each wire of the chain gets it.
+      {:ok, build} = Build.update_wire(build, to_switch.id, %{"from_ocpd" => "250"})
+      ends = Build.wire_ends(build, to_monitor)
+      assert ends.bank == %{fuse: 250, least: 40}
+      assert ends.free == [:from, :to]
+
+      # A wire of 10 AWG from the monitor to the busbar: a fault.
+      {:ok, build} = Build.update_wire(build, to_lynx.id, %{"awg" => "10"})
+      {:ok, wire} = Build.wire(build, to_lynx.id)
+      assert {:bank_big, nil, 250} in DIY.Wire.check(wire, Build.wire_ends(build, wire))
+
+      # A bank at the far end of its wire gives its fuse at that end too.
+      {:ok, build} = Build.delete_wire(build, to_switch.id)
+      [switch, bank] = for type <- ~w(battery_switch van_battery), do: of_type(build, type).id
+      {:ok, build, back} = Build.add_wire(build, switch, bank)
+      {:ok, build} = Build.update_wire(build, back, %{"to_ocpd" => "200"})
+      assert Build.wire_ends(build, to_monitor).bank == %{fuse: 200, least: 40}
+
+      # With no wire to the bank, the chain has no fuse: each end needs a
+      # breaker.
+      {:ok, build} = Build.delete_wire(build, back)
+      assert Build.wire_ends(build, to_monitor) == %{from_min: 0, to_min: 0, free: [], bank: nil}
+    end
+
+    test "adds its kWh to the stations, through a switch and a monitor" do
+      build = bank_build(true)
+      sys = Power.system(build.items, build.wires)
+      assert [%{type: "van_battery"}] = sys.banks
+      # 280 Ah × 48 V × 90% (LiFePO4) ÷ 95% (the part of a station).
+      assert_in_delta sys.kwh, 5.12 + 280 * 48 / 1_000 * 0.9 / 0.95, 1.0e-9
+
+      # The wires of the chain have the voltage of the bank.
+      assert Enum.all?(build.wires, &(&1.system == "48"))
+
+      # The page Power runs with the bank: an outage gives more hours. A
+      # station of 5.12 kWh runs a fridge for about 4 days. With the bank,
+      # it runs it for more than the 7 days of the model.
+      fridge = of_type(build, "fridge").id
+      with_bank = run(flag(build, fridge, :backup)).months |> hd()
+      without = run(flag(bank_build(false), fridge, :backup)).months |> hd()
+      assert is_number(without.outage) and without.outage > 48
+      assert with_bank.outage == :days
+    end
+
+    test "a wire to an item that is not in the house does not count" do
+      build = bank_build(true)
+      [lynx] = for i <- build.items, i.type == "dc_bus", do: i.id
+
+      # A station in a van: the house has no item at that end of its wire.
+      wires = build.wires ++ [%{id: "w99", from: "gone", to: lynx}]
+      sys = Power.system(build.items, wires)
+      assert [%{type: "van_battery"}] = sys.banks
+      assert Power.banks(build.items, [%{id: "w98", from: "gone", to: "lost"}]) == []
+    end
+
+    test "with no wire to a station, a bank adds nothing" do
+      build = bank_build(false)
+      sys = Power.system(build.items, build.wires)
+      assert sys.banks == []
+      assert sys.kwh == 5.12
+
+      # A bank and a station with no wires: nothing either.
+      assert Power.system(build.items).banks == []
+    end
+  end
+
+  property "a bank counts when a chain of wires joins it to a station" do
+    types = ~w(power_station van_battery dc_bus battery_switch battery_monitor fridge)
+
+    check all(
+            kinds <- list_of(member_of(types), min_length: 2, max_length: 8),
+            pairs <- list_of({integer(0..7), integer(0..7)}, max_length: 12),
+            max_runs: 200
+          ) do
+      items =
+        for {type, i} <- Enum.with_index(kinds),
+            do: %{
+              id: "i#{i}",
+              type: type,
+              params: %{
+                "ah" => 100,
+                "volts" => "12",
+                "chemistry" => "lifepo4",
+                "kwh" => 1.0,
+                "extra_kwh" => 0.0
+              }
+            }
+
+      n = length(items)
+      wires = for {a, b} <- pairs, a < n, b < n, a != b, do: %{from: "i#{a}", to: "i#{b}"}
+
+      # The reference: a search from each station that goes on only through
+      # a part of a busbar, a station or a bank. A fridge stops it.
+      pass = ~w(power_station van_battery dc_bus battery_switch battery_monitor)
+      by_id = Map.new(items, &{&1.id, &1})
+
+      step = fn seen ->
+        for w <- wires,
+            {a, b} <- [{w.from, w.to}, {w.to, w.from}],
+            a in seen,
+            by_id[b].type in pass,
+            into: seen,
+            do: b
+      end
+
+      start = MapSet.new(for i <- items, i.type == "power_station", do: i.id)
+      joined = Enum.reduce(1..n, start, fn _, seen -> step.(seen) end)
+      expected = for i <- items, i.type == "van_battery", MapSet.member?(joined, i.id), do: i.id
+
+      assert Enum.map(Power.banks(items, wires), & &1.id) == expected
+    end
+  end
+
   describe "a month of power" do
     test "a house with no equipment takes its use from the grid" do
       result = run(house())

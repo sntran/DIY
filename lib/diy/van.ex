@@ -223,6 +223,10 @@ defmodule DIY.Van do
   defp days(_storage, net) when net <= 0, do: :unlimited
   defp days(storage, net), do: storage / net
 
+  @doc "The part of a battery bank that it gives: 90% of LiFePO4, 50% of AGM."
+  @spec usable(String.t()) :: float()
+  def usable(chemistry), do: Map.fetch!(@usable, chemistry)
+
   @doc "The Wh that the batteries and the stations of a van give."
   def storage(build, van),
     do: build |> items(van.id) |> Enum.map(fn {_zone, item} -> storage(item) end) |> Enum.sum()
