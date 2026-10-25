@@ -648,7 +648,7 @@ defmodule DIY.Estimate do
   # small: the estimate does not count it.
   def kwh(%{type: "pool_heater", params: %{"fuel" => "gas"}}, _ctx), do: other(0)
 
-  def kwh(%{type: "hot_tub", params: p} = item, ctx),
+  def kwh(%{type: type, params: p} = item, ctx) when type in ["hot_tub", "water_dispenser"],
     do: other(in_season(item, ctx) * p["kwh_day"] * ctx.days)
 
   def kwh(%{params: p} = item, ctx),
@@ -1011,7 +1011,8 @@ defmodule DIY.Estimate do
       ]
   end
 
-  defp steps(%{type: "hot_tub", params: p} = item, m, _data, _estimate) do
+  defp steps(%{type: type, params: p} = item, m, _data, _estimate)
+       when type in ["hot_tub", "water_dispenser"] do
     if in_season(item, %{month: m.month}) == 0,
       do: ["It is off in #{m.name} (#{season_text(p)})."],
       else: ["#{num(p["kwh_day"])} kWh in one day × #{m.days} days (#{season_text(p)})."]

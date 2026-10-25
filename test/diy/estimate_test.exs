@@ -684,6 +684,36 @@ defmodule DIY.EstimateTest do
     refute DIY.Stack.takes?(item)
   end
 
+  test "a dehumidifier and a water dispenser" do
+    {build, dry} = add(build(), "Kitchen", "dehumidifier")
+    {build, summer} = add(build, "Kitchen", "dehumidifier", %{"season" => "summer"})
+    {build, water} = add(build, "Kitchen", "water_dispenser")
+    estimate = Estimate.run(build, climate())
+
+    # A dehumidifier: 480 W for 8.9 hours in one day, all year. With the
+    # months of summer, only May to September count.
+    assert_in_delta estimate.items[dry].year, 480 * 8.9 * 365 / 1_000, 1.0e-6
+    assert_in_delta estimate.items[summer].year, 480 * 8.9 * 153 / 1_000, 1.0e-6
+    # A water dispenser of hot and cold water: 0.87 kWh in one day.
+    assert_in_delta estimate.items[water].year, 0.87 * 365, 1.0e-6
+
+    {:ok, item} = Build.item(build, dry)
+    assert [line | _] = Estimate.explain(item, 1, estimate)
+    assert line =~ "480 W × 8.9 hours in one day × 31 days ÷ 1,000 (all year)."
+    assert DIY.Profile.watts(item) == 480.0
+    assert DIY.Profile.motor?(item)
+
+    {:ok, item} = Build.item(build, summer)
+    assert [line | _] = Estimate.explain(item, 1, estimate)
+    assert line =~ "It is off in January (may to september)."
+
+    {:ok, item} = Build.item(build, water)
+    assert [line | _] = Estimate.explain(item, 1, estimate)
+    assert line =~ "0.87 kWh in one day × 31 days (all year)."
+    assert DIY.Profile.watts(item) == 500.0
+    assert DIY.Profile.motor?(item)
+  end
+
   test "the format of a number" do
     assert Estimate.fmt(1_234_567.4) == "1,234,567"
     assert Estimate.fmt(999) == "999"

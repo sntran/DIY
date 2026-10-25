@@ -946,6 +946,43 @@ defmodule DIYWeb.Icon.Shapes do
       ]
   end
 
+  # A dehumidifier, as the Midea Cube: a dark box with round corners, with
+  # the round grille of its fan on its top. Its front has the strip of its
+  # buttons and the window of the water.
+  def model("dehumidifier") do
+    {w, d, h} = {0.38, 0.355, 0.38}
+
+    rbox({0, 0, 0}, {w, d, h}, 0.03, "dark") ++
+      [
+        disc({w / 2, d / 2, h + 0.002}, :top, 0.13, "i-gray-t"),
+        disc({w / 2, d / 2, h + 0.004}, :top, 0.05, "i-dark-t"),
+        front({0.06, d, h - 0.07}, {w - 0.12, 0.03}, "i-black"),
+        front({0.08, d + 0.002, h - 0.06}, {0.03, 0.01}, "i-led"),
+        front({w / 2 - 0.025, d, 0.06}, {0.05, 0.14}, "i-glass")
+      ]
+  end
+
+  # A water dispenser with the bottle at the bottom, as the Primo hTrio: a
+  # tall dark body on a foot. Its top part has a black recess with a red
+  # tap (hot) and a blue tap (cold) over a tray. The door of the bottle is
+  # under it. The taps and the tray are flat: a part out of the front
+  # paints in the wrong order at some turns.
+  def model("water_dispenser") do
+    {w, d, h} = {0.31, 0.355, 1.12}
+
+    rbox({0, 0, 0.02}, {w, d, h - 0.02}, 0.03, "dark") ++
+      box({0.03, 0.03, 0}, {w - 0.06, d - 0.06, 0.02}, "gray") ++
+      [
+        front({0.04, d, 0.68}, {w - 0.08, 0.26}, "i-black"),
+        front({0, d, 0.6}, {w, 0.012}, "i-line"),
+        front({0.03, d, 0.08}, {w - 0.06, 0.48}, "i-glass-dark"),
+        front({w / 2 - 0.02, d + 0.002, 1.0}, {0.04, 0.012}, "i-led"),
+        front({0.07, d + 0.002, 0.82}, {0.035, 0.06}, "i-red-t"),
+        front({w - 0.105, d + 0.002, 0.82}, {0.035, 0.06}, "i-blue-t"),
+        front({0.06, d + 0.002, 0.7}, {w - 0.12, 0.02}, "i-gray-l")
+      ]
+  end
+
   # A power station on its trolley, as the Pecron F5000LFP. The dark body
   # has round corners, and a grip at each end of its top. Its black front
   # has the inputs at the left, and the screen with its two green buttons.

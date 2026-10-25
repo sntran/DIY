@@ -281,6 +281,24 @@ the degree days. A month with no sun keeps its degree days.
   - The app uses these kWh with two decimals, so that the math adds up.
   The size is that of the GE combo: 28 by 32 by 46.7 in (ENERGY STAR). A
   combo does not go on an item, and no item goes on it.
+- A dehumidifier: its power × the hours that its compressor runs in one
+  day, in its months. The typical power is 480 W. This is the rated
+  input of the Midea Cube of 50 pints in one day (MAD50PS1QGRC, Midea
+  spec sheet). Its IEF is 1.95 L/kWh. The typical hours are 8.9. A study metered 21
+  dehumidifiers in 19 homes in 2011 (Mattison and Korn, The Cadmus
+  Group, ACEEE Summer Study 2012). They ran 8.9 hours in one day on
+  average, at 459 W. The study gives near 1,000 kWh in one year for one
+  dehumidifier. The size is the size of the Midea Cube with no bucket:
+  375 by 367 by 370 mm.
+- A water dispenser of hot and cold water: the kWh of one day, in its
+  months. The typical kWh is 0.87. ENERGY STAR permits no more for a
+  dispenser of hot and cold water with tanks, with no water drawn. The
+  source is ENERGY STAR Water Coolers, Version 2.0 (February 2014). A dispenser of
+  cold water only gets 0.16 kWh at most. An older dispenser can use more:
+  the label or a plug meter tells it. The water that a person draws is
+  not in the model. Its power is 500 W: it heats with 420 W and cools
+  with 80 W. These are the numbers of the Primo hTrio, with the bottle at
+  the bottom (Primo spec sheet). Its size is that of the hTrio: 12.2 by 14.2 by 43.5 in.
 - A fridge or a freezer in a room around the house (a garage, a shed).
   The label of a fridge comes from a test that stands for a kitchen near
   72 °F (10 CFR 430, subpart B, appendix A). The heat that comes in
@@ -1335,6 +1353,10 @@ on a light page.
   - a CPAP has its water tank, its screen, a knob and the port of its
     hose;
   - a sink has its cabinet, its basin and its faucet;
+  - a dehumidifier is a dark cube with the round grille of its fan on its
+    top, and the window of its water at its front;
+  - a water dispenser is tall and dark. It has a red tap and a blue tap
+    in a black recess over a tray, and the door of its bottle under them;
   - a bed has its drawers, its mattress, a duvet and two pillows;
   - a battery has its label, its handle and its terminals;
   - a power station has the look of the Pecron F5000LFP, which the owner
