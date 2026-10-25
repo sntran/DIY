@@ -674,6 +674,26 @@ Power). With a station, panels on the grid, or a price at night, it also
 shows the bill of each month from the power of the grid at the prices of
 the house, with its range.
 
+### The cost of an item
+
+The sheet of an item, the list of the rooms and the labels of a shared
+picture give the cost of an item. The cost of a month is the kWh of the
+item in that month at the price of the hours when the item runs
+(`DIY.Power.item_cost/4`). The hours come from the day of the month of
+`DIY.Power` (`DIY.Profile`): the same hours as the bill of the page Power.
+For example, with a price of 0¢ from 21:00 to 9:00, a car that charges
+at night costs $0. A fridge runs at all hours, so half of its day is at
+0¢.
+With no price at night, the cost is the kWh at the price of the day.
+
+This is the cost of the item on the grid. A station and panels can give
+the power of an item at different hours. The page Power shows them, and
+the cost of the year on the page House has them. So with a station or
+panels, the costs of the items can add up to a different number. With
+no station and no panels, the items of the house of today add up to the
+cost of the year (a property of `test/diy/power_test.exs`). The page
+Rooms also shows the planned items.
+
 ### The power view and the safety
 
 The page Power shows what feeds what. It shows the grid, the main panel
@@ -2022,8 +2042,9 @@ The link also has a summary:
   picture. Each item has its id, its kWh of a year, and its cost of a
   year. The numbers are of the house of today, as the numbers of the
   year: with a planned item, the page Rooms can show different numbers.
-  The cost uses the price of the page Rooms. An item with less than 1 kWh
-  has no label. A link of an older version has no items: its
+  The cost is at the price of the hours when the item runs
+  (`DIY.Power.item_cost/4`, "The cost of an item"). An item with less
+  than 1 kWh has no label. A link of an older version has no items: its
   picture has no labels.
 
 The LiveView of the person who shares makes the summary from the
