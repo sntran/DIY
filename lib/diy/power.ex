@@ -375,8 +375,8 @@ defmodule DIY.Power do
 
   @doc """
   The sun of a month on a panel on a tracker with two axes, in kWh/m² in
-  one day: the direct sun and the light of the sky (`DIY.Weather`). With
-  no such data, it is the sun of a fixed panel that faces south.
+  one day. It is the direct sun and the light of the sky (`DIY.Weather`).
+  With no such data, it is the sun of a fixed panel that faces south.
   """
   def track(%{track: track}) when is_number(track), do: track
   def track(month), do: (month[:sun] || 0.0) * @facing["south"]

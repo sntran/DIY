@@ -816,7 +816,13 @@ defmodule DIYWeb.Outside do
       <g :for={room <- @view.level.rooms}>
         <polygon :for={{points, class} <- room.polys} points={points} class={class} />
       </g>
-      <g :for={object <- @view.level.objects} class={object.kind == :item && "p-item"}>
+      <%!-- An id for each object: an update of the page (a new weather) keeps
+      its polygons, so a loop of an item does not start again. --%>
+      <g
+        :for={object <- @view.level.objects}
+        id={"outside-#{object.id}"}
+        class={object.kind == :item && "p-item"}
+      >
         <polygon :for={{points, class} <- object.polys} points={points} class={class} />
       </g>
       <polygon :for={{points, class} <- @view.meter} points={points} class={class} />

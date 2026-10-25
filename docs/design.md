@@ -566,22 +566,23 @@ the app, not a measurement (`DIY.Profile`).
 
 #### Panels on a tracker
 
-A tracker with two axes turns its panels to the sun all day. Its sun is
-the direct sun on a surface that faces the sun (the direct normal
-irradiance, `ALLSKY_SFC_SW_DNI` of NASA POWER) plus the light of the sky
-(the diffuse irradiance, `ALLSKY_SFC_SW_DIFF`). The app takes these
-numbers of each month from POWER, with the sun of a flat panel
-(`DIY.Weather`). The direction of the panels then has no effect. Two
-parts are not in the model: the panel sees a little less of the sky than
-a flat surface, and the ground gives a little light.
+A tracker with two axes turns its panels to the sun all day. Its sun has
+two parts. The first part is the direct sun on a surface that faces the
+sun (the direct normal irradiance, `ALLSKY_SFC_SW_DNI` of NASA POWER).
+The second part is the light of the sky (the diffuse irradiance,
+`ALLSKY_SFC_SW_DIFF`). The app takes these numbers of each month from
+POWER, with the sun of a flat panel (`DIY.Weather`). The direction of the
+panels then has no effect. Two parts are not in the model. The panel sees
+a little less of the sky than a flat surface, and the ground gives a
+little light.
 
-For example, at the house of the owner in 77041 (POWER, 2001 to 2025),
-the sun of a tracker is 1.34 times the sun of a flat panel in a year,
-from 1.17 in July to 1.74 in December. A fixed panel that faces south is
-1.10 in the app, so the tracker gives near 22% more. A study of 50
-cities of the US gives 30% to 45% more for a tracker with two axes, and
-the low end is for humid places (a review on ScienceDirect, from
-trackers next to panels at 25° to the south). Houston is humid.
+For example, look at the house of the owner in 77041 (POWER, 2001 to
+2025). In a year, the sun of a tracker is 1.34 times the sun of a flat
+panel. It
+goes from 1.17 in July to 1.74 in December. A fixed panel that faces
+south is 1.10 in the app, so the tracker gives near 22% more. Humid air
+makes more light of the sky and less direct sun, so a tracker gives less
+in a humid place. Houston is humid.
 
 The day of a tracker has the shape of the day of a flat panel: a simple
 model. A real tracker gives more in the morning and in the evening. A
@@ -1561,11 +1562,14 @@ its turn. A length is in inches.
   sun (`DIYWeb.Cutaway`). South is the front of the plan, and east is
   its right. The sun is the sun of an equinox at 30° of latitude (the
   middle of Texas). The frame does not go lower than 20° over the
-  horizon. It has 8 positions, each with a class: the sun of 7:00, 9:00
-  and 11:00, the day (13:00), 15:00, 17:00, the sunset (19:00), and the
-  night (flat). The page shows the position of the time of day of the
-  scene. The picture of a link has it too (`priv/picture/styles.json`).
-- When the picture shows, the frame turns with the sun: it steps from
+  horizon. It has 8 positions, each with a class. The positions are the
+  sun of 7:00, 9:00 and 11:00, the day (13:00), 15:00 and 17:00, the
+  sunset, and the night (flat). At the sunset (18:00), the sun is at the
+  horizon in the west, and the frame stops at 20°. The page shows the
+  position of the time of day of the scene. The picture of a link has it
+  too (`priv/picture/styles.json`). A tracker on a roof lies flat on the
+  slope, as fixed panels do.
+- When the picture shows, the frame turns with the sun. It steps from
   7:00 to the position of the scene, one step each 0.5 second, and then
   it stops (WCAG 2.2.2: at most 3.5 seconds). With "reduce motion", it
   does not turn. The script of the styles of a picture reads the styles

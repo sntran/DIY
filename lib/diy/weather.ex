@@ -8,13 +8,15 @@ defmodule DIY.Weather do
     18.3 °C (65 °F). The app uses °F: one degree day in °C is 1.8 in °F.
   - `T2M`: the mean air temperature at 2 m.
   - `ALLSKY_SFC_SW_DWN`: the sun on a flat surface, in kWh/m² in one day.
-  - `ALLSKY_SFC_SW_DNI` and `ALLSKY_SFC_SW_DIFF`: the direct sun on a
-    surface that faces the sun (the direct normal irradiance), and the
-    light of the sky on a flat surface (the diffuse irradiance). Their sum
-    is the sun of a panel on a tracker with two axes (`track`): it always
-    faces the sun. The sky that the panel sees is a little less than the
-    sky of a flat surface, and the ground gives a little light. The app
-    does not count these two: a simple model.
+  - `ALLSKY_SFC_SW_DNI`: the direct sun on a surface that faces the sun
+    (the direct normal irradiance).
+  - `ALLSKY_SFC_SW_DIFF`: the light of the sky on a flat surface (the
+    diffuse irradiance).
+
+  The sum of the last two is the sun of a panel on a tracker with two
+  axes (`track`). This panel always faces the sun. The panel sees a
+  little less of the sky than a flat surface, and the ground gives a little
+  light. The app does not count these two: it is a simple model.
 
   The data has a grid of 0.5° of latitude and 0.625° of longitude, so the
   app asks for the point on a grid of 0.25°, and the cache keeps it for all
@@ -121,10 +123,10 @@ defmodule DIY.Weather do
   def parse(_body, _lat, _lon, _first, _last),
     do: {:error, "The weather service gave an answer that the app cannot read."}
 
-  # The values of one month of one year, in °F, or nil with no degree days
-  # or no temperature (the fill value of POWER is -999). The sun comes
-  # later than the rest in the data: a month with no sun has `sun: nil`,
-  # and a month with no direct or no diffuse sun has `track: nil`.
+  # The values of one month of one year, in °F. They are nil with no degree
+  # days or no temperature (the fill value of POWER is -999). The sun comes
+  # later than the rest in the data. A month with no sun has `sun: nil`.
+  # A month with no direct or no diffuse sun has `track: nil`.
   defp value(parameter, key) do
     values =
       for name <- ~w(CDD18_3 HDD18_3 T2M ALLSKY_SFC_SW_DWN ALLSKY_SFC_SW_DNI ALLSKY_SFC_SW_DIFF) do

@@ -566,9 +566,9 @@
 }
 @keyframes p-flicker { 0% { opacity: 1 } 40% { opacity: 0.75 } 70% { opacity: 0.9 } 100% { opacity: 0.65 } }
 /* The panels of a solar tracker (DIYWeb.Cutaway) face the sun of the
-   scene: of 13:00 by day, of 19:00 at sunset, and flat at night. With no
+   scene: of 13:00 by day, of 18:00 at sunset, and flat at night. With no
    scene, they face the sun of the day. When the picture shows, they turn
-   with the sun from 7:00 to the sun of the scene, in steps of 0.5 second,
+   with the sun from 7:00 to the sun of the scene. Each step is 0.5 second,
    and then they stop (WCAG 2.2.2). With "reduce motion", they do not turn. */
 .p-track-7, .p-track-9, .p-track-11, .p-track-15, .p-track-17,
 .p-track-day, .p-track-sunset, .p-track-night { display: none }

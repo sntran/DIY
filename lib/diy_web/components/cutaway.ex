@@ -64,7 +64,7 @@ defmodule DIYWeb.Cutaway do
   """
   use DIYWeb, :html
 
-  alias DIY.{Catalog, Layout}
+  alias DIY.{Catalog, Layout, Solar}
   alias DIYWeb.{Camera, Decor, Geometry}
   alias DIYWeb.Icon.Shapes
 
@@ -952,8 +952,14 @@ defmodule DIYWeb.Cutaway do
       case {item.type, roof} do
         {"solar_panels", nil} ->
           if item.params["mount"] == "tracker" do
-            Shapes.placed_model(tracker(item, {ew, ed}), %{
-              at: {x * @m, y * @m, z},
+            # The model of a tracker has its pole at the middle of the item.
+            # Its box is the box of all its positions: the place of the low
+            # corner of that box keeps the pole at its place.
+            model = tracker(item, {ew, ed})
+            {{lx, ly, lz}, _high} = Shapes.bounds(model)
+
+            Shapes.placed_model(model, %{
+              at: {x * @m + lx, y * @m + ly, z + lz},
               turn: 0,
               camera: camera
             })
@@ -1091,10 +1097,11 @@ defmodule DIYWeb.Cutaway do
   end
 
   # The positions of the panels of a tracker: the solar hour of the sun
-  # that they face, and the class of each position. The page shows one
-  # position for the time of day of the scene (assets/css/app.css): "day"
-  # at 13:00, "sunset" at 19:00, and "night" flat. The other positions are
-  # the steps of the turn with the sun when the picture shows.
+  # that they face (`DIY.Solar.track_sun/1`), and the class of each
+  # position. The page shows one position for the time of day of the scene
+  # (assets/css/app.css): "day" at 13:00, "sunset" at 18:00, and "night"
+  # flat. The other positions are the steps of the turn with the sun when
+  # the picture shows.
   @track [
     {7, "p-track-7"},
     {9, "p-track-9"},
@@ -1102,15 +1109,9 @@ defmodule DIYWeb.Cutaway do
     {13, "p-track-day"},
     {15, "p-track-15"},
     {17, "p-track-17"},
-    {19, "p-track-sunset"},
+    {18, "p-track-sunset"},
     {nil, "p-track-night"}
   ]
-
-  # The latitude of the sun of the positions (°): the middle of Texas. The
-  # sun is that of an equinox. The panels of a tracker do not go lower
-  # than 20° over the horizon: so they tilt 70° at most.
-  @track_latitude 30
-  @track_low 20
 
   # Panels on a tracker with two axes: a pole with a footing, and the
   # panels on a frame at its top. The frame faces the sun at each position
@@ -1128,7 +1129,7 @@ defmodule DIYWeb.Cutaway do
 
     frames =
       for {hour, class} <- @track,
-          {u, v} = track_axes(sun(hour)),
+          {u, v} = track_axes(Solar.track_sun(hour)),
           k <- 0..(count - 1) do
         {col, row} = {rem(k, cols), div(k, cols)}
         {a0, a1} = {-w / 2 + col * pw + 0.02, -w / 2 + (col + 1) * pw - 0.02}
@@ -1138,21 +1139,6 @@ defmodule DIYWeb.Cutaway do
       end
 
     [footing, pole | frames]
-  end
-
-  # The direction of the sun at a solar hour, as a unit vector: x to the
-  # east, y to the south, z up. At night, the panels lie flat.
-  defp sun(nil), do: {0.0, 0.0, 1.0}
-
-  defp sun(hour) do
-    lat = @track_latitude * :math.pi() / 180
-    w = (hour - 12) * 15 * :math.pi() / 180
-    high = max(:math.asin(:math.cos(lat) * :math.cos(w)), @track_low * :math.pi() / 180)
-    # The azimuth from the north: the sun is in the east before noon.
-    cos_a = -:math.sin(high) * :math.sin(lat) / (:math.cos(high) * :math.cos(lat))
-    a = :math.acos(min(max(cos_a, -1.0), 1.0))
-    a = if hour < 12, do: a, else: 2 * :math.pi() - a
-    {:math.cos(high) * :math.sin(a), -:math.cos(high) * :math.cos(a), :math.sin(high)}
   end
 
   # The two axes of a frame that faces a direction: `u` is level, and `v`

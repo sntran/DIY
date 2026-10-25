@@ -28,6 +28,17 @@ defmodule DIYWeb.CutawayTest do
   defp html(build, selected \\ nil),
     do: render_component(&Cutaway.cutaway/1, view: Cutaway.view(build), selected: selected)
 
+  # The mean x of the points of polygons on the screen.
+  defp mean_x(polys) do
+    xs =
+      for {points, _class} <- polys,
+          pair <- String.split(points),
+          [x, _y] = String.split(pair, ","),
+          do: String.to_float(x <> if(String.contains?(x, "."), do: "", else: ".0"))
+
+    Enum.sum(xs) / length(xs)
+  end
+
   test "a tracker has its panels at each position of the sun, and a rack has none" do
     build = house()
     yard = room(build, "Backyard")
@@ -36,11 +47,18 @@ defmodule DIYWeb.CutawayTest do
     html = html(Layout.fill(build))
 
     # 3 panels of 550 W at each of the 8 positions: 7:00, 9:00, 11:00, the
-    # day (13:00), 15:00, 17:00, the sunset (19:00) and the night.
+    # day (13:00), 15:00, 17:00, the sunset (18:00) and the night.
     for class <-
           ~w(p-track-7 p-track-9 p-track-11 p-track-day p-track-15 p-track-17 p-track-sunset p-track-night) do
       assert length(Regex.scan(~r/class="i-pv #{class}"/, html)) == 3, class
     end
+
+    # The footing of the pole is at the middle of the item. In this view,
+    # the x of the screen does not change with the height.
+    [ground | _] = Cutaway.view(Layout.fill(build)).levels
+    object = Enum.find(ground.objects, &Enum.any?(&1.polys, fn {_p, c} -> c =~ "p-track" end))
+    mid_x = fn class -> object.polys |> Enum.filter(&(elem(&1, 1) =~ class)) |> mean_x() end
+    assert_in_delta mid_x.("p-pad"), mid_x.("p-shadow"), 1.0
 
     # A turn of the item does not turn the frame: it faces the sun.
     [{_, item}] = for i <- build.items, i.type == "solar_panels", do: {i.id, i}
