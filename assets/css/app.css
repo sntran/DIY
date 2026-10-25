@@ -569,7 +569,8 @@
    scene: of 13:00 by day, of 18:00 at sunset, and flat at night. With no
    scene, they face the sun of the day. When the picture shows, they turn
    with the sun from 7:00 to the sun of the scene. Each step is 0.5 second,
-   and then they stop (WCAG 2.2.2). With "reduce motion", they do not turn. */
+   and then they stop (WCAG 2.2.2). With "reduce motion", they do not turn.
+   Each scene has its own keyframes: a new scene starts each step again. */
 .p-track-7, .p-track-9, .p-track-11, .p-track-15, .p-track-17,
 .p-track-day, .p-track-sunset, .p-track-night { display: none }
 .cutaway:not([data-scene]) .p-track-day,
@@ -577,20 +578,24 @@
 .cutaway[data-scene=sunset] .p-track-sunset,
 .cutaway[data-scene=night] .p-track-night { display: inline }
 @media (prefers-reduced-motion: no-preference) {
-  .cutaway[data-scene=day] :is(.p-track-7, .p-track-9, .p-track-11),
+  .cutaway[data-scene=day] :is(.p-track-7, .p-track-9, .p-track-11) {
+    display: inline; visibility: hidden; animation: p-track-on-day 0.5s step-end 1
+  }
   .cutaway[data-scene=sunset] :is(.p-track-7, .p-track-9, .p-track-11, .p-track-day, .p-track-15, .p-track-17) {
-    display: inline; visibility: hidden; animation: p-track-on 0.5s step-end 1
+    display: inline; visibility: hidden; animation: p-track-on-sunset 0.5s step-end 1
   }
   .cutaway[data-scene] .p-track-9 { animation-delay: 0.5s }
   .cutaway[data-scene] .p-track-11 { animation-delay: 1s }
   .cutaway[data-scene=sunset] .p-track-day { animation-delay: 1.5s }
   .cutaway[data-scene] .p-track-15 { animation-delay: 2s }
   .cutaway[data-scene] .p-track-17 { animation-delay: 2.5s }
-  .cutaway[data-scene=day] .p-track-day { animation: p-track-off 1.5s step-end 1 }
-  .cutaway[data-scene=sunset] .p-track-sunset { animation: p-track-off 3s step-end 1 }
+  .cutaway[data-scene=day] .p-track-day { animation: p-track-off-day 1.5s step-end 1 }
+  .cutaway[data-scene=sunset] .p-track-sunset { animation: p-track-off-sunset 3s step-end 1 }
 }
-@keyframes p-track-on { from, to { visibility: visible } }
-@keyframes p-track-off { from, to { visibility: hidden } }
+@keyframes p-track-on-day { from, to { visibility: visible } }
+@keyframes p-track-on-sunset { from, to { visibility: visible } }
+@keyframes p-track-off-day { from, to { visibility: hidden } }
+@keyframes p-track-off-sunset { from, to { visibility: hidden } }
 @keyframes p-warm { from { opacity: 1 } to { opacity: 0.7 } }
 /* The house from the outside (DIYWeb.Outside): the pole and the wire of
    the grid, the meter, the doors, and the labels. The power of the grid
