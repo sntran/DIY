@@ -284,7 +284,8 @@ defmodule DIYWeb.PlanLiveTest do
     render_click(view, "add_item", %{"room" => roof.id, "type" => "solar_panels"})
     panels = item(view, "solar_panels")
     render_patch(view, ~p"/inside?#{[item: panels.id]}")
-    assert has_element?(view, "#item-place", "The watts give the size of the panels on the roof")
+    assert has_element?(view, "#item-place", "The watts give the size of the panels:")
+    assert has_element?(view, "#item-place", "inches for each panel of 400 W")
     refute has_element?(view, "#size-form")
   end
 

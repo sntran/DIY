@@ -379,7 +379,7 @@ defmodule DIYWeb.OutsideTest do
     assert html =~ ~s(class="p-flow")
     assert html =~ ~s(class="p-chip")
     assert html =~ ~s(<text x=)
-    assert html =~ ~s(<g class="p-item">)
+    assert html =~ ~r/<g id="outside-[^"]+" class="p-item">/
   end
 
   test "the power of the grid flows a short time, and the windows have light at night" do
