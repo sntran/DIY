@@ -42,7 +42,7 @@ defmodule DIY.HomeAssistant do
   @phrases [
     {~w(microwave oven), "microwave"},
     {~w(dish washer), "dishwasher"},
-    {~w(washer dryer), "dryer"},
+    {~w(washer dryer), "washer_dryer"},
     {~w(fridge freezer), "fridge"},
     {~w(backlight), "lights"},
     {~w(water heater), "water_heater"},

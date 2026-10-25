@@ -738,16 +738,44 @@ defmodule DIY.Power do
 
     # The part of the charge in the hours of the night, as in the day of a
     # month (DIY.Profile): a long charge goes past the end of the night.
-    night =
-      item
-      |> Profile.shape(:other, kwh / 365, settings.night_from)
-      |> Enum.with_index()
-      |> Enum.filter(fn {_part, h} -> night?(settings, h) end)
-      |> Enum.map(&elem(&1, 0))
-      |> Enum.sum()
+    night = night_part(Profile.shape(item, :other, kwh / 365, settings.night_from), settings)
 
     price = night * (settings.night_cents || cents) + (1 - night) * cents
     %{kwh: kwh, cost: kwh * price / 100, hours: Profile.charge_hours(item, kwh / 365)}
+  end
+
+  @doc """
+  The cost of an item of the house in one year, in dollars. Each month of
+  the estimate gives its kWh at the price of the hours when the item runs
+  (`DIY.Profile`). These are the hours of the day of a month of `run/4`.
+  With no price at night, the cost is the kWh of the year at the price of
+  the day (`cents`).
+
+  This is the cost of the item on the grid. A station and panels can give
+  its power at different hours: the page Power shows them.
+  """
+  @spec item_cost(map(), map(), settings(), number()) :: float()
+  def item_cost(item, %{months: months}, settings, cents) do
+    night_cents = settings.night_cents || cents
+
+    for m <- months, data = m.items[item.id], data && data.kwh > 0, reduce: 0.0 do
+      sum ->
+        shape = Profile.shape(item, data.part, data.kwh / m.days, settings.night_from)
+        night = night_part(shape, settings)
+        sum + data.kwh * (night * night_cents + (1 - night) * cents) / 100
+    end
+  end
+
+  # The part of a day (a shape of DIY.Profile) in the hours of the night.
+  # The sum of a shape can be a little more than 1 (a float). So the part
+  # is 1 at most: a night at 0 cents gives no cost below 0.
+  defp night_part(shape, settings) do
+    shape
+    |> Enum.with_index()
+    |> Enum.filter(fn {_part, h} -> night?(settings, h) end)
+    |> Enum.map(&elem(&1, 0))
+    |> Enum.sum()
+    |> min(1.0)
   end
 
   @doc """

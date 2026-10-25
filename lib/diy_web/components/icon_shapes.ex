@@ -590,6 +590,25 @@ defmodule DIYWeb.Icon.Shapes do
   def model("washer"), do: laundry("i-glass")
   def model("dryer"), do: laundry("i-glass-dark")
 
+  # A washer and dryer in one: the body of a washer, with a wide touch
+  # screen in the place of the drawer and the dial.
+  def model("washer_dryer") do
+    {w, d, h} = {0.71, 0.81, 1.19}
+    {cx, cz} = {w / 2, 0.5}
+
+    rbox({0, 0, 0.03}, {w, d, h - 0.03}, 0.03, "white") ++
+      box({0.04, d - 0.06, 0}, {w - 0.08, 0.04, 0.03}, "gray") ++
+      [
+        front({0, d, h - 0.17}, {w, 0.012}, "i-line"),
+        front({0.12, d, h - 0.14}, {w - 0.24, 0.09}, "i-black"),
+        front({0.16, d + 0.002, h - 0.11}, {0.14, 0.03}, "i-led"),
+        disc({cx, d + 0.012, cz}, :front, 0.25, "i-gray-l"),
+        disc({cx, d + 0.016, cz}, :front, 0.2, "i-steel-t"),
+        disc({cx, d + 0.02, cz}, :front, 0.16, "i-glass"),
+        disc({cx - 0.05, d + 0.024, cz + 0.05}, :front, 0.05, "i-shine")
+      ]
+  end
+
   # A water heater: a round tank on its foot, with its cap and its label.
   # Two pipes are on its top, and the relief valve is on its side.
   def model("water_heater") do

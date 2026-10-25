@@ -574,6 +574,86 @@ defmodule DIY.PowerTest do
     end
   end
 
+  describe "the cost of an item" do
+    test "with no price at night, it is the kWh of the year at the price of the day" do
+      build = house()
+      estimate = Estimate.run(build, climate())
+
+      for item <- build.items, data = estimate.items[item.id] do
+        assert_in_delta Power.item_cost(item, estimate, build.power, 15.0),
+                        data.year * 0.15,
+                        1.0e-9
+      end
+    end
+
+    test "a car that charges at night at 0 cents costs nothing, and the items add up to the bill" do
+      {build, car} =
+        add(house(), "Driveway", "ev", %{"miles" => "30", "charger" => "l1", "when" => "night"})
+
+      build = power(build, %{night_cents: 0.0, night_from: 21, night_to: 9})
+      climate = climate()
+      estimate = Estimate.run(build, climate)
+      {:ok, car} = Build.item(build, car)
+      assert Power.item_cost(car, estimate, build.power, 35.4) == 0.0
+
+      # The fridge runs at all hours: half of its day is at 0 cents.
+      fridge = of_type(build, "fridge")
+      fridge_cost = Power.item_cost(fridge, estimate, build.power, 35.4)
+      assert fridge_cost > 0 and fridge_cost < estimate.items[fridge.id].year * 0.354
+
+      # With no station and no panels, the items give the cost of the
+      # page Power.
+      costs = for item <- build.items, do: Power.item_cost(item, estimate, build.power, 35.4)
+      assert_in_delta Enum.sum(costs), Power.run(build, estimate, climate, 35.4).year.cost, 1.0e-6
+    end
+
+    test "an item with no kWh costs nothing" do
+      build = house()
+      estimate = Estimate.run(build, climate())
+      {build, id} = add(build, "Laundry", "power_station")
+      {:ok, station} = Build.item(build, id)
+      assert Power.item_cost(station, estimate, build.power, 15.0) == 0.0
+    end
+  end
+
+  property "with no station and no panels, the costs of the items add up to the cost of the grid" do
+    climate = climate()
+    {build, _car} = add(house(), "Driveway", "ev", %{"charger" => "l1"})
+    estimate = Estimate.run(build, climate)
+
+    check all(
+            cents <- float(min: 1.0, max: 60.0),
+            night <- one_of([constant(nil), float(min: 0.0, max: 60.0)]),
+            from <- integer(0..23),
+            to <- filter(integer(0..23), &(&1 != from)),
+            when_ <- member_of(["night", "evening"]),
+            max_runs: 25
+          ) do
+      build =
+        build
+        |> power(%{night_cents: night, night_from: from, night_to: to})
+        |> Map.update!(:items, fn items ->
+          Enum.map(items, fn
+            %{type: "ev"} = car -> put_in(car.params["when"], when_)
+            item -> item
+          end)
+        end)
+
+      costs =
+        for item <- build.items do
+          cost = Power.item_cost(item, estimate, build.power, cents)
+          year = estimate.items[item.id].year
+          low = year * min(cents, night || cents) / 100
+          high = year * max(cents, night || cents) / 100
+          assert cost >= low - 1.0e-9 and cost <= high + 1.0e-9
+          cost
+        end
+
+      grid = Power.run(build, estimate, climate, cents).year.cost
+      assert_in_delta Enum.sum(costs), grid, 1.0e-6 * max(grid, 1.0)
+    end
+  end
+
   # A random average day: the items of a station, the other items, and the
   # sun, in kWh for each hour.
   defp day_input do

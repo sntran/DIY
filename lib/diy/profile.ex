@@ -88,7 +88,7 @@ defmodule DIY.Profile do
   defp weights(type) when type in ["range", "microwave"],
     do: for(h <- hours(), do: if(h in [7, 12, 17, 18], do: 4, else: 0.2))
 
-  defp weights(type) when type in ["washer", "dryer", "dishwasher"],
+  defp weights(type) when type in ["washer", "dryer", "washer_dryer", "dishwasher"],
     do: for(h <- hours(), do: if(h in 18..21, do: 4, else: 0.2))
 
   defp weights("pool_pump"), do: for(h <- hours(), do: if(h in 9..16, do: 1, else: 0))
@@ -157,6 +157,12 @@ defmodule DIY.Profile do
   def watts(%{type: "range", params: p}), do: if(p["fuel"] == "electric", do: 3_000.0, else: 50.0)
   def watts(%{type: "dishwasher"}), do: 1_200.0
   def watts(%{type: "washer"}), do: 500.0
+
+  # A combo with a heat pump: 1,320 W to wash, on 120 V (a seller gives it
+  # for the GE Profile PFQ97HSPVRS). A combo with a heater: the power of an
+  # electric dryer.
+  def watts(%{type: "washer_dryer", params: p}),
+    do: if(p["dry"] == "heat_pump", do: 1_320.0, else: 5_000.0)
 
   def watts(%{type: "dryer", params: p}),
     do: if(p["fuel"] == "electric", do: 5_000.0, else: 300.0)

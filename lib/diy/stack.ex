@@ -17,8 +17,8 @@ defmodule DIY.Stack do
     item comes down. An item that comes down goes on the item that holds
     it there, or on the floor.
   - Some kinds do not go on an item, and do not take an item on them.
-    These are solar panels, a camper van, a car, and an item on a wall or
-    a ceiling (`DIY.Catalog.lift/1`). A pool takes an item, but it does
+    These are solar panels, a camper van, a car, a washer and dryer in
+    one, and an item on a wall or a ceiling (`DIY.Catalog.lift/1`). A pool takes an item, but it does
     not go on an item.
   - The items of the roof and of a van do not stack.
 
@@ -38,11 +38,11 @@ defmodule DIY.Stack do
 
   @doc "True when an item of a kind can go on an item."
   def goes_on?(%{type: type}),
-    do: type not in ~w(solar_panels camper_van ev pool) and Catalog.lift(type) == 0
+    do: type not in ~w(solar_panels camper_van ev pool washer_dryer) and Catalog.lift(type) == 0
 
   @doc "True when an item of a kind can take an item on it."
   def takes?(%{type: type}),
-    do: type not in ~w(solar_panels camper_van ev) and Catalog.lift(type) == 0
+    do: type not in ~w(solar_panels camper_van ev washer_dryer) and Catalog.lift(type) == 0
 
   @doc "True when the items of a room can stack: not on the roof, not in a van."
   def stacks?(%{place: place, level: level}),

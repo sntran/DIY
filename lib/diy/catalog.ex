@@ -572,6 +572,25 @@ defmodule DIY.Catalog do
       ]
     },
     %{
+      type: "washer_dryer",
+      name: "Washer and dryer in one",
+      places: [:indoor],
+      features: [:estimate],
+      params: [
+        int("loads", "Loads in one week", nil, 5, 0, 30),
+        choice(
+          "dry",
+          "How it dries",
+          [
+            {"heat_pump", "With a heat pump"},
+            {"heater", "With a heater (no heat pump)"}
+          ],
+          "heat_pump",
+          "The label or the manual tells it. A heat pump uses less energy to dry."
+        )
+      ]
+    },
+    %{
       type: "lights",
       name: "Lights",
       places: [:indoor, :outdoor],
@@ -1432,6 +1451,8 @@ defmodule DIY.Catalog do
     "washer" => {27, 30, 39},
     # No source: the size of the washer (a dryer of the same line).
     "dryer" => {27, 30, 39},
+    # GE Profile PFQ97HSPVDS: 28 by 32 by 46.7 in (ENERGY STAR, ID 2407727).
+    "washer_dryer" => {28, 32, 47},
     # No source: a floor lamp.
     "lights" => {16, 16, 60},
     # Samsung UN50CU7000, 50 in, on its stand: 44 by 9.9 by 28.3 in (P.C. Richard).
@@ -1636,6 +1657,7 @@ defmodule DIY.Catalog do
     "mini_split" => ~w(heat pump ductless air conditioner),
     "furnace" => ~w(heater heating hvac),
     "water_heater" => ~w(tank tankless),
+    "washer_dryer" => ~w(combo all-in-one laundry ventless apartment),
     "range" => ~w(stove oven cooktop),
     "computer" => ~w(pc laptop desk),
     "always_on" => ~w(router modem standby),
