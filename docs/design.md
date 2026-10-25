@@ -268,6 +268,16 @@ the degree days. A month with no sun keeps its degree days.
 - A water heater: 15 gallons for each person in one day, from the
   temperature of the ground to 120 °F.
 - The other items: power × hours, or the kWh in one year of the label.
+- A washer and dryer in one (a combo, common in apartments): for each
+  load, 0.25 kWh to wash (the motor, as a washer) and the kWh to dry. To
+  dry, a load of 8.45 lb (the test load of a standard dryer of the DOE) ÷
+  the combined energy factor (CEF, lb for each kWh):
+  - with a heat pump: 6.00, the CEF of the GE Profile PFQ97HS*V
+    (ENERGY STAR, ID 2407727). This gives 1.41 kWh, the same as its 399
+    kWh to dry in one year of 283 loads;
+  - with no heat pump: 2.68, the least CEF of ENERGY STAR for a dryer
+    with no vent (compact, 240 V). This gives 3.15 kWh.
+  The size is that of the GE combo: 28 by 32 by 46.7 in (ENERGY STAR).
 - A fridge or a freezer in a room around the house (a garage, a shed).
   The label of a fridge comes from a test that stands for a kitchen near
   72 °F (10 CFR 430, subpart B, appendix A). The heat that comes in

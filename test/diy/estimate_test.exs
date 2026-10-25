@@ -301,6 +301,7 @@ defmodule DIY.EstimateTest do
     {build, _id} = add(build, "Kitchen", "range", %{"fuel" => "electric"})
     {build, _id} = add(build, "Laundry", "dryer", %{"fuel" => "gas"})
     {build, _id} = add(build, "Laundry", "dryer", %{"fuel" => "electric"})
+    {build, _id} = add(build, "Laundry", "washer_dryer", %{"dry" => "condenser"})
     {build, _id} = add(build, "Backyard", "ac", %{"heat_pump" => "true", "tons" => "1"})
 
     {build, _id} =
@@ -649,6 +650,30 @@ defmodule DIY.EstimateTest do
     # A house that the person plans: the bill is of another home.
     {:ok, plan} = Build.set_bill(build(%{}, "planning"), %{month: 7, kwh: 900})
     assert %{ready: true, fit: nil} = Estimate.run(plan, climate)
+  end
+
+  test "a washer and dryer in one: the wash, and the dry of a heat pump or of a heater" do
+    {build, pump} = add(build(), "Laundry", "washer_dryer", %{"loads" => "7"})
+
+    {build, heater} =
+      add(build, "Laundry", "washer_dryer", %{"loads" => "7", "dry" => "condenser"})
+
+    estimate = Estimate.run(build, climate())
+
+    # 7 loads in one week: one load each day.
+    assert_in_delta estimate.items[pump].year, 365 * (0.25 + 8.45 / 6.0), 1.0e-6
+    assert_in_delta estimate.items[heater].year, 365 * (0.25 + 8.45 / 2.68), 1.0e-6
+
+    # The heat pump dries a load with 1.41 kWh: the 399 kWh of ENERGY STAR
+    # in one year of 283 loads.
+    assert_in_delta 8.45 / 6.0, 399 / 283, 0.01
+
+    {:ok, item} = Build.item(build, pump)
+    assert [_cef, line] = Estimate.explain(item, 1, estimate) |> Enum.drop(-1)
+    assert line =~ "(0.25 kWh to wash + 1.4 kWh to dry)"
+    assert DIY.Profile.watts(item) == 1_320.0
+    {:ok, item} = Build.item(build, heater)
+    assert DIY.Profile.watts(item) == 1_800.0
   end
 
   test "the format of a number" do

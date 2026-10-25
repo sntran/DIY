@@ -87,6 +87,15 @@ defmodule DIY.Estimate do
   @gas_water 0.58
   @stove 0.055
   @dryer 0.073
+
+  # The kWh to dry one load in a washer and dryer in one: a load of 8.45 lb
+  # (the test load of a standard dryer of the DOE) ÷ the combined energy
+  # factor (CEF, lb for each kWh). With a heat pump: 6.00, the CEF of the GE
+  # Profile PFQ97HS*V (ENERGY STAR, ID 2407727): 1.41 kWh, the same as its
+  # 399 kWh to dry in one year of 283 loads. With no heat pump: 2.68, the
+  # least CEF of ENERGY STAR for a dryer with no vent (compact, 240 V).
+  @combo_cef %{"heat_pump" => 6.0, "condenser" => 2.68}
+  @dry_load 8.45
   @therm 100_000
 
   # The kinds that use no power of the house by themselves (`no_use/0`). A
@@ -607,6 +616,9 @@ defmodule DIY.Estimate do
   def kwh(%{type: "dishwasher", params: p}, ctx), do: other(p["loads"] * ctx.days / 7 * 1.0)
   def kwh(%{type: "washer", params: p}, ctx), do: other(p["loads"] * ctx.days / 7 * 0.25)
 
+  def kwh(%{type: "washer_dryer", params: p}, ctx),
+    do: other(p["loads"] * ctx.days / 7 * (0.25 + combo_dry(p["dry"])))
+
   def kwh(%{type: "dryer", params: p}, ctx),
     do: other(p["loads"] * ctx.days / 7 * if(p["fuel"] == "electric", do: 2.5, else: 0.2))
 
@@ -639,6 +651,8 @@ defmodule DIY.Estimate do
     do: other(in_season(item, ctx) * p["watts"] * p["hours"] * ctx.days / 1_000)
 
   defp other(kwh), do: %{kwh: kwh / 1, part: :other, full: false}
+
+  defp combo_dry(dry), do: @dry_load / Map.fetch!(@combo_cef, dry)
 
   # The label of a fridge comes from a test at 90 °F with closed doors.
   # This test stands for a kitchen near 72 °F, with doors that open (10
@@ -910,6 +924,21 @@ defmodule DIY.Estimate do
 
     gas ++
       ["#{num(p["loads"])} loads in one week × #{m.days} days ÷ 7 × #{per_load} for each load."]
+  end
+
+  defp steps(%{type: "washer_dryer", params: p}, m, _data, _estimate) do
+    {source, cef} =
+      case p["dry"] do
+        "heat_pump" -> {"ENERGY STAR gives the CEF of a combo with a heat pump", "6.00"}
+        "condenser" -> {"The least CEF of ENERGY STAR for a dryer with no vent", "2.68"}
+      end
+
+    dry = combo_dry(p["dry"])
+
+    [
+      "#{source}: 8.45 lb (the test load of a standard dryer) ÷ #{cef} lb for each kWh = #{number_text(dry)} kWh to dry one load.",
+      "#{num(p["loads"])} loads in one week × #{m.days} days ÷ 7 × (0.25 kWh to wash + #{number_text(dry)} kWh to dry) = #{number_text(p["loads"] * m.days / 7 * (0.25 + dry))} kWh. The hot water of the wash is on the water heater."
+    ]
   end
 
   defp steps(%{type: "lights", params: p}, m, _data, _estimate),
