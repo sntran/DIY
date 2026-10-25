@@ -103,6 +103,11 @@ Check the service, and run the job again when it is up.
 - Make a branch from `main` for each change, with the type of the change
   as a prefix: `feat/`, `fix/`, `docs/`, `test/`, `refactor/`. Each push
   to `main` can go to production.
+- Cloudflare builds and deploys each commit on `main` to production. It
+  skips a commit with `[skip ci]` in its message. So the title of a merge
+  to `main` has no `[skip ci]`. (CI does not run on `main`: the pull
+  request ran it.) On a branch, `[skip ci]` in a commit that is not the
+  last one keeps the minutes of Actions and of the Cloudflare preview.
 - Write the commit message in the format of
   [Conventional Commits](https://www.conventionalcommits.org/), in
   Simplified Technical English: `feat(house): add the rooms`.
