@@ -281,6 +281,35 @@ the degree days. A month with no sun keeps its degree days.
   - The app uses these kWh with two decimals, so that the math adds up.
   The size is that of the GE combo: 28 by 32 by 46.7 in (ENERGY STAR). A
   combo does not go on an item, and no item goes on it.
+- A dehumidifier: its power × the hours that its compressor runs in one
+  day, in its months. The typical power is 480 W. This is the rated
+  input of the Midea Cube of 50 pints in one day (MAD50PS1QGRC, Midea
+  spec sheet). Its IEF is 1.95 L/kWh.
+  - A study metered 21 dehumidifiers in 19 homes in 2011 (Mattison and
+    Korn, The Cadmus Group, ACEEE Summer Study 2012). They ran 8.9 hours
+    in one day on average, at 459 W. Half of the homes used them all
+    year, and the mean was 8 months. For 8 months, the study gives near
+    1,000 kWh in one year.
+  - So the typical hours are 8.9, and the typical months are April to
+    October (7 months). This gives 480 W × 8.9 hours × 214 days = 914
+    kWh in one year. All year gives near 1,560 kWh.
+  - The size is the size of the body of the Midea Cube: 375 by 367 by
+    370 mm.
+- A water dispenser of hot and cold water: the kWh of one day, in its
+  months. The water that a person draws is not in the model.
+  - ENERGY STAR gives the most kWh in one day with no water drawn. For a
+    dispenser of hot and cold water with tanks, Version 2.0 (February
+    2014) permitted less than 0.87 kWh. Version 3.0 (March 2022)
+    permits 0.68 kWh for a dispenser for a home (low capacity), and
+    0.80 kWh for a large one. Cold water only: 0.16 kWh.
+  - The typical kWh is 0.87: a dispenser made before 2022, or with no
+    ENERGY STAR, can use this much or more. The label or a plug meter
+    tells the true number.
+  - Its power is 500 W: it heats with 420 W and cools with 80 W. These
+    are the numbers of the Primo hTrio, with the bottle at the bottom
+    and a coffee brewer (Primo spec sheet DS-9115). The app does not
+    count the coffee. Its size is that of the hTrio: 12.2 by 14.2 by
+    43.5 in.
 - A fridge or a freezer in a room around the house (a garage, a shed).
   The label of a fridge comes from a test that stands for a kitchen near
   72 °F (10 CFR 430, subpart B, appendix A). The heat that comes in
@@ -1368,6 +1397,10 @@ on a light page.
   - a CPAP has its water tank, its screen, a knob and the port of its
     hose;
   - a sink has its cabinet, its basin and its faucet;
+  - a dehumidifier is a dark cube with the round grille of its fan on its
+    top, and the window of its water at its front;
+  - a water dispenser is tall and dark. It has a red tap and a blue tap
+    in a black recess over a tray, and the door of its bottle under them;
   - a bed has its drawers, its mattress, a duvet and two pillows;
   - a battery has its label, its handle and its terminals;
   - a power station has the look of the Pecron F5000LFP, which the owner
@@ -4206,6 +4239,8 @@ station on a freezer, or a pool pump on the coping of a pool
   season is April to October. A heat pump and a gas heater have a motor
   for the check of the start of a station. An electric heater has no
   motor.
+- **Dehumidifier and water dispenser.** Each has a compressor, so each
+  has a motor for the check of the start of a station.
 - **Hot tub.** The person gives the kWh of one day: 5 kWh is the
   default, for a tub with a good cover. The default season is all year.
 - **Tesla Wall Connector.** The charger of a car has the choice "Level

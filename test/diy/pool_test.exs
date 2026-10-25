@@ -233,6 +233,10 @@ defmodule DIY.PoolTest do
       assert "washer_dryer" in types.("all-in-one")
       assert "washer_dryer" in types.("apartment")
       assert "washer_dryer" in types.("washer dryer")
+      assert "dehumidifier" in types.("humidity")
+      assert "dehumidifier" in types.("dehumidifier")
+      assert "water_dispenser" in types.("water cooler")
+      assert "water_dispenser" in types.("bottle")
       assert types.("zzz") == []
       # A word of the text is the start of a word.
       assert "ev" in types.("tes")

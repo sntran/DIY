@@ -177,6 +177,10 @@ defmodule DIY.Profile do
   # The heater of a hot tub: 5.5 kW, a common heater of 240 V.
   def watts(%{type: "hot_tub"}), do: 5_500.0
 
+  # A water dispenser heats with 420 W and cools with 80 W (the Primo
+  # hTrio, on its spec sheet).
+  def watts(%{type: "water_dispenser"}), do: 500.0
+
   def watts(%{type: type})
       when type in [
              "smart_meter",
@@ -200,5 +204,14 @@ defmodule DIY.Profile do
   def motor?(%{type: "pool_heater", params: %{"fuel" => fuel}}), do: fuel != "electric"
 
   def motor?(%{type: type}),
-    do: type in ["ac", "mini_split", "fridge", "freezer", "pool_pump"]
+    do:
+      type in [
+        "ac",
+        "mini_split",
+        "fridge",
+        "freezer",
+        "pool_pump",
+        "dehumidifier",
+        "water_dispenser"
+      ]
 end
