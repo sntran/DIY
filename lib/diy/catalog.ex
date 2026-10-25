@@ -809,7 +809,7 @@ defmodule DIY.Catalog do
           24.0,
           "The hours that its compressor runs. In a study of 21 dehumidifiers in homes, the mean was 8.9 hours."
         ),
-        season("all")
+        season("warm")
       ]
     },
     %{
@@ -825,7 +825,7 @@ defmodule DIY.Catalog do
           0.87,
           0.0,
           5.0,
-          "ENERGY STAR permits 0.87 kWh in one day for a dispenser of hot and cold water with tanks, and 0.16 kWh for cold water only."
+          "With hot and cold water in tanks, ENERGY STAR permitted 0.87 kWh in one day before 2022. Since 2022, it permits 0.68 kWh for a dispenser for a home. Cold water only: 0.16 kWh."
         ),
         season("all")
       ]
@@ -1493,11 +1493,11 @@ defmodule DIY.Catalog do
     "mini_split" => {31, 9, 12},
     # Goodman GM9S800804BN, 80,000 BTU: 17 1/2 by 28 by 33 3/8 in (distributor listing).
     "furnace" => {18, 28, 33},
-    # Midea MAD50PS1QGRC (Cube, 50 pints): 375 by 367 by 370 mm, with no
-    # bucket under it (Midea spec sheet).
+    # Midea MAD50PS1QGRC (Cube, 50 pints): its body is 375 by 367 by 370 mm
+    # (Midea spec sheet).
     "dehumidifier" => {15, 14, 15},
-    # Primo hTrio, with the bottle at the bottom: 12.2 by 14.2 by 43.5 in
-    # (Primo spec sheet).
+    # Primo hTrio, with the bottle at the bottom and a coffee brewer: 12.2
+    # by 14.2 by 43.5 in (Primo spec sheet DS-9115).
     "water_dispenser" => {12, 14, 44},
     # No source: heat strips are in an air handler.
     "heat_strips" => {48, 24, 24},

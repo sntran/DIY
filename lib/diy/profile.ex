@@ -205,6 +205,13 @@ defmodule DIY.Profile do
 
   def motor?(%{type: type}),
     do:
-      type in (["ac", "mini_split", "fridge", "freezer", "pool_pump", "dehumidifier"] ++
-                 ["water_dispenser"])
+      type in [
+        "ac",
+        "mini_split",
+        "fridge",
+        "freezer",
+        "pool_pump",
+        "dehumidifier",
+        "water_dispenser"
+      ]
 end
