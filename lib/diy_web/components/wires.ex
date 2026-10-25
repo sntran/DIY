@@ -131,6 +131,7 @@ defmodule DIYWeb.Wires do
         to={to}
         title={title}
         buses={@buses}
+        ends={Build.wire_ends(@build, wire)}
         error={wire_error(@error, wire.id)}
       />
       <form
@@ -215,12 +216,12 @@ defmodule DIYWeb.Wires do
   attr :to, :map, required: true
   attr :title, :string, required: true
   attr :buses, :map, required: true, doc: "the system of each busbar with a battery"
+  attr :ends, :map, required: true, doc: "the ends of the wire (`DIY.Build.wire_ends/2`)"
   attr :error, :atom, default: nil
 
   defp wire(assigns) do
-    %{wire: wire, from: from, to: to} = assigns
+    %{wire: wire, from: from, to: to, ends: ends} = assigns
     two_way = Wire.two_way?(wire)
-    ends = Wire.ends(from, to)
     advice = Wire.advise(wire, ends)
     battery = Enum.find([from, to], &(&1.type == "van_battery"))
     buses = assigns.buses
@@ -346,7 +347,7 @@ defmodule DIYWeb.Wires do
           id={"#{@id}-chain"}
           class="stage-help"
         >
-          This wire is on the wire of a battery to a busbar. The fuse at the battery protects it (for example a class T fuse).
+          This wire is on the wire of a battery to a busbar. The fuse at the battery protects it (for example a class T fuse of {@advice.bank} A). So this wire must carry {@advice.bank} A, as the wire of the battery does.
         </p>
         <p
           :if={(@two_way and @advice.to) && @advice.to > Wire.rating(@advice.need)}
@@ -548,7 +549,8 @@ defmodule DIYWeb.Wires do
   rating and the largest that the wire takes. On DC, it has the DC
   rating.
   """
-  def ocpd_text(nil, _largest, _highest), do: "no breaker: the fuse at the battery protects it."
+  def ocpd_text(nil, _largest, _highest),
+    do: "no breaker, because the fuse at the battery protects it."
 
   def ocpd_text(least, largest, highest) do
     range =
@@ -586,6 +588,10 @@ defmodule DIYWeb.Wires do
   def fault_text({:dc_rating, side, highest}, wire, from, to),
     do:
       "The breaker or the fuse at #{name(side, from, to)} has a DC rating of #{dc(wire, side)} V. The system can have #{volts(highest)} V (a full LiFePO4 battery): the breaker can fail to stop a fault. Use one for #{volts(highest)} V DC or more (NEC 706.31(C))."
+
+  def fault_text({:bank_big, nil, fuse}, wire, _from, _to),
+    do:
+      "The fuse at the battery does not protect this wire: #{wire.awg} AWG takes #{Wire.largest(wire.awg)} A at most, and the fuse is #{fuse} A. Use a wire of the size of the wire of the battery, or a smaller fuse (NEC 240.4)."
 
   def fault_text({:drop, nil, drop}, _wire, _from, _to),
     do:

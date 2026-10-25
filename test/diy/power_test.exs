@@ -184,6 +184,42 @@ defmodule DIY.PowerTest do
       end)
     end
 
+    test "each wire of the chain gets the fuse at the bank" do
+      build = bank_build(true)
+      [to_switch, to_monitor, to_lynx, station] = build.wires
+
+      # No fuse at the bank yet: the smallest fuse for 30 A (40 A).
+      for wire <- [to_switch, to_monitor, to_lynx] do
+        assert Build.wire_ends(build, wire).bank == %{fuse: nil, least: 40}
+      end
+
+      # The wire of the station has no switch and no monitor.
+      assert Build.wire_ends(build, station) == %{from_min: 0, to_min: 40, free: [], bank: nil}
+
+      # A class T fuse of 250 A at the bank: each wire of the chain gets it.
+      {:ok, build} = Build.update_wire(build, to_switch.id, %{"from_ocpd" => "250"})
+      ends = Build.wire_ends(build, to_monitor)
+      assert ends.bank == %{fuse: 250, least: 40}
+      assert ends.free == [:from, :to]
+
+      # A wire of 10 AWG from the monitor to the busbar: a fault.
+      {:ok, build} = Build.update_wire(build, to_lynx.id, %{"awg" => "10"})
+      {:ok, wire} = Build.wire(build, to_lynx.id)
+      assert {:bank_big, nil, 250} in DIY.Wire.check(wire, Build.wire_ends(build, wire))
+
+      # A bank at the far end of its wire gives its fuse at that end too.
+      {:ok, build} = Build.delete_wire(build, to_switch.id)
+      [switch, bank] = for type <- ~w(battery_switch van_battery), do: of_type(build, type).id
+      {:ok, build, back} = Build.add_wire(build, switch, bank)
+      {:ok, build} = Build.update_wire(build, back, %{"to_ocpd" => "200"})
+      assert Build.wire_ends(build, to_monitor).bank == %{fuse: 200, least: 40}
+
+      # With no wire to the bank, the chain has no fuse: each end needs a
+      # breaker.
+      {:ok, build} = Build.delete_wire(build, back)
+      assert Build.wire_ends(build, to_monitor) == %{from_min: 0, to_min: 0, free: [], bank: nil}
+    end
+
     test "adds its kWh to the stations, through a switch and a monitor" do
       build = bank_build(true)
       sys = Power.system(build.items, build.wires)

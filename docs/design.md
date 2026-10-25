@@ -3732,10 +3732,22 @@ them is as a wire to a busbar (`DIY.Wire.bus?/1`). It gets the voltage of
 the batteries of its node, and it has two ways.
 
 The fuse at the bank (for example a class T fuse) protects the wire of
-the bank to the busbar, through these parts. So a wire with an end at a
-switch or a monitor needs a breaker only at its end at a bank
-(`DIY.Wire.ends/2`). Its other ends need none: the advice says so, and
-the check finds no fault there.
+the bank to the busbar, through these parts. The wires between switches
+and monitors make a chain (`DIY.Build.wire_ends/2`). When a wire joins a
+bank to the chain, the rules of the chain are:
+
+- A wire with an end at a switch or a monitor needs a breaker only at its
+  end at a bank (`DIY.Wire.ends/3`). Its other ends need none: the advice
+  says so, and the check finds no fault of a breaker there.
+- The fuse at the bank protects each wire of the chain, so each wire must
+  carry this fuse (NEC 240.4). The advice gives a wire that the fuse
+  protects. With no fuse yet, it uses the smallest fuse for the wire of
+  the bank. The check gives a fault when the fuse is more than the wire
+  takes (`:bank_big`).
+- With more than one bank on the chain, the largest fuse counts.
+
+A chain with no bank (for example a station wired only to a switch) has
+no fuse at a bank. Then each end needs its breaker, as on any wire.
 
 ### The rules
 

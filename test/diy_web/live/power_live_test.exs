@@ -605,13 +605,25 @@ defmodule DIYWeb.PowerLiveTest do
     {build, bank} = add(build, "Garage", "van_battery", %{"ah" => "280", "volts" => "48"})
     {build, switch} = add(build, "Garage", "battery_switch")
     {build, lynx} = add(build, "Garage", "dc_bus")
-    {:ok, build, _wire} = Build.add_wire(build, bank, switch)
-    {:ok, build, _wire} = Build.add_wire(build, switch, lynx)
+    {:ok, build, to_switch} = Build.add_wire(build, bank, switch)
+    {:ok, build, to_lynx} = Build.add_wire(build, switch, lynx)
     {:ok, build, _wire} = Build.add_wire(build, station, lynx)
 
     view = open(conn, ~p"/inside?#{[item: switch]}", build)
     html = render(view)
-    assert html =~ "The fuse at the battery protects it (for example a class T fuse)."
-    assert html =~ "no breaker: the fuse at the battery protects it."
+
+    assert html =~
+             "The fuse at the battery protects it (for example a class T fuse of 40 A). So this wire must carry 40 A, as the wire of the battery does."
+
+    assert html =~ "no breaker, because the fuse at the battery protects it."
+
+    # A class T fuse of 250 A, and a wire of 10 AWG from the switch to the
+    # busbar: the fuse does not protect this wire.
+    {:ok, build} = Build.update_wire(build, to_switch, %{"from_ocpd" => "250"})
+    {:ok, build} = Build.update_wire(build, to_lynx, %{"awg" => "10"})
+    view = open(conn, ~p"/inside?#{[item: switch]}", build)
+
+    assert render(view) =~
+             "The fuse at the battery does not protect this wire: 10 AWG takes 30 A at most, and the fuse is 250 A."
   end
 end

@@ -1128,6 +1128,64 @@ defmodule DIY.Build do
   @spec wires_of(t(), String.t()) :: [wire()]
   def wires_of(build, item_id), do: Enum.filter(build.wires, &(item_id in [&1.from, &1.to]))
 
+  @doc """
+  The ends of a wire for its checks (`DIY.Wire.ends/3`). The wires between
+  battery switches and battery monitors make a chain. When a wire joins a
+  battery to this chain, the fuse at the battery protects all of the
+  chain. The ends then get this fuse: the largest fuse of the batteries of
+  the chain. With no battery on the chain, each end needs a breaker.
+  """
+  @spec wire_ends(t(), wire()) :: Wire.ends()
+  def wire_ends(build, wire) do
+    by_id = Map.new(build.items, &{&1.id, &1})
+    from = by_id[wire.from]
+    to = by_id[wire.to]
+    parts = for item <- [from, to], Wire.inline?(item), do: item.id
+    Wire.ends(from, to, chain_bank(build.wires, by_id, parts))
+  end
+
+  defp chain_bank(_wires, _by_id, []), do: nil
+
+  defp chain_bank(wires, by_id, parts) do
+    chain = chain(parts, MapSet.new(parts), wires, by_id)
+
+    banks =
+      for wire <- wires,
+          {battery, part, fuse} <- [
+            {wire.from, wire.to, wire.from_ocpd},
+            {wire.to, wire.from, wire.to_ocpd}
+          ],
+          match?(%{type: "van_battery"}, by_id[battery]),
+          MapSet.member?(chain, part),
+          do: {fuse, Wire.rating(Wire.need(wire))}
+
+    if banks != [] do
+      fuses = for {fuse, _least} <- banks, fuse, do: fuse
+
+      %{
+        fuse: Enum.max(fuses, fn -> nil end),
+        least: banks |> Enum.map(&elem(&1, 1)) |> Enum.max()
+      }
+    end
+  end
+
+  # The battery switches and the battery monitors that a chain of wires
+  # joins to the parts of `todo`.
+  defp chain([], seen, _wires, _by_id), do: seen
+
+  defp chain([id | todo], seen, wires, by_id) do
+    next =
+      for wire <- wires,
+          id in [wire.from, wire.to],
+          other = if(wire.from == id, do: wire.to, else: wire.from),
+          not MapSet.member?(seen, other),
+          by_id[other] && Wire.inline?(by_id[other]),
+          uniq: true,
+          do: other
+
+    chain(next ++ todo, MapSet.union(seen, MapSet.new(next)), wires, by_id)
+  end
+
   @doc "The most wires of a build, and of an item."
   @spec max_wires() :: {pos_integer(), pos_integer()}
   def max_wires, do: {@max_wires, @max_item_wires}
