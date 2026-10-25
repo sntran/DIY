@@ -15,7 +15,7 @@ defmodule DIYWeb.Inside do
   """
   use DIYWeb, :html
 
-  alias DIY.{Build, Catalog, Estimate, Layout, Prices, Solar}
+  alias DIY.{Build, Catalog, Estimate, Layout, Power, Prices, Solar}
   alias DIYWeb.{Camera, Cutaway, Format, HomeAssistant, Icon, MakerLink, Stage, Wires}
 
   @place_names %{indoor: "Inside", outdoor: "Outside", roof: "On the roof"}
@@ -476,7 +476,7 @@ defmodule DIYWeb.Inside do
                   data-nudge={item.id}
                   class="link"
                 >
-                  {Catalog.name(item)}{item_note(item, @estimate, @price, @gas)}{state_note(
+                  {Catalog.name(item)}{item_note(item, @build, @estimate, @price, @gas)}{state_note(
                     @states[item.id]
                   )}
                 </.link>
@@ -722,14 +722,19 @@ defmodule DIYWeb.Inside do
     end
   end
 
-  # The usage, the cost and the flags of an item, as a text. The cost of a
-  # gas item has its gas.
-  defp item_note(item, estimate, price, gas) do
+  # The usage, the cost and the flags of an item, as a text. The cost is at
+  # the price of the hours when the item runs (DIY.Power.item_cost/4). The
+  # cost of a gas item has its gas.
+  defp item_note(item, build, estimate, price, gas) do
     usage =
       if estimate.ready and item.type not in Estimate.no_use() do
         %{year: kwh, therms: therms} = estimate.items[item.id]
         gas_text = if therms / 12 >= 0.5, do: " and #{Format.therms(therms / 12)}", else: ""
-        cost = Format.cost(kwh / 12, price.cents) + therms / 12 * gas.dollars
+
+        cost =
+          Power.item_cost(item, estimate, build.power, price.cents) / 12 +
+            therms / 12 * gas.dollars
+
         ": #{Format.kwh(kwh / 12)}#{gas_text}, #{Format.money(cost)} a month"
       else
         ""
@@ -1017,11 +1022,11 @@ defmodule DIYWeb.Inside do
         </p>
         <%= if @item.type not in @no_use do %>
           <p class="stage-month">
-            {Format.dollars(Format.cost(@estimate.items[@item.id].year / 12, @price.cents))} a month
+            {Format.dollars(Power.item_cost(@item, @estimate, @build.power, @price.cents) / 12)} a month
           </p>
           <p id="item-year" class="stage-year">
             {Format.kwh(@estimate.items[@item.id].year)} and {Format.money(
-              Format.cost(@estimate.items[@item.id].year, @price.cents)
+              Power.item_cost(@item, @estimate, @build.power, @price.cents)
             )} in one year
           </p>
           <p :if={@estimate.items[@item.id].therms > 0} id="item-gas" class="stage-year">
