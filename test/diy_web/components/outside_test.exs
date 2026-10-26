@@ -673,8 +673,15 @@ defmodule DIYWeb.OutsideTest do
   defp cover?({ax0, ay0, ax1, ay1}, {bx0, by0, bx1, by1}),
     do: ax0 < bx1 - 0.01 and bx0 < ax1 - 0.01 and ay0 < by1 - 0.01 and by0 < ay1 - 0.01
 
-  defp on_floor?(%{box: {_, _, az0, _, _, az1}}, %{box: {_, _, bz0, _, _, _}}),
-    do: az1 - az0 <= 0.02 and bz0 >= az0 - 1.0e-6
+  # A flat object (a rug, the water of a pool) is a part of the floor: an
+  # object on it paints after it. The floor of a yard is 0.02 over the
+  # ground. An object that stands on the ground (for example "you") also
+  # paints after the water of a pool in the yard. The water cannot cover
+  # a thing that is taller than it.
+  defp on_floor?(%{box: {_, _, az0, _, _, az1}}, %{box: {_, _, bz0, _, _, bz1}}),
+    do:
+      az1 - az0 <= 0.02 and
+        (bz0 >= az0 - 1.0e-6 or (bz1 - bz0 > 0.02 and bz0 >= az0 - 0.02 - 1.0e-6))
 
   defp screen(object) do
     {xs, ys} =
