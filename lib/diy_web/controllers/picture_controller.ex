@@ -18,12 +18,19 @@ defmodule DIYWeb.PictureController do
          {:ok, png} <-
            Gettext.with_locale(DIY.Gettext, summary.locale, fn -> Picture.png(build, summary) end) do
       conn
-      # The picture of a link never changes.
-      |> put_resp_header("cache-control", "public, max-age=31536000, immutable")
+      # The picture of a long link never changes. A short link ends, so
+      # its picture stays in a cache for one day only.
+      |> put_resp_header("cache-control", cache(data))
       |> put_resp_content_type("image/png", nil)
       |> send_resp(200, png)
     else
       {:error, _reason} -> send_resp(conn, 404, "")
     end
+  end
+
+  defp cache(data) do
+    if DIY.Links.id?(data),
+      do: "public, max-age=86400",
+      else: "public, max-age=31536000, immutable"
   end
 end

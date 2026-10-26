@@ -3,6 +3,7 @@ defmodule DIY.LinksTest do
   use ExUnitProperties
 
   import Ecto.Query
+  import ExUnit.CaptureLog
 
   alias DIY.Links
   alias DIY.Links.Link
@@ -12,12 +13,12 @@ defmodule DIY.LinksTest do
 
   defp data(text \\ "abc"), do: "1" <> Base.url_encode64(text, padding: false)
 
-  test "the id of a short link: the version 2, then 12 letters or digits" do
-    assert Links.id?("2Ab3dE9xYk2Lm")
-    refute Links.id?("2Ab3dE9xYk2L")
-    refute Links.id?("2Ab3dE9xYk2Lmn")
-    refute Links.id?("2Ab3dE9xYk2L_")
-    refute Links.id?("1Ab3dE9xYk2Lm")
+  test "the id of a short link: the version 2, then 16 letters or digits" do
+    assert Links.id?("2Ab3dE9xYk2Lm7Qz0")
+    refute Links.id?("2Ab3dE9xYk2Lm7Qz")
+    refute Links.id?("2Ab3dE9xYk2Lm7Qz0p")
+    refute Links.id?("2Ab3dE9xYk2Lm7Qz_")
+    refute Links.id?("1Ab3dE9xYk2Lm7Qz0")
     refute Links.id?(nil)
   end
 
@@ -33,8 +34,8 @@ defmodule DIY.LinksTest do
     refute link.box =~ long
     assert byte_size(link.key) == 32
 
-    # A different id finds nothing, also with the same key of the row.
-    assert {:error, :gone} = Links.fetch("2" <> String.duplicate("A", 12), @day)
+    # A different id finds nothing.
+    assert {:error, :gone} = Links.fetch("2" <> String.duplicate("A", 16), @day)
     assert {:error, :gone} = Links.fetch("no id", @day)
   end
 
@@ -114,10 +115,45 @@ defmodule DIY.LinksTest do
     assert run.() == [1]
     assert run.() == []
 
+    # A boot that stopped after the table, before the version of the
+    # migration: the next boot runs it again with no error.
+    Ecto.Adapters.SQL.query!(repo, "DELETE FROM schema_migrations")
+    assert run.() == [1]
+
     # The dynamic repo is of this process only.
     Repo.put_dynamic_repo(repo)
     assert {:ok, id} = Links.create(data(), @day)
     assert {:ok, _data} = Links.fetch(id, @day)
+  end
+
+  test "a migration that fails lets the app start, and the log tells the kind of the error" do
+    {:ok, repo} = Repo.start_link(name: nil, database: ":memory:", pool_size: 1)
+    GenServer.stop(repo)
+
+    log = capture_log(fn -> assert Links.migrate(dynamic_repo: repo) == :ignore end)
+    assert log =~ "The table of the short links is not ready ("
+  end
+
+  test "an error of the storage gives an error, and the log has no id and no house" do
+    {:ok, id} = Links.create(data("the house"), @day)
+
+    # A process with no connection of the sandbox: each statement fails.
+    task = fn fun ->
+      parent = self()
+      spawn(fn -> send(parent, {:result, fun.()}) end)
+      assert_receive {:result, result}
+      result
+    end
+
+    log =
+      capture_log(fn ->
+        assert task.(fn -> Links.create(data(), @day) end) == {:error, :storage}
+        assert task.(fn -> Links.fetch(id, @day) end) == {:error, :storage}
+      end)
+
+    assert log =~ "The storage of the short links failed (DBConnection.OwnershipError)"
+    refute log =~ id
+    refute log =~ "the house"
   end
 
   property "each DATA comes back from its short link, and each id is new" do

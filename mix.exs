@@ -89,7 +89,7 @@ defmodule DIY.MixProject do
       # always uses its own NIF of exqlite. Thus the version must be the
       # version of that NIF ("Linked NIFs" in `beam.com --version`).
       {:ecto_sql, "~> 3.13"},
-      {:ecto_sqlite3, ">= 0.0.0"},
+      {:ecto_sqlite3, "~> 0.26"},
       {:exqlite, "0.41.0"},
       {:bandit, "~> 1.5"}
     ]

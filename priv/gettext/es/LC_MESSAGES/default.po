@@ -749,12 +749,12 @@ msgstr "Una casa de %{size} pies²: %{kwh} kWh al año"
 msgid "A shared house"
 msgstr "Una casa compartida"
 
-#: lib/diy_web/components/share.ex:287
+#: lib/diy_web/components/share.ex:295
 #, elixir-autogen, elixir-format
 msgid "April"
 msgstr "abril"
 
-#: lib/diy_web/components/share.ex:291
+#: lib/diy_web/components/share.ex:299
 #, elixir-autogen, elixir-format
 msgid "August"
 msgstr "agosto"
@@ -774,7 +774,7 @@ msgstr "Costo en un año"
 msgid "D"
 msgstr "D"
 
-#: lib/diy_web/components/share.ex:295
+#: lib/diy_web/components/share.ex:303
 #, elixir-autogen, elixir-format
 msgid "December"
 msgstr "diciembre"
@@ -789,13 +789,14 @@ msgstr "Electricidad en un año"
 msgid "F"
 msgstr "F"
 
-#: lib/diy_web/components/share.ex:285
+#: lib/diy_web/components/share.ex:293
 #, elixir-autogen, elixir-format
 msgid "February"
 msgstr "febrero"
 
 #: lib/diy_web/components/share.ex:230
-#: lib/diy_web/components/share.ex:240
+#: lib/diy_web/components/share.ex:238
+#: lib/diy_web/components/share.ex:248
 #, elixir-autogen, elixir-format
 msgid "Go to Small Steps Home"
 msgstr "Ir a Small Steps Home"
@@ -805,17 +806,17 @@ msgstr "Ir a Small Steps Home"
 msgid "J"
 msgstr "E"
 
-#: lib/diy_web/components/share.ex:284
+#: lib/diy_web/components/share.ex:292
 #, elixir-autogen, elixir-format
 msgid "January"
 msgstr "enero"
 
-#: lib/diy_web/components/share.ex:290
+#: lib/diy_web/components/share.ex:298
 #, elixir-autogen, elixir-format
 msgid "July"
 msgstr "julio"
 
-#: lib/diy_web/components/share.ex:289
+#: lib/diy_web/components/share.ex:297
 #, elixir-autogen, elixir-format
 msgid "June"
 msgstr "junio"
@@ -835,12 +836,12 @@ msgstr "Conservar mi casa"
 msgid "M"
 msgstr "M"
 
-#: lib/diy_web/components/share.ex:286
+#: lib/diy_web/components/share.ex:294
 #, elixir-autogen, elixir-format
 msgid "March"
 msgstr "marzo"
 
-#: lib/diy_web/components/share.ex:288
+#: lib/diy_web/components/share.ex:296
 #, elixir-autogen, elixir-format
 msgid "May"
 msgstr "mayo"
@@ -855,7 +856,7 @@ msgstr "N"
 msgid "Not in the link: your links to Home Assistant and to the makers of your stations."
 msgstr "No está en el enlace: sus conexiones a Home Assistant y a los fabricantes de sus estaciones."
 
-#: lib/diy_web/components/share.ex:294
+#: lib/diy_web/components/share.ex:302
 #, elixir-autogen, elixir-format
 msgid "November"
 msgstr "noviembre"
@@ -865,7 +866,7 @@ msgstr "noviembre"
 msgid "O"
 msgstr "O"
 
-#: lib/diy_web/components/share.ex:293
+#: lib/diy_web/components/share.ex:301
 #, elixir-autogen, elixir-format
 msgid "October"
 msgstr "octubre"
@@ -880,7 +881,7 @@ msgstr "Poner el código postal en el enlace. El clima y los planes lo necesitan
 msgid "S"
 msgstr "S"
 
-#: lib/diy_web/components/share.ex:292
+#: lib/diy_web/components/share.ex:300
 #, elixir-autogen, elixir-format
 msgid "September"
 msgstr "septiembre"
@@ -917,7 +918,7 @@ msgstr "Empezar con esta casa"
 msgid "The house, its rooms and its items."
 msgstr "La casa, sus cuartos y sus aparatos."
 
-#: lib/diy_web/components/share.ex:268
+#: lib/diy_web/components/share.ex:276
 #, elixir-autogen, elixir-format
 msgid "The kWh of each month"
 msgstr "Los kWh de cada mes"
@@ -932,7 +933,7 @@ msgstr "El enlace"
 msgid "The link is in the clipboard."
 msgstr "El enlace está en el portapapeles."
 
-#: lib/diy_web/components/share.ex:235
+#: lib/diy_web/components/share.ex:243
 #, elixir-autogen, elixir-format
 msgid "The link is not complete, or it is from a different version of the app. Ask for the link again."
 msgstr "El enlace no está completo o es de otra versión de la aplicación. Pida el enlace otra vez."
@@ -954,6 +955,7 @@ msgstr "Esta casa reemplaza a su casa en este dispositivo."
 
 #: lib/diy_web/components/share.ex:223
 #: lib/diy_web/components/share.ex:233
+#: lib/diy_web/components/share.ex:241
 #, elixir-autogen, elixir-format
 msgid "This link has no house"
 msgstr "Este enlace no tiene una casa"
@@ -1106,3 +1108,8 @@ msgstr "Este enlace corto guarda una copia de la casa en el servidor. La copia e
 #, elixir-autogen, elixir-format
 msgid "The link shows your house and its numbers to a different person."
 msgstr "El enlace muestra su casa y sus números a otra persona."
+
+#: lib/diy_web/components/share.ex:235
+#, elixir-autogen, elixir-format
+msgid "The app cannot open short links now. Try again later."
+msgstr "La aplicación no puede abrir enlaces cortos ahora. Inténtelo de nuevo más tarde."

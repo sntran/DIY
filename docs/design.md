@@ -2200,7 +2200,7 @@ owner (October 2026): DIY keeps its own short links, not a different
 app. A short link opens only a shared house of DIY. A short link ends
 one year after its last visit.
 
-`ID` is the version `2`, then 12 random letters and digits (71 bits).
+`ID` is the version `2`, then 16 random letters and digits (95 bits).
 The long links keep the version `1`. Thus `/s/` takes the two kinds,
 and `DIY.Share.resolve/1` finds the `DATA` of each kind
 (`DIY.Links`).
@@ -2211,7 +2211,9 @@ it so that the table alone does not give a house:
 - The key of the row is a hash of the id (SHA-256). The table does not
   keep the id.
 - The `DATA` is encrypted with AES-256-GCM. The key is an HMAC of the
-  id. Thus only a person with the link can read the house.
+  id. Thus a person needs the link, or a search of all the 95 bits, to
+  read the house. The length of a row still shows the size of its
+  house.
 - A row has the day of its last visit (`used_on`), not the time. A visit
   writes the day once a day at most.
 
@@ -2229,26 +2231,48 @@ The rules of a short link:
   The same house on the same page gives the same link again.
 - The `DATA` has the limits of a long link (6,000 characters).
 - When the app cannot make a short link (a full table, an error of the
-  storage), the sheet tells it and keeps the long link.
+  storage), the sheet tells it and keeps the long link. When the app
+  cannot read the storage, the page of a short link tells it. An error
+  of the storage never stops a page. The log tells only the kind of the
+  error: no id and no house.
 - The picture and the preview of a short link are the picture and the
-  preview of its long link.
+  preview of its long link. A cache keeps the picture of a short link
+  for one day only, because the link can end.
 - The ZIP box changes the house, so it gives the long link again. The
   person can then ask for a new short link.
 
-The storage of a Durable Object commits each statement alone. A short
-link needs no transaction. The insert of a row is one statement. The
-update of a visit is one statement, and the delete of an ended link is
-one statement. The migration of the table runs at the boot
-(`DIY.Links.migrate/0`).
+The storage of a Durable Object commits each statement alone, and the
+VM runs many requests at the same time. Thus each statement must be
+correct when other statements come between the statements of a request:
 
-The model `specs/Links.tla` checks the rules of the days with TLC:
+- A visit reads the row, and then writes its day with an upsert. A new
+  link can delete the row between the two (at midnight). Then the
+  upsert puts the row back, because the visit found the link. Two visits
+  at the same time keep the later day.
+- The delete of an ended link also checks the day in the row. Thus it
+  does not delete a row that a different visit just wrote.
+- The count of the rows and the insert of a new link are two
+  statements. Thus the table can have a few more than 100,000 links.
+
+The migration of the table runs at the boot (`DIY.Links.migrate/0`). It
+makes only what is not there, so it can run again after a boot that
+stopped in it. When it fails, the app starts without the short links.
+
+The model `specs/Links.tla` checks these rules with TLC. A visit is two
+steps (`Read`, `Write`), and other steps can come between them:
 
 - A link that a person visited in the last 365 days stays (`Kept`).
-- A row keeps the day of the last good visit of its link (`Fresh`).
+- A link that did not end keeps the day of the last good visit
+  (`Fresh`).
 
-Two configurations have a fault that TLC must find. In
+Three configurations have a fault that TLC must find. In
 `Links.early.cfg`, a link ends one day too early. In
-`Links.noupdate.cfg`, a visit does not write its day.
+`Links.noupdate.cfg`, a visit does not write its day. In
+`Links.noupsert.cfg`, a visit writes its day with an update, not an
+upsert.
+
+A script can make many links: the limit of 20 is for one page. A limit
+for each address is a next step.
 
 ### The share
 

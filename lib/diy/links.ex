@@ -1,8 +1,8 @@
 defmodule DIY.Links do
   @moduledoc """
   The short links of shared houses (docs/design.md, "A short link"). A
-  short link is `/s/ID`. `ID` is the version `2`, then 12 random letters
-  and digits (71 bits). The server keeps the `DATA` of the long link
+  short link is `/s/ID`. `ID` is the version `2`, then 16 random letters
+  and digits (95 bits). The server keeps the `DATA` of the long link
   (`DIY.Share`) for it, encrypted:
 
   - The key of the row is a hash of the id (SHA-256). The table does not
@@ -13,16 +13,22 @@ defmodule DIY.Links do
     writes the day once a day at most. Each new link deletes the links
     that ended.
   - The table has 100,000 links at most.
+  - The storage of a Durable Object commits each statement alone. Thus
+    each step is one statement that is correct at any time
+    (`specs/Links.tla`). An error of the storage gives
+    `{:error, :storage}`, and the log tells only the kind of the error.
 
   The long links stay as they are: their `DATA` has the version `1`.
   """
   import Ecto.Query
 
+  require Logger
+
   alias DIY.Links.{Link, Migration}
   alias DIY.Repo
 
   @version "2"
-  @length 12
+  @length 16
   @alphabet ~c"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
   @days 365
   @max_links 100_000
@@ -31,13 +37,22 @@ defmodule DIY.Links do
   # characters at most.
   @max_data 6_001
 
-  @doc "Runs the migration of the table at the boot (`DIY.Application`)."
-  def migrate do
-    Ecto.Migrator.run(Repo, [{1, Migration}], :up, all: true, log: false)
+  @doc """
+  Runs the migration of the table at the boot (`DIY.Application`). The
+  migration can run again after a boot that stopped in it. When it fails,
+  the app starts without the short links: their pages tell an error of
+  the storage.
+  """
+  def migrate(opts \\ []) do
+    Ecto.Migrator.run(Repo, [{1, Migration}], :up, [all: true, log: false] ++ opts)
     :ignore
+  catch
+    kind, reason ->
+      Logger.error("The table of the short links is not ready (#{kind(kind, reason)})")
+      :ignore
   end
 
-  @doc "True for the text of a short link: `2` and 12 letters or digits."
+  @doc "True for the text of a short link: `2` and 16 letters or digits."
   @spec id?(term()) :: boolean()
   def id?(@version <> rest) when byte_size(rest) == @length,
     do: rest |> String.to_charlist() |> Enum.all?(&(&1 in @alphabet))
@@ -50,20 +65,22 @@ defmodule DIY.Links do
   ended. A full table gives `{:error, :full}`, and a `DATA` that is not
   of a long link gives `{:error, :data}`.
   """
-  @spec create(String.t(), Date.t()) :: {:ok, String.t()} | {:error, :full | :data}
+  @spec create(String.t(), Date.t()) :: {:ok, String.t()} | {:error, :full | :data | :storage}
   def create(data, today \\ Date.utc_today())
 
   def create("1" <> _rest = data, today) when byte_size(data) <= @max_data do
-    Repo.delete_all(from(l in Link, where: l.used_on < ^Date.add(today, -@days)))
+    storage(fn ->
+      Repo.delete_all(from(l in Link, where: l.used_on < ^Date.add(today, -@days)))
 
-    if Repo.aggregate(Link, :count) < @max_links do
-      id = new_id()
-      {row, key} = keys(id)
-      Repo.insert!(%Link{key: row, box: seal(key, data), used_on: today})
-      {:ok, id}
-    else
-      {:error, :full}
-    end
+      if Repo.aggregate(Link, :count) < @max_links do
+        id = new_id()
+        {row, key} = keys(id)
+        Repo.insert!(%Link{key: row, box: seal(key, data), used_on: today})
+        {:ok, id}
+      else
+        {:error, :full}
+      end
+    end)
   end
 
   def create(_data, _today), do: {:error, :data}
@@ -73,33 +90,67 @@ defmodule DIY.Links do
   in the row. A link that is not there, or that ended, gives
   `{:error, :gone}`. An ended link is deleted.
   """
-  @spec fetch(String.t(), Date.t()) :: {:ok, String.t()} | {:error, :gone}
+  @spec fetch(String.t(), Date.t()) :: {:ok, String.t()} | {:error, :gone | :storage}
   def fetch(id, today \\ Date.utc_today()) do
-    with true <- id?(id),
-         {row, key} = keys(id),
-         %Link{} = link <- Repo.get(Link, row),
+    if id?(id) do
+      {row, key} = keys(id)
+      storage(fn -> find(row, key, today) end)
+    else
+      {:error, :gone}
+    end
+  end
+
+  defp find(row, key, today) do
+    with %Link{} = link <- Repo.get(Link, row),
          :ok <- alive(link, today),
          {:ok, data} <- open(key, link.box) do
-      if Date.compare(link.used_on, today) == :lt,
-        do: Repo.update_all(from(l in Link, where: l.key == ^row), set: [used_on: today])
-
+      if Date.compare(link.used_on, today) == :lt, do: keep(link, today)
       {:ok, data}
     else
       _gone -> {:error, :gone}
     end
   end
 
-  # A link ends 365 days after its last visit. An ended link is deleted.
+  # A link ends 365 days after its last visit. The delete also checks the
+  # day: a different request can write a new visit after this read.
   defp alive(link, today) do
     if Date.diff(today, link.used_on) <= @days do
       :ok
     else
-      Repo.delete!(link)
+      Repo.delete_all(
+        from(l in Link, where: l.key == ^link.key and l.used_on < ^Date.add(today, -@days))
+      )
+
       :gone
     end
   end
 
-  # 12 letters or digits, each from 6 random bits: a value of 62 or more
+  # The day of a visit. A new link can delete the row after the read (at
+  # midnight). Then the row comes back, because the visit found the link.
+  # Two visits at the same time keep the later day.
+  defp keep(link, today) do
+    Repo.insert!(%Link{key: link.key, box: link.box, used_on: today},
+      on_conflict:
+        from(l in Link, update: [set: [used_on: fragment("max(?, excluded.used_on)", l.used_on)]]),
+      conflict_target: :key
+    )
+  end
+
+  # An error of the storage stops the short links, not the page. The log
+  # has no id and no house: only the kind of the error.
+  defp storage(fun) do
+    fun.()
+  catch
+    kind, reason ->
+      Logger.error("The storage of the short links failed (#{kind(kind, reason)})")
+      {:error, :storage}
+  end
+
+  # The module of an exception, else only `:exit`, `:throw` or `:error`.
+  defp kind(kind, reason),
+    do: if(is_exception(reason), do: inspect(reason.__struct__), else: inspect(kind))
+
+  # 16 letters or digits, each from 6 random bits: a value of 62 or more
   # is not used, so each character has the same chance.
   defp new_id, do: @version <> List.to_string(chars(@length, []))
 

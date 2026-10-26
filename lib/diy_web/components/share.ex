@@ -229,6 +229,14 @@ defmodule DIYWeb.Share do
           <.link navigate={~p"/"} id="shared-start" class="btn btn-primary">
             {gettext("Go to Small Steps Home")}
           </.link>
+        <% {:error, :storage} -> %>
+          <h1 class="text-2xl font-bold">{gettext("This link has no house")}</h1>
+          <p id="shared-storage">
+            {gettext("The app cannot open short links now. Try again later.")}
+          </p>
+          <.link navigate={~p"/"} id="shared-start" class="btn btn-primary">
+            {gettext("Go to Small Steps Home")}
+          </.link>
         <% {:error, _reason} -> %>
           <h1 class="text-2xl font-bold">{gettext("This link has no house")}</h1>
           <p>

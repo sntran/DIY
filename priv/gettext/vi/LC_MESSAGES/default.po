@@ -747,12 +747,12 @@ msgstr "Nhà %{size} ft²: %{kwh} kWh mỗi năm"
 msgid "A shared house"
 msgstr "Một ngôi nhà được chia sẻ"
 
-#: lib/diy_web/components/share.ex:287
+#: lib/diy_web/components/share.ex:295
 #, elixir-autogen, elixir-format
 msgid "April"
 msgstr "Tháng 4"
 
-#: lib/diy_web/components/share.ex:291
+#: lib/diy_web/components/share.ex:299
 #, elixir-autogen, elixir-format
 msgid "August"
 msgstr "Tháng 8"
@@ -772,7 +772,7 @@ msgstr "Chi phí trong một năm"
 msgid "D"
 msgstr "12"
 
-#: lib/diy_web/components/share.ex:295
+#: lib/diy_web/components/share.ex:303
 #, elixir-autogen, elixir-format
 msgid "December"
 msgstr "Tháng 12"
@@ -787,13 +787,14 @@ msgstr "Điện trong một năm"
 msgid "F"
 msgstr "2"
 
-#: lib/diy_web/components/share.ex:285
+#: lib/diy_web/components/share.ex:293
 #, elixir-autogen, elixir-format
 msgid "February"
 msgstr "Tháng 2"
 
 #: lib/diy_web/components/share.ex:230
-#: lib/diy_web/components/share.ex:240
+#: lib/diy_web/components/share.ex:238
+#: lib/diy_web/components/share.ex:248
 #, elixir-autogen, elixir-format
 msgid "Go to Small Steps Home"
 msgstr "Đến Small Steps Home"
@@ -803,17 +804,17 @@ msgstr "Đến Small Steps Home"
 msgid "J"
 msgstr "1"
 
-#: lib/diy_web/components/share.ex:284
+#: lib/diy_web/components/share.ex:292
 #, elixir-autogen, elixir-format
 msgid "January"
 msgstr "Tháng 1"
 
-#: lib/diy_web/components/share.ex:290
+#: lib/diy_web/components/share.ex:298
 #, elixir-autogen, elixir-format
 msgid "July"
 msgstr "Tháng 7"
 
-#: lib/diy_web/components/share.ex:289
+#: lib/diy_web/components/share.ex:297
 #, elixir-autogen, elixir-format
 msgid "June"
 msgstr "Tháng 6"
@@ -833,12 +834,12 @@ msgstr "Giữ nhà của tôi"
 msgid "M"
 msgstr "3"
 
-#: lib/diy_web/components/share.ex:286
+#: lib/diy_web/components/share.ex:294
 #, elixir-autogen, elixir-format
 msgid "March"
 msgstr "Tháng 3"
 
-#: lib/diy_web/components/share.ex:288
+#: lib/diy_web/components/share.ex:296
 #, elixir-autogen, elixir-format
 msgid "May"
 msgstr "Tháng 5"
@@ -853,7 +854,7 @@ msgstr "11"
 msgid "Not in the link: your links to Home Assistant and to the makers of your stations."
 msgstr "Không có trong liên kết: các kết nối của bạn với Home Assistant và với hãng sản xuất trạm điện."
 
-#: lib/diy_web/components/share.ex:294
+#: lib/diy_web/components/share.ex:302
 #, elixir-autogen, elixir-format
 msgid "November"
 msgstr "Tháng 11"
@@ -863,7 +864,7 @@ msgstr "Tháng 11"
 msgid "O"
 msgstr "10"
 
-#: lib/diy_web/components/share.ex:293
+#: lib/diy_web/components/share.ex:301
 #, elixir-autogen, elixir-format
 msgid "October"
 msgstr "Tháng 10"
@@ -878,7 +879,7 @@ msgstr "Đưa mã ZIP vào liên kết. Thời tiết và các gói điện cầ
 msgid "S"
 msgstr "9"
 
-#: lib/diy_web/components/share.ex:292
+#: lib/diy_web/components/share.ex:300
 #, elixir-autogen, elixir-format
 msgid "September"
 msgstr "Tháng 9"
@@ -915,7 +916,7 @@ msgstr "Bắt đầu từ ngôi nhà này"
 msgid "The house, its rooms and its items."
 msgstr "Ngôi nhà, các phòng và các thiết bị."
 
-#: lib/diy_web/components/share.ex:268
+#: lib/diy_web/components/share.ex:276
 #, elixir-autogen, elixir-format
 msgid "The kWh of each month"
 msgstr "Số kWh của mỗi tháng"
@@ -930,7 +931,7 @@ msgstr "Liên kết"
 msgid "The link is in the clipboard."
 msgstr "Liên kết đã được sao chép."
 
-#: lib/diy_web/components/share.ex:235
+#: lib/diy_web/components/share.ex:243
 #, elixir-autogen, elixir-format
 msgid "The link is not complete, or it is from a different version of the app. Ask for the link again."
 msgstr "Liên kết không đầy đủ, hoặc thuộc một phiên bản khác của ứng dụng. Hãy xin lại liên kết."
@@ -952,6 +953,7 @@ msgstr "Ngôi nhà này sẽ thay thế nhà của bạn trên thiết bị này
 
 #: lib/diy_web/components/share.ex:223
 #: lib/diy_web/components/share.ex:233
+#: lib/diy_web/components/share.ex:241
 #, elixir-autogen, elixir-format
 msgid "This link has no house"
 msgstr "Liên kết này không có ngôi nhà"
@@ -1104,3 +1106,8 @@ msgstr "Liên kết ngắn này lưu một bản sao của ngôi nhà trên máy
 #, elixir-autogen, elixir-format
 msgid "The link shows your house and its numbers to a different person."
 msgstr "Liên kết cho người khác thấy nhà của bạn và các con số của nó."
+
+#: lib/diy_web/components/share.ex:235
+#, elixir-autogen, elixir-format
+msgid "The app cannot open short links now. Try again later."
+msgstr "Ứng dụng không thể mở liên kết ngắn lúc này. Hãy thử lại sau."

@@ -160,6 +160,28 @@ defmodule DIYWeb.ShareLiveTest do
     end
   end
 
+  describe "a short link with an error of the storage" do
+    # These tests have no connection of the sandbox: each statement fails.
+    @describetag :capture_log
+
+    test "the page and the picture tell the error, and the sheet keeps the long link",
+         %{conn: conn} do
+      id = "2" <> String.duplicate("A", 16)
+      {:ok, _view, html} = live(conn, ~p"/s/#{id}")
+      assert html =~ "The app cannot open short links now."
+      assert build_conn() |> get(~p"/s/#{id}/picture.png") |> response(404)
+
+      {:ok, view, _html} = live(build_conn(), ~p"/?sheet=share")
+      restore(view, house())
+      settle(view)
+      long = view |> element("#share-link") |> render() |> attr("value")
+
+      view |> element("#share-short") |> render_click()
+      assert has_element?(view, "#share-short-error", "Share the long link.")
+      assert long == view |> element("#share-link") |> render() |> attr("value")
+    end
+  end
+
   describe "a short link" do
     @describetag :db
 
@@ -175,7 +197,7 @@ defmodule DIYWeb.ShareLiveTest do
 
       view |> element("#share-short") |> render_click()
       url = view |> element("#share-link") |> render() |> attr("value")
-      assert url =~ ~r"\Ahttp://www.example.com/s/2[0-9A-Za-z]{12}\z"
+      assert url =~ ~r"\Ahttp://www.example.com/s/2[0-9A-Za-z]{16}\z"
       assert has_element?(view, ~s(#share-button[data-path="#{url}"]))
       assert has_element?(view, "#share-short-note", "only the link has")
       refute has_element?(view, "#share-short")
@@ -197,6 +219,8 @@ defmodule DIYWeb.ShareLiveTest do
 
       short = build_conn() |> get(~p"/s/#{id}/picture.png")
       assert short.status == 200
+      # A short link ends, so a cache keeps its picture for one day only.
+      assert get_resp_header(short, "cache-control") == ["public, max-age=86400"]
       assert short.resp_body == response(build_conn() |> get(~p"/s/#{data}/picture.png"), 200)
 
       {:ok, shared, _html} = live(build_conn(), ~p"/s/#{id}")
@@ -211,10 +235,11 @@ defmodule DIYWeb.ShareLiveTest do
     end
 
     test "a short link that is not there, or that ended", %{conn: conn} do
-      {:ok, view, html} = live(conn, ~p"/s/2AAAAAAAAAAAA")
+      id = "2" <> String.duplicate("A", 16)
+      {:ok, view, html} = live(conn, ~p"/s/#{id}")
       assert html =~ "This link has no house"
       assert has_element?(view, "#shared-gone", "one year after its last visit")
-      assert build_conn() |> get(~p"/s/2AAAAAAAAAAAA/picture.png") |> response(404)
+      assert build_conn() |> get(~p"/s/#{id}/picture.png") |> response(404)
     end
 
     test "a page makes 20 short links at most", %{conn: conn} do
@@ -222,7 +247,7 @@ defmodule DIYWeb.ShareLiveTest do
       restore(view, house())
       settle(view)
 
-      links = Map.new(1..20, &{"1#{&1}", "2#{String.duplicate("A", 11)}#{rem(&1, 10)}"})
+      links = Map.new(1..20, &{"1#{&1}", "2#{String.duplicate("A", 15)}#{rem(&1, 10)}"})
 
       :sys.replace_state(view.pid, fn state ->
         put_in(state.socket.assigns.share_links, links)

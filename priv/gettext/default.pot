@@ -749,12 +749,12 @@ msgstr ""
 msgid "A shared house"
 msgstr ""
 
-#: lib/diy_web/components/share.ex:287
+#: lib/diy_web/components/share.ex:295
 #, elixir-autogen, elixir-format
 msgid "April"
 msgstr ""
 
-#: lib/diy_web/components/share.ex:291
+#: lib/diy_web/components/share.ex:299
 #, elixir-autogen, elixir-format
 msgid "August"
 msgstr ""
@@ -774,7 +774,7 @@ msgstr ""
 msgid "D"
 msgstr ""
 
-#: lib/diy_web/components/share.ex:295
+#: lib/diy_web/components/share.ex:303
 #, elixir-autogen, elixir-format
 msgid "December"
 msgstr ""
@@ -789,13 +789,14 @@ msgstr ""
 msgid "F"
 msgstr ""
 
-#: lib/diy_web/components/share.ex:285
+#: lib/diy_web/components/share.ex:293
 #, elixir-autogen, elixir-format
 msgid "February"
 msgstr ""
 
 #: lib/diy_web/components/share.ex:230
-#: lib/diy_web/components/share.ex:240
+#: lib/diy_web/components/share.ex:238
+#: lib/diy_web/components/share.ex:248
 #, elixir-autogen, elixir-format
 msgid "Go to Small Steps Home"
 msgstr ""
@@ -805,17 +806,17 @@ msgstr ""
 msgid "J"
 msgstr ""
 
-#: lib/diy_web/components/share.ex:284
+#: lib/diy_web/components/share.ex:292
 #, elixir-autogen, elixir-format
 msgid "January"
 msgstr ""
 
-#: lib/diy_web/components/share.ex:290
+#: lib/diy_web/components/share.ex:298
 #, elixir-autogen, elixir-format
 msgid "July"
 msgstr ""
 
-#: lib/diy_web/components/share.ex:289
+#: lib/diy_web/components/share.ex:297
 #, elixir-autogen, elixir-format
 msgid "June"
 msgstr ""
@@ -835,12 +836,12 @@ msgstr ""
 msgid "M"
 msgstr ""
 
-#: lib/diy_web/components/share.ex:286
+#: lib/diy_web/components/share.ex:294
 #, elixir-autogen, elixir-format
 msgid "March"
 msgstr ""
 
-#: lib/diy_web/components/share.ex:288
+#: lib/diy_web/components/share.ex:296
 #, elixir-autogen, elixir-format
 msgid "May"
 msgstr ""
@@ -855,7 +856,7 @@ msgstr ""
 msgid "Not in the link: your links to Home Assistant and to the makers of your stations."
 msgstr ""
 
-#: lib/diy_web/components/share.ex:294
+#: lib/diy_web/components/share.ex:302
 #, elixir-autogen, elixir-format
 msgid "November"
 msgstr ""
@@ -865,7 +866,7 @@ msgstr ""
 msgid "O"
 msgstr ""
 
-#: lib/diy_web/components/share.ex:293
+#: lib/diy_web/components/share.ex:301
 #, elixir-autogen, elixir-format
 msgid "October"
 msgstr ""
@@ -880,7 +881,7 @@ msgstr ""
 msgid "S"
 msgstr ""
 
-#: lib/diy_web/components/share.ex:292
+#: lib/diy_web/components/share.ex:300
 #, elixir-autogen, elixir-format
 msgid "September"
 msgstr ""
@@ -917,7 +918,7 @@ msgstr ""
 msgid "The house, its rooms and its items."
 msgstr ""
 
-#: lib/diy_web/components/share.ex:268
+#: lib/diy_web/components/share.ex:276
 #, elixir-autogen, elixir-format
 msgid "The kWh of each month"
 msgstr ""
@@ -932,7 +933,7 @@ msgstr ""
 msgid "The link is in the clipboard."
 msgstr ""
 
-#: lib/diy_web/components/share.ex:235
+#: lib/diy_web/components/share.ex:243
 #, elixir-autogen, elixir-format
 msgid "The link is not complete, or it is from a different version of the app. Ask for the link again."
 msgstr ""
@@ -954,6 +955,7 @@ msgstr ""
 
 #: lib/diy_web/components/share.ex:223
 #: lib/diy_web/components/share.ex:233
+#: lib/diy_web/components/share.ex:241
 #, elixir-autogen, elixir-format
 msgid "This link has no house"
 msgstr ""
@@ -1105,4 +1107,9 @@ msgstr ""
 #: lib/diy_web/components/share.ex:41
 #, elixir-autogen, elixir-format
 msgid "The link shows your house and its numbers to a different person."
+msgstr ""
+
+#: lib/diy_web/components/share.ex:235
+#, elixir-autogen, elixir-format
+msgid "The app cannot open short links now. Try again later."
 msgstr ""
