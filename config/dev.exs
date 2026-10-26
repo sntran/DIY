@@ -1,5 +1,8 @@
 import Config
 
+# The database of the short links (DIY.Links), a file of this computer.
+config :diy, DIY.Repo, database: Path.expand("../diy_dev.db", __DIR__), pool_size: 1
+
 # For development, we disable any cache and enable
 # debugging and code reloading.
 #

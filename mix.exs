@@ -18,7 +18,8 @@ defmodule DIY.MixProject do
       # DIY.Picture.NIF, so its line never runs.
       test_coverage: [
         summary: [threshold: 100],
-        ignore_modules: [DIYWeb.ConnCase, DIY.Picture.NIF]
+        # DIY.Repo has only the code that `use Ecto.Repo` makes.
+        ignore_modules: [DIYWeb.ConnCase, DIY.Picture.NIF, DIY.Repo]
       ],
       # RELEASE_ERTS=false: a release with no ERTS, for beam.com (see
       # scripts/edge-com.sh).
@@ -83,6 +84,13 @@ defmodule DIY.MixProject do
       # the VM sends its HTTP through fetch() of the Worker. Do not add
       # castore: the VM trusts only :public_key.cacerts_get/0.
       {:req, "~> 0.5"},
+      # The short links of shared houses (`DIY.Links`). On Cloudflare, the
+      # SQL goes to the SQLite storage of the Durable Object. beam.com
+      # always uses its own NIF of exqlite. Thus the version must be the
+      # version of that NIF ("Linked NIFs" in `beam.com --version`).
+      {:ecto_sql, "~> 3.13"},
+      {:ecto_sqlite3, ">= 0.0.0"},
+      {:exqlite, "0.41.0"},
       {:bandit, "~> 1.5"}
     ]
   end

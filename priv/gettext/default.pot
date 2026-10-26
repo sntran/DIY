@@ -423,7 +423,7 @@ msgstr ""
 msgid "none"
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:274
+#: lib/diy_web/live/home_live.ex:280
 #, elixir-autogen, elixir-format
 msgid "The app does not know this ZIP code. Give 5 digits, for example 75070."
 msgstr ""
@@ -459,42 +459,42 @@ msgstr ""
 msgid "A different tab changed this build. This page shows that build now."
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:1228
+#: lib/diy_web/live/home_live.ex:1259
 #, elixir-autogen, elixir-format
 msgid "A room or a zone cannot go over a different one."
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:1226
+#: lib/diy_web/live/home_live.ex:1257
 #, elixir-autogen, elixir-format
 msgid "A wall of a room is from 2 to 200 feet long, and a room stays near the house."
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:1230
+#: lib/diy_web/live/home_live.ex:1261
 #, elixir-autogen, elixir-format
 msgid "A zone stays in the van."
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:1364
+#: lib/diy_web/live/home_live.ex:1395
 #, elixir-autogen, elixir-format
 msgid "Choose a floor of the house."
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:1366
+#: lib/diy_web/live/home_live.ex:1397
 #, elixir-autogen, elixir-format
 msgid "Choose a house first."
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:1365
+#: lib/diy_web/live/home_live.ex:1396
 #, elixir-autogen, elixir-format
 msgid "Choose a place: inside, outside or the roof."
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:1361
+#: lib/diy_web/live/home_live.ex:1392
 #, elixir-autogen, elixir-format
 msgid "Choose how you use the batteries."
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:299
+#: lib/diy_web/live/home_live.ex:305
 #, elixir-autogen, elixir-format
 msgid "Choose one of each: the size, the age, the floors and the heat."
 msgstr ""
@@ -504,102 +504,102 @@ msgstr ""
 msgid "Close"
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:1360
+#: lib/diy_web/live/home_live.ex:1391
 #, elixir-autogen, elixir-format
 msgid "Give a part from 0 to 100%."
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:1356
+#: lib/diy_web/live/home_live.ex:1387
 #, elixir-autogen, elixir-format
 msgid "Give an hour from 0 to 23."
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:1170
+#: lib/diy_web/live/home_live.ex:1201
 #, elixir-autogen, elixir-format
 msgid "Give each number of the plan in the limits: dollars, cents or kWh."
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:935
+#: lib/diy_web/live/home_live.ex:941
 #, elixir-autogen, elixir-format
 msgid "Give numbers in the limits of each field."
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:1164
+#: lib/diy_web/live/home_live.ex:1195
 #, elixir-autogen, elixir-format
 msgid "Give the delivery charges of your utility: its EFL gives them."
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:1167
+#: lib/diy_web/live/home_live.ex:1198
 #, elixir-autogen, elixir-format
 msgid "Give the kWh of the minimum usage fee: the fee is for a month under that kWh."
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:291
+#: lib/diy_web/live/home_live.ex:297
 #, elixir-autogen, elixir-format
 msgid "Give the lot in square feet, from 100 to 100,000,000, or leave it empty."
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:1161
+#: lib/diy_web/live/home_live.ex:1192
 #, elixir-autogen, elixir-format
 msgid "Give the plan a name."
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:1353
+#: lib/diy_web/live/home_live.ex:1384
 #, elixir-autogen, elixir-format
 msgid "Give the price at night in cents, from 0 to 200, or leave it empty."
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:849
+#: lib/diy_web/live/home_live.ex:855
 #, elixir-autogen, elixir-format
 msgid "Give the price in cents for one kWh, for example 14.5."
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:1359
+#: lib/diy_web/live/home_live.ex:1390
 #, elixir-autogen, elixir-format
 msgid "Give the price in cents, from 0 to 200."
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:1363
+#: lib/diy_web/live/home_live.ex:1394
 #, elixir-autogen, elixir-format
 msgid "Give the room a name."
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:911
+#: lib/diy_web/live/home_live.ex:917
 #, elixir-autogen, elixir-format
 msgid "Give the total of the bill in dollars and its kWh, for example 150 and 1,100."
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:931
+#: lib/diy_web/live/home_live.ex:937
 #, elixir-autogen, elixir-format
 msgid "Remove the rooms of the top floor first."
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:1147
+#: lib/diy_web/live/home_live.ex:1178
 #, elixir-autogen, elixir-format
 msgid "The app cannot keep this plan. A number of the plan is not in the range that the app accepts."
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:1031
+#: lib/diy_web/live/home_live.ex:1037
 #, elixir-autogen, elixir-format
 msgid "The app cannot read the text of this file."
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:498
+#: lib/diy_web/live/home_live.ex:504
 #, elixir-autogen, elixir-format
 msgid "The app cannot read the usage of this file."
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:1025
+#: lib/diy_web/live/home_live.ex:1031
 #, elixir-autogen, elixir-format
 msgid "The app cannot read this EFL: it has no average prices."
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:1040
+#: lib/diy_web/live/home_live.ex:1046
 #, elixir-autogen, elixir-format
 msgid "The app cannot read this file. Open the PDF of an EFL."
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:890
+#: lib/diy_web/live/home_live.ex:896
 #, elixir-autogen, elixir-format
 msgid "The app now uses the price of your bill: %{price} for each kWh."
 msgstr ""
@@ -614,17 +614,17 @@ msgstr ""
 msgid "The build on this device comes from a newer version of the app. Load the page again."
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:1231
+#: lib/diy_web/live/home_live.ex:1262
 #, elixir-autogen, elixir-format
 msgid "The cab and the roof of the van stay where they are."
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:1314
+#: lib/diy_web/live/home_live.ex:1345
 #, elixir-autogen, elixir-format
 msgid "The file is not a build of this app."
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:1358
+#: lib/diy_web/live/home_live.ex:1389
 #, elixir-autogen, elixir-format
 msgid "The night must start and end at different hours."
 msgstr ""
@@ -634,56 +634,56 @@ msgstr ""
 msgid "The page cannot read the build on this device. It starts a new build, and keeps a copy of the old one."
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:521
+#: lib/diy_web/live/home_live.ex:527
 #, elixir-autogen, elixir-format
 msgid "The page has 1 month of your usage from Home Assistant."
 msgid_plural "The page has %{count} months of your usage from Home Assistant."
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/diy_web/live/home_live.ex:489
+#: lib/diy_web/live/home_live.ex:495
 #, elixir-autogen, elixir-format
 msgid "The page has 1 month of your usage. The file stayed on this device."
 msgid_plural "The page has %{count} months of your usage. The file stayed on this device."
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/diy_web/live/home_live.ex:1787
+#: lib/diy_web/live/home_live.ex:1818
 #, elixir-autogen, elixir-format
 msgid "The page reads your build from this device."
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:1311
+#: lib/diy_web/live/home_live.ex:1342
 #, elixir-autogen, elixir-format
 msgid "The page shows the build of the file now."
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:960
+#: lib/diy_web/live/home_live.ex:966
 #, elixir-autogen, elixir-format
 msgid "The planned items are part of your house now."
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:618
+#: lib/diy_web/live/home_live.ex:624
 #, elixir-autogen, elixir-format
 msgid "The power station is at home now."
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:1136
+#: lib/diy_web/live/home_live.ex:1167
 #, elixir-autogen, elixir-format
 msgid "The worksheet has %{plan} now."
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:1140
+#: lib/diy_web/live/home_live.ex:1171
 #, elixir-autogen, elixir-format
 msgid "The worksheet has 10 plans. Remove a plan first."
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:899
+#: lib/diy_web/live/home_live.ex:905
 #, elixir-autogen, elixir-format
 msgid "These numbers give %{price} for each kWh. Check the total and the kWh of the bill."
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:1780
+#: lib/diy_web/live/home_live.ex:1811
 #, elixir-autogen, elixir-format
 msgid "This app needs JavaScript. Turn on JavaScript in the browser."
 msgstr ""
@@ -693,27 +693,27 @@ msgstr ""
 msgid "This device did not save the build: %{error}"
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:1229
+#: lib/diy_web/live/home_live.ex:1260
 #, elixir-autogen, elixir-format
 msgid "This item cannot go in that room."
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:1235
+#: lib/diy_web/live/home_live.ex:1266
 #, elixir-autogen, elixir-format
 msgid "This item or this room is not on the plan now."
 msgstr ""
 
-#: lib/diy_web/components/share.ex:47
+#: lib/diy_web/components/share.ex:56
 #, elixir-autogen, elixir-format
 msgid "%{cost} a year"
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:201
+#: lib/diy_web/live/home_live.ex:207
 #, elixir-autogen, elixir-format
 msgid "%{cost} for the electricity of a year. Small Steps Home shows where the electricity of a house goes."
 msgstr ""
 
-#: lib/diy_web/components/share.ex:46
+#: lib/diy_web/components/share.ex:55
 #: lib/diy_web/picture.ex:224
 #, elixir-autogen, elixir-format
 msgid "%{kwh} a year"
@@ -744,27 +744,27 @@ msgstr ""
 msgid "A house of %{size} sq ft: %{kwh} kWh a year"
 msgstr ""
 
-#: lib/diy_web/components/share.ex:122
+#: lib/diy_web/components/share.ex:153
 #, elixir-autogen, elixir-format
 msgid "A shared house"
 msgstr ""
 
-#: lib/diy_web/components/share.ex:246
+#: lib/diy_web/components/share.ex:287
 #, elixir-autogen, elixir-format
 msgid "April"
 msgstr ""
 
-#: lib/diy_web/components/share.ex:250
+#: lib/diy_web/components/share.ex:291
 #, elixir-autogen, elixir-format
 msgid "August"
 msgstr ""
 
-#: lib/diy_web/components/share.ex:88
+#: lib/diy_web/components/share.ex:119
 #, elixir-autogen, elixir-format
 msgid "Copy the link from the box."
 msgstr ""
 
-#: lib/diy_web/components/share.ex:141
+#: lib/diy_web/components/share.ex:172
 #, elixir-autogen, elixir-format
 msgid "Cost in a year"
 msgstr ""
@@ -774,12 +774,12 @@ msgstr ""
 msgid "D"
 msgstr ""
 
-#: lib/diy_web/components/share.ex:254
+#: lib/diy_web/components/share.ex:295
 #, elixir-autogen, elixir-format
 msgid "December"
 msgstr ""
 
-#: lib/diy_web/components/share.ex:135
+#: lib/diy_web/components/share.ex:166
 #, elixir-autogen, elixir-format
 msgid "Electricity in a year"
 msgstr ""
@@ -789,12 +789,13 @@ msgstr ""
 msgid "F"
 msgstr ""
 
-#: lib/diy_web/components/share.ex:244
+#: lib/diy_web/components/share.ex:285
 #, elixir-autogen, elixir-format
 msgid "February"
 msgstr ""
 
-#: lib/diy_web/components/share.ex:199
+#: lib/diy_web/components/share.ex:230
+#: lib/diy_web/components/share.ex:240
 #, elixir-autogen, elixir-format
 msgid "Go to Small Steps Home"
 msgstr ""
@@ -804,27 +805,27 @@ msgstr ""
 msgid "J"
 msgstr ""
 
-#: lib/diy_web/components/share.ex:243
+#: lib/diy_web/components/share.ex:284
 #, elixir-autogen, elixir-format
 msgid "January"
 msgstr ""
 
-#: lib/diy_web/components/share.ex:249
+#: lib/diy_web/components/share.ex:290
 #, elixir-autogen, elixir-format
 msgid "July"
 msgstr ""
 
-#: lib/diy_web/components/share.ex:248
+#: lib/diy_web/components/share.ex:289
 #, elixir-autogen, elixir-format
 msgid "June"
 msgstr ""
 
-#: lib/diy_web/components/share.ex:162
+#: lib/diy_web/components/share.ex:193
 #, elixir-autogen, elixir-format
 msgid "Keep a file of your house first."
 msgstr ""
 
-#: lib/diy_web/components/share.ex:176
+#: lib/diy_web/components/share.ex:207
 #, elixir-autogen, elixir-format
 msgid "Keep my house"
 msgstr ""
@@ -834,12 +835,12 @@ msgstr ""
 msgid "M"
 msgstr ""
 
-#: lib/diy_web/components/share.ex:245
+#: lib/diy_web/components/share.ex:286
 #, elixir-autogen, elixir-format
 msgid "March"
 msgstr ""
 
-#: lib/diy_web/components/share.ex:247
+#: lib/diy_web/components/share.ex:288
 #, elixir-autogen, elixir-format
 msgid "May"
 msgstr ""
@@ -849,12 +850,12 @@ msgstr ""
 msgid "N"
 msgstr ""
 
-#: lib/diy_web/components/share.ex:52
+#: lib/diy_web/components/share.ex:61
 #, elixir-autogen, elixir-format
 msgid "Not in the link: your links to Home Assistant and to the makers of your stations."
 msgstr ""
 
-#: lib/diy_web/components/share.ex:253
+#: lib/diy_web/components/share.ex:294
 #, elixir-autogen, elixir-format
 msgid "November"
 msgstr ""
@@ -864,12 +865,12 @@ msgstr ""
 msgid "O"
 msgstr ""
 
-#: lib/diy_web/components/share.ex:252
+#: lib/diy_web/components/share.ex:293
 #, elixir-autogen, elixir-format
 msgid "October"
 msgstr ""
 
-#: lib/diy_web/components/share.ex:67
+#: lib/diy_web/components/share.ex:76
 #, elixir-autogen, elixir-format
 msgid "Put the ZIP code in the link. The weather and the plans need it."
 msgstr ""
@@ -879,84 +880,85 @@ msgstr ""
 msgid "S"
 msgstr ""
 
-#: lib/diy_web/components/share.ex:251
+#: lib/diy_web/components/share.ex:292
 #, elixir-autogen, elixir-format
 msgid "September"
 msgstr ""
 
-#: lib/diy_web/components/share.ex:92
+#: lib/diy_web/components/share.ex:123
 #, elixir-autogen, elixir-format
 msgid "Share"
 msgstr ""
 
 #: lib/diy_web/components/front.ex:73
-#: lib/diy_web/components/share.ex:28
+#: lib/diy_web/components/share.ex:34
 #, elixir-autogen, elixir-format
 msgid "Share this house"
 msgstr ""
 
-#: lib/diy_web/components/share.ex:149
+#: lib/diy_web/components/share.ex:180
 #, elixir-autogen, elixir-format
 msgid "Small Steps Home shows where the electricity of a house goes, and what a change can save. Start from this house, and then change it to your house."
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:197
+#: lib/diy_web/live/home_live.ex:203
 #, elixir-autogen, elixir-format
 msgid "Small Steps Home shows where the electricity of a house goes."
 msgstr ""
 
-#: lib/diy_web/components/share.ex:173
-#: lib/diy_web/components/share.ex:188
+#: lib/diy_web/components/share.ex:204
+#: lib/diy_web/components/share.ex:219
 #, elixir-autogen, elixir-format
 msgid "Start from this house"
 msgstr ""
 
-#: lib/diy_web/components/share.ex:44
+#: lib/diy_web/components/share.ex:53
 #, elixir-autogen, elixir-format
 msgid "The house, its rooms and its items."
 msgstr ""
 
-#: lib/diy_web/components/share.ex:227
+#: lib/diy_web/components/share.ex:268
 #, elixir-autogen, elixir-format
 msgid "The kWh of each month"
 msgstr ""
 
-#: lib/diy_web/components/share.ex:72
+#: lib/diy_web/components/share.ex:81
 #, elixir-autogen, elixir-format
 msgid "The link"
 msgstr ""
 
-#: lib/diy_web/components/share.ex:87
+#: lib/diy_web/components/share.ex:118
 #, elixir-autogen, elixir-format
 msgid "The link is in the clipboard."
 msgstr ""
 
-#: lib/diy_web/components/share.ex:194
+#: lib/diy_web/components/share.ex:235
 #, elixir-autogen, elixir-format
 msgid "The link is not complete, or it is from a different version of the app. Ask for the link again."
 msgstr ""
 
-#: lib/diy_web/components/share.ex:30
+#: lib/diy_web/components/share.ex:36
 #, elixir-autogen, elixir-format
 msgid "The link shows your house and its numbers to a different person. The link carries the house: the app keeps no copy of it."
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:1121
+#: lib/diy_web/live/home_live.ex:1152
 #, elixir-autogen, elixir-format
 msgid "This house is your house now. Change it to your own house."
 msgstr ""
 
-#: lib/diy_web/components/share.ex:160
+#: lib/diy_web/components/share.ex:191
 #, elixir-autogen, elixir-format
 msgid "This house takes the place of your house on this device."
 msgstr ""
 
-#: lib/diy_web/components/share.ex:192
+#: lib/diy_web/components/share.ex:223
+#: lib/diy_web/components/share.ex:233
 #, elixir-autogen, elixir-format
 msgid "This link has no house"
 msgstr ""
 
-#: lib/diy_web/components/share.ex:50
+#: lib/diy_web/components/share.ex:59
 #, elixir-autogen, elixir-format
 msgid "ZIP code %{zip}"
 msgstr ""
@@ -995,12 +997,12 @@ msgctxt "May"
 msgid "M"
 msgstr ""
 
-#: lib/diy_web/components/share.ex:49
+#: lib/diy_web/components/share.ex:58
 #, elixir-autogen, elixir-format
 msgid "The months of your meter."
 msgstr ""
 
-#: lib/diy_web/components/share.ex:98
+#: lib/diy_web/components/share.ex:129
 #, elixir-autogen, elixir-format
 msgid "This house is too large for a link. A link can have 150 items and 50 rooms at most."
 msgstr ""
@@ -1073,4 +1075,34 @@ msgstr ""
 #: lib/diy_web/picture.ex:227
 #, elixir-autogen, elixir-format
 msgid "%{kwh} · %{cost} a year"
+msgstr ""
+
+#: lib/diy_web/components/share.ex:100
+#, elixir-autogen, elixir-format
+msgid "A short link keeps a copy of the house on the server for one year after its last visit. The copy is locked with a key that only the link has."
+msgstr ""
+
+#: lib/diy_web/components/share.ex:97
+#, elixir-autogen, elixir-format
+msgid "Make a short link"
+msgstr ""
+
+#: lib/diy_web/components/share.ex:110
+#, elixir-autogen, elixir-format
+msgid "The app cannot make a short link now. Share the long link."
+msgstr ""
+
+#: lib/diy_web/components/share.ex:225
+#, elixir-autogen, elixir-format
+msgid "This short link ended, or it is not complete. A short link ends one year after its last visit. Ask for the link again."
+msgstr ""
+
+#: lib/diy_web/components/share.ex:105
+#, elixir-autogen, elixir-format
+msgid "This short link keeps a copy of the house on the server. The copy is locked with a key that only the link has. The link ends one year after its last visit."
+msgstr ""
+
+#: lib/diy_web/components/share.ex:41
+#, elixir-autogen, elixir-format
+msgid "The link shows your house and its numbers to a different person."
 msgstr ""

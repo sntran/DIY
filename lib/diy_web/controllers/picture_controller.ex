@@ -1,8 +1,9 @@
 defmodule DIYWeb.PictureController do
   @moduledoc """
   The picture of a shared house (`DIYWeb.Picture`), for the preview of
-  its link: `/s/DATA/picture.png`. The picture is in the language of the
-  link. The server keeps no copy of the house (docs/design.md, "The
+  its link: `/s/DATA/picture.png`, or `/s/ID/picture.png` for a short
+  link (`DIY.Links`). The picture is in the language of the link. The
+  server keeps no copy of the house of a long link (docs/design.md, "The
   link").
   """
   use Phoenix.Controller, formats: []
@@ -13,7 +14,7 @@ defmodule DIYWeb.PictureController do
   alias DIYWeb.Picture
 
   def show(conn, %{"data" => data}) do
-    with {:ok, build, summary} <- Share.decode(data),
+    with {:ok, build, summary} <- Share.resolve(data),
          {:ok, png} <-
            Gettext.with_locale(DIY.Gettext, summary.locale, fn -> Picture.png(build, summary) end) do
       conn

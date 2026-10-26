@@ -41,6 +41,11 @@ if config_env() == :dev do
 end
 
 if config_env() == :prod do
+  # The database of the short links (DIY.Links). On Cloudflare, beam.com
+  # gives DATABASE_PATH, and the SQL goes to the SQLite storage of the
+  # Durable Object.
+  config :diy, DIY.Repo, database: System.get_env("DATABASE_PATH", "/tmp/diy.db"), pool_size: 1
+
   # The secret key base is used to sign/encrypt cookies and other secrets.
   # A default value is used in config/dev.exs and config/test.exs but you
   # want to use a different value for prod and you most likely don't want

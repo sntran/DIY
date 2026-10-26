@@ -9,6 +9,7 @@ import Config
 
 config :diy,
   namespace: DIY,
+  ecto_repos: [DIY.Repo],
   generators: [timestamp_type: :utc_datetime]
 
 # Configure the endpoint

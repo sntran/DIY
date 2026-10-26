@@ -37,6 +37,9 @@ defmodule DIYWeb.HomeLive do
   # one immediately after the other.
   @said_again 100
 
+  # The most short links of one page (DIY.Links).
+  @max_short 20
+
   alias DIY.{
     Bill,
     Build,
@@ -50,6 +53,7 @@ defmodule DIYWeb.HomeLive do
     Plan,
     Power,
     Prices,
+    Links,
     Share,
     Usage,
     Van,
@@ -107,6 +111,8 @@ defmodule DIYWeb.HomeLive do
      |> assign(:sheet, nil)
      |> assign(:status, nil)
      |> assign(shared: nil, meta: nil, adopt: nil, share: nil, share_zip: true, origin: "")
+     # The short links that this page made: the id of each DATA (DIY.Links).
+     |> assign(share_links: %{}, share_short: nil)
      |> allow_upload(:build_file,
        accept: ~w(.json),
        max_entries: 1,
@@ -157,7 +163,7 @@ defmodule DIYWeb.HomeLive do
   # title, and the tags of the preview. The title and the preview are in
   # the language of the link.
   defp shared(%{assigns: %{live_action: :shared}} = socket, %{"data" => data}) do
-    case Share.decode(data) do
+    case Share.resolve(data) do
       {:ok, build, summary} ->
         {title, description} =
           Gettext.with_locale(DIY.Gettext, summary.locale, fn ->
@@ -1101,6 +1107,31 @@ defmodule DIYWeb.HomeLive do
   def handle_event("share_zip", %{"zip" => zip}, socket),
     do: {:noreply, socket |> assign(:share_zip, zip == "true") |> share()}
 
+  # A short link of the link of the sheet (DIY.Links). A page makes 20 at
+  # most: each one keeps a house on the server for one year.
+  def handle_event("share_short", _params, %{assigns: %{share: %{data: data}}} = socket)
+      when is_binary(data) do
+    links = socket.assigns.share_links
+
+    result =
+      cond do
+        Map.has_key?(links, data) -> {:ok, links[data]}
+        map_size(links) >= @max_short -> {:error, :many}
+        true -> Links.create(data)
+      end
+
+    case result do
+      {:ok, id} ->
+        {:noreply,
+         socket |> assign(share_links: Map.put(links, data, id), share_short: nil) |> share()}
+
+      {:error, reason} ->
+        {:noreply, assign(socket, :share_short, reason)}
+    end
+  end
+
+  def handle_event("share_short", _params, socket), do: {:noreply, socket}
+
   # Start from a shared house: it takes the place of the build of the
   # device, as the import of a file does. When the device has a house, the
   # page asks first.
@@ -1928,6 +1959,7 @@ defmodule DIYWeb.HomeLive do
               <DIYWeb.Share.sheet
                 :if={@share}
                 share={@share}
+                short_error={@share_short}
                 sky_pick={@sky_pick}
                 sky_now={if @share_zip, do: @sky.now}
               />
@@ -1964,16 +1996,22 @@ defmodule DIYWeb.HomeLive do
     shared = if zip?, do: build, else: %{build | zip: nil}
     share = %{build: build, summary: summary, zip: zip?, title: Picture.title(shared, summary)}
 
+    # A short link that this page made for the same DATA takes the place
+    # of the long link (DIY.Links).
     share =
       case Share.encode(Build.today(build), summary, zip: zip?) do
         {:ok, data} ->
+          path = assigns.share_links[data] || data
+
           Map.merge(share, %{
-            url: assigns.origin <> ~p"/s/#{data}",
+            data: data,
+            short: Map.has_key?(assigns.share_links, data),
+            url: assigns.origin <> ~p"/s/#{path}",
             picture: ~p"/s/#{data}/picture.png"
           })
 
         {:error, :too_large} ->
-          Map.merge(share, %{url: nil, picture: nil})
+          Map.merge(share, %{data: nil, short: false, url: nil, picture: nil})
       end
 
     assign(socket, :share, share)

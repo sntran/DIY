@@ -11,10 +11,16 @@ defmodule DIYWeb.Share do
   attr :share, :map,
     required: true,
     doc: """
-    the link. It has `build`, `summary` (`DIY.Share.summary/3`), `zip`
-    (true when the link has the ZIP code), `title`, `url` and `picture`.
-    `url` and `picture` are `nil` for a house that is too large for a link
+    the link. It has `build`, `summary` (`DIY.Share.summary/3`), `zip`,
+    `title`, `url`, `picture`, `data` and `short`. `zip` is true when the
+    link has the ZIP code. `data` is the `DATA` of the long link. `short`
+    is true when `url` is a short link (`DIY.Links`). `url`, `picture` and
+    `data` are `nil` for a house that is too large for a link
     """
+
+  attr :short_error, :atom,
+    default: nil,
+    doc: "why the page could not make a short link: `:full`, `:many` or `:data`"
 
   attr :sky_pick, :map, required: true, doc: "the choice of the sky (`DIYWeb.Outside.sky_form/1`)"
   attr :sky_now, :map, default: nil, doc: "the sky at the house now (`DIY.Sky.now/3`)"
@@ -26,10 +32,13 @@ defmodule DIYWeb.Share do
   def sheet(assigns) do
     ~H"""
     <Inside.sheet id="share-sheet" title={gettext("Share this house")} close={~p"/"}>
-      <p class="text-sm">
+      <p :if={not @share.short} class="text-sm">
         {gettext(
           "The link shows your house and its numbers to a different person. The link carries the house: the app keeps no copy of it."
         )}
+      </p>
+      <p :if={@share.short} class="text-sm">
+        {gettext("The link shows your house and its numbers to a different person.")}
       </p>
       <img
         :if={@share.picture}
@@ -78,6 +87,28 @@ defmodule DIYWeb.Share do
             class="input input-sm w-full"
           />
         </label>
+        <button
+          :if={not @share.short}
+          id="share-short"
+          type="button"
+          phx-click="share_short"
+          class="btn btn-sm w-full"
+        >
+          <.icon name="hero-link" class="size-4" /> {gettext("Make a short link")}
+        </button>
+        <p :if={not @share.short} class="text-xs opacity-70">
+          {gettext(
+            "A short link keeps a copy of the house on the server for one year after its last visit. The copy is locked with a key that only the link has."
+          )}
+        </p>
+        <p :if={@share.short} id="share-short-note" class="text-xs opacity-70">
+          {gettext(
+            "This short link keeps a copy of the house on the server. The copy is locked with a key that only the link has. The link ends one year after its last visit."
+          )}
+        </p>
+        <p :if={@short_error} id="share-short-error" role="alert" class="alert alert-warning text-sm">
+          {gettext("The app cannot make a short link now. Share the long link.")}
+        </p>
         <button
           id="share-button"
           type="button"
@@ -188,6 +219,16 @@ defmodule DIYWeb.Share do
               {gettext("Start from this house")}
             </button>
           <% end %>
+        <% {:error, :gone} -> %>
+          <h1 class="text-2xl font-bold">{gettext("This link has no house")}</h1>
+          <p id="shared-gone">
+            {gettext(
+              "This short link ended, or it is not complete. A short link ends one year after its last visit. Ask for the link again."
+            )}
+          </p>
+          <.link navigate={~p"/"} id="shared-start" class="btn btn-primary">
+            {gettext("Go to Small Steps Home")}
+          </.link>
         <% {:error, _reason} -> %>
           <h1 class="text-2xl font-bold">{gettext("This link has no house")}</h1>
           <p>
