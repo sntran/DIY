@@ -52,3 +52,6 @@ npm-debug.log
 # The build of the NIF of DIY.Picture (scripts/nif.sh). priv/resvg.wasm
 # is in the repository.
 /native/resvg/target/
+
+# The SQLite files of the database in dev and in test (DIY.Repo).
+/*.db*

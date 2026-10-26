@@ -33,8 +33,18 @@ defmodule DIYWeb.ConnCase do
 
   # The sky of the house is a clear day at noon (DIY.Stubs.sky/1). A test
   # can stub a different sky.
-  setup _tags do
+  #
+  # A test with the tag `:db` uses the database of the short links
+  # (DIY.Links). It shares one connection of the sandbox with the
+  # processes of its pages. Such a test is not async.
+  setup tags do
     DIY.Stubs.sky()
+
+    if tags[:db] do
+      pid = Ecto.Adapters.SQL.Sandbox.start_owner!(DIY.Repo, shared: true)
+      on_exit(fn -> Ecto.Adapters.SQL.Sandbox.stop_owner(pid) end)
+    end
+
     {:ok, conn: Phoenix.ConnTest.build_conn()}
   end
 

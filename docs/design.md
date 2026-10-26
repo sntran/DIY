@@ -24,7 +24,9 @@ Cloudflare Workers. One Durable Object runs one VM for all the requests,
 so that each page and its WebSocket go to the same VM. This is the setup
 of mkfifo.com, the first app on BEAM.com.
 
-The VM has no database. The app keeps no data of a user on the server.
+The app keeps no data of a user on the server, with one exception: the
+short links of shared houses ("A short link"). Their table is in the
+SQLite storage of the Durable Object (`DIY.Repo`, `ecto_sqlite3`).
 
 One VM in 128 MB serves all the users. So a WebSocket frame can be 1 MiB
 at most, a build from the device can be 512 KiB at most, and the
@@ -2120,11 +2122,12 @@ The link has the house in its path: `/s/DATA`. `DATA` is the shared
 house as JSON, compressed with raw DEFLATE, in base64url (`DIY.Share`).
 The first character of `DATA` is the version of the format (`1`).
 
-The link carries the house. The server keeps no copy of it:
+The long link carries the house. The server keeps no copy of it:
 
 - The server reads a shared house only to answer a request for its link
   or its picture. It writes the house nowhere: no database, no file, no
-  cache of the server.
+  cache of the server. Only a short link writes the house, encrypted,
+  when the person asks for it ("A short link").
 - The log of the requests does not show the path of a link
   (`DIYWeb.Endpoint.log_level/1`). The invocation logs of Cloudflare stay
   off.
@@ -2187,6 +2190,89 @@ the one VM serves all the pages. The picture of a house with 900 items
 takes about 8 times the time of a typical house. The sheet of the share
 uses the same limits. A house that a link cannot carry gets a message,
 and no link.
+
+### A short link
+
+A long link has about 1,400 to 2,500 characters. Some apps of chat and
+of mail break such a link, for example at the `_` of base64url. So a
+person can ask for a short link: `/s/ID`. This is a decision of the
+owner (October 2026): DIY keeps its own short links, not a different
+app. A short link opens only a shared house of DIY. A short link ends
+one year after its last visit.
+
+`ID` is the version `2`, then 16 random letters and digits (95 bits).
+The long links keep the version `1`. Thus `/s/` takes the two kinds,
+and `DIY.Share.resolve/1` finds the `DATA` of each kind
+(`DIY.Links`).
+
+The server keeps the `DATA` of the long link for a short link. It keeps
+it so that the table alone does not give a house:
+
+- The key of the row is a hash of the id (SHA-256). The table does not
+  keep the id.
+- The `DATA` is encrypted with AES-256-GCM. The key is an HMAC of the
+  id. Thus a person needs the link, or a search of all the 95 bits, to
+  read the house. The length of a row still shows the size of its
+  house.
+- A row has the day of its last visit (`used_on`), not the time. A visit
+  writes the day once a day at most.
+
+The rules of a short link:
+
+- The person must ask for it: the sheet of the share has the button
+  **Make a short link**. The sheet tells that the server then keeps a
+  copy of the house for one year after the last visit. Without this
+  button, the server keeps nothing.
+- A link ends 365 days after its last visit. A visit to an ended link
+  deletes its row, and each new link first deletes all the rows that
+  ended. A link that is not there, or that ended, shows the page "This
+  short link ended".
+- The table has 100,000 links at most. A page makes 20 links at most.
+  The same house on the same page gives the same link again.
+- The `DATA` has the limits of a long link (6,000 characters).
+- When the app cannot make a short link (a full table, an error of the
+  storage), the sheet tells it and keeps the long link. When the app
+  cannot read the storage, the page of a short link tells it. An error
+  of the storage never stops a page. The log tells only the kind of the
+  error: no id and no house.
+- The picture and the preview of a short link are the picture and the
+  preview of its long link. A cache keeps the picture of a short link
+  for one day only, because the link can end.
+- The ZIP box changes the house, so it gives the long link again. The
+  person can then ask for a new short link.
+
+The storage of a Durable Object commits each statement alone, and the
+VM runs many requests at the same time. Thus each statement must be
+correct when other statements come between the statements of a request:
+
+- A visit reads the row, and then writes its day with an upsert. A new
+  link can delete the row between the two (at midnight). Then the
+  upsert puts the row back, because the visit found the link. Two visits
+  at the same time keep the later day.
+- The delete of an ended link also checks the day in the row. Thus it
+  does not delete a row that a different visit just wrote.
+- The count of the rows and the insert of a new link are two
+  statements. Thus the table can have a few more than 100,000 links.
+
+The migration of the table runs at the boot (`DIY.Links.migrate/0`). It
+makes only what is not there, so it can run again after a boot that
+stopped in it. When it fails, the app starts without the short links.
+
+The model `specs/Links.tla` checks these rules with TLC. A visit is two
+steps (`Read`, `Write`), and other steps can come between them:
+
+- A link that a person visited in the last 365 days stays (`Kept`).
+- A link that did not end keeps the day of the last good visit
+  (`Fresh`).
+
+Three configurations have a fault that TLC must find. In
+`Links.early.cfg`, a link ends one day too early. In
+`Links.noupdate.cfg`, a visit does not write its day. In
+`Links.noupsert.cfg`, a visit writes its day with an update, not an
+upsert.
+
+A script can make many links: the limit of 20 is for one page. A limit
+for each address is a next step.
 
 ### The share
 

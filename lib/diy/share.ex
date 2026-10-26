@@ -201,6 +201,20 @@ defmodule DIY.Share do
   def decode(@version <> _data), do: {:error, :too_long}
   def decode(_data), do: {:error, :version}
 
+  @doc """
+  Reads the path of a link: the `DATA` of a long link, or the id of a
+  short link (`DIY.Links`). A short link that ended gives
+  `{:error, :gone}`.
+  """
+  @spec resolve(term()) :: {:ok, Build.t(), summary()} | {:error, atom()}
+  def resolve(path) do
+    if DIY.Links.id?(path) do
+      with {:ok, data} <- DIY.Links.fetch(path), do: decode(data)
+    else
+      decode(path)
+    end
+  end
+
   defp base64(data) do
     case Base.url_decode64(data, padding: false) do
       {:ok, bytes} -> {:ok, bytes}

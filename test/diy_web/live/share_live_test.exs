@@ -160,6 +160,111 @@ defmodule DIYWeb.ShareLiveTest do
     end
   end
 
+  describe "a short link with an error of the storage" do
+    # These tests have no connection of the sandbox: each statement fails.
+    @describetag :capture_log
+
+    test "the page and the picture tell the error, and the sheet keeps the long link",
+         %{conn: conn} do
+      id = "2" <> String.duplicate("A", 16)
+      {:ok, _view, html} = live(conn, ~p"/s/#{id}")
+      assert html =~ "The app cannot open short links now."
+      assert build_conn() |> get(~p"/s/#{id}/picture.png") |> response(404)
+
+      {:ok, view, _html} = live(build_conn(), ~p"/?sheet=share")
+      restore(view, house())
+      settle(view)
+      long = view |> element("#share-link") |> render() |> attr("value")
+
+      view |> element("#share-short") |> render_click()
+      assert has_element?(view, "#share-short-error", "Share the long link.")
+      assert long == view |> element("#share-link") |> render() |> attr("value")
+    end
+  end
+
+  describe "a short link" do
+    @describetag :db
+
+    test "the sheet makes a short link, and the short link gives the house", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/?sheet=share")
+      restore(view, house())
+      settle(view)
+
+      long = view |> element("#share-link") |> render() |> attr("value")
+      assert has_element?(view, "#share-short", "Make a short link")
+      refute has_element?(view, "#share-short-note")
+      assert render(view) =~ "the app keeps no copy"
+
+      view |> element("#share-short") |> render_click()
+      url = view |> element("#share-link") |> render() |> attr("value")
+      assert url =~ ~r"\Ahttp://www.example.com/s/2[0-9A-Za-z]{16}\z"
+      assert has_element?(view, ~s(#share-button[data-path="#{url}"]))
+      assert has_element?(view, "#share-short-note", "only the link has")
+      refute has_element?(view, "#share-short")
+      refute render(view) =~ "the app keeps no copy"
+
+      # The same DATA gives the same short link: the table keeps one row.
+      render_hook(view, "share_short", %{})
+      assert url == view |> element("#share-link") |> render() |> attr("value")
+      assert DIY.Repo.aggregate(DIY.Links.Link, :count) == 1
+
+      # The page and the picture of the short link are those of the long
+      # link.
+      "http://www.example.com/s/" <> id = url
+      "http://www.example.com/s/" <> data = long
+      html = conn |> get(~p"/s/#{id}") |> html_response(200)
+      assert html =~ ~s(<meta property="og:url" content="http://www.example.com/s/#{id}")
+      assert html =~ ~s(content="http://www.example.com/s/#{id}/picture.png")
+      assert html =~ "A house of 1,800 sq ft in 75070"
+
+      short = build_conn() |> get(~p"/s/#{id}/picture.png")
+      assert short.status == 200
+      # A short link ends, so a cache keeps its picture for one day only.
+      assert get_resp_header(short, "cache-control") == ["public, max-age=86400"]
+      assert short.resp_body == response(build_conn() |> get(~p"/s/#{data}/picture.png"), 200)
+
+      {:ok, shared, _html} = live(build_conn(), ~p"/s/#{id}")
+      restore(shared, nil)
+      assert has_element?(shared, "#adopt")
+
+      # A new box of the ZIP code is a new house for a link: the long link
+      # comes back, with the button.
+      view |> form("#share-zip", %{"zip" => "false"}) |> render_change()
+      refute has_element?(view, "#share-short-note")
+      assert has_element?(view, "#share-short")
+    end
+
+    test "a short link that is not there, or that ended", %{conn: conn} do
+      id = "2" <> String.duplicate("A", 16)
+      {:ok, view, html} = live(conn, ~p"/s/#{id}")
+      assert html =~ "This link has no house"
+      assert has_element?(view, "#shared-gone", "one year after its last visit")
+      assert build_conn() |> get(~p"/s/#{id}/picture.png") |> response(404)
+    end
+
+    test "a page makes 20 short links at most", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/?sheet=share")
+      restore(view, house())
+      settle(view)
+
+      links = Map.new(1..20, &{"1#{&1}", "2#{String.duplicate("A", 15)}#{rem(&1, 10)}"})
+
+      :sys.replace_state(view.pid, fn state ->
+        put_in(state.socket.assigns.share_links, links)
+      end)
+
+      view |> element("#share-short") |> render_click()
+      assert has_element?(view, "#share-short-error", "Share the long link.")
+      assert DIY.Repo.aggregate(DIY.Links.Link, :count) == 0
+
+      # With no sheet, the event does nothing.
+      {:ok, front, _html} = live(build_conn(), ~p"/")
+      restore(front, house())
+      render_hook(front, "share_short", %{})
+      refute has_element?(front, "#share-link")
+    end
+  end
+
   describe "the page of a link" do
     test "the server gives the tags of the preview, in the language of the link", %{conn: conn} do
       data = link_data()
