@@ -53,7 +53,7 @@ defmodule DIY.Links.GuardTest do
     assert Links.create(data(), @day, address: nil) == {:error, :many}
 
     # The table is not ready: 25 tries spend no count of the address.
-    :ets.insert(Guard, {:ready, false, System.monotonic_time(:millisecond)})
+    :ets.insert(Guard, {:ready, false, System.monotonic_time(:millisecond), []})
     for _n <- 1..25, do: assert(Links.create(data(), @day, address: "a") == {:error, :storage})
     :ets.insert(Guard, {:ready, true})
 
@@ -72,26 +72,45 @@ defmodule DIY.Links.GuardTest do
     assert Links.create(data(), @day, address: "a") == {:error, :many}
   end
 
-  test "a table that is not ready gets no statement, and a request tries the migration again after one minute" do
-    {:ok, repo} = Repo.start_link(name: nil, database: ":memory:", pool_size: 1)
-    GenServer.stop(repo)
+  # The migrations of this test run on databases out of the sandbox: the
+  # start keeps its options, and a new try uses them.
+  @tag :tmp_dir
+  test "a table that is not ready gets no statement, and a request tries the migration again after one minute",
+       %{tmp_dir: dir} do
+    {:ok, dead} = Repo.start_link(name: nil, database: ":memory:", pool_size: 1)
+    GenServer.stop(dead)
 
     # The migration of the start fails.
-    log = capture_log(fn -> Links.boot(dynamic_repo: repo) end)
+    log = capture_log(fn -> Links.boot(dynamic_repo: dead) end)
     assert log =~ "The table of the short links is not ready"
-    assert [{:ready, false, at}] = :ets.lookup(Guard, :ready)
+    assert [{:ready, false, at, [dynamic_repo: ^dead]}] = :ets.lookup(Guard, :ready)
 
     assert Links.create(data(), @day) == {:error, :storage}
     assert Links.fetch("2" <> String.duplicate("A", 16), @day) == {:error, :storage}
 
     # A different request wrote a new time first: this request does not run
     # the migration.
-    :ets.insert(Guard, {:ready, false, at})
     assert Links.create(data(), @day) == {:error, :storage}
 
-    # One minute later, a request runs the migration again. It works: the
+    # One minute later, a request runs the migration again. It fails again:
+    # the state keeps the time of this try.
+    :ets.insert(Guard, {:ready, false, at - 60_000, [dynamic_repo: dead]})
+
+    capture_log(fn -> assert Links.create(data(), @day) == {:error, :storage} end)
+    assert [{:ready, false, again, _opts}] = :ets.lookup(Guard, :ready)
+    assert again >= at
+
+    # The database works now. One minute later, the migration works: the
     # table is ready.
-    :ets.insert(Guard, {:ready, false, at - 60_000})
+    {:ok, good} =
+      Repo.start_link(
+        name: nil,
+        database: Path.join(dir, "new.db"),
+        pool: DBConnection.ConnectionPool,
+        pool_size: 1
+      )
+
+    :ets.insert(Guard, {:ready, false, at - 60_000, [dynamic_repo: good]})
     assert {:ok, _id} = Links.create(data(), @day)
     assert :ets.lookup(Guard, :ready) == [{:ready, true}]
   end
