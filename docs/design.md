@@ -1324,22 +1324,39 @@ It gets one of three steps between the light and the shade (`-m1`,
   weight is red when it is over the rating of the axle. The van also
   shows the Wh of its batteries and the watts of its panels.
 - A van has the shape of its make (`DIYWeb.Icon.VanShapes`): the Ford
-  Transit, the Mercedes-Benz Sprinter or the Ram ProMaster. A medium roof
-  rises less behind the windshield. Its length,
+  Transit, the Mercedes-Benz Sprinter or the Ram ProMaster. Its length,
   its width, its height and its axles come from `DIY.Catalog.van_size/1`.
-  The side profile, the grille and the lights follow photos of each
-  model, for the picture only:
-  - The Transit has a hood that slopes into the windshield, a wide grille
-    in the shape of a trapezoid, and lights that sweep back.
-  - The Sprinter has a long, low hood and a tall grille with the star.
-    Its roof rises in a curve from the top of the windshield.
-  - The ProMaster has a short nose that is almost upright, a large black
-    grille, and lights high on the front.
-  - Over the bottom of the windows (the belt), the sides lean in. The van
-    has its mirrors, its bumpers, and its wheels with their rims. It has
-    the windows of its doors, the sliding door on its right side, and the
-    doors at its back. A mirror reaches 7 inches out of its side: the
-    plan gives a van this space (`DIY.Layout.size/1`).
+  The side profile is a trace of the side view of a drawing of each make,
+  for the picture only. The drawings are the previews of Outlines, 2019
+  to 2023:
+  - A trace is two lines of points. The front line goes from the bottom
+    of the front bumper over the nose, the hood, the windshield and the
+    roof. Its points are back from the front. The back line goes from the
+    roof down the back. Its points are from the back. So a long van has
+    the same front and back as a short one.
+  - The points over 2 m stretch to the height of the model: so a high
+    roof keeps the cab of its make.
+  - The Transit has a short hood that slopes up into the windshield in
+    nearly one line. Its roof rises in a long, smooth curve. Its grille is
+    a hexagon with the oval, and its lights sweep back along the hood. The
+    trace of the medium roof is a different drawing.
+  - The Sprinter has a long hood, and a roof that rises in a round curve
+    from the top of the windshield. Its grille has three bars and the
+    star.
+  - The ProMaster has a very short nose, and a near straight line from the
+    hood to the roof. Its lights are high at the corners, and its grille
+    is low in a large black bumper.
+  - The body is a hull (`DIYWeb.Icon.Shapes.hull/5`, "The hull of a
+    vehicle"). Its round shape comes from the front and the back views of
+    the drawings. The sides of a Sprinter lean in the most, and the
+    ProMaster is nearly upright. The roof of the ProMaster has the
+    roundest edge.
+  - The van has its mirrors, its black bumpers, the black band between
+    its wheels, and its wheels with their rims. It has the window of the
+    door of the cab with its black frame. Its right side has the sliding
+    door and its rail. The doors at its back have their windows. A mirror
+    reaches 7 inches out of its side: the plan gives a van this space
+    (`DIY.Layout.size/1`).
   - The same shape shows in the pictures and in the plan of the house.
     The plan of the van uses only the height of its hood
     (`DIYWeb.VanCutaway`).
@@ -1380,6 +1397,22 @@ on a light page.
   normal, so the shape has a soft light. The sides have no edge between
   them. Under them is the silhouette of the sides that show, and over
   them its edge (`i-outline`).
+- The hull of a vehicle (`DIYWeb.Icon.Shapes.hull/5`) is its side
+  profile across its width. Its sides lean in over the belt, and the edge
+  of its roof is round. Seen from above, its corners at the front and at
+  the back are round. The faces across the hull paint from the far one
+  to the near one, as the sides of a prism. A face on the front, the top
+  or the back of the hull is the windshield, the grille or a light. It
+  paints just after the edge of the profile that it is on. A shape on the
+  front is in pieces, one on each edge: so a nearer part of the hull
+  still hides it. Then the side that looks to the camera paints in cells,
+  where it is flat, and its edge (`i-outline`).
+- A face of a hull has a soft light: the light of its side, and over it
+  the light of a top. The top is none, 1/4, 1/2, 3/4 or all of it, with
+  the classes `i-o1` to `i-o3`. The more the face looks up, the more of
+  the top it has. A face or a cell goes 4 mm over the next one. A piece
+  on the front bends 3 cm over the next edges. So no thin line shows
+  between them.
 - A prism can also lie along x or y. A tube is a motor or a pipe, and a
   slab with round corners is the frame of a window.
 - The loop of a prism can be not convex: for example, the side profile

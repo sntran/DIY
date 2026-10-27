@@ -204,6 +204,15 @@
   "i-linen-t": {
    "fill": "rgb(246, 239, 226)"
   },
+  "i-o1": {
+   "fill-opacity": "0.25"
+  },
+  "i-o2": {
+   "fill-opacity": "0.5"
+  },
+  "i-o3": {
+   "fill-opacity": "0.75"
+  },
   "i-off": {
    "fill": "rgb(75, 85, 99)"
   },
@@ -1084,6 +1093,15 @@
   },
   "i-linen-t": {
    "fill": "rgb(246, 239, 226)"
+  },
+  "i-o1": {
+   "fill-opacity": "0.25"
+  },
+  "i-o2": {
+   "fill-opacity": "0.5"
+  },
+  "i-o3": {
+   "fill-opacity": "0.75"
   },
   "i-off": {
    "fill": "rgb(75, 85, 99)"
@@ -1969,6 +1987,15 @@
   },
   "i-linen-t": {
    "fill": "rgb(177, 168, 156)"
+  },
+  "i-o1": {
+   "fill-opacity": "0.25"
+  },
+  "i-o2": {
+   "fill-opacity": "0.5"
+  },
+  "i-o3": {
+   "fill-opacity": "0.75"
   },
   "i-off": {
    "fill": "rgb(75, 85, 99)"

@@ -128,6 +128,12 @@ defmodule DIYWeb.Camera do
     if z >= max(x, y), do: "t", else: side_light(camera, x, y)
   end
 
+  @doc """
+  The light of the side of a face with a normal, as if the face did not
+  look up. It is `l`, `m1`, `m2`, `m3` or `r` (`light/2`).
+  """
+  def side(camera, {x, y, _z}), do: side_light(camera, x, y)
+
   # The part of the normal on the ground that goes to the side in the
   # light (from -1 to 1).
   defp side_light(camera, x, y) do

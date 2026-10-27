@@ -271,6 +271,9 @@
 [data-theme=dark] .scene .i-white-m3 { fill: color-mix(in oklab, #b8bcc3 25%, #969aa2) }
 [data-theme=dark] .scene .i-white-r { fill: #969aa2 }
 .i-outline { fill: none; stroke: rgb(31 35 40 / 0.35); stroke-width: 0.75; stroke-linejoin: round; vector-effect: non-scaling-stroke }
+/* The top of a material over a face of a hull, at 1/4, 1/2 or 3/4: a
+   round part goes from its side to its top in steps. */
+.i-o1 { fill-opacity: 0.25 } .i-o2 { fill-opacity: 0.5 } .i-o3 { fill-opacity: 0.75 }
 .i-burner { fill: none; stroke: #6b7280; stroke-width: 1.5; vector-effect: non-scaling-stroke }
 .i-glass { fill: #8ec5ec } .i-glass-dark { fill: #2b3a52 } .i-shine { fill: rgb(255 255 255 / 0.14) } .i-screen { fill: #1e40af }
 /* The light of a Home Assistant hub: gray with no link, amber while the
