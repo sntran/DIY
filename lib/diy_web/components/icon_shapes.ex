@@ -62,9 +62,13 @@ defmodule DIYWeb.Icon.Shapes do
   The look of an item: the kind of its model. A busbar shows its number of
   positions for wires (`{"dc_bus", ports}`). A power station of a model
   with a look of its own shows that model (`{"power_station", model}`,
-  `DIYWeb.Icon.StationShapes`). Each other item has the model of its kind.
+  `DIYWeb.Icon.StationShapes`). A camper van shows its model
+  (`{"camper_van", model}`, `DIYWeb.Icon.VanShapes`). Each other item has
+  the model of its kind.
   """
   def look(%{type: "dc_bus", params: %{"ports" => ports}}), do: {"dc_bus", ports}
+
+  def look(%{type: "camper_van", params: %{"model" => model}}), do: {"camper_van", model}
 
   def look(%{type: "power_station", params: %{"model" => model}}) do
     if model in StationShapes.models(), do: {"power_station", model}, else: "power_station"
@@ -1521,6 +1525,9 @@ defmodule DIYWeb.Icon.Shapes do
 
   # The icon of a camper van: the model of the Ford Transit.
   def model("camper_van"), do: VanShapes.van("transit_148")
+
+  # A camper van of a model (`look/1`).
+  def model({"camper_van", model}), do: VanShapes.van(model)
 
   # A captain seat on its swivel: the seat and the back have round corners,
   # with a headrest and two armrests.
