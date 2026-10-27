@@ -670,15 +670,11 @@ defmodule DIYWeb.CutawayTest do
       %{at: {0, 0, 0}, size: {1.0, 2.6, 1.25}, turn: turn, camera: camera}
     end
 
-    # The van shows one of its two sides in each turn, for each camera. The
-    # part of the side under the belt is upright. It has the profile of the
-    # van: more than 6 corners on one plane (x or y).
+    # The van shows one of its two sides in each turn, for each camera: the
+    # edge of one side (its profile) paints.
     for turn <- 0..3, camera <- [Camera.house(), Camera.van()] do
       sides =
-        for {:poly, corners, "i-white" <> _} <- Shapes.placed("camper_van", frame.(turn, camera)),
-            length(corners) > 6,
-            {xs, ys, _zs} = unzip3(corners),
-            length(Enum.uniq(xs)) == 1 or length(Enum.uniq(ys)) == 1,
+        for {:poly, _corners, "i-outline"} <- Shapes.placed("camper_van", frame.(turn, camera)),
             do: 1
 
       assert sides == [1]
@@ -742,11 +738,6 @@ defmodule DIYWeb.CutawayTest do
       |> Enum.unzip()
 
     {Enum.min(xs), Enum.min(ys), Enum.max(xs), Enum.max(ys)}
-  end
-
-  defp unzip3(points) do
-    {Enum.map(points, &elem(&1, 0)), Enum.map(points, &elem(&1, 1)),
-     Enum.map(points, &elem(&1, 2))}
   end
 
   defp overlap?({ax0, ay0, ax1, ay1}, {bx0, by0, bx1, by1}),

@@ -27,6 +27,12 @@ defmodule DIYWeb.Icon.Shapes do
     `:z`, it is `{x, y}`. A tube (`tube/5`) is a prism along x or y.
   - `{:face, corners, normal, class}`: a flat part, with the direction
     that it looks to (`nil`: it always shows).
+  - `{:hull, loop, w, shape, material, faces}`: the body of a vehicle
+    (`hull/5`). Its loop is its side profile (`{y, z}`, as for a prism
+    along `:x`), from x = 0 to x = w. Its sides lean in over the belt, and
+    its edges are round (`hull_inset/3`). Its faces are on its front, its
+    top and its back (the windshield, the lights): they paint before its
+    sides.
 
   A shape is `{:poly, corners, class}`. `shapes/2` gives the shapes of an
   icon, and `placed/2` the shapes of an item at the scale of the world
@@ -56,9 +62,13 @@ defmodule DIYWeb.Icon.Shapes do
   The look of an item: the kind of its model. A busbar shows its number of
   positions for wires (`{"dc_bus", ports}`). A power station of a model
   with a look of its own shows that model (`{"power_station", model}`,
-  `DIYWeb.Icon.StationShapes`). Each other item has the model of its kind.
+  `DIYWeb.Icon.StationShapes`). A camper van shows its model
+  (`{"camper_van", model}`, `DIYWeb.Icon.VanShapes`). Each other item has
+  the model of its kind.
   """
   def look(%{type: "dc_bus", params: %{"ports" => ports}}), do: {"dc_bus", ports}
+
+  def look(%{type: "camper_van", params: %{"model" => model}}), do: {"camper_van", model}
 
   def look(%{type: "power_station", params: %{"model" => model}}) do
     if model in StationShapes.models(), do: {"power_station", model}, else: "power_station"
@@ -108,6 +118,9 @@ defmodule DIYWeb.Icon.Shapes do
 
         {:face, corners, _normal, _class} ->
           corners
+
+        {:hull, loop, w, _shape, _material, _faces} ->
+          Enum.flat_map(loop, fn {y, z} -> [{0.0, y, z}, {w, y, z}] end)
       end)
 
     {xs, ys, zs} = unzip3(points)
@@ -225,6 +238,102 @@ defmodule DIYWeb.Icon.Shapes do
     draw_one({:prism, loop, z, h, material}, view)
   end
 
+  # How far a cell or a face goes over its next one: 4 mm.
+  @seam 0.004
+
+  # A hull (`hull/5`). The faces across it come from the edges of its
+  # profile, as on a prism. They paint from the far one to the near one
+  # (`paint_order/2`). Each face of the hull paints just after the edge
+  # that it is on (`nearest_edge/3`). So a nearer part of the hull still
+  # hides it. A face of the hull is on one edge: a shape on the front is in
+  # pieces, each on one edge. A piece bends over the next edges a little.
+  # So it goes over the part of the next face that goes over it. Thus no
+  # thin line of the hull shows between two pieces. Then the cells of the
+  # side that looks to the camera paint, and the edge of that side. So a
+  # side hides the faces behind it. Each face has a smooth light
+  # (`smooth/4`), and no edge of its own: so a round part has no lines. A
+  # face is a little longer than its edge of the profile, and a cell goes a
+  # little over the next cell. So no thin gap shows between them.
+  defp draw_one(
+         {:hull, loop, w, shape, material, details},
+         %{point: point, normal: turn, camera: camera} = view
+       ) do
+    inset = fn y, z -> hull_inset(shape, y, z) end
+    edges = loop |> Enum.zip(tl(loop) ++ [hd(loop)]) |> Enum.with_index()
+
+    across =
+      for {{{ya, za}, {yb, zb}}, i} <- edges,
+          len = :math.sqrt((yb - ya) ** 2 + (zb - za) ** 2),
+          len > 1.0e-9,
+          normal = at(turn, {0, zb - za, ya - yb}),
+          Camera.shows?(camera, normal) do
+        {ey, ez} = {(yb - ya) / len * @seam, (zb - za) / len * @seam}
+        {ia, ib} = {inset.(ya, za), inset.(yb, zb)}
+
+        quad = fn e, f ->
+          [
+            {ia, ya - e, za - f},
+            {w - ia, ya - e, za - f},
+            {w - ib, yb + e, zb + f},
+            {ib, yb + e, zb + f}
+          ]
+          |> Enum.map(&at(point, &1))
+        end
+
+        {i, {quad.(ey, ez), quad.(0, 0)}, normal}
+      end
+
+    # The plane of the profile in the world, as for a prism along x.
+    {ax, ay, az} = at(turn, {1, 0, 0})
+    k = Enum.find_index([ax, ay, az], &(abs(&1) > 1.0e-9))
+    plane = &Tuple.delete_at(&1, k)
+    by_index = Map.new(across, fn {i, corners, normal} -> {i, {corners, normal}} end)
+
+    sides =
+      across
+      |> Enum.map(fn {i, {_wide, corners}, _normal} ->
+        middle = Geometry.scale(Geometry.add(Enum.at(corners, 0), Enum.at(corners, 2)), 0.5)
+
+        {Camera.depth(camera, middle),
+         {i, {plane.(Enum.at(corners, 0)), plane.(Enum.at(corners, 3))}}}
+      end)
+      |> Enum.sort_by(&elem(&1, 0))
+      |> Enum.map(&elem(&1, 1))
+
+    order = paint_order(sides, plane.(camera.eye))
+    on = Enum.group_by(details, &nearest_edge(&1, edges, order))
+
+    faces =
+      for i <- order,
+          {corners, normal} = by_index[i],
+          poly <-
+            smooth(corners, normal, material, camera) ++
+              Enum.flat_map(Map.get(on, i, []), &draw_one(&1, view)),
+          do: poly
+
+    side =
+      for sign <- [-1, 1],
+          normal = at(turn, {sign, 0, 0}),
+          Camera.shows?(camera, normal) do
+        x = fn y, z -> if sign < 0, do: inset.(y, z), else: w - inset.(y, z) end
+
+        place = fn cell -> Enum.map(cell, fn {y, z} -> at(point, {x.(y, z), y, z}) end) end
+
+        cells =
+          for {wide, cell} <- hull_cells(loop, shape),
+              normal =
+                at(turn, normal(Enum.map(cell, fn {y, z} -> {x.(y, z), y, z} end), {sign, 0, 0})),
+              Camera.shows?(camera, normal),
+              poly <- smooth({place.(wide), place.(cell)}, normal, material, camera),
+              do: poly
+
+        edge = Enum.map(loop, fn {y, z} -> at(point, {x.(y, z), y, z}) end)
+        cells ++ [{:poly, edge, "i-outline"}]
+      end
+
+    faces ++ List.flatten(side)
+  end
+
   # A prism that stands: a prism along z.
   defp draw_one({:prism, loop, z, h, material}, view),
     do: draw_one({:prism, :z, loop, z, h, material}, view)
@@ -305,6 +414,148 @@ defmodule DIYWeb.Icon.Shapes do
       else: []
   end
 
+  # The light of a face of a hull: the light of its side
+  # (`DIYWeb.Camera.side/2`), and over it the light of a top. The more the
+  # face looks up, the more of the top it has: none, 1/4, 1/2, 3/4 or all.
+  # So a round part goes from its side to its top in steps. The face is a
+  # little wide: it goes over the next one. The top over it has its true
+  # size: so the top does not paint twice where two faces meet.
+  defp smooth({wide, corners}, {nx, ny, nz}, material, camera) do
+    up = nz / :math.sqrt(nx * nx + ny * ny + nz * nz)
+    step = round(min(max((up - 0.3) / 0.6, 0.0), 1.0) * 4)
+    side = "i-#{material}-#{Camera.side(camera, {nx, ny, nz})}"
+
+    case step do
+      0 -> [{:poly, wide, side}]
+      4 -> [{:poly, wide, "i-#{material}-t"}]
+      step -> [{:poly, wide, side}, {:poly, corners, "i-#{material}-t i-o#{step}"}]
+    end
+  end
+
+  # The edge of the profile of a hull that a face of the hull is on. Of
+  # the edges that show, it is the nearest one (in y and z) to the middle
+  # of the face. The camera looks down: so the top of a hull always shows.
+  defp nearest_edge({:face, corners, _normal, _class}, edges, order) do
+    n = length(corners)
+
+    middle =
+      {Enum.sum(Enum.map(corners, &elem(&1, 1))) / n,
+       Enum.sum(Enum.map(corners, &elem(&1, 2))) / n}
+
+    shown = MapSet.new(order)
+
+    edges
+    |> Enum.filter(fn {_edge, i} -> i in shown end)
+    |> Enum.min_by(fn {{a, b}, _i} -> distance(middle, a, b) end)
+    |> elem(1)
+  end
+
+  # The distance from a point to a segment, in a plane.
+  defp distance({py, pz}, {ay, az}, {by, bz}) do
+    {dy, dz} = {by - ay, bz - az}
+    t = min(max(((py - ay) * dy + (pz - az) * dz) / max(dy * dy + dz * dz, 1.0e-12), 0.0), 1.0)
+    :math.sqrt((py - ay - t * dy) ** 2 + (pz - az - t * dz) ** 2)
+  end
+
+  @doc """
+  The normal of a flat shape (Newell), to the side of a direction. So a
+  face on a round part looks to where it truly looks.
+  """
+  def normal(corners, {hx, hy, hz}) do
+    {nx, ny, nz} =
+      corners
+      |> Enum.zip(tl(corners) ++ [hd(corners)])
+      |> Enum.reduce({0.0, 0.0, 0.0}, fn {{x1, y1, z1}, {x2, y2, z2}}, {a, b, c} ->
+        {a + (y1 - y2) * (z1 + z2), b + (z1 - z2) * (x1 + x2), c + (x1 - x2) * (y1 + y2)}
+      end)
+
+    if nx * hx + ny * hy + nz * hz >= 0, do: {nx, ny, nz}, else: {-nx, -ny, -nz}
+  end
+
+  # The cells of a side of a hull: its profile cut where the side bends.
+  # The cuts in z are at the belt and in the round edge of the roof. The
+  # cuts in y are in the round corners at the front and at the back. In a
+  # cell, the side is flat, or near it. Each cell comes two times: a little
+  # wide (it goes over the next cell), and with its true size.
+  defp hull_cells(loop, shape) do
+    for {ys, zs} <- hull_boxes(shape),
+        cell = band(loop, ys, zs),
+        length(cell) >= 3,
+        do: {band(loop, wide(ys), wide(zs)), cell}
+  end
+
+  defp wide({a, b}), do: {a - @seam, b + @seam}
+
+  # The boxes of y and z of the cells of a side of a hull.
+  defp hull_boxes(shape) do
+    %{belt: belt, edge: r, nose: n, tail: t, front: f, back: b, bottom: bottom, top: top} = shape
+    zcuts = Enum.uniq([bottom, belt, top - r, top - r * 0.5, top - r * 0.2, top])
+    ycuts = Enum.uniq([b, b + t * 0.25, b + t * 0.5, b + t, f - n, f - n * 0.5, f - n * 0.25, f])
+
+    for {y0, y1} <- Enum.zip(ycuts, tl(ycuts)),
+        y1 > y0,
+        {z0, z1} <- Enum.zip(zcuts, tl(zcuts)),
+        z1 > z0,
+        do: {{y0, y1}, {z0, z1}}
+  end
+
+  @doc """
+  The pieces of a convex shape on a side of a hull (points `{y, z}`).
+  They are in the profile of the hull (its loop). The shape is cut where
+  the side bends, as the cells of the side: each piece is flat, or near
+  it. A piece goes a little over the next one, as a cell.
+  """
+  def hull_pieces(loop, shape, points) do
+    # The turn of the points: counterclockwise is more than 0.
+    area =
+      points
+      |> Enum.zip(tl(points) ++ [hd(points)])
+      |> Enum.reduce(0.0, fn {{y1, z1}, {y2, z2}}, sum -> sum + y1 * z2 - y2 * z1 end)
+
+    inside =
+      points
+      |> Enum.zip(tl(points) ++ [hd(points)])
+      |> Enum.reduce(loop, fn {{y1, z1}, {y2, z2}}, part ->
+        clip(part, fn {y, z} -> -area * ((y2 - y1) * (z - z1) - (z2 - z1) * (y - y1)) end)
+      end)
+
+    for {ys, zs} <- hull_boxes(shape),
+        piece = band(inside, wide(ys), wide(zs)),
+        length(piece) >= 3,
+        do: piece
+  end
+
+  # The part of a loop in a box of y and z (Sutherland and Hodgman).
+  defp band(loop, {y0, y1}, {z0, z1}) do
+    loop
+    |> clip(fn {y, _z} -> y0 - y end)
+    |> clip(fn {y, _z} -> y - y1 end)
+    |> clip(fn {_y, z} -> z0 - z end)
+    |> clip(fn {_y, z} -> z - z1 end)
+  end
+
+  @doc """
+  The part of a flat shape (points of two values) where `f` is 0 or less:
+  the clip of Sutherland and Hodgman.
+  """
+  def clip([], _f), do: []
+
+  def clip(points, f) do
+    points
+    |> Enum.zip(tl(points) ++ [hd(points)])
+    |> Enum.flat_map(fn {{y1, z1} = a, {y2, z2} = b} ->
+      {fa, fb} = {f.(a), f.(b)}
+      cut = fn -> {y1 + (y2 - y1) * fa / (fa - fb), z1 + (z2 - z1) * fa / (fa - fb)} end
+
+      cond do
+        fa <= 0 and fb <= 0 -> [b]
+        fa <= 0 -> [cut.()]
+        fb <= 0 -> [cut.(), b]
+        true -> []
+      end
+    end)
+  end
+
   # The order of the paint of the sides of a prism that show: from the far
   # one to the near one. The order is on the plane of the loop, where the
   # eye looks along e. A side is behind a different side when, at a point that
@@ -379,6 +630,58 @@ defmodule DIYWeb.Icon.Shapes do
 
   # The parts of a model. They are public for the models in the modules
   # of the vans and of the stations.
+
+  @doc """
+  The hull of a vehicle: its side profile from x = 0 to x = w. The
+  profile is a loop of `{y, z}`, counterclockwise when the eye is at the
+  large x. The hull has a material, and the faces on its front, its top
+  and its back. The shape tells how the hull is round:
+
+  - `belt`: the height where the sides start to lean in;
+  - `lean`: how far each side is in at the top of the lean (under the
+    round edge of the roof);
+  - `edge`: the radius of the round edge of the roof;
+  - `nose` and `tail`: the radius of the round corners at the front and at
+    the back, seen from above.
+  """
+  def hull(loop, w, shape, material, faces) do
+    {:hull, loop, w, hull_shape(loop, w, shape), material, faces}
+  end
+
+  @doc """
+  The shape of a hull (`hull/5`) with its box: the front, the back, the
+  bottom and the top of its loop, and its width. `hull_inset/3` takes it.
+  """
+  def hull_shape(loop, w, shape) do
+    {ys, zs} = Enum.unzip(loop)
+    {bottom, top} = Enum.min_max(zs)
+
+    Map.merge(shape, %{
+      front: Enum.max(ys),
+      back: Enum.min(ys),
+      bottom: bottom,
+      top: top,
+      width: w
+    })
+  end
+
+  @doc """
+  How far a side of a hull (`hull/5`) is in from its plane, at a point
+  `{y, z}` of the side. The plane is x = 0 or x = w. It is the lean over
+  the belt, the round edge of the roof and the round corners. It is less
+  than half of the width.
+  """
+  def hull_inset(shape, y, z) do
+    %{belt: belt, lean: lean, edge: r, nose: n, tail: t, front: f, back: b, top: top} = shape
+    lean = if z > belt, do: lean * min(1.0, (z - belt) / max(top - r - belt, 1.0e-9)), else: 0.0
+    plan = max(round_in(n, n - (f - y)), round_in(t, t - (y - b)))
+    min(lean + round_in(r, z - (top - r)) + plan, shape.width / 2 - 0.01)
+  end
+
+  # How far a round corner of radius r is in, at u into it. It is 0 where
+  # it starts (u = 0), and r at its end (u = r).
+  defp round_in(r, u) when r <= 0 or u <= 0, do: 0.0
+  defp round_in(r, u), do: r - :math.sqrt(r * r - min(u, r) ** 2)
 
   @doc "A box of a material."
   def box(corner, size, material), do: [{:box, corner, size, material}]
@@ -1233,6 +1536,9 @@ defmodule DIYWeb.Icon.Shapes do
 
   # The icon of a camper van: the model of the Ford Transit.
   def model("camper_van"), do: VanShapes.van("transit_148")
+
+  # A camper van of a model (`look/1`).
+  def model({"camper_van", model}), do: VanShapes.van(model)
 
   # A captain seat on its swivel: the seat and the back have round corners,
   # with a headrest and two armrests.

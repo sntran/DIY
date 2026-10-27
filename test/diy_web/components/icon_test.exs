@@ -124,6 +124,17 @@ defmodule DIYWeb.IconTest do
     end
   end
 
+  test "a camper van shows its model" do
+    van = fn model -> %{type: "camper_van", params: %{"model" => model}} end
+    assert Shapes.look(van.("sprinter_144")) == {"camper_van", "sprinter_144"}
+
+    assert Shapes.model({"camper_van", "sprinter_144"}) ==
+             DIYWeb.Icon.VanShapes.van("sprinter_144")
+
+    refute Shapes.shapes({"camper_van", "sprinter_144"}) ==
+             Shapes.shapes({"camper_van", "promaster_136"})
+  end
+
   test "a power station shows its model, when the model has a look of its own" do
     station = fn model -> %{type: "power_station", params: %{"model" => model}} end
     assert Shapes.look(station.("ecoflow_delta_pro")) == {"power_station", "ecoflow_delta_pro"}
