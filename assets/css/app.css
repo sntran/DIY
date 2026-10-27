@@ -963,3 +963,19 @@ button.stage-switch { padding: 0; border: 0 }
   .stage-screen.stage-ping { box-shadow: inset 0 0 0 2px #8dffa8, 0 0 22px rgb(141 255 168 / 0.7) }
   [data-stage=landed] .stage-panel, .stage-spot, .stage-screen, .stage-field, .stage-switch, .stage-switch::after { transition: none }
 }
+
+/* The chart of the price for each kWh of plans (DIYWeb.PlanChart): the
+   first 6 colors of the categorical palette of the data charts, in their
+   fixed order. The dark theme has the same hues, made for a dark surface.
+   The swatch of the key (pc-key) is a line with the dashes of its plan. */
+.pc-chart { --pc-1: #2a78d6; --pc-2: #eb6834; --pc-3: #1baf7a; --pc-4: #eda100; --pc-5: #e87ba4; --pc-6: #008300 }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme=light]) .pc-chart { --pc-1: #3987e5; --pc-2: #d95926; --pc-3: #199e70; --pc-4: #c98500; --pc-5: #d55181; --pc-6: #008300 }
+}
+[data-theme=dark] .pc-chart { --pc-1: #3987e5; --pc-2: #d95926; --pc-3: #199e70; --pc-4: #c98500; --pc-5: #d55181; --pc-6: #008300 }
+.pc-1 { stroke: var(--pc-1) } .pc-2 { stroke: var(--pc-2) } .pc-3 { stroke: var(--pc-3) }
+.pc-4 { stroke: var(--pc-4) } .pc-5 { stroke: var(--pc-5) } .pc-6 { stroke: var(--pc-6) }
+.pc-grid { stroke: currentColor; stroke-opacity: 0.12 }
+.pc-text { fill: currentColor; fill-opacity: 0.75 }
+.pc-month { fill: currentColor; fill-opacity: 0.55; stroke: var(--color-base-100); stroke-width: 1.5 }
+.pc-key { stroke-width: 3 }

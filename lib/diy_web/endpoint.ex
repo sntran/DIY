@@ -59,7 +59,10 @@ defmodule DIYWeb.Endpoint do
   plug Plug.Session, @session_options
   plug DIYWeb.Router
 
-  @doc "The level of the log of a request: none for the link of a shared house."
-  def log_level(%Plug.Conn{path_info: ["s" | _]}), do: false
+  @doc """
+  The level of the log of a request: none for the link of a shared house
+  and for the link of plans.
+  """
+  def log_level(%Plug.Conn{path_info: [link | _]}) when link in ["s", "p"], do: false
   def log_level(_conn), do: :info
 end

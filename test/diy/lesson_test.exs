@@ -18,6 +18,14 @@ defmodule DIY.LessonTest do
     assert year.cents > 11.3
     april = Enum.at(year.rows, 3)
     assert april.credits == 0 and april.cents > 20
+    # April misses the credit of $100. It is not July: the credit of $25
+    # is only for July, August and September.
+    assert april.missed == 100.0
+    # July has 2,050 kWh: it gets both credits.
+    assert Enum.at(year.rows, 6).missed == 0.0
+    # A July under 1,000 kWh misses both.
+    [july] = Lesson.rows(plan, [%{Enum.at(Lesson.example_months(), 6) | kwh: 900.0}]).rows
+    assert july.missed == 125.0
   end
 
   defp bill(kwh) do

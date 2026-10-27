@@ -100,7 +100,8 @@ defmodule DIY.Lesson do
   The bill of each month of a plan, and of the year, with the range of the
   months (`total_low` and `total_high`). `shares` gives the part of the
   kWh of a month at night (for a plan with a price of the night), or
-  `nil`.
+  `nil`. Each month also has `missed`: the dollars of the credits that
+  the month does not get. Its kWh are under the kWh of these credits.
   """
   def rows(plan, months, shares \\ fn _month -> nil end) do
     rows =
@@ -110,7 +111,13 @@ defmodule DIY.Lesson do
 
         plan
         |> bill(m, share)
-        |> Map.merge(%{month: m.month, name: m.name, total_low: low, total_high: high})
+        |> Map.merge(%{
+          month: m.month,
+          name: m.name,
+          total_low: low,
+          total_high: high,
+          missed: missed(plan, m)
+        })
       end
 
     total = rows |> Enum.map(& &1.total) |> Enum.sum()
@@ -124,6 +131,17 @@ defmodule DIY.Lesson do
       kwh: kwh,
       cents: if(kwh > 0, do: total / kwh * 100)
     }
+  end
+
+  # The credits of the month (each month, or a month of the credit) that
+  # the kWh of the month do not get.
+  defp missed(plan, m) do
+    for(
+      c <- plan.credits,
+      m.kwh < c.min_kwh and (is_nil(c.months) or m.month in c.months),
+      do: c.dollars
+    )
+    |> Enum.reduce(0.0, &+/2)
   end
 
   # The least and the most bill of a month in the range of its kWh. A
