@@ -20,7 +20,7 @@ defmodule DIYWeb.Share do
 
   attr :short_error, :atom,
     default: nil,
-    doc: "why the page could not make a short link: `:full`, `:many` or `:data`"
+    doc: "why the page could not make a short link: `:full`, `:many`, `:data` or `:storage`"
 
   attr :sky_pick, :map, required: true, doc: "the choice of the sky (`DIYWeb.Outside.sky_form/1`)"
   attr :sky_now, :map, default: nil, doc: "the sky at the house now (`DIY.Sky.now/3`)"

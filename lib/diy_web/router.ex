@@ -38,10 +38,11 @@ defmodule DIYWeb.Router do
     # it needs no script.
     get "/language/:locale", LanguageController, :update
 
-    # The signed session keeps the language of the first render
-    # (DIYWeb.Locale.live_session/1).
+    # The signed session keeps the language of the first render, and the
+    # key of the address for the limit of the short links
+    # (DIYWeb.Address.live_session/1).
     live_session :build,
-      session: {DIYWeb.Locale, :live_session, []},
+      session: {DIYWeb.Address, :live_session, []},
       on_mount: [DIYWeb.Locale, DIYWeb.Device, DIYWeb.HomeAssistant, DIYWeb.MakerLink] do
       live "/", HomeLive, :front
       live "/inside", HomeLive, :inside

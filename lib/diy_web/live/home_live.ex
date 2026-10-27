@@ -74,7 +74,7 @@ defmodule DIYWeb.HomeLive do
   }
 
   @impl true
-  def mount(_params, _session, socket) do
+  def mount(_params, session, socket) do
     {:ok,
      socket
      |> assign(:page_title, "Small Steps Home")
@@ -112,7 +112,8 @@ defmodule DIYWeb.HomeLive do
      |> assign(:status, nil)
      |> assign(shared: nil, meta: nil, adopt: nil, share: nil, share_zip: true, origin: "")
      # The short links that this page made: the id of each DATA (DIY.Links).
-     |> assign(share_links: %{}, share_short: nil)
+     # The key of the address counts the links of the person in a day.
+     |> assign(share_links: %{}, share_short: nil, address: session["address"] || "")
      |> allow_upload(:build_file,
        accept: ~w(.json),
        max_entries: 1,
@@ -1108,7 +1109,8 @@ defmodule DIYWeb.HomeLive do
     do: {:noreply, socket |> assign(:share_zip, zip == "true") |> share()}
 
   # A short link of the link of the sheet (DIY.Links). A page makes 20 at
-  # most: each one keeps a house on the server for one year.
+  # most: each one keeps a house on the server for one year. The address
+  # of the person also has a limit for each day (DIY.Links.allow/2).
   def handle_event("share_short", _params, %{assigns: %{share: %{data: data}}} = socket)
       when is_binary(data) do
     links = socket.assigns.share_links
@@ -1117,7 +1119,7 @@ defmodule DIYWeb.HomeLive do
       cond do
         Map.has_key?(links, data) -> {:ok, links[data]}
         map_size(links) >= @max_short -> {:error, :many}
-        true -> Links.create(data)
+        true -> with :ok <- Links.allow(socket.assigns.address), do: Links.create(data)
       end
 
     case result do

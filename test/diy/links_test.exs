@@ -130,8 +130,42 @@ defmodule DIY.LinksTest do
     {:ok, repo} = Repo.start_link(name: nil, database: ":memory:", pool_size: 1)
     GenServer.stop(repo)
 
-    log = capture_log(fn -> assert Links.migrate(dynamic_repo: repo) == :ignore end)
+    log = capture_log(fn -> assert Links.migrate(dynamic_repo: repo) == :error end)
     assert log =~ "The table of the short links is not ready ("
+  end
+
+  # The steps of a visit (specs/Links.tla): other requests can come
+  # between the read and the write of a visit.
+  test "a visit puts back a row that a new link deleted after the read, and keeps the later day" do
+    {:ok, id} = Links.create(data("visit"), @day)
+    [link] = Repo.all(Link)
+
+    # A new link (at midnight) deletes the row after the read of the visit.
+    Repo.delete_all(Link)
+    later = Date.add(@day, 365)
+    assert Links.visit(link, later) == :ok
+    assert [%Link{used_on: ^later}] = Repo.all(Link)
+    assert {:ok, _data} = Links.fetch(id, later)
+
+    # A visit that read before a different visit writes an older day: the
+    # row keeps the later day.
+    assert Links.visit(link, @day) == :ok
+    assert [%Link{used_on: ^later}] = Repo.all(Link)
+  end
+
+  test "the delete of an ended link keeps a row that a different visit just wrote" do
+    {:ok, _id} = Links.create(data(), @day)
+    [link] = Repo.all(Link)
+
+    # The read found the link ended on day 366. A different visit wrote
+    # day 2 before the delete.
+    assert Links.visit(link, Date.add(@day, 2)) == :ok
+    assert Links.expire(link.key, Date.add(@day, 366)) == :ok
+    assert [_row] = Repo.all(Link)
+
+    # 366 days after that visit, the delete works.
+    assert Links.expire(link.key, Date.add(@day, 368)) == :ok
+    assert Repo.all(Link) == []
   end
 
   test "an error of the storage gives an error, and the log has no id and no house" do

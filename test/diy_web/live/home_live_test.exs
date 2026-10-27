@@ -1055,6 +1055,21 @@ defmodule DIYWeb.HomeLiveTest do
     assert %{zip: "75010", market: %{utility: "Oncor"}} = build(view)
   end
 
+  # The order of the answers changes from run to run. This test gives the
+  # last case directly: an answer that the page does not wait for.
+  test "an answer of the market that the page does not wait for changes nothing" do
+    socket = %Phoenix.LiveView.Socket{
+      assigns: %{
+        __changed__: %{},
+        build: %{zip: "75010", market: %{utility: "Oncor"}},
+        market: %{zip: nil, status: :none}
+      }
+    }
+
+    assert DIYWeb.HomeLive.handle_async({:market, "75009"}, {:ok, {:ok, %{}}}, socket) ==
+             {:noreply, socket}
+  end
+
   test "the same ZIP code again keeps the market", %{conn: conn} do
     view = open(conn, ~p"/settings", house("75013"))
     settle(view)

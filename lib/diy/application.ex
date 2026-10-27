@@ -8,9 +8,10 @@ defmodule DIY.Application do
   @impl true
   def start(_type, _args) do
     children = [
-      # The database of the short links, and its table (DIY.Links).
+      # The database of the short links. The guard runs the migration of
+      # their table, and keeps their counts of today (DIY.Links).
       DIY.Repo,
-      %{id: :migrate, start: {DIY.Links, :migrate, []}, restart: :transient},
+      DIY.Links.Guard,
       {Phoenix.PubSub, name: DIY.PubSub},
       # The data of the public services: the weather and the utility areas.
       DIY.Cache,

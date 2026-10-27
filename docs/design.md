@@ -2229,6 +2229,14 @@ The rules of a short link:
   short link ended".
 - The table has 100,000 links at most. A page makes 20 links at most.
   The same house on the same page gives the same link again.
+- The app makes 1,000 new links a day at most, and 20 a day for each
+  address (`DIY.Links.allow/2`). The counts are in the memory of the VM
+  (`DIY.Links.Guard`), so a new start of the VM starts them again. The
+  key of an address is an HMAC of the IP address with the secret key
+  base (`DIYWeb.Address`): the app does not keep the address. On
+  Cloudflare, beam.com gives the connection the address of the client
+  (`cf-connecting-ip`). Thus a script must use many addresses and many
+  days to fill the table: 100 days at 1,000 links a day.
 - The `DATA` has the limits of a long link (6,000 characters).
 - When the app cannot make a short link (a full table, an error of the
   storage), the sheet tells it and keeps the long link. When the app
@@ -2254,9 +2262,11 @@ correct when other statements come between the statements of a request:
 - The count of the rows and the insert of a new link are two
   statements. Thus the table can have a few more than 100,000 links.
 
-The migration of the table runs at the boot (`DIY.Links.migrate/0`). It
-makes only what is not there, so it can run again after a boot that
+The migration of the table runs at the start (`DIY.Links.Guard`). It
+makes only what is not there, so it can run again after a start that
 stopped in it. When it fails, the app starts without the short links.
+Then no statement goes to the storage, and a request runs the migration
+again, once a minute at most.
 
 The model `specs/Links.tla` checks these rules with TLC. A visit is two
 steps (`Read`, `Write`), and other steps can come between them:
@@ -2269,10 +2279,10 @@ Three configurations have a fault that TLC must find. In
 `Links.early.cfg`, a link ends one day too early. In
 `Links.noupdate.cfg`, a visit does not write its day. In
 `Links.noupsert.cfg`, a visit writes its day with an update, not an
-upsert.
+upsert. The tests also run the steps `Write` and `Expire` one by one,
+with a change of the row between them (`DIY.Links.visit/2`,
+`DIY.Links.expire/2`).
 
-A script can make many links: the limit of 20 is for one page. A limit
-for each address is a next step.
 
 ### The share
 
