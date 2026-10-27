@@ -474,22 +474,22 @@ msgstr ""
 msgid "A zone stays in the van."
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:1494
+#: lib/diy_web/live/home_live.ex:1496
 #, elixir-autogen, elixir-format
 msgid "Choose a floor of the house."
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:1496
+#: lib/diy_web/live/home_live.ex:1498
 #, elixir-autogen, elixir-format
 msgid "Choose a house first."
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:1495
+#: lib/diy_web/live/home_live.ex:1497
 #, elixir-autogen, elixir-format
 msgid "Choose a place: inside, outside or the roof."
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:1491
+#: lib/diy_web/live/home_live.ex:1493
 #, elixir-autogen, elixir-format
 msgid "Choose how you use the batteries."
 msgstr ""
@@ -504,12 +504,12 @@ msgstr ""
 msgid "Close"
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:1490
+#: lib/diy_web/live/home_live.ex:1492
 #, elixir-autogen, elixir-format
 msgid "Give a part from 0 to 100%."
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:1486
+#: lib/diy_web/live/home_live.ex:1488
 #, elixir-autogen, elixir-format
 msgid "Give an hour from 0 to 23."
 msgstr ""
@@ -544,7 +544,7 @@ msgstr ""
 msgid "Give the plan a name."
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:1483
+#: lib/diy_web/live/home_live.ex:1485
 #, elixir-autogen, elixir-format
 msgid "Give the price at night in cents, from 0 to 200, or leave it empty."
 msgstr ""
@@ -554,12 +554,12 @@ msgstr ""
 msgid "Give the price in cents for one kWh, for example 14.5."
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:1489
+#: lib/diy_web/live/home_live.ex:1491
 #, elixir-autogen, elixir-format
 msgid "Give the price in cents, from 0 to 200."
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:1493
+#: lib/diy_web/live/home_live.ex:1495
 #, elixir-autogen, elixir-format
 msgid "Give the room a name."
 msgstr ""
@@ -614,17 +614,12 @@ msgstr ""
 msgid "The build on this device comes from a newer version of the app. Load the page again."
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:1361
-#, elixir-autogen, elixir-format
-msgid "The cab and the roof of the van stay where they are."
-msgstr ""
-
-#: lib/diy_web/live/home_live.ex:1444
+#: lib/diy_web/live/home_live.ex:1446
 #, elixir-autogen, elixir-format
 msgid "The file is not a build of this app."
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:1488
+#: lib/diy_web/live/home_live.ex:1490
 #, elixir-autogen, elixir-format
 msgid "The night must start and end at different hours."
 msgstr ""
@@ -648,12 +643,12 @@ msgid_plural "The page has %{count} months of your usage. The file stayed on thi
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/diy_web/live/home_live.ex:1925
+#: lib/diy_web/live/home_live.ex:1927
 #, elixir-autogen, elixir-format
 msgid "The page reads your build from this device."
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:1441
+#: lib/diy_web/live/home_live.ex:1443
 #, elixir-autogen, elixir-format
 msgid "The page shows the build of the file now."
 msgstr ""
@@ -683,7 +678,7 @@ msgstr ""
 msgid "These numbers give %{price} for each kWh. Check the total and the kWh of the bill."
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:1910
+#: lib/diy_web/live/home_live.ex:1912
 #, elixir-autogen, elixir-format
 msgid "This app needs JavaScript. Turn on JavaScript in the browser."
 msgstr ""
@@ -698,7 +693,7 @@ msgstr ""
 msgid "This item cannot go in that room."
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:1365
+#: lib/diy_web/live/home_live.ex:1367
 #, elixir-autogen, elixir-format
 msgid "This item or this room is not on the plan now."
 msgstr ""
@@ -1132,4 +1127,9 @@ msgstr ""
 #: lib/diy_web/live/home_live.ex:1217
 #, elixir-autogen, elixir-format
 msgid "These plans are for Texas, in an area with retail choice. The house on this device is not in such an area."
+msgstr ""
+
+#: lib/diy_web/live/home_live.ex:1363
+#, elixir-autogen, elixir-format
+msgid "The cab, the engine bay and the roof of the van stay where they are."
 msgstr ""

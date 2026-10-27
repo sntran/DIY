@@ -1358,7 +1358,9 @@ defmodule DIYWeb.HomeLive do
   defp move_error(:overlap), do: gettext("A room or a zone cannot go over a different one.")
   defp move_error(:place), do: gettext("This item cannot go in that room.")
   defp move_error(:van), do: gettext("A zone stays in the van.")
-  defp move_error(:fixed), do: gettext("The cab and the roof of the van stay where they are.")
+
+  defp move_error(:fixed),
+    do: gettext("The cab, the engine bay and the roof of the van stay where they are.")
 
   # An item or a room that is not on the plan now (it went to a van, or a
   # different tab removed it).

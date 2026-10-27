@@ -1009,13 +1009,13 @@ rooms.
 
 ### The zones
 
-A new van gets its zones: the cab, the galley, the living area, the bed,
-the electrical bay, the roof of the van, and the shell. A zone is a room
-of the build on the level `"van:ID"` (the id of the van). The zones are
-fixed: the user cannot add, rename or remove one. The removal of the van
-(or of its room) removes its zones and their items. The kinds of items of
-a van (`DIY.Catalog`) go only in the zones, each with its weight; a power
-station can go in a house or in a van.
+A new van gets its zones. They are the cab, the engine bay, the galley,
+the living area, the bed, the electrical bay, the roof of the van, and
+the shell. A zone is a room of the build on the level `"van:ID"` (the id
+of the van). The zones are fixed: the user cannot add, rename or remove
+one. The removal of the van (or of its room) removes its zones and their
+items. The kinds of items of a van (`DIY.Catalog`) go only in the zones,
+each with its weight. A power station can go in a house or in a van.
 
 The house has its own numbers: the estimate, the power, the bill and the
 lesson use only the rooms and the items of the house
@@ -1026,7 +1026,8 @@ house: its batteries and its power are its own.
 
 The page Van shows the van cut open, as the page Rooms shows the house
 (`DIYWeb.VanCutaway`, with the rules in `DIY.Layout`). The van has two
-layers: its floor, and its roof over it with a gap.
+layers: its floor, and its roof over it with a gap. The engine bay is on
+the floor, in front of the dash.
 
 - The plan of a van comes from its model (`DIY.Catalog.van_size/1`): the
   cargo area and the cab in front of it. `y` goes along the van, from the
@@ -1041,21 +1042,33 @@ layers: its floor, and its roof over it with a gap.
   bed, the electrical bay, the living area and the galley, each across
   the van. The cab is at the front, and the roof of the van is over all
   of it. The shell has no plan: its items are materials.
+- The engine bay (`DIY.Layout.engine_box/1`) is under the hood. It goes
+  from the dash to the front of the van. The dash is 14 in deep: a guess
+  of the app. The bay is as wide as the cargo area, and 37 to 48 in long.
 - The rules are the rules of the house. No two zones of a layer overlap,
-  each zone stays in the van, and each item is in its zone. The cab and
-  the roof of the van are fixed: they do not move, and they have no
-  handles. A new model (or a stored text that breaks a rule) gives all
-  the zones the draft again. An item does not go between the house and a
-  van. `specs/VanPlan.tla` checks the box of the van and the place of the
-  cab. Two faults show that these rules matter.
+  each zone stays in the van, and each item is in its zone. The cab, the
+  engine bay and the roof of the van are fixed: they do not move, and
+  they have no handles. A new model (or a stored text that breaks a rule)
+  gives all the zones the draft again. The engine bay always gets its
+  draft, and it does not change the other zones. So a van of an older
+  version gets its engine bay and keeps its plan. An item does not go
+  between the house and a van. `specs/VanPlan.tla` checks the box of the
+  van, the place of the cab and the place of the engine bay. Four faults
+  show that these rules matter.
 - The picture shows the walls of the van. The right side has the full
   height of the cargo area, with the opening of the sliding door. The
   doors at the back are cut on a slope: full at the right side, and near
   the floor at the left side. The left side is cut near the floor.
   The picture also shows the wheel wells, the wheels, the seats, the
-  dash, the steering wheel, the hood and the bumper. These fixed parts
-  do not take a tap: a tap goes to the zone under them. A swivel seat
-  (an item) takes the place of the seat that it is on.
+  dash, the steering wheel and the bumper. These fixed parts do not take
+  a tap: a tap goes to the zone under them. A swivel seat (an item) takes
+  the place of the seat that it is on.
+- The engine bay is open. The lid of the hood is up, on the layer of the
+  roof. The engine at the back of the bay and the fenders at its sides
+  are flat on its floor. The front of the van, with its grille and its
+  lights, goes up to the hood. So the dash, the steering wheel and the
+  items in the bay show. A test checks that no part of the van is in the
+  space of an item in the bay.
 - The shell gives the materials: a floor of wood, walls with panels, and
   pink insulation in the cut of the walls. The shell shows under the
   plan, with its items and a button that adds an item.
@@ -1116,8 +1129,9 @@ The power budget, for each month:
   So in a hot month, the app can be low.
 - The sun: the panels give 80% of their watts in full sun, with the sun
   of NASA POWER at the house.
-- The engine: the amps of the alternator charger, at the voltage of the
-  batteries (12.8 V for each 12 V), for the hours that the user drives.
+- The engine: the amps of the alternator charger and of the second
+  alternator, for the hours that the user drives. They charge at the
+  voltage of the batteries (12.8 V for each 12 V).
 - The batteries: lithium (LiFePO4) gives 90% of its label, lead acid or
   AGM 50%, and a power station 95%. The app does not count the loss of
   the outlets of a station.
@@ -1174,6 +1188,36 @@ the garage to the street. So the longest van (290 in) fits in it.
   items need more watts than the inverters and the stations give, a note
   tells it.
 - Items that use power: a battery or a power station.
+- An alternator charger in the engine bay that is not made for it. The
+  heat under the hood can stop it. A charger tells it in its manual: for
+  example, the REDARC BCDC Classic can go under the hood, and the BCDC
+  Core cannot
+  ([REDARC](https://www.redarcelectronics.com/nz/discover/the-dos-and-donts-of-bcdc-mounting)).
+
+### The engine bay
+
+Some people put the chargers of the engine under the hood. The engine
+bay is a zone for them:
+
+- An alternator charger (DC-DC) can go in the cab, in the electrical bay
+  or in the engine bay. It has the check "It is made for the engine
+  bay". With no check, a charger in the engine bay gets a safety note.
+- A second alternator goes only in the engine bay. Its regulator sets
+  the charge of the batteries (typical: 150 A). The person gives the amps
+  of the regulator, not the label of the alternator. The label gives the
+  most amps, at a high speed of the engine. For example, a kit for the
+  Sprinter has an alternator of 280 A
+  ([Vanland](https://vanlandstore.com/collections/alternators)).
+- REDARC puts its charger less than 1 m from the battery that it
+  charges. Else the wire must be larger. In the engine bay, the best
+  place is in front of the radiator, behind the grille.
+- A new wire in a van gets the length of its run on the plan (see "A
+  wire"). So a charger in the engine bay gets a long wire to the
+  battery, and its voltage drop shows. The length does not change when
+  an item moves later: then the person changes it on the wire.
+- The app does not show the starter battery. Its place changes with the
+  make and the year. For example, in the Sprinter it is under the floor
+  at the feet of the driver.
 
 ### A station of the house in the van
 
@@ -1358,8 +1402,8 @@ It gets one of three steps between the light and the shade (`-m1`,
     reaches 7 inches out of its side: the plan gives a van this space
     (`DIY.Layout.size/1`).
   - The same shape shows in the pictures and in the plan of the house.
-    The plan of the van uses only the height of its hood
-    (`DIYWeb.VanCutaway`).
+    The plan of the van uses only the height of its hood: the front of
+    the open engine bay goes up to it (`DIYWeb.VanCutaway`).
   - On the roof, the panels are in rows of two, in the middle of the
     roof. The fan is at the back. In the drive, the van stands between
     the garage and the street.
@@ -4071,9 +4115,10 @@ positive and the negative, or the hot and the neutral). The build keeps
 the wires (`DIY.Build`, `wires`).
 
 - The kinds that take wires have the feature `:wires`. They are a power
-  station, a battery bank, an inverter, a busbar, an alternator charger,
-  a transfer switch and a shore power inlet. Solar panels do not take
-  wires yet. The rules of solar circuits are different (NEC 690.8).
+  station, a battery bank, an inverter, a busbar and an alternator
+  charger. A second alternator, a transfer switch and a shore power inlet
+  take wires too. Solar panels do not take wires yet. The rules of solar
+  circuits are different (NEC 690.8).
 - A wire goes from the item that gives the current (`from`) to a
   different item (`to`). A new wire joins two items of one place: the
   house, or one van. A wire stays when a station goes to a van and back.
@@ -4084,10 +4129,12 @@ the wires (`DIY.Build`, `wires`).
   port, the length one way, and two ways. The system is 12, 24 or 48 V
   DC, or 120 or 240 V AC. A wire has two ways when the far end also
   gives current: a battery, or a busbar with a battery on it.
-- A new wire gets typical numbers: 30 A and 6 ft. Its system is the
-  system of a battery at an end. At a busbar, it is 12 V DC. At a
-  transfer switch or a shore power inlet, it is 120 V AC. Else it is
-  12 V DC.
+- A new wire gets typical numbers: 30 A and 6 ft. In a van, its length
+  is the run between the middles of its two items on the plan. The run
+  goes along the van and across it, with 2 ft for the ends (3 ft or
+  more). Its system is the system of a battery at an end. At a busbar,
+  it is 12 V DC. At a transfer switch or a shore power inlet, it is 120 V
+  AC. Else it is 12 V DC.
   On DC, a wire to a battery or to a busbar has two ways.
 - When a battery is at an end, the system of the wire is the voltage of
   the battery. A battery joined to a battery of a higher voltage (through

@@ -200,6 +200,35 @@ defmodule DIY.BuildWiresTest do
     assert loaded.wires == []
   end
 
+  test "a new wire in a van has the length of its run on the plan" do
+    build = preset()
+    {:ok, build, van} = Build.add_item(build, room(build, "Driveway"), "camper_van")
+    # The ProMaster 159 in: the electrical bay is at y = 61 in, and the
+    # engine bay at y = 196 in.
+    [bay, engine] = for place <- [:bay, :engine], do: Build.zone(build, van, place)
+    assert {bay.plan.y, engine.plan.y} == {61, 196}
+
+    at = fn build, id, zone ->
+      {:ok, build} = Build.place_item(build, id, zone.id, %{x: 0, y: 0})
+      build
+    end
+
+    {build, battery} = add(build, bay.id, "van_battery")
+    {build, other} = add(build, bay.id, "van_battery")
+    {build, charger} = add(build, engine.id, "dc_charger")
+    build = build |> at.(battery, bay) |> at.(other, bay) |> at.(charger, engine)
+    {:ok, build, far} = Build.add_wire(build, charger, battery)
+    {:ok, build, near} = Build.add_wire(build, other, battery)
+
+    # The middle of the battery (13 by 7 in) is at 6.5 and 64.5 in. The
+    # middle of the charger (7 by 3 in) is at 3.5 and 197.5 in. The run is
+    # 3 + 133 = 136 in: 11.3 ft, and 2 ft for the ends, up to 14 ft.
+    assert {:ok, %{feet: 14.0}} = Build.wire(build, far)
+
+    # Two batteries at the same place: the shortest wire is 3 ft.
+    assert {:ok, %{feet: 3.0}} = Build.wire(build, near)
+  end
+
   test "a wire between two batteries, or a battery on three busbars, makes one node" do
     build = preset()
     {:ok, build, van} = Build.add_item(build, room(build, "Driveway"), "camper_van")

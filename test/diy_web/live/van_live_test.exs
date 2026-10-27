@@ -201,9 +201,12 @@ defmodule DIYWeb.VanLiveTest do
     # charger: the page tells why the engine gives no power. With a
     # charger, or with no drive, it does not.
     assert has_element?(view, "#van-no-engine", "You drive 1 h in one day")
+    assert has_element?(view, "#van-no-engine", "Or add a second alternator in the engine bay.")
     assert has_element?(view, "#van-months td", "Jan")
     {charged, _} = add(build, van, :bay, "dc_charger")
     refute has_element?(open(conn, ~p"/van?#{[id: van]}", charged), "#van-no-engine")
+    {second, _} = add(build, van, :engine, "second_alternator")
+    refute has_element?(open(conn, ~p"/van?#{[id: van]}", second), "#van-no-engine")
     {:ok, parked} = Build.update_item(build, van, %{"drive_hours" => "0"})
     refute has_element?(open(conn, ~p"/van?#{[id: van]}", parked), "#van-no-engine")
 
@@ -287,6 +290,16 @@ defmodule DIYWeb.VanLiveTest do
 
     assert has_element?(view, "#van-weight", "is not less than the rating")
     refute has_element?(view, "#van-weight", "The van can take")
+
+    # An alternator charger under the hood that is not made for the heat.
+    {hot, _} = add(build, van, :engine, "dc_charger", %{"amps" => "40"})
+
+    assert has_element?(
+             open(conn, ~p"/van?#{[id: van]}", hot),
+             "#van-notes",
+             "The alternator charger of 40 A is in the engine bay, but it is not made for it."
+           )
+
     # A number of the label: the user checked the numbers.
     refute render(view) =~ "These numbers are typical of the model"
   end

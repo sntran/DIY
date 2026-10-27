@@ -38,8 +38,9 @@ defmodule DIYWeb.VanCutawayTest do
       [floor, roof] = view.levels
       assert roof.z > floor.z
 
-      # The zones with a plan: five on the floor, and the roof of the van.
-      assert length(floor.rooms) == 5
+      # The zones with a plan: six on the floor (with the engine bay), and
+      # the roof of the van.
+      assert length(floor.rooms) == 6
       assert length(roof.rooms) == 1
 
       ids = Enum.map(floor.objects, & &1.id)
@@ -47,8 +48,59 @@ defmodule DIYWeb.VanCutawayTest do
       for part <- ~w(left back right-back right-front),
           do: assert("van-wall-#{part}" in ids)
 
-      for part <- ~w(well-left well-right seat-driver seat-passenger dash wheel hood bumper),
+      for part <-
+            ~w(well-left well-right seat-driver seat-passenger dash wheel) ++
+              ~w(grille bumper),
           do: assert("van-#{part}" in ids)
+    end
+  end
+
+  test "the engine bay is open in front of the dash, and the lid of the hood is up" do
+    m = 0.0254
+
+    for {model, _name, _numbers, _source} <- Catalog.van_models() do
+      {build, van} = van(model)
+      engine = Build.zone(build, van, :engine)
+      # A charger and a second alternator in the bay, at their first places.
+      {:ok, build, charger} = Build.add_item(build, engine.id, "dc_charger")
+      {:ok, build, alternator} = Build.add_item(build, engine.id, "second_alternator")
+      {:ok, item} = Build.item(build, van)
+      [floor, roof] = view(build, van).levels
+      objects = Map.new(floor.objects ++ roof.objects, &{&1.id, &1})
+      bay = DIY.Layout.engine_box(item)
+      front = (bay.y + bay.d) * m
+
+      # The engine bay is a fixed zone with no handles. The engine and the
+      # fenders are flat on its floor, under the items.
+      surface = Enum.find(floor.rooms, &(&1.id == engine.id))
+      assert surface.fixed
+
+      marks =
+        for {_points, class} <- surface.polys, class =~ ~r/^i-(dark|gray|white)-t$/, do: class
+
+      assert length(marks) == 4
+
+      # Nothing on the floor covers the items: no other object is in their
+      # boxes. Only the front goes up to the hood.
+      for id <- [charger, alternator] do
+        {ix0, iy0, _, ix1, iy1, _} = objects[id].box
+
+        for {other, %{kind: kind, box: {x0, y0, _z0, x1, y1, z1}}} <- objects,
+            kind != :item,
+            other != "van-hood-lid",
+            z1 > 0.01 do
+          refute x0 < ix1 and ix0 < x1 and y0 < iy1 and iy0 < y1, "#{model}: #{other}"
+        end
+      end
+
+      assert elem(objects["van-grille"].box, 1) >= front - 3 * m - 1.0e-9
+
+      # The lid is up with the roof, over the bay.
+      {x0, y0, _z0, x1, y1, z1} = objects["van-hood-lid"].box
+      assert x0 <= 0 and x1 >= bay.w * m
+      assert_in_delta y0, bay.y * m, 1.0e-9
+      assert_in_delta y1, front, 1.0e-9
+      assert z1 > roof.z - 0.01
     end
   end
 
