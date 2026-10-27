@@ -23,7 +23,9 @@ defmodule DIYWeb.HullTest do
 
   test "a side of a hull leans in over the belt, with a round edge of the roof and round corners" do
     shape = Shapes.hull_shape(@loop, 2.0, @round)
-    assert {shape.front, shape.back, shape.top, shape.width} == {4.0, 0.0, 2.0, 2.0}
+
+    assert {shape.front, shape.back, shape.bottom, shape.top, shape.width} ==
+             {4.0, 0.0, 0.3, 2.0, 2.0}
 
     # Under the belt, in the middle, the side is upright.
     assert Shapes.hull_inset(shape, 2.0, 0.8) == 0.0
@@ -59,7 +61,7 @@ defmodule DIYWeb.HullTest do
 
     # The windshield looks up at 45 degrees: its side light, and over it
     # 3/4 of the light of a top, with its true size. The face under it is a
-    # little longer (2 mm at each end).
+    # little longer (4 mm at each end).
     on_slope = fn corners ->
       Enum.all?(corners, fn {_x, y, z} -> abs(y + z - 5.0) < 1.0e-6 end)
     end
@@ -70,7 +72,7 @@ defmodule DIYWeb.HullTest do
 
     # The side that looks to the camera (x = 2) paints in cells, then its
     # edge. The other side does not paint.
-    [{edge, "i-outline"}] = for {corners, "i-outline"} = poly <- polys, do: poly
+    [{edge, "i-outline"}] = for {_corners, "i-outline"} = poly <- polys, do: poly
     assert length(edge) == length(@loop)
     assert Enum.all?(edge, fn {x, _y, _z} -> x > 1.5 end)
     refute Enum.any?(polys, fn {corners, _class} -> all?(corners, 0, 0.0) end)

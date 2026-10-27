@@ -82,7 +82,7 @@ defmodule DIYWeb.VanCutawayTest do
             high - low > 1.0,
             do: nx < 0
 
-      assert rails != [] and Enum.all?(rails)
+      assert rails == [true]
     end
   end
 

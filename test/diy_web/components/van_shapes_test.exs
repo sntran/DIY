@@ -64,8 +64,9 @@ defmodule DIYWeb.VanShapesTest do
       assert Enum.min(ys) == 0.0
 
       # The bottom of the windshield is from 1.35 to 1.55 meters over the
-      # ground.
-      assert VanShapes.hood_height(model) > 1.35 and VanShapes.hood_height(model) < 1.55
+      # ground. The front of the hood is from 1.1 to 1.35 meters over it.
+      assert VanShapes.cowl_height(model) > 1.35 and VanShapes.cowl_height(model) < 1.55
+      assert VanShapes.hood_height(model) > 1.1 and VanShapes.hood_height(model) < 1.35
     end
 
     # The ProMaster has the shortest nose, and its roof rises first. The
@@ -73,15 +74,30 @@ defmodule DIYWeb.VanShapesTest do
     # Sprinter starts the highest.
     assert roof_starts("promaster_136") < roof_starts("sprinter_144")
     assert roof_starts("sprinter_144") < roof_starts("transit_148")
-    assert VanShapes.hood_height("sprinter_144") > VanShapes.hood_height("transit_148")
-    assert VanShapes.hood_height("transit_148") > VanShapes.hood_height("promaster_136")
+    assert VanShapes.cowl_height("sprinter_144") > VanShapes.cowl_height("transit_148")
+    assert VanShapes.cowl_height("transit_148") > VanShapes.cowl_height("promaster_136")
 
     # The points of a trace over 2 m stretch to the roof of the model. So
-    # the same make with a higher roof has the same cab.
-    low = VanShapes.profile("transit_148_medium")
-    high = VanShapes.profile("transit_148")
-    assert Enum.filter(low, &(elem(&1, 1) < 1.5)) != Enum.filter(high, &(elem(&1, 1) < 1.5))
-    assert VanShapes.hood_height("transit_148_medium") > 1.4
+    # two models with the same trace and a different height have the same
+    # cab, and the same front and back under 2 m.
+    {short, tall} = {"transit_148", "transit_148_el"}
+    assert elem(size(tall), 2) > elem(size(short), 2)
+
+    ends = fn model ->
+      {l, _w, _h} = size(model)
+
+      for {y, z} <- VanShapes.profile(model), z <= 2.0 do
+        # The distance from the nearest end, and the height.
+        {Float.round(min(y, l - y), 9), Float.round(z, 9), y > l / 2}
+      end
+      |> Enum.sort()
+    end
+
+    assert ends.(short) == ends.(tall)
+
+    # The points over 2 m go up with the roof.
+    high = fn model -> for {_y, z} <- VanShapes.profile(model), z > 2.0, do: z end
+    assert Enum.sum(high.(tall)) > Enum.sum(high.(short))
   end
 
   test "the tires are at the axles of the model, on the two sides" do
@@ -111,24 +127,34 @@ defmodule DIYWeb.VanShapesTest do
       for {:face, _corners, normal, class} <- hull(model).faces, ahead.(normal), do: class
     end
 
-    star = fn model ->
-      {_l, w, _h} = size(model)
+    # The width and the height of the steel rings on the front: the steel
+    # faces less than 25 cm wide.
+    ring = fn model ->
+      points =
+        for {:face, corners, normal, "i-steel-t"} <- hull(model).faces,
+            ahead.(normal),
+            {x0, x1} = range(corners, 0),
+            x1 - x0 < 0.25,
+            point <- corners,
+            do: point
 
-      for {:face, corners, normal, "i-steel-t"} <- hull(model).faces,
-          ahead.(normal),
-          {x0, x1} = range(corners, 0),
-          {z0, z1} = range(corners, 2),
-          abs((x0 + x1) / 2 - w / 2) < 0.12 and z0 > 0.85 and z1 < 1.15,
-          do: 1
+      if points != [] do
+        {{x0, x1}, {z0, z1}} = {range(points, 0), range(points, 2)}
+        {x1 - x0, z1 - z0}
+      end
     end
 
     # The Transit has the blue oval, the ProMaster has the low dark grille,
-    # and the Sprinter has the star in its bars.
+    # and the Sprinter has the round star in its bars.
     assert "i-screen" in front.("transit_148")
     refute "i-screen" in front.("sprinter_144") or "i-screen" in front.("promaster_136")
     assert "i-dark-t" in front.("promaster_136")
     refute "i-dark-t" in front.("transit_148") or "i-dark-t" in front.("sprinter_144")
-    assert length(star.("sprinter_144")) > length(star.("transit_148"))
+    {width, height} = ring.("sprinter_144")
+    assert_in_delta width, height, 0.01
+    {width, height} = ring.("transit_148")
+    assert height < width / 2
+    assert ring.("promaster_136") == nil
   end
 
   test "the faces on the front and the back stay on the profile" do
@@ -171,6 +197,7 @@ defmodule DIYWeb.VanShapesTest do
   test "a model that the app does not know has the shape and the size of the Transit" do
     assert VanShapes.van("other") == VanShapes.van("transit_148")
     assert VanShapes.hood_height("other") == VanShapes.hood_height("transit_148")
+    assert VanShapes.cowl_height("other") == VanShapes.cowl_height("transit_148")
     assert VanShapes.profile("other") == VanShapes.profile("transit_148")
   end
 

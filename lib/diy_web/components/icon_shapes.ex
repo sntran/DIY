@@ -488,8 +488,8 @@ defmodule DIYWeb.Icon.Shapes do
 
   # The boxes of y and z of the cells of a side of a hull.
   defp hull_boxes(shape) do
-    %{belt: belt, edge: r, nose: n, tail: t, front: f, back: b, top: top} = shape
-    zcuts = Enum.uniq([-1.0, belt, top - r, top - r * 0.5, top - r * 0.2, top])
+    %{belt: belt, edge: r, nose: n, tail: t, front: f, back: b, bottom: bottom, top: top} = shape
+    zcuts = Enum.uniq([bottom, belt, top - r, top - r * 0.5, top - r * 0.2, top])
     ycuts = Enum.uniq([b, b + t * 0.25, b + t * 0.5, b + t, f - n, f - n * 0.5, f - n * 0.25, f])
 
     for {y0, y1} <- Enum.zip(ycuts, tl(ycuts)),
@@ -516,7 +516,7 @@ defmodule DIYWeb.Icon.Shapes do
       points
       |> Enum.zip(tl(points) ++ [hd(points)])
       |> Enum.reduce(loop, fn {{y1, z1}, {y2, z2}}, part ->
-        clip_half(part, fn {y, z} -> -area * ((y2 - y1) * (z - z1) - (z2 - z1) * (y - y1)) end)
+        clip(part, fn {y, z} -> -area * ((y2 - y1) * (z - z1) - (z2 - z1) * (y - y1)) end)
       end)
 
     for {ys, zs} <- hull_boxes(shape),
@@ -528,16 +528,19 @@ defmodule DIYWeb.Icon.Shapes do
   # The part of a loop in a box of y and z (Sutherland and Hodgman).
   defp band(loop, {y0, y1}, {z0, z1}) do
     loop
-    |> clip_half(fn {y, _z} -> y0 - y end)
-    |> clip_half(fn {y, _z} -> y - y1 end)
-    |> clip_half(fn {_y, z} -> z0 - z end)
-    |> clip_half(fn {_y, z} -> z - z1 end)
+    |> clip(fn {y, _z} -> y0 - y end)
+    |> clip(fn {y, _z} -> y - y1 end)
+    |> clip(fn {_y, z} -> z0 - z end)
+    |> clip(fn {_y, z} -> z - z1 end)
   end
 
-  # The part of a loop where f is 0 or less.
-  defp clip_half([], _f), do: []
+  @doc """
+  The part of a flat shape (points of two values) where `f` is 0 or less:
+  the clip of Sutherland and Hodgman.
+  """
+  def clip([], _f), do: []
 
-  defp clip_half(points, f) do
+  def clip(points, f) do
     points
     |> Enum.zip(tl(points) ++ [hd(points)])
     |> Enum.flat_map(fn {{y1, z1} = a, {y2, z2} = b} ->
@@ -646,12 +649,20 @@ defmodule DIYWeb.Icon.Shapes do
   end
 
   @doc """
-  The shape of a hull (`hull/5`) with its box: the front, the back and the
-  top of its loop, and its width. `hull_inset/3` takes it.
+  The shape of a hull (`hull/5`) with its box: the front, the back, the
+  bottom and the top of its loop, and its width. `hull_inset/3` takes it.
   """
   def hull_shape(loop, w, shape) do
     {ys, zs} = Enum.unzip(loop)
-    Map.merge(shape, %{front: Enum.max(ys), back: Enum.min(ys), top: Enum.max(zs), width: w})
+    {bottom, top} = Enum.min_max(zs)
+
+    Map.merge(shape, %{
+      front: Enum.max(ys),
+      back: Enum.min(ys),
+      bottom: bottom,
+      top: top,
+      width: w
+    })
   end
 
   @doc """

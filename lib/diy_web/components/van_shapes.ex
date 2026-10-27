@@ -280,10 +280,28 @@ defmodule DIYWeb.Icon.VanShapes do
   defp model_of(model), do: Map.get(@models, model, @models["transit_148"])
 
   @doc """
-  The height of the hood of a model of a van over the ground, in meters:
-  the bottom of its windshield.
+  The height of the hood of a model of a van over the ground, in meters.
+  It is the top of the nose, 20 cm back from the front, where the hood
+  starts. The plan of the van uses it (`DIYWeb.VanCutaway`).
   """
   def hood_height(model) do
+    {_make, trace} = model_of(model)
+
+    # The nose starts over the bumper. The hood is where the front goes
+    # back past 20 cm.
+    {{d0, z0}, {d1, z1}} =
+      trace.front
+      |> Enum.zip(tl(trace.front))
+      |> Enum.find(fn {{d0, z0}, {d1, _z1}} -> z0 > 0.9 and d0 < 0.2 and d1 >= 0.2 end)
+
+    z0 + (z1 - z0) * (0.2 - d0) / (d1 - d0)
+  end
+
+  @doc """
+  The height of the bottom of the windshield of a model of a van over the
+  ground, in meters.
+  """
+  def cowl_height(model) do
     {make, trace} = model_of(model)
     cowl = @makes[make].cowl
     {_d, z} = Enum.find(trace.front, fn {d, _z} -> d >= cowl - 0.01 end)
@@ -588,7 +606,7 @@ defmodule DIYWeb.Icon.VanShapes do
 
   # The part of a shape (points `{x, z}`) between two heights.
   defp between(points, z0, z1) do
-    points |> clip(fn {_x, z} -> z0 - z end) |> clip(fn {_x, z} -> z - z1 end)
+    points |> Shapes.clip(fn {_x, z} -> z0 - z end) |> Shapes.clip(fn {_x, z} -> z - z1 end)
   end
 
   # A shape with a point where each of its sides crosses a height: so it
@@ -600,25 +618,6 @@ defmodule DIYWeb.Icon.VanShapes do
       if (z1 - at) * (z2 - at) < 0,
         do: [a, {x1 + (x2 - x1) * (at - z1) / (z2 - z1), at}],
         else: [a]
-    end)
-  end
-
-  # Sutherland and Hodgman: the part of a shape where f is 0 or less.
-  defp clip([], _f), do: []
-
-  defp clip(points, f) do
-    points
-    |> Enum.zip(tl(points) ++ [hd(points)])
-    |> Enum.flat_map(fn {{x1, z1} = a, {x2, z2} = b} ->
-      {fa, fb} = {f.(a), f.(b)}
-      cut = fn -> {x1 + (x2 - x1) * fa / (fa - fb), z1 + (z2 - z1) * fa / (fa - fb)} end
-
-      cond do
-        fa <= 0 and fb <= 0 -> [b]
-        fa <= 0 -> [cut.()]
-        fb <= 0 -> [cut.(), b]
-        true -> []
-      end
     end)
   end
 
