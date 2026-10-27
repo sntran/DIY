@@ -21,7 +21,7 @@ defmodule DIYWeb.VanPage do
   """
   use DIYWeb, :html
 
-  alias DIY.{Build, Catalog, Van}
+  alias DIY.{Build, Catalog, Layout, Van}
   alias DIYWeb.{Cutaway, Format, Icon, Inside, Scene}
 
   attr :build, :map, required: true
@@ -373,7 +373,7 @@ defmodule DIYWeb.VanPage do
 
   defp note({:hot, %{params: p}}),
     do:
-      "The alternator charger of #{p["amps"]} A is in the engine bay, but it is not made for it. The heat under the hood can stop it. Move it to the cab or the electrical bay, or use a charger for the engine bay. Then mark it: \"It is made for the engine bay\"."
+      "The alternator charger of #{p["amps"]} A is in the engine bay, but it is not made for it. The heat under the hood can stop it. Move it to the cab or the electrical bay, or use a charger for the engine bay. Then mark it: \"It is made for the engine bay\". The best place in the engine bay is in front of the radiator, behind the grille."
 
   defp note(:no_battery),
     do: "The items of the van use power, and the van has no battery and no power station."
@@ -462,7 +462,7 @@ defmodule DIYWeb.VanPage do
 
   # The cab, the engine bay and the roof of a van do not move
   # (`DIY.Build.move_room/4`).
-  defp movable?(zone), do: zone.place not in [:cab, :engine, :van_roof]
+  defp movable?(zone), do: not Layout.fixed?(zone)
 
   # A zone with a name that a person may not know: what it is.
   defp zone_note(:galley), do: "The kitchen of the van · "

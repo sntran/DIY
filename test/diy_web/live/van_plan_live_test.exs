@@ -47,7 +47,7 @@ defmodule DIYWeb.VanPlanLiveTest do
     assert has_element?(view, "polygon[data-room=#{galley.id}]")
     assert has_element?(view, "g[data-item=#{fridge}][data-in=#{galley.id}]")
     assert has_element?(view, "#plan-fixture-van-seat-driver")
-    assert has_element?(view, "#plan-fixture-van-engine")
+    assert has_element?(view, "#plan-fixture-van-grille")
     assert has_element?(view, "#plan-fixture-van-hood-lid")
     assert has_element?(view, "button[data-zoom=fit][aria-label='Show all the van']")
 

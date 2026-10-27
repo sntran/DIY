@@ -953,12 +953,12 @@ defmodule DIY.Build do
          do: put_room_plan(build, room, plan, {x - room.plan.x, y - room.plan.y})
   end
 
-  # A room with a plan that moves: not the cab, the engine bay or the roof
-  # of a van.
+  # A room with a plan that moves: not a fixed zone of a van
+  # (`DIY.Layout.fixed?/1`).
   defp movable_room(build, id) do
     case plan_room(build, id) do
-      {:ok, %{place: place}} when place in [:cab, :engine, :van_roof] -> {:error, :fixed}
-      other -> other
+      {:ok, room} -> if Layout.fixed?(room), do: {:error, :fixed}, else: {:ok, room}
+      error -> error
     end
   end
 
@@ -1227,7 +1227,7 @@ defmodule DIY.Build do
          true <- not (wires_full?(build, from) or wires_full?(build, to)) || {:error, :wires} do
       {id, build} = next_id(build, "w")
       wire = Map.merge(%{id: id, from: from, to: to}, Wire.defaults(a, b))
-      wire = %{wire | feet: run(build, a, b) || wire.feet}
+      wire = %{wire | feet: wire_run(build, a, b) || wire.feet}
       {:ok, change(build, &%{&1 | wires: &1.wires ++ [wire]}), id}
     end
   end
@@ -1235,14 +1235,14 @@ defmodule DIY.Build do
   # The run of a wire between two items of a van, in feet (`add_wire/3`).
   # It is nil in the house. It is nil when an item has no place on the
   # plan: an item of the shell.
-  defp run(build, a, b) do
-    case Enum.map([a, b], &middle(build, &1)) do
+  defp wire_run(build, a, b) do
+    case Enum.map([a, b], &item_middle(build, &1)) do
       [{x1, y1}, {x2, y2}] -> max(3.0, Float.ceil((abs(x1 - x2) + abs(y1 - y2)) / 12 + 2))
       _other -> nil
     end
   end
 
-  defp middle(build, item) do
+  defp item_middle(build, item) do
     {:ok, zone} = room(build, item.room)
 
     if (van_level?(zone.level) and zone.plan) && item.at do

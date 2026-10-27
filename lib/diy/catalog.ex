@@ -1155,12 +1155,12 @@ defmodule DIY.Catalog do
       params: [
         int(
           "amps",
-          "Charge",
+          "Charge that its regulator sets",
           "A",
           150,
           1,
           400,
-          "Its regulator sets the charge of the batteries while you drive. The label gives the most amps, at a high speed of the engine."
+          "Give the amps that the regulator lets the batteries take while you drive. It is less than the label of the alternator: the label gives the most amps, at a high speed of the engine."
         ),
         weight(
           25,

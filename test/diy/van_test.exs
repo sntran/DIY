@@ -107,7 +107,7 @@ defmodule DIY.VanTest do
       assert engine.plan == Layout.engine_box(van(build, id))
       assert engine.plan.y == size.cargo_length + Layout.cab() + Layout.dash()
       assert engine.plan.y + engine.plan.d == size.length - Van.doors()
-      assert Layout.layer(engine) == "van:#{id}:engine"
+      assert Layout.layer(engine) == "van:#{id}"
 
       # It does not move.
       assert Build.move_room(build, engine.id, 0, 0) == {:error, :fixed}

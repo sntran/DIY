@@ -16,9 +16,9 @@ defmodule DIY.Layout do
     its right side), and `y` along it, from the doors at the back. The cab
     is the zone at the front of the cargo area (`van_box/1`). The engine
     bay is under the hood, in front of the dash (`engine_box/1`). The roof
-    of the van and the engine bay are layers of their own. The shell (the
-    insulation, the walls and the floor) has no plan: its items are the
-    materials of the van, with no place.
+    of the van is a layer of its own. The shell (the insulation, the walls
+    and the floor) has no plan: its items are the materials of the van,
+    with no place.
 
   The app makes a draft of the plan (`draft/2`). The size of the house
   gives the size of its floors, and the rooms of a floor are in rows. The
@@ -31,8 +31,7 @@ defmodule DIY.Layout do
 
   - Two rooms of the same layer do not overlap. A layer is a surface
     (`layer/1`): the ground (outside and floor 1), floor 2, floor 3, the
-    attic and the roof. Each van has three layers: its floor, its roof
-    and its engine bay.
+    attic and the roof. Each van has two layers: its floor and its roof.
   - A zone of a van is in the van (`van_box/1`), and the cab and the roof
     are at their places for the model. A different model, or a stored text
     that a person changed, can break this rule. Then all the zones of the
@@ -77,7 +76,6 @@ defmodule DIY.Layout do
   they do not overlap.
   """
   def layer(%{level: "van:" <> _ = level, place: :van_roof}), do: level <> ":roof"
-  def layer(%{level: "van:" <> _ = level, place: :engine}), do: level <> ":engine"
   def layer(%{level: level}) when level in ["outside", "f1"], do: "ground"
   def layer(%{level: "roof", place: :roof}), do: "roof"
   def layer(%{level: "roof"}), do: "attic"
@@ -379,6 +377,12 @@ defmodule DIY.Layout do
   @doc "The depth of the cab zone of a van, in inches."
   def cab, do: @cab
 
+  @doc """
+  True for a zone of a van that does not move: the cab, the engine bay and
+  the roof of the van.
+  """
+  def fixed?(%{place: place}), do: place in [:cab, :engine, :van_roof]
+
   @doc "The depth of the dash of a van, in inches."
   def dash, do: @dash
 
@@ -402,8 +406,8 @@ defmodule DIY.Layout do
   The draft plans of the zones of a van, in the order of the zones. From
   the doors at the back: the bed, the electrical bay, the living area and
   the galley, each across the van. The cab is at the front, and the roof
-  of the van is over all of it. The engine bay is in front of the dash
-  (`engine_box/1`). The shell has no plan.
+  of the van is over all of it. The engine bay is not in the draft: its
+  plan is `engine_box/1`. The shell has no plan.
   """
   def van_draft(van, zones) do
     %{w: w, d: d} = van_box(van)
@@ -420,7 +424,6 @@ defmodule DIY.Layout do
       living: %{x: 0, y: bed + bay, w: w, d: living},
       galley: %{x: 0, y: bed + bay + living, w: w, d: cargo - bed - bay - living},
       cab: %{x: 0, y: cargo, w: w, d: @cab},
-      engine: engine_box(van),
       van_roof: %{x: 0, y: 0, w: w, d: d}
     }
 

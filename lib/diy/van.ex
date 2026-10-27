@@ -307,8 +307,8 @@ defmodule DIY.Van do
     inverters and the stations give.
   - `:no_battery`: items that use power, with no battery and no station.
   - `{:hot, item}`: an alternator charger in the engine bay that is not
-    made for it. The heat under the hood can stop it (REDARC, "Where to
-    mount your BCDC").
+    made for it. The heat under the hood can stop it (REDARC, "The Do's and
+    Don'ts of BCDC Mounting").
   """
   def warnings(build, van) do
     placed = items(build, van.id)

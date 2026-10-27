@@ -7,7 +7,7 @@
 (*                                                                         *)
 (* The box of the van has the length of its model. The cab is fixed: it    *)
 (* is at the front of the box. The engine bay is fixed too: it is in       *)
-(* front of the box, on a layer of its own. The bed and the galley move.   *)
+(* front of the box. The bed and the galley move.                          *)
 (* The person does these steps in any order:                               *)
 (* - move a zone, or give it a new depth;                                  *)
 (* - choose a different model: the box gets a different length.            *)
@@ -23,17 +23,20 @@
 (* engine bay: the fill makes them whole. The engine bay does not change   *)
 (* the good plans of the floor (FillKeepsFloor).                           *)
 (*                                                                         *)
-(* Three modes have a fault:                                               *)
+(* Four modes have a fault:                                                *)
 (* - "nobox": a zone moves out of the box (VanPlan.nobox.cfg);             *)
 (* - "nocab": the fill does not check the place of the cab, so a new      *)
 (*   model keeps the old cab (VanPlan.nocab.cfg);                          *)
 (* - "noengine": the fill keeps the stored engine bay, so a new model     *)
-(*   keeps the old engine bay (VanPlan.noengine.cfg).                      *)
+(*   keeps the old engine bay (VanPlan.noengine.cfg);                      *)
+(* - "inbox": the fill checks that the engine bay is in the box too. It    *)
+(*   never is, so the fill gives the draft to good plans of the floor      *)
+(*   (VanPlan.inbox.cfg).                                                  *)
 (***************************************************************************)
 EXTENDS Integers
 
 CONSTANTS Lengths,  \* the lengths of the models (3 or more)
-          Mode      \* "ok", "nobox", "nocab" or "noengine"
+          Mode      \* "ok", "nobox", "nocab", "noengine" or "inbox"
 
 VARIABLES len,      \* the length of the box of the van
           plan      \* the plan of each zone: [y, d]
@@ -56,10 +59,13 @@ Draft(l) == [z \in Zones |->
                  [] z = "cab" -> [y |-> l - 1, d |-> 1]
                  [] z = "engine" -> [y |-> l, d |-> 1]]
 
-Good(p, l) ==
+\* The rules of the floor.
+FloorGood(p, l) ==
   /\ \A z \in Floor : In(p[z], l)
   /\ \A z, w \in Floor : z # w => ~Overlap(p[z], p[w])
   /\ Mode = "nocab" \/ p["cab"] = Draft(l)["cab"]
+
+Good(p, l) == FloorGood(p, l) /\ (Mode = "inbox" => In(p["engine"], l))
 
 Fill(p, l) ==
   LET q == IF Good(p, l) THEN p ELSE Draft(l)
@@ -84,10 +90,11 @@ EngineAtFront == plan["engine"] = Draft(len)["engine"]
 \* A stored build can have any plans: the fill makes them whole.
 Stored == [y : 0..5, d : 1..3]
 
-\* The fill keeps the good plans of the floor, with any engine bay.
+\* The fill keeps the good plans of the floor, with any engine bay. This is
+\* also true for a van of an older version, with no engine bay.
 FillKeepsFloor ==
   \A l \in Lengths, p \in [Zones -> Stored] :
-    Good(p, l) => \A z \in Floor : Fill(p, l)[z] = p[z]
+    FloorGood(p, l) => \A z \in Floor : Fill(p, l)[z] = p[z]
 
 ASSUME FillKeepsFloor
 

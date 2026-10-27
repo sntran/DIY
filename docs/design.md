@@ -1026,9 +1026,8 @@ house: its batteries and its power are its own.
 
 The page Van shows the van cut open, as the page Rooms shows the house
 (`DIYWeb.VanCutaway`, with the rules in `DIY.Layout`). The van has two
-layers on the screen: its floor, and its roof over it with a gap. The
-engine bay is on the floor, in front of the dash, but it is a layer of
-its own for the rules (`DIY.Layout.layer/1`).
+layers: its floor, and its roof over it with a gap. The engine bay is on
+the floor, in front of the dash.
 
 - The plan of a van comes from its model (`DIY.Catalog.van_size/1`): the
   cargo area and the cab in front of it. `y` goes along the van, from the
@@ -1054,7 +1053,7 @@ its own for the rules (`DIY.Layout.layer/1`).
   draft, and it does not change the other zones. So a van of an older
   version gets its engine bay and keeps its plan. An item does not go
   between the house and a van. `specs/VanPlan.tla` checks the box of the
-  van, the place of the cab and the place of the engine bay. Three faults
+  van, the place of the cab and the place of the engine bay. Four faults
   show that these rules matter.
 - The picture shows the walls of the van. The right side has the full
   height of the cargo area, with the opening of the sliding door. The
@@ -1062,13 +1061,14 @@ its own for the rules (`DIY.Layout.layer/1`).
   the floor at the left side. The left side is cut near the floor.
   The picture also shows the wheel wells, the wheels, the seats, the
   dash, the steering wheel and the bumper. These fixed parts do not take
-  a tap: a tap goes to the zone under them.
+  a tap: a tap goes to the zone under them. A swivel seat (an item) takes
+  the place of the seat that it is on.
 - The engine bay is open. The lid of the hood is up, on the layer of the
-  roof. The bay shows the engine at its back, the low fenders, and the
-  front of the van with its grille and its lights. Only the front goes up
-  to the hood. So the dash, the steering wheel and the items in the bay
-  show. A swivel seat
-  (an item) takes the place of the seat that it is on.
+  roof. The engine at the back of the bay and the fenders at its sides
+  are flat on its floor. The front of the van, with its grille and its
+  lights, goes up to the hood. So the dash, the steering wheel and the
+  items in the bay show. A test checks that no part of the van is in the
+  space of an item in the bay.
 - The shell gives the materials: a floor of wood, walls with panels, and
   pink insulation in the cut of the walls. The shell shows under the
   plan, with its items and a button that adds an item.
@@ -1203,14 +1203,18 @@ bay is a zone for them:
   or in the engine bay. It has the check "It is made for the engine
   bay". With no check, a charger in the engine bay gets a safety note.
 - A second alternator goes only in the engine bay. Its regulator sets
-  the charge of the batteries (typical: 150 A). A kit for the Sprinter
-  has an alternator of 280 A at a high speed of the engine, with a
-  bracket and a regulator
+  the charge of the batteries (typical: 150 A). The person gives the amps
+  of the regulator, not the label of the alternator. The label gives the
+  most amps, at a high speed of the engine. For example, a kit for the
+  Sprinter has an alternator of 280 A
   ([Vanland](https://vanlandstore.com/collections/alternators)).
 - REDARC puts its charger less than 1 m from the battery that it
-  charges. Else the wire must be larger. A new wire in a van gets the
-  length of its run on the plan (see "A wire"). So a charger in the
-  engine bay gets a long wire to the battery, and its voltage drop shows.
+  charges. Else the wire must be larger. In the engine bay, the best
+  place is in front of the radiator, behind the grille.
+- A new wire in a van gets the length of its run on the plan (see "A
+  wire"). So a charger in the engine bay gets a long wire to the
+  battery, and its voltage drop shows. The length does not change when
+  an item moves later: then the person changes it on the wire.
 - The app does not show the starter battery. Its place changes with the
   make and the year. For example, in the Sprinter it is under the floor
   at the feet of the driver.
@@ -4113,8 +4117,8 @@ the wires (`DIY.Build`, `wires`).
 - The kinds that take wires have the feature `:wires`. They are a power
   station, a battery bank, an inverter, a busbar and an alternator
   charger. A second alternator, a transfer switch and a shore power inlet
-  take wires too. Solar panels do not take wires yet. The rules of solar circuits are
-  different (NEC 690.8).
+  take wires too. Solar panels do not take wires yet. The rules of solar
+  circuits are different (NEC 690.8).
 - A wire goes from the item that gives the current (`from`) to a
   different item (`to`). A new wire joins two items of one place: the
   house, or one van. A wire stays when a station goes to a van and back.
@@ -4128,10 +4132,9 @@ the wires (`DIY.Build`, `wires`).
 - A new wire gets typical numbers: 30 A and 6 ft. In a van, its length
   is the run between the middles of its two items on the plan. The run
   goes along the van and across it, with 2 ft for the ends (3 ft or
-  more). Its system
-  is the system of a battery at an end. At a busbar, it is 12 V DC. At a
-  transfer switch or a shore power inlet, it is 120 V AC. Else it is
-  12 V DC.
+  more). Its system is the system of a battery at an end. At a busbar,
+  it is 12 V DC. At a transfer switch or a shore power inlet, it is 120 V
+  AC. Else it is 12 V DC.
   On DC, a wire to a battery or to a busbar has two ways.
 - When a battery is at an end, the system of the wire is the voltage of
   the battery. A battery joined to a battery of a higher voltage (through

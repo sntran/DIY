@@ -725,7 +725,7 @@ defmodule DIYWeb.Cutaway do
   @doc """
   The surface of a room on a flat floor at a height (meters), for a
   camera. It has its material (the class `p-NAME`), and the data of its
-  plan for the hook. A zone that is `fixed` (the cab and the roof of a van)
+  plan for the hook. A zone that is `fixed` (`DIY.Layout.fixed?/1`)
   has no handles.
   """
   def floor(room, z, material, camera, fixed \\ false) do

@@ -107,19 +107,16 @@ defmodule DIYWeb.VanCutaway do
           {-t * @m, -t * @m, -0.16},
           {(cw + 2 * t) * @m, (cab_end + t) * @m, 0.16},
           "white"
-        ),
+        ) ++ engine_body(t, axles.nose, van, camera),
       rooms:
-        for(
-          zone <- zones,
-          do:
-            Cutaway.floor(
-              zone,
-              0.0,
-              zone_floor(zone.place, floor),
-              camera,
-              zone.place in [:cab, :engine]
-            )
-        ),
+        for zone <- zones do
+          surface =
+            Cutaway.floor(zone, 0.0, zone_floor(zone.place, floor), camera, Layout.fixed?(zone))
+
+          if zone.place == :engine,
+            do: %{surface | polys: surface.polys ++ engine_marks(zone.plan)},
+            else: surface
+        end,
       objects:
         walls(size, t, shell, camera) ++
           wells(size, axles.rear, camera) ++
@@ -312,59 +309,47 @@ defmodule DIYWeb.VanCutaway do
     ]
   end
 
-  # The engine bay, open (`DIY.Layout.engine_box/1`): the lid of the hood
-  # is on the layer of the roof. Under the bay, the body goes down to the
-  # frame. The fenders on the two sides are low. The engine is at the back
-  # of the bay, under the windshield. At the front, the grille and the
-  # lights go up to the hood (`DIYWeb.Icon.VanShapes.hood_height/1`). Then
-  # the bumper.
-  defp engine_bay(t, front, van, camera) do
-    %{y: bay, w: cw} = Layout.engine_box(van)
-    hood = max(0.25, Shapes.hood_height(van.params["model"]) - @floor * @m)
-    {fender, long} = {4, front - bay - 3}
-    body = {(cw + 2 * t - 2) * @m, (front - bay) * @m, 0.16}
+  # The engine and the fenders of the engine bay, flat on its floor: so an
+  # item in the bay always shows over them. The engine is a dark block at
+  # the back of the bay, under the windshield. The fenders are the two
+  # sides.
+  defp engine_marks(%{x: x, y: y, w: w, d: d}) do
+    flat = fn {x0, y0, x1, y1}, z, class ->
+      {[
+         {x0 * @m, y0 * @m, z},
+         {x1 * @m, y0 * @m, z},
+         {x1 * @m, y1 * @m, z},
+         {x0 * @m, y1 * @m, z}
+       ], class}
+    end
+
+    middle = x + w / 2
 
     [
-      fixture(
-        "engine-body",
-        solid(camera, {(-t + 1) * @m, bay * @m, -0.16}, body, "white"),
-        -1.0,
-        camera
-      ),
-      fixture(
-        "fender-right",
-        solid(
-          camera,
-          {(-t + 1) * @m, bay * @m, 0},
-          {(fender + t - 1) * @m, long * @m, @low},
-          "white"
-        ),
-        nil,
-        camera
-      ),
-      fixture(
-        "fender-left",
-        solid(
-          camera,
-          {(cw - fender) * @m, bay * @m, 0},
-          {(fender + t - 1) * @m, long * @m, @low},
-          "white"
-        ),
-        nil,
-        camera
-      ),
-      fixture(
-        "engine",
-        solid(camera, {(cw / 2 - 14) * @m, (bay + 3) * @m, 0}, {28 * @m, 18 * @m, 0.22}, "dark") ++
-          solid(
-            camera,
-            {(cw / 2 - 11) * @m, (bay + 5) * @m, 0.22},
-            {22 * @m, 13 * @m, 0.04},
-            "gray"
-          ),
-        nil,
-        camera
-      ),
+      flat.({x, y, x + 4, y + d - 3}, 0.001, "i-white-t"),
+      flat.({x + w - 4, y, x + w, y + d - 3}, 0.001, "i-white-t"),
+      flat.({middle - 14, y + 3, middle + 14, y + 21}, 0.001, "i-dark-t"),
+      flat.({middle - 11, y + 5, middle + 11, y + 18}, 0.002, "i-gray-t")
+    ]
+  end
+
+  # The body under the engine bay, down to the frame. It is a slab: it
+  # paints before the floor of the bay.
+  defp engine_body(t, front, van, camera) do
+    %{y: y0, w: cw} = Layout.engine_box(van)
+    body = {(cw + 2 * t - 2) * @m, (front - y0) * @m, 0.16}
+    solid(camera, {(-t + 1) * @m, y0 * @m, -0.16}, body, "white")
+  end
+
+  # The engine bay, open (`DIY.Layout.engine_box/1`): the lid of the hood
+  # is on the layer of the roof. At the front, the grille and the lights go
+  # up to the hood (`DIYWeb.Icon.VanShapes.hood_height/1`). Then the
+  # bumper.
+  defp engine_bay(t, front, van, camera) do
+    %{w: cw} = Layout.engine_box(van)
+    hood = max(0.25, Shapes.hood_height(van.params["model"]) - @floor * @m)
+
+    [
       fixture(
         "grille",
         solid(
