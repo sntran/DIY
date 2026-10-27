@@ -91,7 +91,7 @@ defmodule DIY.MixProject do
       {:ecto_sql, "~> 3.13"},
       {:ecto_sqlite3, "~> 0.26"},
       {:exqlite, "0.41.0"},
-      {:bandit, "~> 1.5"}
+      {:bandit, "~> 1.14"}
     ]
   end
 
