@@ -1700,10 +1700,13 @@ its turn. A length is in inches.
   - The furniture of a room (`DIYWeb.Decor`), as in the drawn picture. A
     word in the name of a room gives its pieces, in capital letters or
     not:
-    - "stair": on floor 1, stairs that go up to the back of the room, to
-      the top of its walls. On an upper floor, the opening of the stairs
-      with a rail, and a plant. In the picture of a share, the stairs
-      join the floors (the owner, October 2026);
+    - "stair" or "stairs" as a word ("upstairs" is not): on floor 1,
+      stairs that go up to the back of the room. They have 13 steps (up
+      to the top of the walls), or less when the room is not as deep. A
+      room with space for less than 4 steps has no stairs. On an upper
+      floor, the opening of the stairs with a rail, and a plant. In the
+      picture of a share, the stairs join the floors (the owner, October
+      2026);
     - "bed": a bed, two nightstands, a dresser, a rug and a plant;
     - "living": a sofa, an armchair, a table, books, a rug and two plants;
     - "kitchen": counters, a table with chairs, and a plant;
@@ -2359,16 +2362,18 @@ only the total. This is a decision of the owner (October 2026):
   no names of rooms. The box of the house is only around its rooms and
   its items. Thus the house is as large as possible in the picture.
 - The floors have a gap, so that a floor does not hide the rooms of the
-  floor under it. Without more, the upper floor looked as if it floated
+  floor under it. With only the gap, the upper floor looked as if it was
   apart from the house (the owner, October 2026). Thus a shell joins
   each floor to the floor under it (`DIYWeb.Cutaway.shell/4`). The shell
   is the wall at the back and the wall at the left of the upper floor.
   The back wall goes along the rooms at the back of the upper floor, and
   the left wall along the rooms at its left. Thus an upper floor that is
   not over all of the house (a room with one story) has walls only under
-  it. The shell goes from the ground (or from the slab of the lower
-  floor) up to the slab of the upper floor. The owner asked that the
-  walls touch the ground. The sky shows through it, and it has the colors of the slabs.
+  it. Each wall stands at the outer edge of the slab, as an outer wall.
+  The shell goes from the ground (or from the slab of the lower floor)
+  up to the slab of the upper floor. The owner asked that the walls
+  touch the ground. The sky shows through the shell, and it has the
+  colors of the slabs.
   The lower floor paints it after its yards and before its slabs. Thus
   the yard at the back is behind it, and the rooms are in front of it.
   The house then looks like one house with its upper floor pulled up.

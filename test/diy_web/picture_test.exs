@@ -253,25 +253,32 @@ defmodule DIYWeb.PictureTest do
       assert length(empty) < length(build_rooms)
       assert shells.(svg_of(%{house() | rooms: empty})) == 2
 
-      # Floor 2 over a part of the house: the left wall goes only along the
-      # rooms at the left of floor 2.
-      build = house()
-      f2 = for r <- build.rooms, r.level == "f2", do: r
-      x0 = f2 |> Enum.map(& &1.plan.x) |> Enum.min()
-      y0 = f2 |> Enum.map(& &1.plan.y) |> Enum.min()
-      gone = for r <- f2, r.plan.x == x0, r.plan.y > y0, do: r.id
-      assert gone != []
-      part = %{build | rooms: Enum.reject(build.rooms, &(&1.id in gone))}
-      rest = for r <- part.rooms, r.level == "f2", do: r.plan
-      y1 = rest |> Enum.filter(&(&1.x == x0)) |> Enum.map(&(&1.y + &1.d)) |> Enum.max()
-      x1 = rest |> Enum.filter(&(&1.y == y0)) |> Enum.map(&(&1.x + &1.w)) |> Enum.max()
-      view = DIYWeb.Cutaway.view(part)
-      [below, above] = Enum.filter(view.levels, &(&1.id in ["ground", "f2"]))
-      box = %{x: x0, y: y0, w: x1 - x0, d: y1 - y0}
-      svg = svg_of(part)
+      # Floor 2 over a part of the house: the walls go only along its
+      # rooms. Floor 2 of the house has 5 rooms (x, y, w and d in inches):
+      #
+      # - Bedroom 1: {0, 0, 204, 186}
+      # - Bedroom 2: {204, 0, 204, 186}
+      # - the bathroom: {408, 0, 102, 186}
+      # - Bedroom 3: {0, 186, 252, 150}
+      # - Bedroom 4: {252, 186, 258, 150}
+      walls = fn gone, plan ->
+        build = house()
+        ids = for r <- build.rooms, r.name in gone, do: r.id
+        assert length(ids) == length(gone)
+        part = %{build | rooms: Enum.reject(build.rooms, &(&1.id in ids))}
+        view = DIYWeb.Cutaway.view(part)
+        [below, above] = Enum.filter(view.levels, &(&1.id in ["ground", "f2"]))
+        svg = svg_of(part)
 
-      for {points, _class} <- DIYWeb.Cutaway.shell(view.camera, below, above, box),
-          do: assert(svg =~ ~s(points="#{points}"))
+        for {points, _class} <- DIYWeb.Cutaway.shell(view.camera, below, above, plan),
+            do: assert(svg =~ ~s(points="#{points}"))
+      end
+
+      # With no Bedroom 3, the left wall stops at the back of Bedroom 1.
+      walls.(["Bedroom 3"], %{back: {0, 510, 0}, left: {0, 0, 186}})
+      # With no Bedroom 1, floor 2 is an L, with no room at its corner.
+      # The back wall starts at Bedroom 2, and the left wall at Bedroom 3.
+      walls.(["Bedroom 1"], %{back: {204, 510, 0}, left: {0, 186, 336}})
 
       # The attic with a label shows, but it has no shell.
       build = house()
@@ -309,6 +316,7 @@ defmodule DIYWeb.PictureTest do
       bubbles = length(Regex.scan(~r/<path d="M[^"]+ L[^"]+ L[^"]+"/, svg))
       lines = length(Regex.scan(~r/<line /, svg))
       assert bubbles == 5
+      assert lines == Enum.count(labels, &(not Picture.just_above?(&1)))
       assert lines < 5
 
       for a <- labels, b <- labels, a != b, do: refute(Labels.overlap?(a, b))

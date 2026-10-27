@@ -88,7 +88,7 @@ defmodule DIY.Links.GuardTest do
     assert Links.create(data(), @day) == {:error, :storage}
     assert Links.fetch("2" <> String.duplicate("A", 16), @day) == {:error, :storage}
 
-    # A different request wrote a new time first: this request does not run
+    # The last try was less than one minute ago: this request does not run
     # the migration.
     assert Links.create(data(), @day) == {:error, :storage}
 

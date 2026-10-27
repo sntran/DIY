@@ -714,32 +714,32 @@ msgid "%{cost} for the electricity of a year. Small Steps Home shows where the e
 msgstr "%{cost} de electricidad en un año. Small Steps Home muestra a dónde va la electricidad de una casa."
 
 #: lib/diy_web/components/share.ex:55
-#: lib/diy_web/picture.ex:264
+#: lib/diy_web/picture.ex:277
 #, elixir-autogen, elixir-format
 msgid "%{kwh} a year"
 msgstr "%{kwh} al año"
 
-#: lib/diy_web/picture.ex:410
+#: lib/diy_web/picture.ex:431
 #, elixir-autogen, elixir-format
 msgid "A"
 msgstr "A"
 
-#: lib/diy_web/picture.ex:368
+#: lib/diy_web/picture.ex:389
 #, elixir-autogen, elixir-format
 msgid "A house of %{size} sq ft"
 msgstr "Una casa de %{size} pies²"
 
-#: lib/diy_web/picture.ex:364
+#: lib/diy_web/picture.ex:385
 #, elixir-autogen, elixir-format
 msgid "A house of %{size} sq ft in %{zip}"
 msgstr "Una casa de %{size} pies² en %{zip}"
 
-#: lib/diy_web/picture.ex:348
+#: lib/diy_web/picture.ex:369
 #, elixir-autogen, elixir-format
 msgid "A house of %{size} sq ft in %{zip}: %{kwh} kWh a year"
 msgstr "Una casa de %{size} pies² en %{zip}: %{kwh} kWh al año"
 
-#: lib/diy_web/picture.ex:355
+#: lib/diy_web/picture.ex:376
 #, elixir-autogen, elixir-format
 msgid "A house of %{size} sq ft: %{kwh} kWh a year"
 msgstr "Una casa de %{size} pies²: %{kwh} kWh al año"
@@ -769,7 +769,7 @@ msgstr "Copie el enlace del cuadro."
 msgid "Cost in a year"
 msgstr "Costo en un año"
 
-#: lib/diy_web/picture.ex:418
+#: lib/diy_web/picture.ex:439
 #, elixir-autogen, elixir-format
 msgid "D"
 msgstr "D"
@@ -784,7 +784,7 @@ msgstr "diciembre"
 msgid "Electricity in a year"
 msgstr "Electricidad en un año"
 
-#: lib/diy_web/picture.ex:408
+#: lib/diy_web/picture.ex:429
 #, elixir-autogen, elixir-format
 msgid "F"
 msgstr "F"
@@ -801,7 +801,7 @@ msgstr "febrero"
 msgid "Go to Small Steps Home"
 msgstr "Ir a Small Steps Home"
 
-#: lib/diy_web/picture.ex:407
+#: lib/diy_web/picture.ex:428
 #, elixir-autogen, elixir-format
 msgid "J"
 msgstr "E"
@@ -831,7 +831,7 @@ msgstr "Primero guarde un archivo de su casa."
 msgid "Keep my house"
 msgstr "Conservar mi casa"
 
-#: lib/diy_web/picture.ex:409
+#: lib/diy_web/picture.ex:430
 #, elixir-autogen, elixir-format
 msgid "M"
 msgstr "M"
@@ -846,7 +846,7 @@ msgstr "marzo"
 msgid "May"
 msgstr "mayo"
 
-#: lib/diy_web/picture.ex:417
+#: lib/diy_web/picture.ex:438
 #, elixir-autogen, elixir-format
 msgid "N"
 msgstr "N"
@@ -861,7 +861,7 @@ msgstr "No está en el enlace: sus conexiones a Home Assistant y a los fabricant
 msgid "November"
 msgstr "noviembre"
 
-#: lib/diy_web/picture.ex:416
+#: lib/diy_web/picture.ex:437
 #, elixir-autogen, elixir-format
 msgid "O"
 msgstr "O"
@@ -876,7 +876,7 @@ msgstr "octubre"
 msgid "Put the ZIP code in the link. The weather and the plans need it."
 msgstr "Poner el código postal en el enlace. El clima y los planes lo necesitan."
 
-#: lib/diy_web/picture.ex:415
+#: lib/diy_web/picture.ex:436
 #, elixir-autogen, elixir-format
 msgid "S"
 msgstr "S"
@@ -965,35 +965,35 @@ msgstr "Este enlace no tiene una casa"
 msgid "ZIP code %{zip}"
 msgstr "Código postal %{zip}"
 
-#: lib/diy_web/picture.ex:374
+#: lib/diy_web/picture.ex:395
 #, elixir-autogen, elixir-format
 msgid "for the electricity of a year"
 msgstr "por la electricidad de un año"
 
-#: lib/diy_web/picture.ex:383
+#: lib/diy_web/picture.ex:404
 #, elixir-autogen, elixir-format
 msgid "of electricity in a year"
 msgstr "de electricidad en un año"
 
-#: lib/diy_web/picture.ex:414
+#: lib/diy_web/picture.ex:435
 #, elixir-autogen, elixir-format
 msgctxt "August"
 msgid "A"
 msgstr "A"
 
-#: lib/diy_web/picture.ex:413
+#: lib/diy_web/picture.ex:434
 #, elixir-autogen, elixir-format
 msgctxt "July"
 msgid "J"
 msgstr "J"
 
-#: lib/diy_web/picture.ex:412
+#: lib/diy_web/picture.ex:433
 #, elixir-autogen, elixir-format
 msgctxt "June"
 msgid "J"
 msgstr "J"
 
-#: lib/diy_web/picture.ex:411
+#: lib/diy_web/picture.ex:432
 #, elixir-autogen, elixir-format
 msgctxt "May"
 msgid "M"
@@ -1074,7 +1074,7 @@ msgstr "Clima"
 msgid "Sunrise"
 msgstr "Amanecer"
 
-#: lib/diy_web/picture.ex:267
+#: lib/diy_web/picture.ex:280
 #, elixir-autogen, elixir-format
 msgid "%{kwh} · %{cost} a year"
 msgstr "%{kwh} · %{cost} al año"

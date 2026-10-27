@@ -59,6 +59,10 @@ defmodule DIYWeb.Picture do
   # The largest space between the tip of a pointer and its item: the
   # space of `DIYWeb.Picture.Labels`. A label that is farther has a line.
   @gap_max 4
+  # The largest distance at the side between the tip of a pointer and its
+  # item. A bubble at the side of its item (`DIYWeb.Picture.Labels`) has
+  # its tip 1 pixel from the item.
+  @side_max 3
 
   # The colors of the page (app.css, the light theme).
   @paper "#faf7f2"
@@ -190,7 +194,7 @@ defmodule DIYWeb.Picture do
       Enum.flat_map(levels, fn level ->
         Enum.flat_map(level.low ++ level.rooms, & &1.polys) ++
           Enum.map(level.slabs, fn {points, class, _room} -> {points, class} end) ++
-          Enum.flat_map(level.objects, & &1.polys)
+          Enum.flat_map(level.objects, & &1.polys) ++ level.shell
       end)
 
     %{view | levels: levels, box: bounds(points)}
@@ -198,24 +202,33 @@ defmodule DIYWeb.Picture do
 
   defp labeled?(object, costs), do: object.kind == :item and Map.has_key?(costs, object.id)
 
-  # The plan of the shell of a floor (`DIYWeb.Cutaway.shell/4`), from its
-  # rooms, or the house when the floor has no room. The back wall goes
-  # along the rooms at the back of the floor, and the left wall along the
-  # rooms at its left. So an upper floor over a part of the house (for
-  # example, not over a room with one story) has walls only under it.
+  # The places of the walls of the shell of a floor
+  # (`DIYWeb.Cutaway.shell/4`). They come from its rooms inside. A floor
+  # with no room uses the box of the house. The back wall goes along the
+  # rooms at the back of the floor, and the left wall along the rooms at
+  # its left. So an upper floor over a part of the house (for example,
+  # not over a room with one story) has walls only under it.
   defp plan(build, id) do
-    case for(room <- build.rooms, room.plan, Layout.layer(room) == id, do: room.plan) do
-      [] -> Layout.house_box(build)
-      plans -> shell_box(plans)
+    case for(r <- build.rooms, r.plan, r.place == :indoor, Layout.layer(r) == id, do: r.plan) do
+      [] -> walls([Layout.house_box(build)])
+      plans -> walls(plans)
     end
   end
 
-  defp shell_box(plans) do
-    x0 = plans |> Enum.map(& &1.x) |> Enum.min()
-    y0 = plans |> Enum.map(& &1.y) |> Enum.min()
-    x1 = for(p <- plans, p.y == y0, do: p.x + p.w) |> Enum.max()
-    y1 = for(p <- plans, p.x == x0, do: p.y + p.d) |> Enum.max()
-    %{x: x0, y: y0, w: x1 - x0, d: y1 - y0}
+  defp walls(plans) do
+    y = plans |> Enum.map(& &1.y) |> Enum.min()
+    x = plans |> Enum.map(& &1.x) |> Enum.min()
+    back = for p <- plans, p.y == y, do: p
+    left = for p <- plans, p.x == x, do: p
+
+    %{
+      back:
+        {back |> Enum.map(& &1.x) |> Enum.min(), back |> Enum.map(&(&1.x + &1.w)) |> Enum.max(),
+         y},
+      left:
+        {x, left |> Enum.map(& &1.y) |> Enum.min(),
+         left |> Enum.map(&(&1.y + &1.d)) |> Enum.max()}
+    }
   end
 
   # The box {x, y, w, h} of polygons.
@@ -275,6 +288,14 @@ defmodule DIYWeb.Picture do
     for(<<c::utf8 <- text>>, reduce: 0, do: (sum -> sum + Map.get(@widths, c, @widest))) * size
   end
 
+  @doc false
+  # True when a placed label is just above its item: its pointer touches
+  # the item, so it needs no line. `x` is the tip of its pointer.
+  def just_above?(%{top: top, h: h} = label) do
+    x = tip(label)
+    abs(top + h - label.y) <= @gap_max and abs(x - label.x) <= @side_max
+  end
+
   # The x of the tip of the pointer of a label: over its item, but not
   # under the round corners of the bubble.
   defp tip(%{left: left, w: w} = label),
@@ -286,7 +307,7 @@ defmodule DIYWeb.Picture do
   defp line(%{top: top, h: h} = label) do
     x = tip(label)
 
-    if abs(top + h - label.y) <= @gap_max and abs(x - label.x) < 0.5,
+    if just_above?(label),
       do: [],
       else: [
         ~s(<line x1="#{r(x)}" y1="#{r(top + h)}" x2="#{r(label.x)}" y2="#{r(label.y)}" stroke="#{@ink}" stroke-width="1.2" stroke-opacity="0.7"/>),

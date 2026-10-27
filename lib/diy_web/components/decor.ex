@@ -29,6 +29,9 @@ defmodule DIYWeb.Decor do
   # The space between a piece in a yard and the edge of the yard (inches).
   # The walls and the slab of the house go out of the house.
   @yard_gap 8
+  # The most steps of stairs, and the depth of a step (inches).
+  @steps 13
+  @step 11
   # The depth of a kitchen counter (inches), and its least length.
   @counter 25
   @least 18
@@ -182,14 +185,6 @@ defmodule DIYWeb.Decor do
     name = String.downcase(name)
 
     cond do
-      # The stairs go up from floor 1 to the back of the room. On an upper
-      # floor, the room has the opening of the stairs, with a rail.
-      String.contains?(name, "stair") and room.level == "f1" ->
-        [{model("stairs"), :back_right, 0}]
-
-      String.contains?(name, "stair") ->
-        [{model("stair_well"), :front_center, 0}, {model("plant"), :back_left, 0}]
-
       String.contains?(name, "bed") ->
         [
           {model("rug"), :center, 0},
@@ -223,6 +218,16 @@ defmodule DIYWeb.Decor do
           {model("vanity"), :front_right, 2}
         ]
 
+      # The word "stair" or "stairs" (not "upstairs"). On floor 1, the
+      # stairs go up to the back of the room: as many steps as the room
+      # has space for. On an upper floor, the room has the opening of the
+      # stairs, with a rail.
+      Regex.match?(~r/\bstairs?\b/, name) and room.level == "f1" ->
+        stairs(room)
+
+      Regex.match?(~r/\bstairs?\b/, name) ->
+        [{model("stair_well"), :front_center, 0}, {model("plant"), :back_left, 0}]
+
       String.contains?(name, "garage") ->
         [{model("bench"), :back_right, 0}, {model("shelf"), :back_left, 0}]
 
@@ -238,6 +243,13 @@ defmodule DIYWeb.Decor do
   end
 
   defp plan(_room, _boxes), do: []
+
+  # The stairs of a room: 13 steps at most, each 11 inches deep, in the
+  # depth of the room. A room with space for less than 4 steps has none.
+  defp stairs(room) do
+    steps = min(@steps, div(room.plan.d - 2 * @gap, @step))
+    if steps >= 4, do: [{model({"stairs", steps}), :back_right, 0}], else: []
+  end
 
   # The counters of a kitchen fill the back wall where no item is. They
   # stop 4 inches from the left wall and from the right wall. An item
@@ -345,13 +357,20 @@ defmodule DIYWeb.Decor do
       [{:cyl, {0.8, 0.22, 0.8}, 0.07, 0.2, "clay"}] ++ ball({0.8, 0.22, 1.14}, 0.12, "leaf")
   end
 
-  # 13 steps of 18.5 cm up to the top of the walls of floor 1 (2.4 m), each
-  # 27 cm deep. The top step is at the back. The side at the right is a
-  # panel on the slope of the steps.
-  def model("stairs") do
-    for(i <- 0..12, do: {:box, {0, i * 0.27, 0}, {0.9, 0.27, (13 - i) * 0.185}, "light-wood"}) ++
+  # Stairs of a number of steps, each 18.5 cm up and 11 inches deep. With
+  # 13 steps, they go up to the top of the walls of floor 1 (2.4 m). The
+  # top step is at the back. The side at the right is a panel on the slope
+  # of the steps.
+  def model({"stairs", steps}) do
+    run = @step * @m
+    depth = steps * run
+
+    for(
+      i <- 0..(steps - 1),
+      do: {:box, {0, i * run, 0}, {0.9, run, (steps - i) * 0.185}, "light-wood"}
+    ) ++
       [
-        {:face, [{0.9, 0, 0}, {0.9, 3.51, 0}, {0.9, 3.51, 0.185}, {0.9, 0, 2.405}], nil,
+        {:face, [{0.9, 0, 0}, {0.9, depth, 0}, {0.9, depth, 0.185}, {0.9, 0, steps * 0.185}], nil,
          "i-wood-r i-face"}
       ]
   end
