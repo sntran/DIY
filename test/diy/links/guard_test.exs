@@ -6,12 +6,16 @@ defmodule DIY.Links.GuardTest do
   import ExUnit.CaptureLog
 
   alias DIY.Links
-  alias DIY.Links.Guard
+  alias DIY.Links.{Guard, Link}
   alias DIY.Repo
 
   @day ~D[2026-10-27]
 
   setup do
+    # The tests of the pages also count links. Each test here starts with
+    # no counts.
+    :ets.match_delete(Guard, {{:count, :_, :_}, :_})
+
     on_exit(fn ->
       :ets.match_delete(Guard, {{:count, :_, :_}, :_})
       :ets.insert(Guard, {:ready, true})
@@ -53,7 +57,18 @@ defmodule DIY.Links.GuardTest do
     for _n <- 1..25, do: assert(Links.create(data(), @day, address: "a") == {:error, :storage})
     :ets.insert(Guard, {:ready, true})
 
+    # The row of the address goes: an error of the storage adds no rows.
+    assert :ets.lookup(Guard, {:count, "a", Date.to_gregorian_days(@day)}) == []
+
     for _n <- 1..20, do: assert({:ok, _id} = Links.create(data(), @day, address: "a"))
+    assert Links.create(data(), @day, address: "a") == {:error, :many}
+  end
+
+  test "a full table keeps the count: a page cannot try without a limit" do
+    rows = for n <- 1..100_000, do: %{key: <<n::256>>, box: "x", used_on: @day}
+    for chunk <- Enum.chunk_every(rows, 5_000), do: Repo.insert_all(Link, chunk)
+
+    for _n <- 1..20, do: assert(Links.create(data(), @day, address: "a") == {:error, :full})
     assert Links.create(data(), @day, address: "a") == {:error, :many}
   end
 

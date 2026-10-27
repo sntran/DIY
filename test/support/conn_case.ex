@@ -36,13 +36,15 @@ defmodule DIYWeb.ConnCase do
   #
   # A test with the tag `:db` uses the database of the short links
   # (DIY.Links). It shares one connection of the sandbox with the
-  # processes of its pages. Such a test is not async.
+  # processes of its pages. Such a test is not async. It starts with no
+  # counts of the links of today (DIY.Links.Guard).
   setup tags do
     DIY.Stubs.sky()
 
     if tags[:db] do
       pid = Ecto.Adapters.SQL.Sandbox.start_owner!(DIY.Repo, shared: true)
       on_exit(fn -> Ecto.Adapters.SQL.Sandbox.stop_owner(pid) end)
+      :ets.match_delete(DIY.Links.Guard, {{:count, :_, :_}, :_})
     end
 
     {:ok, conn: Phoenix.ConnTest.build_conn()}

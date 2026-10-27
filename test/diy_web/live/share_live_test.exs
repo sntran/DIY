@@ -248,7 +248,6 @@ defmodule DIYWeb.ShareLiveTest do
       key = DIYWeb.Address.key({127, 0, 0, 1})
       day = Date.to_gregorian_days(Date.utc_today())
       :ets.insert(DIY.Links.Guard, {{:count, key, day}, 20})
-      on_exit(fn -> :ets.match_delete(DIY.Links.Guard, {{:count, :_, :_}, :_}) end)
 
       {:ok, view, _html} = live(conn, ~p"/?sheet=share")
       restore(view, house())

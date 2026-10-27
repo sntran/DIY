@@ -123,11 +123,14 @@ defmodule DIY.Links do
     end
   end
 
-  # A link that the app did not make gives its counts back.
+  # A link that the app did not make gives its counts back. A row of an
+  # address with no count goes: an error of the storage does not add rows.
   defp give_back(address, today) do
     day = Date.to_gregorian_days(today)
     add({:count, :all, day}, -1)
-    add({:count, address, day}, -1)
+    one = {:count, address, day}
+    add(one, -1)
+    :ets.select_delete(Guard, [{{one, 0}, [], [true]}])
   end
 
   defp add(key, n), do: :ets.update_counter(Guard, key, n, {key, 0})
@@ -147,7 +150,8 @@ defmodule DIY.Links do
 
   With the option `address`, the link counts for that address
   (`allow/2`), and too many links give `{:error, :many}`. A link that the
-  app could not make gives its count back.
+  app could not make because of an error of the storage gives its count
+  back.
   """
   @spec create(String.t(), Date.t(), keyword()) ::
           {:ok, String.t()} | {:error, :full | :data | :storage | :many}
@@ -165,12 +169,14 @@ defmodule DIY.Links do
 
   def create(_data, _today, _opts), do: {:error, :data}
 
-  defp counted({:ok, _id} = made, _address, _today), do: made
-
-  defp counted(error, address, today) do
+  # Only an error of the storage gives the counts back. A full table keeps
+  # the count, so a page cannot try without a limit.
+  defp counted({:error, :storage} = error, address, today) do
     give_back(address, today)
     error
   end
+
+  defp counted(result, _address, _today), do: result
 
   defp insert(data, today) do
     storage(fn ->

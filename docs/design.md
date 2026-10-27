@@ -2242,8 +2242,13 @@ The rules of a short link:
     The app does not keep the address, and the key is not in the page.
   - A count goes up first, and then the check reads the new count. Thus
     two requests at the same time cannot both get the last link.
-  - A link that the app could not make (an error of the storage, a full
-    table) gives its count back.
+  - A link that the app could not make because of an error of the
+    storage gives its count back. A full table keeps the count, so a page
+    cannot try without a limit. A refusal of the limit of all the persons
+    does not count for the address.
+  - A connection with no `cf-connecting-ip` gets the address `0.0.0.0`
+    from beam.com. Thus all such connections share one count. On
+    Cloudflare, each request has the field.
 
   Thus a script must use many networks and many days to fill the table:
   100 days at 1,000 links a day.
