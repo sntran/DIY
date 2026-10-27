@@ -28,6 +28,38 @@ defmodule DIY.LessonTest do
     assert july.missed == 125.0
   end
 
+  property "a month gets a credit, or misses it: never both" do
+    check all(
+            credits <-
+              list_of(
+                fixed_map(%{
+                  dollars: float(min: 0.0, max: 200.0),
+                  min_kwh: integer(0..2500),
+                  months:
+                    one_of([
+                      constant(nil),
+                      map(list_of(integer(1..12), min_length: 1), &Enum.uniq/1)
+                    ])
+                }),
+                max_length: 4
+              ),
+            kwhs <- list_of(integer(0..3000), length: 12)
+          ) do
+      plan = %{Lesson.example_plan() | credits: credits}
+
+      months =
+        for {kwh, m} <- Enum.with_index(kwhs, 1),
+            do: %{Enum.at(Lesson.example_months(), m - 1) | kwh: kwh / 1}
+
+      for row <- Lesson.rows(plan, months).rows do
+        # The credits of the month, whatever its kWh.
+        all = for c <- credits, is_nil(c.months) or row.month in c.months, do: c.dollars
+        assert_in_delta row.credits + row.missed, Enum.sum(all), 1.0e-6
+        assert row.missed >= 0
+      end
+    end
+  end
+
   defp bill(kwh) do
     %{
       months:

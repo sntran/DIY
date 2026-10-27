@@ -2529,6 +2529,8 @@ neighbor in the same area. The page of a link tells this.
 The chart (`DIYWeb.PlanChart`) shows the price for each kWh of each plan,
 from 200 to 2,500 kWh in a month. The price is the bill of an average
 month (`DIY.Plan.bill/4`) divided by its kWh, with the delivery charges.
+A credit of some months of the year counts for its part of the year, as
+in the averages of an EFL. The caption of the chart tells this.
 
 - The line has a point each 25 kWh. It has two points at each limit of
   a credit or of a fee: the kWh before the limit and the kWh of the
@@ -2561,8 +2563,9 @@ plans with my months**:
   fit, and the page tells this.
 - Then the page Plans shows the worksheet. A device with no house first
   shows the first screens (the door, the ZIP code and the preset). The
-  page Plans waits for the market of the ZIP code and for the bill of
-  the house: it tells this.
+  page Plans waits for the weather and the market of the ZIP code, and
+  it tells this. When one of them fails, the page tells the error, and
+  it has the button **Try again**.
 - A house that is not in an area of Texas with retail choice keeps its
   worksheet. The page tells that the plans are for Texas.
 
@@ -2599,18 +2602,22 @@ The page has the tags of Open Graph, as the page of a shared house:
 ### The tests of a link of plans
 
 - The link: the plans that go in are the plans that come out (a
-  property). A link with 0 or 7 plans, a bad text, a bad version, a bad
-  plan or a large JSON is an error.
-- The chart: the line drops at a credit and jumps at a fee. The top and
-  the steps of the grid. The page has classes and no colors, and the
+  property). Any text or bytes give plans or an error, and never a crash
+  (a property). A link with 0 or 7 plans, a bad text, a bad version, a
+  bad plan or a large JSON is an error.
+- The chart: the line drops at a credit and jumps at a fee. The points
+  are in order, once each, with both sides of each limit (a property).
+  The top and the steps of the grid. A control character of a name does
+  not go into the picture: resvg refuses it. The page has classes and no colors, and the
   picture has colors and no classes. A name is escaped, and a long name
   is cut. The NIF gives a PNG.
 - The LiveView: the page of a link, its tags and its picture. A bad
   link. The button on a new device, on a house in Texas, on a full
   worksheet, and on a house that is not in Texas.
 - The worksheet: the chart, the marks of the months with no credit, and
-  the link. More than 6 plans, names that are too long, and the wait for
-  the numbers.
+  the link. More than 6 plans, names that are too long, the wait for the
+  weather, and its error. A month gets a credit or misses it, and never
+  both (a property of `DIY.Lesson.rows/3`).
 
 ## Home Assistant
 

@@ -589,7 +589,7 @@ defmodule DIYWeb.LessonPage do
   # The mark of a month that does not get a credit of the plan.
   defp missed(assigns) do
     ~H"""
-    <span :if={@row.missed > 0} class="font-bold">*<span class="sr-only">
+    <span :if={@row.missed > 0} class="font-bold"><span aria-hidden="true">*</span><span class="sr-only">
       (no credit of {money(@row.missed)})
     </span></span>
     """

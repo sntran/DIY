@@ -232,11 +232,34 @@ defmodule DIYWeb.PlanLinkLiveTest do
       refute has_element?(view, "#plan-share")
     end
 
-    test "the page waits for the numbers of the house", %{conn: conn} do
+    test "the page waits for the weather, and tells when it failed", %{conn: conn} do
+      # A slow weather service: the page waits.
+      Req.Test.stub(DIY.Weather, fn conn ->
+        Process.sleep(300)
+        Req.Test.json(conn, DIY.Stubs.power())
+      end)
+
+      {:ok, view, _html} = live(conn, ~p"/plans")
+      render_hook(view, "device:restore", %{"text" => Build.to_json(house()), "stamp" => ""})
+      assert has_element?(view, "#plans-loading")
+      settle(view)
+      refute has_element?(view, "#plans-loading")
+      assert has_element?(view, "#lesson")
+
+      # The weather service is down: the page tells it, and it can try
+      # again.
       Stubs.weather(:down)
       {:ok, view, _html} = live(conn, ~p"/plans")
       restore(view, house())
-      assert has_element?(view, "#plans-loading")
+      refute has_element?(view, "#plans-loading")
+      assert has_element?(view, "#plans-failed p.text-error")
+      assert has_element?(view, "#plans-failed", "The page needs the weather")
+
+      Stubs.weather()
+      view |> element("#plans-failed button", "Try again") |> render_click()
+      settle(view)
+      refute has_element?(view, "#plans-failed")
+      assert has_element?(view, "#lesson")
     end
   end
 

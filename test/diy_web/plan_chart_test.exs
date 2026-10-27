@@ -1,5 +1,6 @@
 defmodule DIYWeb.PlanChartTest do
   use ExUnit.Case, async: true
+  use ExUnitProperties
 
   alias DIY.Plan
   alias DIYWeb.PlanChart
@@ -43,6 +44,27 @@ defmodule DIYWeb.PlanChartTest do
     # A limit out of the chart adds no point.
     far = %{flat_plan() | credits: [%{dollars: 5.0, min_kwh: 3000, months: nil}]}
     assert length(PlanChart.points(far)) == length(PlanChart.points(flat_plan()))
+  end
+
+  property "the points are in order, once each, with both sides of each limit" do
+    check all(
+            limits <- list_of(integer(0..3000), max_length: 4),
+            fee <- one_of([constant(nil), integer(1..3000)])
+          ) do
+      plan = %{
+        flat_plan()
+        | credits: for(l <- limits, do: %{dollars: 50.0, min_kwh: l, months: nil}),
+          min_fee: fee && %{dollars: 5.0, below_kwh: fee}
+      }
+
+      kwhs = Enum.map(PlanChart.points(plan), &elem(&1, 0))
+      assert kwhs == Enum.sort(Enum.uniq(kwhs))
+      assert hd(kwhs) == 200 and List.last(kwhs) == 2500
+
+      for l <- PlanChart.limits(plan), l > 200 and l < 2500 do
+        assert (l - 1) in kwhs and l in kwhs
+      end
+    end
   end
 
   test "the table has 500 to 2,000 kWh and the kWh at each limit" do
@@ -126,7 +148,11 @@ defmodule DIYWeb.PlanChartTest do
     assert svg =~ ~s(<text x="826" y="598")
   end
 
-  test "the picture is a PNG" do
+  test "the picture is a PNG, also with a name that has control characters" do
     assert {:ok, <<0x89, "PNG", _rest::binary>>} = PlanChart.png([credit_plan()])
+
+    odd = %{flat_plan() | name: "a\u0000b\u0001c\uFFFEd"}
+    assert PlanChart.picture([odd]) =~ ">abcd</text>"
+    assert {:ok, <<0x89, "PNG", _rest::binary>>} = PlanChart.png([odd])
   end
 end

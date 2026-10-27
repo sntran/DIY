@@ -2006,11 +2006,19 @@ defmodule DIYWeb.HomeLive do
                 origin={@origin}
               />
             </div>
-          <% @live_action == :plans and plans_loading?(@build, @market, @bill) -> %>
+          <% @live_action == :plans and plans_loading?(@weather, @market) -> %>
             <div lang="en" class="contents">
               <p id="plans-loading" class="py-8 opacity-80">
                 The page gets the plans of your area and the months of your house.
               </p>
+            </div>
+          <% @live_action == :plans and plans_failed?(@weather, @market) != [] -> %>
+            <div lang="en" id="plans-failed" class="py-8 space-y-3">
+              <p :for={message <- plans_failed?(@weather, @market)} class="text-error">
+                {message}
+              </p>
+              <p>The page needs the weather and the plans of your ZIP code to show the plans.</p>
+              <button type="button" phx-click="retry" class="btn btn-sm">Try again</button>
             </div>
           <% @live_action == :plans -> %>
             <div lang="en" class="contents">
@@ -2160,10 +2168,12 @@ defmodule DIYWeb.HomeLive do
   defp plans?(%Build{market: %{choice: true}}), do: true
   defp plans?(_build), do: false
 
-  # The page Plans waits for the market of the ZIP code, and for the bill
-  # of a house in an area with retail choice.
-  defp plans_loading?(build, market, bill),
-    do: market.status == :loading or (plans?(build) and is_nil(bill))
+  # The page Plans waits for the weather and the market of the ZIP code.
+  # When one of them failed, it tells the error: the bill needs them.
+  defp plans_loading?(weather, market), do: :loading in [weather.status, market.status]
+
+  defp plans_failed?(weather, market),
+    do: for(%{status: {:error, message}} <- [weather, market], do: message)
 
   # The delivery charges of the utility of the house, when the app knows
   # them (DIY.Plan.tdu/1).

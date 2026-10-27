@@ -33,7 +33,7 @@ defmodule DIYWeb.PlanLinkPage do
     <figure id={@id} class="pc-chart space-y-2">
       <figcaption class="text-sm">
         <span class="font-semibold">The price for each kWh, at each use of a month.</span>
-        The bill of a month divided by its kWh, with the delivery charges. A credit makes the price drop at its kWh.
+        The bill of an average month divided by its kWh, with the delivery charges. A credit makes the price drop at its kWh. A credit of some months of the year counts for its part of the year.
       </figcaption>
       {raw(@svg)}
       <ul class="flex flex-wrap gap-x-4 gap-y-1 text-sm" aria-label="The key of the chart">

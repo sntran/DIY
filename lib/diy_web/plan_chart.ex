@@ -233,7 +233,14 @@ defmodule DIYWeb.PlanChart do
     ]
   end
 
-  defp escape(text), do: text |> Phoenix.HTML.html_escape() |> Phoenix.HTML.safe_to_string()
+  # A text for the SVG. A control character or a noncharacter is not text
+  # of XML (resvg refuses the SVG), so it goes.
+  defp escape(text) do
+    text
+    |> String.replace(~r/[\x{0}-\x{8}\x{B}\x{C}\x{E}-\x{1F}\x{FFFE}\x{FFFF}]/u, "")
+    |> Phoenix.HTML.html_escape()
+    |> Phoenix.HTML.safe_to_string()
+  end
 
   defp r(n), do: Float.round(n / 1, 1)
 end

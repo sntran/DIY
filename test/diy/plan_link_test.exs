@@ -97,6 +97,18 @@ defmodule DIY.PlanLinkTest do
              {:error, :plan}
   end
 
+  property "any text gives plans or an error, and never a crash" do
+    check all(
+            text <- one_of([binary(), string(:printable)]),
+            bytes <- binary()
+          ) do
+      for data <- [text, "1" <> text, "1" <> Base.url_encode64(bytes, padding: false), data(text)] do
+        assert match?({:ok, [_ | _]}, PlanLink.decode(data)) or
+                 match?({:error, _reason}, PlanLink.decode(data))
+      end
+    end
+  end
+
   property "the plans of a link are the plans that went in" do
     check all(
             plans <-
