@@ -13,7 +13,7 @@ defmodule DIYWeb.Picture do
   """
   use Gettext, backend: DIY.Gettext
 
-  alias DIY.Share
+  alias DIY.{Layout, Share}
   alias DIYWeb.{Camera, Cutaway, Format, Outside}
   alias DIYWeb.Picture.Labels
 
@@ -43,12 +43,22 @@ defmodule DIYWeb.Picture do
   # the roof show only with an item that has a label.
   @floors ~w(ground f2 f3)
 
-  # The size of the text of a label (the name, then the numbers), and the
-  # size of a label around its text.
-  @name_size 12
-  @numbers_size 11
-  @label_pad 8
-  @label_h 34
+  # The two floors that a shell joins: floor 1 and floor 2, and floor 2
+  # and floor 3.
+  @joined [{"ground", "f2"}, {"f2", "f3"}]
+
+  # A label is a bubble with the numbers of its item, and a pointer down
+  # to the item, as a tooltip. Then: the size of its text, the space at
+  # its sides, and the height of the bubble. Then the height of the
+  # pointer, which is also half of its width.
+  @numbers_size 12
+  @label_pad 9
+  @bubble_h 24
+  @pointer 7
+  @radius 8
+  # The largest space between the tip of a pointer and its item: the
+  # space of `DIYWeb.Picture.Labels`. A label that is farther has a line.
+  @gap_max 4
 
   # The colors of the page (app.css, the light theme).
   @paper "#faf7f2"
@@ -155,7 +165,8 @@ defmodule DIYWeb.Picture do
 
   # The layers of the house cut open, with no names of rooms, and the box
   # of their shapes. The lot is not in the picture: the rooms outside show
-  # the yard.
+  # the yard. A floor under a floor has the shell that joins them
+  # (`DIYWeb.Cutaway.shell/4`).
   defp layers(build, costs) do
     view = Cutaway.view(build)
 
@@ -163,6 +174,17 @@ defmodule DIYWeb.Picture do
       for level <- view.levels,
           level.id in @floors or Enum.any?(level.objects, &labeled?(&1, costs)),
           do: %{level | labels: [], ground: []}
+
+    levels =
+      levels
+      |> Enum.zip(tl(levels) ++ [nil])
+      |> Enum.map(fn
+        {%{id: id} = level, %{id: above_id} = above} when {id, above_id} in @joined ->
+          %{level | shell: Cutaway.shell(view.camera, level, above, plan(build, above_id))}
+
+        {level, _above} ->
+          level
+      end)
 
     points =
       Enum.flat_map(levels, fn level ->
@@ -175,6 +197,26 @@ defmodule DIYWeb.Picture do
   end
 
   defp labeled?(object, costs), do: object.kind == :item and Map.has_key?(costs, object.id)
+
+  # The plan of the shell of a floor (`DIYWeb.Cutaway.shell/4`), from its
+  # rooms, or the house when the floor has no room. The back wall goes
+  # along the rooms at the back of the floor, and the left wall along the
+  # rooms at its left. So an upper floor over a part of the house (for
+  # example, not over a room with one story) has walls only under it.
+  defp plan(build, id) do
+    case for(room <- build.rooms, room.plan, Layout.layer(room) == id, do: room.plan) do
+      [] -> Layout.house_box(build)
+      plans -> shell_box(plans)
+    end
+  end
+
+  defp shell_box(plans) do
+    x0 = plans |> Enum.map(& &1.x) |> Enum.min()
+    y0 = plans |> Enum.map(& &1.y) |> Enum.min()
+    x1 = for(p <- plans, p.y == y0, do: p.x + p.w) |> Enum.max()
+    y1 = for(p <- plans, p.x == x0, do: p.y + p.d) |> Enum.max()
+    %{x: x0, y: y0, w: x1 - x0, d: y1 - y0}
+  end
 
   # The box {x, y, w, h} of polygons.
   defp bounds(polys) do
@@ -211,11 +253,9 @@ defmodule DIYWeb.Picture do
       {x0, y0, w, _h} = bounds(object.polys)
       {x, y} = at.({x0 + w / 2, y0})
       numbers = label_numbers(kwh, cost)
-      name = short(object.name)
-      width = max(width(name, @name_size), width(numbers, @numbers_size))
+      width = width(numbers, @numbers_size) + 2 * @label_pad
 
-      %{x: x, y: y, w: width + 2 * @label_pad, h: @label_h, name: name, kwh: kwh}
-      |> Map.put(:numbers, numbers)
+      %{x: x, y: y, w: width, h: @bubble_h + @pointer, kwh: kwh, numbers: numbers}
     end)
     |> Enum.sort_by(&(-&1.kwh))
     |> Labels.place({hx + 6, hy + 6, hw - 12, hh - 12})
@@ -226,23 +266,6 @@ defmodule DIYWeb.Picture do
   defp label_numbers(kwh, cost),
     do: gettext("%{kwh} · %{cost} a year", kwh: Format.kwh(kwh), cost: Format.money(cost))
 
-  # The name of a label: only the letters of the fonts of the NIF, because
-  # resvg draws nothing for a different letter. The spaces that stay
-  # together become one space. A name of more than 24 letters has its first
-  # 23 letters and "…". A name with no letter of the fonts is "…".
-  defp short(name) do
-    name =
-      for(<<c::utf8 <- name>>, Map.has_key?(@widths, c), into: "", do: <<c::utf8>>)
-      |> String.replace(~r/\s+/u, " ")
-      |> String.trim()
-
-    cond do
-      name == "" -> "…"
-      String.length(name) > 24 -> String.slice(name, 0, 23) <> "…"
-      true -> name
-    end
-  end
-
   @doc false
   # The width of a text: the sum of the widths of its code points, because
   # resvg moves on for each code point. Each width is the larger width of
@@ -252,24 +275,40 @@ defmodule DIYWeb.Picture do
     for(<<c::utf8 <- text>>, reduce: 0, do: (sum -> sum + Map.get(@widths, c, @widest))) * size
   end
 
-  # The line from a label down to the top of its item. All the lines are
-  # under all the labels.
-  defp line(%{left: left, top: top, w: w, h: h} = label) do
-    x = label.x |> max(left + h / 2) |> min(left + w - h / 2)
+  # The x of the tip of the pointer of a label: over its item, but not
+  # under the round corners of the bubble.
+  defp tip(%{left: left, w: w} = label),
+    do: label.x |> max(left + @radius + @pointer) |> min(left + w - @radius - @pointer)
 
-    [
-      ~s(<line x1="#{r(x)}" y1="#{r(top + h)}" x2="#{r(label.x)}" y2="#{r(label.y)}" stroke="#{@ink}" stroke-width="1.2" stroke-opacity="0.7"/>),
-      ~s(<circle cx="#{r(label.x)}" cy="#{r(label.y)}" r="2.2" fill="#{@ink}"/>)
-    ]
+  # A label that is not just above its item has a thin line from the tip
+  # of its pointer down to the item. All the lines are under all the
+  # labels.
+  defp line(%{top: top, h: h} = label) do
+    x = tip(label)
+
+    if abs(top + h - label.y) <= @gap_max and abs(x - label.x) < 0.5,
+      do: [],
+      else: [
+        ~s(<line x1="#{r(x)}" y1="#{r(top + h)}" x2="#{r(label.x)}" y2="#{r(label.y)}" stroke="#{@ink}" stroke-width="1.2" stroke-opacity="0.7"/>),
+        ~s(<circle cx="#{r(label.x)}" cy="#{r(label.y)}" r="2.2" fill="#{@ink}"/>)
+      ]
   end
 
-  defp label(%{left: left, top: top, w: w, h: h} = label) do
-    center = left + w / 2
+  # The bubble and its pointer are one path, so the line around them has
+  # no gap.
+  defp label(%{left: left, top: top, w: w} = label) do
+    {right, bottom, x, k} = {left + w, top + @bubble_h, tip(label), @radius}
+
+    d =
+      "M#{r(left + k)},#{r(top)} H#{r(right - k)} A#{k},#{k} 0 0 1 #{r(right)},#{r(top + k)} " <>
+        "V#{r(bottom - k)} A#{k},#{k} 0 0 1 #{r(right - k)},#{r(bottom)} " <>
+        "H#{r(x + @pointer)} L#{r(x)},#{r(bottom + @pointer)} L#{r(x - @pointer)},#{r(bottom)} " <>
+        "H#{r(left + k)} A#{k},#{k} 0 0 1 #{r(left)},#{r(bottom - k)} " <>
+        "V#{r(top + k)} A#{k},#{k} 0 0 1 #{r(left + k)},#{r(top)} Z"
 
     [
-      ~s(<rect x="#{r(left)}" y="#{r(top)}" width="#{r(w)}" height="#{h}" rx="8" fill="#{@pill}" stroke="#{@pill_line}" stroke-width="1"/>),
-      text(r(center), r(top + 14), @name_size, 700, @ink, label.name, "middle"),
-      text(r(center), r(top + 28), @numbers_size, 400, @muted, label.numbers, "middle")
+      ~s(<path d="#{d}" fill="#{@pill}" stroke="#{@pill_line}" stroke-width="1"/>),
+      text(r(left + w / 2), r(top + 16.5), @numbers_size, 600, @ink, label.numbers, "middle")
     ]
   end
 

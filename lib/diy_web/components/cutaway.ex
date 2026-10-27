@@ -129,6 +129,33 @@ defmodule DIYWeb.Cutaway do
   end
 
   @doc """
+  The shell between two layers of a view, for the picture of a share
+  (`DIYWeb.Picture`). The layers have a gap, so that a layer does not
+  hide the layer under it. In the picture, the gap makes the floors look
+  apart. The shell joins them: it is the wall at the back and the wall at
+  the left of the upper floor. It goes from the ground (or from the
+  bottom of the slab of the lower floor) up to the slab of the upper
+  floor. The lower layer paints it after its yards and before its slabs
+  (its `shell`). Thus the yard at the back is behind it. The rooms of the
+  lower floor are in front of it. `box` is the plan of the upper floor
+  (`x`, `y`, `w` and `d`, in inches). It gives SVG polygons (`{points,
+  class}`), with the classes `p-shell-l` and `p-shell-r`.
+  """
+  def shell(camera, below, above, %{x: x, y: y, w: w, d: d}) do
+    {x0, y0, x1, y1} = {x * @m, y * @m, (x + w) * @m, (y + d) * @m}
+    bottom = if below.id == "ground", do: below.z, else: below.z - @slab
+    {z0, z1} = {bottom, above.z - @slab}
+    back = [{x0, y0, z0}, {x1, y0, z0}, {x1, y0, z1}, {x0, y0, z1}]
+    left = [{x0, y0, z0}, {x0, y1, z0}, {x0, y1, z1}, {x0, y0, z1}]
+    # The back wall faces the way of the front of a box (`DIYWeb.Geometry.box/2`).
+    {back_class, left_class} =
+      if camera.lit == :front, do: {"p-shell-l", "p-shell-r"}, else: {"p-shell-r", "p-shell-l"}
+
+    for {corners, class} <- [{back, back_class}, {left, left_class}],
+        do: {Camera.points(camera, {0, 0}, corners), class}
+  end
+
+  @doc """
   A view of layers (`layer/2`) with a camera: the layers, the camera, and
   the box of the SVG.
   """
@@ -240,6 +267,9 @@ defmodule DIYWeb.Cutaway do
           part -> svg_polys.(part)
         end),
       labels: parts.labels,
+      # The shell to the layer over it: only the picture of a share has it
+      # (`shell/4`).
+      shell: [],
       box: bounds(polys, camera)
     }
   end
@@ -1296,6 +1326,7 @@ defmodule DIYWeb.Cutaway do
       <g :for={level <- @view.levels} id={"plan-#{level.id}"} data-box={box_text(level.box)}>
         <polygon :for={{points, class} <- level.ground} points={points} class={class} />
         <.surface :for={room <- level.low} :key={room.id} room={room} selected={@selected} />
+        <polygon :for={{points, class} <- level.shell} points={points} class={class} />
         <polygon
           :for={{points, class, room} <- level.slabs}
           points={points}

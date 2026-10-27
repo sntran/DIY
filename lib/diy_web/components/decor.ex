@@ -182,6 +182,14 @@ defmodule DIYWeb.Decor do
     name = String.downcase(name)
 
     cond do
+      # The stairs go up from floor 1 to the back of the room. On an upper
+      # floor, the room has the opening of the stairs, with a rail.
+      String.contains?(name, "stair") and room.level == "f1" ->
+        [{model("stairs"), :back_right, 0}]
+
+      String.contains?(name, "stair") ->
+        [{model("stair_well"), :front_center, 0}, {model("plant"), :back_left, 0}]
+
       String.contains?(name, "bed") ->
         [
           {model("rug"), :center, 0},
@@ -335,6 +343,29 @@ defmodule DIYWeb.Decor do
     [round_box({0, 0, 0}, {1.0, 0.45, 0.8}, 0.03, "light-wood")] ++
       for(z <- [0.18, 0.42, 0.66], do: {:box, {0.45, 0.45, z}, {0.1, 0.01, 0.02}, "wood"}) ++
       [{:cyl, {0.8, 0.22, 0.8}, 0.07, 0.2, "clay"}] ++ ball({0.8, 0.22, 1.14}, 0.12, "leaf")
+  end
+
+  # 13 steps of 18.5 cm up to the top of the walls of floor 1 (2.4 m), each
+  # 27 cm deep. The top step is at the back. The side at the right is a
+  # panel on the slope of the steps.
+  def model("stairs") do
+    for(i <- 0..12, do: {:box, {0, i * 0.27, 0}, {0.9, 0.27, (13 - i) * 0.185}, "light-wood"}) ++
+      [
+        {:face, [{0.9, 0, 0}, {0.9, 3.51, 0}, {0.9, 3.51, 0.185}, {0.9, 0, 2.405}], nil,
+         "i-wood-r i-face"}
+      ]
+  end
+
+  # The opening of the stairs on an upper floor: a dark well. Two posts
+  # stand at its front corners, with a rail over them.
+  def model("stair_well") do
+    [
+      {:face, [{0, 0, 0.01}, {0.9, 0, 0.01}, {0.9, 1.2, 0.01}, {0, 1.2, 0.01}], nil,
+       "i-dark-t i-face"},
+      {:box, {0, 1.16, 0}, {0.04, 0.04, 0.9}, "wood"},
+      {:box, {0.86, 1.16, 0}, {0.04, 0.04, 0.9}, "wood"},
+      {:box, {0, 1.16, 0.9}, {0.9, 0.04, 0.04}, "wood"}
+    ]
   end
 
   def model("rug"), do: [mat({2.0, 1.5}, 0.15)]

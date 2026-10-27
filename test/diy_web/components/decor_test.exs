@@ -70,6 +70,22 @@ defmodule DIYWeb.DecorTest do
     assert [] == names(build, "Driveway")
     assert [] == names(build, "Roof")
 
+    # The stairs go up from floor 1. An upper floor has their opening.
+    stairs = %{
+      room(build, "Bedroom 1")
+      | name: "Entry and stairs",
+        level: "f1",
+        plan: %{x: 0, y: 0, w: 120, d: 216}
+    }
+
+    assert [{model, _x, _y, 0}] = Decor.pieces(stairs, [])
+    assert model == Decor.model("stairs")
+
+    hall = %{stairs | name: "Hall and stairs", level: "f2", plan: %{x: 0, y: 0, w: 132, d: 144}}
+
+    assert Enum.map(Decor.pieces(hall, []), &elem(&1, 0)) ==
+             [Decor.model("stair_well"), Decor.model("plant")]
+
     # A room with a name that the app does not know: a plant.
     office = %{room(build, "Bedroom 1") | name: "Office"}
     assert [{model, 4, 4, 0}] = Decor.pieces(office, [])

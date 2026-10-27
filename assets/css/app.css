@@ -385,6 +385,12 @@
 .p-wall-t, .p-wall-l, .p-wall-r, .p-slab-l, .p-slab-r, .p-gable {
   stroke: var(--p-edge); stroke-width: 0.6; stroke-linejoin: round; vector-effect: non-scaling-stroke
 }
+/* The shell between two floors in the picture of a share (DIYWeb.Cutaway.shell/4):
+   walls that the sky shows through, in the colors of the slabs. */
+.p-shell-l { fill: var(--p-slab-l); fill-opacity: 0.55 } .p-shell-r { fill: var(--p-slab-r); fill-opacity: 0.55 }
+.p-shell-l, .p-shell-r {
+  stroke: var(--p-edge); stroke-width: 0.6; stroke-linejoin: round; vector-effect: non-scaling-stroke
+}
 .p-floor { stroke: var(--p-edge); stroke-width: 0.8; stroke-linejoin: round; vector-effect: non-scaling-stroke }
 .p-wood { fill: var(--p-wood) } .p-tile { fill: var(--p-tile) } .p-carpet { fill: var(--p-carpet) }
 .p-concrete { fill: var(--p-concrete) } .p-ply { fill: var(--p-ply) } .p-asphalt { fill: var(--p-asphalt) }

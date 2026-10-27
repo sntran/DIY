@@ -230,7 +230,58 @@ defmodule DIYWeb.PictureTest do
       assert svg =~ ~s(id="plan-f3")
     end
 
-    test "the items with the most kWh have labels with their kWh and cost" do
+    test "a shell joins each floor to the floor under it: after the yards, before the slabs" do
+      shells = fn svg -> length(Regex.scan(~r/class="p-shell-[lr]"/, svg)) end
+
+      assert shells.(svg_of(house(%{floors: 1, size: 900, heat: "electric"}))) == 0
+      assert shells.(svg_of(house(%{floors: 3, size: 5200}))) == 4
+
+      # Two walls between floor 1 and floor 2. The layer of floor 1 paints
+      # them after its yards and before its slabs. Thus the yard at the
+      # back is behind them, and the rooms are in front of them.
+      two = svg_of(house())
+      assert shells.(two) == 2
+      [_before, ground] = String.split(two, ~s(id="plan-ground"), parts: 2)
+      [ground, _f2] = String.split(ground, ~s(id="plan-f2"), parts: 2)
+      [yards, rest] = String.split(ground, ~s(class="p-shell-l"), parts: 2)
+      assert yards =~ ~s(data-room=)
+      refute yards =~ "p-slab"
+      assert rest =~ "p-slab"
+
+      # Floor 2 with no room: the shell has the box of the house.
+      empty = Enum.reject(build_rooms = house().rooms, &(&1.level == "f2"))
+      assert length(empty) < length(build_rooms)
+      assert shells.(svg_of(%{house() | rooms: empty})) == 2
+
+      # Floor 2 over a part of the house: the left wall goes only along the
+      # rooms at the left of floor 2.
+      build = house()
+      f2 = for r <- build.rooms, r.level == "f2", do: r
+      x0 = f2 |> Enum.map(& &1.plan.x) |> Enum.min()
+      y0 = f2 |> Enum.map(& &1.plan.y) |> Enum.min()
+      gone = for r <- f2, r.plan.x == x0, r.plan.y > y0, do: r.id
+      assert gone != []
+      part = %{build | rooms: Enum.reject(build.rooms, &(&1.id in gone))}
+      rest = for r <- part.rooms, r.level == "f2", do: r.plan
+      y1 = rest |> Enum.filter(&(&1.x == x0)) |> Enum.map(&(&1.y + &1.d)) |> Enum.max()
+      x1 = rest |> Enum.filter(&(&1.y == y0)) |> Enum.map(&(&1.x + &1.w)) |> Enum.max()
+      view = DIYWeb.Cutaway.view(part)
+      [below, above] = Enum.filter(view.levels, &(&1.id in ["ground", "f2"]))
+      box = %{x: x0, y: y0, w: x1 - x0, d: y1 - y0}
+      svg = svg_of(part)
+
+      for {points, _class} <- DIYWeb.Cutaway.shell(view.camera, below, above, box),
+          do: assert(svg =~ ~s(points="#{points}"))
+
+      # The attic with a label shows, but it has no shell.
+      build = house()
+      {parts, _labels} = Picture.parts(build, labeled(build, [{"furnace", 257, 34}]))
+      svg = Enum.map_join(parts, fn {svg, _scale} -> svg end)
+      assert svg =~ ~s(id="plan-attic")
+      assert shells.(svg) == 2
+    end
+
+    test "the items with the most kWh have bubbles with their kWh and cost, and no name" do
       build = pool_house()
 
       uses = [
@@ -242,15 +293,23 @@ defmodule DIYWeb.PictureTest do
       ]
 
       svg = Picture.svg(build, labeled(build, uses))
-      assert svg =~ ">Central AC<"
+      # The item keeps its title in the drawing, but no bubble has a name.
+      refute svg =~ ~r/<text[^>]*>Central AC</
       assert svg =~ ">6,828 kWh · $908 a year<"
       assert svg =~ ">1,346 kWh · $179 a year<"
       # With no cost, the label has the kWh only.
       assert svg =~ ">1,200 kWh a year<"
 
       {_parts, labels} = Picture.parts(build, labeled(build, uses))
-      assert Enum.map(labels, & &1.name) |> hd() == "Central AC"
+      assert hd(labels).numbers == "6,828 kWh · $908 a year"
       assert length(labels) == 5
+
+      # A bubble has a pointer down to its item, as a tooltip. A bubble
+      # that is not just above its item also has a line to it.
+      bubbles = length(Regex.scan(~r/<path d="M[^"]+ L[^"]+ L[^"]+"/, svg))
+      lines = length(Regex.scan(~r/<line /, svg))
+      assert bubbles == 5
+      assert lines < 5
 
       for a <- labels, b <- labels, a != b, do: refute(Labels.overlap?(a, b))
 
@@ -272,19 +331,6 @@ defmodule DIYWeb.PictureTest do
       assert svg =~ "6,828 kWh · $908 mỗi năm"
     end
 
-    # The label of an item Other with a name.
-    defp named(name) do
-      build = house()
-      kitchen = Enum.find(build.rooms, &(&1.name == "Kitchen")).id
-      {:ok, build, other} = Build.add_item(build, kitchen, "other")
-      {:ok, build} = Build.update_item(build, other, %{"name" => name})
-
-      {_parts, [label]} =
-        Picture.parts(build, %{summary() | items: [%{id: other, kwh: 900, cost: 120}]})
-
-      label
-    end
-
     # The width of each letter of the fonts of the NIF, in Inter Regular or
     # Bold, the larger one (scripts/inter-widths.mjs).
     @widths "priv/picture/inter_widths.json"
@@ -299,21 +345,18 @@ defmodule DIYWeb.PictureTest do
       do:
         for(<<c::utf8 <- text>>, reduce: 0, do: (sum -> sum + Map.get(@widths, c, 0.656))) * size
 
-    test "a long name ends in an ellipsis, and a label is never narrower than its text" do
-      label = named(String.duplicate("W", 32))
-      assert label.name == String.duplicate("W", 23) <> "…"
-      assert label.w >= drawn_width(label.name, 12)
+    test "a bubble is never narrower than its text" do
+      build = house()
+      kitchen = Enum.find(build.rooms, &(&1.name == "Kitchen")).id
+      {:ok, build, other} = Build.add_item(build, kitchen, "other")
 
-      # resvg draws nothing for a letter that is not in the fonts: the name
-      # has no such letter. An emoji of a family is 7 code points.
+      {_parts, [label]} =
+        Picture.parts(build, %{summary() | items: [%{id: other, kwh: 88_888, cost: 8888}]})
+
+      assert label.w >= drawn_width(label.numbers, 12)
+
+      # An emoji of a family is 7 code points.
       family = "👨‍👩‍👧‍👦"
-      label = named(String.duplicate(family, 4) <> "Big fan")
-      assert label.name == "Big fan"
-      assert label.w >= drawn_width("Big fan", 12)
-      assert named("Big 🇺🇸 fan ").name == "Big fan"
-      assert named("空调").name == "…"
-      assert named("Điều hòa").name == "Điều hòa"
-
       # The width of a text with a letter that is not in the fonts is
       # larger than in resvg.
       assert Picture.width(family, 10) >= drawn_width(family, 10)
