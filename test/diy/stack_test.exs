@@ -144,6 +144,22 @@ defmodule DIY.StackTest do
     assert item(build, computer).at == %{x: box.x, y: box.y + box.d}
   end
 
+  test "an item dropped in front of two items side by side snaps to their front once" do
+    build = house()
+    {build, a} = add(build, "Garage", "water_heater")
+    {build, b} = add(build, "Garage", "water_heater")
+    {build, c} = add(build, "Garage", "water_heater")
+    {:ok, build} = drop(build, a, "Garage", %{x: 100, y: 0})
+    box = Layout.item_box(item(build, a))
+    {:ok, build} = drop(build, b, "Garage", %{x: box.x + box.w, y: 0})
+    assert item(build, b).at == %{x: box.x + box.w, y: 0}
+
+    # The third is in front of both, 4 inches from them. Both give the
+    # same snap: the first one counts.
+    {:ok, build} = drop(build, c, "Garage", %{x: box.x + box.w - 6, y: box.y + box.d + 4})
+    assert item(build, c).at == %{x: box.x + box.w - 6, y: box.y + box.d}
+  end
+
   test "the items on an item move with it, also to another room, and stay in the room" do
     build = house()
     washer = first(build, "Laundry", "washer")

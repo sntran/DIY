@@ -885,8 +885,9 @@ the app checks the ends of the range and each limit in it.
 3. Fewer hints: a second plan (from its EFL, or from its numbers). The
    user gives only the total of the bill, and can ask for the hints.
 4. On your own: the worksheet. Each plan has the bill of each of the 12
-   months, and the cost of the year, in the order that the user added the
-   plans.
+   months, and the cost of the year. The plans are in the order that the
+   user added them. The worksheet also has the chart of the price, and a link that
+   shares its plans ("A link of plans").
 
 A person who knows how to read a bill can go to the worksheet at once.
 On step 1, the button "Go to the worksheet" is under the text of the
@@ -2489,6 +2490,134 @@ The PNG and the NIF:
   draws the picture in workerd.
 - CI builds the NIF again when a pull request changes `native/resvg`, and
   the bytes must be the same as `priv/resvg.wasm`.
+
+## A link of plans
+
+A person in Texas can share the plans of the worksheet with a link. This
+is a request of the owner (October 2026). A neighbor asked on Nextdoor
+about a plan of 8.9¢ at 1,000 kWh with a bill credit of $125. A link
+with that plan and a plan with no credit shows the difference at once.
+
+### The link
+
+The link has the plans in its path: `/p/DATA` (`DIY.PlanLink`). `DATA` is
+the version of the format (`1`), then the plans as JSON. The JSON is
+compressed with raw DEFLATE, in base64url (`DIY.Pack`), as in the link
+of a shared house.
+
+- The link has 1 to 6 plans: the first 6 plans of the worksheet. Each
+  plan has its name, its charges, its credits and its fees. It has no id
+  and no averages of an EFL.
+- The link has no house, no months and no ZIP code. The person who opens
+  it sees the plans with the months of their own house.
+- The server keeps no copy of the plans. It reads them only to answer
+  the request of the link or of its picture. The log does not show the
+  path of a link of plans (`DIYWeb.Endpoint.log_level/1`).
+- Each plan must be a plan that a build can keep (`DIY.Plan.read/1`).
+  Two plans give a link of about 250 characters.
+- A link has these limits: a `DATA` of 6,000 characters at most, and a
+  JSON of 16 KiB at most after the inflate. A name has 60 letters at
+  most, but a letter can have many marks. Thus the worksheet checks the
+  size of the link. Plans that are too large get a message, and no link.
+
+The delivery charges of the plans are the charges of the person who
+shares. A plan is only for the area of its utility, so a link is for a
+neighbor in the same area. The page of a link tells this.
+
+### The chart of the price
+
+The chart (`DIYWeb.PlanChart`) shows the price for each kWh of each plan,
+from 200 to 2,500 kWh in a month. The price is the bill of an average
+month (`DIY.Plan.bill/4`) divided by its kWh, with the delivery charges.
+A credit of some months of the year counts for its part of the year, as
+in the averages of an EFL. The caption of the chart tells this.
+
+- The line has a point each 25 kWh. It has two points at each limit of
+  a credit or of a fee: the kWh before the limit and the kWh of the
+  limit. So the line drops at a credit, and it jumps at a minimum usage
+  fee.
+- The top of the chart is the highest price, up to the next 5¢. It is
+  10¢ at least and 60¢ at most. Higher prices go out of the box.
+- The colors are the first 6 of the categorical palette of the data
+  charts, in their fixed order. The light theme and the dark theme have
+  their own sets (`app.css`). The checks of the palette pass (the
+  separation for colorblind persons, and for normal vision). Three light
+  colors have less than 3:1 of contrast on the page, so each line after
+  the first also has its own dashes. The key has the dashes too.
+- Below the chart, "The numbers of the chart" is a table of the prices.
+  It has 500, 1,000, 1,500 and 2,000 kWh, and the kWh before and at each
+  limit.
+- On the worksheet, a dot on the axis shows each month of the house,
+  with its name and its kWh. The chart shows the first 6 plans.
+
+### The page of a link
+
+A link opens the page of the plans (`DIYWeb.HomeLive`, the action
+`:plan_link`). It shows the chart, and the numbers of each plan in the
+words of an EFL. It changes nothing on the device until the person taps **See these
+plans with my months**:
+
+- The plans go into the worksheet of the device (`DIY.Build.add_plan/2`),
+  and the lesson goes to step 4. A plan that the worksheet has already
+  does not go in again. A full worksheet (10 plans) keeps the plans that
+  fit, and the page tells this.
+- Then the page Plans shows the worksheet. A device with no house first
+  shows the first screens (the door, the ZIP code and the preset). The
+  page Plans waits for the weather and the market of the ZIP code, and
+  it tells this. When one of them fails, the page tells the error, and
+  it has the button **Try again**.
+- A house that is not in an area of Texas with retail choice keeps its
+  worksheet. The page tells that the plans are for Texas.
+
+The pages of the plans are in English, as the plan lesson. The page does
+not pick a plan, and it does not rank plans (honesty rule 4).
+
+### The preview of a link of plans
+
+The page has the tags of Open Graph, as the page of a shared house:
+
+- `og:title`: the count of the plans, for example "2 plans: the price
+  for each kWh at each use".
+- `og:description`: the names of the plans, and a sentence about the
+  price at each use.
+- `og:image`: `/p/DATA/picture.png`, a PNG of 1200 × 630 pixels from the
+  NIF of resvg. It has the title, the chart and a key with the name of
+  each plan. A long name is cut with "…". The picture never changes.
+
+### The worksheet with the links
+
+- The worksheet shows the chart above its table.
+- A month that does not get a credit of a plan has a mark (`*`) next to
+  its bill (`DIY.Lesson.rows/3`, `missed`). The note under the table
+  tells what the mark means.
+- On a wide screen, the table is wider than the text of the page (64rem
+  at most), at the middle of the page. Before, the table had the width
+  of the text, and the second plan was out of view on a computer. A
+  name of a plan wraps in its column. A table that is still too wide
+  scrolls.
+- The button **Share these plans** shares the link. On a phone, it opens
+  the share sheet of the phone. Else it copies the link. The box shows
+  the link.
+
+### The tests of a link of plans
+
+- The link: the plans that go in are the plans that come out (a
+  property). Any text or bytes give plans or an error, and never a crash
+  (a property). A link with 0 or 7 plans, a bad text, a bad version, a
+  bad plan or a large JSON is an error.
+- The chart: the line drops at a credit and jumps at a fee. The points
+  are in order, once each, with both sides of each limit (a property).
+  The top and the steps of the grid. A control character of a name does
+  not go into the picture: resvg refuses it. The page has classes and no colors, and the
+  picture has colors and no classes. A name is escaped, and a long name
+  is cut. The NIF gives a PNG.
+- The LiveView: the page of a link, its tags and its picture. A bad
+  link. The button on a new device, on a house in Texas, on a full
+  worksheet, and on a house that is not in Texas.
+- The worksheet: the chart, the marks of the months with no credit, and
+  the link. More than 6 plans, names that are too long, the wait for the
+  weather, and its error. A month gets a credit or misses it, and never
+  both (a property of `DIY.Lesson.rows/3`).
 
 ## Home Assistant
 

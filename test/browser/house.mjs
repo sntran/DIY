@@ -248,7 +248,36 @@ async function lesson(page, name) {
   await page.waitForSelector("#worksheet-table")
   const heads = await page.$$eval("#worksheet-table thead th", (els) => els.map((el) => el.textContent.trim()))
   assert.deepEqual(heads, ["Month", "kWh", "Plan with a credit", "Broker plan"])
+  // The chart of the price is above the table (docs/design.md, "A link
+  // of plans").
+  assert.equal(await page.locator("#worksheet-chart polyline").count(), 2)
   await check(page, `${name} worksheet`)
+
+  // The link of the plans, and its page in a new tab, as a neighbor sees
+  // it. This device has the two plans already: they do not go in again.
+  // Chromium on Linux has no share sheet, so the link goes into the
+  // clipboard.
+  const context = page.context()
+  await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: site })
+  await page.click("#plan-share-button")
+  await page.waitForSelector("#plan-share-status:has-text('The link is in the clipboard.')")
+  const plans = await page.inputValue("#plan-share-link")
+  assert.match(plans, new RegExp(`^${site}/p/1[A-Za-z0-9_-]+$`))
+  const linked = await context.newPage()
+  linked.on("pageerror", (error) => { faults++; console.log(`${name} plan link: page error: ${error.message}`) })
+  await linked.goto(plans)
+  await connected(linked)
+  await linked.waitForSelector("#plan-link h1:has-text('2 plans to compare')")
+  assert.equal(await linked.getAttribute('meta[property="og:image"]', "content"), `${plans}/picture.png`)
+  const chart = await linked.request.get(`${plans}/picture.png`)
+  assert.equal(chart.status(), 200)
+  assert.equal(chart.headers()["content-type"], "image/png")
+  await linked.click("#link-chart details summary")
+  await check(linked, `${name} plan link`)
+  await linked.click("#plan-link-add:not([disabled])")
+  await linked.waitForSelector("#flash-info:has-text('The worksheet has these plans already.')")
+  await linked.waitForSelector("#worksheet-table")
+  await linked.close()
 }
 
 // The van: the person adds a camper van in the driveway, fills its zones,

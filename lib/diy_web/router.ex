@@ -31,6 +31,11 @@ defmodule DIYWeb.Router do
     get "/:data/picture.png", PictureController, :show
   end
 
+  # The picture of a link of plans (DIY.PlanLink), in the same way.
+  scope "/p", DIYWeb do
+    get "/:data/picture.png", PictureController, :plans
+  end
+
   scope "/", DIYWeb do
     pipe_through :browser
 
@@ -52,6 +57,8 @@ defmodule DIYWeb.Router do
       live "/settings", HomeLive, :settings
       # The page of the link of a shared house (DIY.Share).
       live "/s/:data", HomeLive, :shared
+      # The page of a link of plans to compare (DIY.PlanLink).
+      live "/p/:data", HomeLive, :plan_link
     end
 
     # The sign-in page of Home Assistant, in its own tab: it needs no build.

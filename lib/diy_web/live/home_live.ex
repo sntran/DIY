@@ -51,6 +51,7 @@ defmodule DIYWeb.HomeLive do
     Lesson,
     Market,
     Plan,
+    PlanLink,
     Power,
     Prices,
     Links,
@@ -68,6 +69,7 @@ defmodule DIYWeb.HomeLive do
     Inside,
     Outside,
     Picture,
+    PlanChart,
     Scene,
     Stage,
     VanCutaway
@@ -120,6 +122,7 @@ defmodule DIYWeb.HomeLive do
      |> assign(:sheet, nil)
      |> assign(:status, nil)
      |> assign(shared: nil, meta: nil, adopt: nil, share: nil, share_zip: true, origin: "")
+     |> assign(:plan_link, nil)
      # The short links that this page made: the id of each DATA (DIY.Links).
      # The key of the address counts the links of the person in a day.
      |> assign(share_links: %{}, share_short: nil, address: address(socket))
@@ -162,6 +165,7 @@ defmodule DIYWeb.HomeLive do
      |> assign(:hint, false)
      |> assign(:origin, origin(uri))
      |> shared(params)
+     |> plan_link(params)
      |> share()}
   end
 
@@ -208,6 +212,35 @@ defmodule DIYWeb.HomeLive do
 
   defp shared(socket, _params),
     do: assign(socket, shared: nil, meta: nil, adopt: nil, page_title: "Small Steps Home")
+
+  # The page of a link of plans (DIY.PlanLink): the plans, the title, and
+  # the tags of the preview. They are in English, as the plan lesson.
+  defp plan_link(%{assigns: %{live_action: :plan_link}} = socket, %{"data" => data}) do
+    case PlanLink.decode(data) do
+      {:ok, plans} ->
+        title = PlanChart.title(plans)
+        origin = socket.assigns.origin
+
+        socket
+        |> assign(page_title: title, plan_link: {:ok, plans})
+        |> assign(:meta, %{
+          title: title,
+          description:
+            Enum.map_join(plans, ", ", & &1.name) <>
+              ". The price for each kWh changes with the use of a month. Small Steps Home shows the bill of each month for your own house.",
+          image: origin <> ~p"/p/#{data}/picture.png",
+          url: origin <> ~p"/p/#{data}"
+        })
+
+      {:error, reason} ->
+        assign(socket, page_title: "Small Steps Home", plan_link: {:error, reason}, meta: nil)
+    end
+  end
+
+  defp plan_link(%{assigns: %{plan_link: nil}} = socket, _params), do: socket
+
+  defp plan_link(socket, _params),
+    do: assign(socket, plan_link: nil, meta: nil, page_title: "Small Steps Home")
 
   defp share_description(%{cost: nil}),
     do: gettext("Small Steps Home shows where the electricity of a house goes.")
@@ -1167,6 +1200,45 @@ defmodule DIYWeb.HomeLive do
 
   def handle_event("adopt_cancel", _params, socket), do: {:noreply, assign(socket, :adopt, nil)}
 
+  # The plans of a link go into the worksheet of the device. Then the page
+  # Plans shows them with the months of the house. A device with no house
+  # shows the first screens first. A plan that the worksheet has already
+  # does not go in again.
+  def handle_event(
+        "plan_link_add",
+        _params,
+        %{assigns: %{plan_link: {:ok, plans}, build: %Build{} = build}} = socket
+      ) do
+    if build.market != nil and not plans?(build) do
+      {:noreply,
+       put_flash(
+         socket,
+         :error,
+         gettext(
+           "These plans are for Texas, in an area with retail choice. The house on this device is not in such an area."
+         )
+       )}
+    else
+      {build, added, left} =
+        Enum.reduce(plans, {build, 0, 0}, fn plan, {build, added, left} ->
+          if Enum.any?(build.plans, &same_plan?(&1, plan)) do
+            {build, added, left}
+          else
+            case Build.add_plan(build, plan) do
+              {:ok, build, _id} -> {build, added + 1, left}
+              {:error, _full} -> {build, added, left + 1}
+            end
+          end
+        end)
+
+      {:noreply,
+       socket
+       |> put(Build.set_lesson(build, 4))
+       |> put_flash(link_flash(added, left), link_text(added, left))
+       |> push_patch(to: ~p"/plans?#{[step: 4]}")}
+    end
+  end
+
   def handle_event(_event, _params, socket), do: {:noreply, socket}
 
   defp add_plan(socket, plan) do
@@ -1192,6 +1264,22 @@ defmodule DIYWeb.HomeLive do
          )}
     end
   end
+
+  # Two plans are the same when all their numbers and their names are the
+  # same. The averages of an EFL are not in a link.
+  defp same_plan?(a, b), do: Map.drop(a, [:id, :averages]) == Map.drop(b, [:id, :averages])
+
+  defp link_flash(_added, 0), do: :info
+  defp link_flash(_added, _left), do: :error
+
+  defp link_text(0, 0), do: gettext("The worksheet has these plans already.")
+  defp link_text(_added, 0), do: gettext("The worksheet has the plans of the link now.")
+
+  defp link_text(_added, _left),
+    do:
+      gettext(
+        "The worksheet has 10 plans. Some plans of the link are not in it. Remove a plan first."
+      )
 
   defp plan_name(name, default) do
     case name |> String.trim() |> String.slice(0, 60) do
@@ -1807,7 +1895,7 @@ defmodule DIYWeb.HomeLive do
     ~H"""
     <Layouts.app
       flash={@flash}
-      nav={nav?(@build) and @live_action != :shared}
+      nav={nav?(@build) and @live_action not in [:shared, :plan_link]}
       power={power?(@build)}
       plans={plans?(@build)}
       action={@live_action}
@@ -1824,12 +1912,20 @@ defmodule DIYWeb.HomeLive do
       </noscript>
 
       <DIYWeb.Share.page :if={@live_action == :shared} shared={@shared} build={@build} adopt={@adopt} />
+      <DIYWeb.PlanLinkPage.page
+        :if={@live_action == :plan_link}
+        compared={@plan_link}
+        build={@build}
+      />
 
-      <p :if={is_nil(@build) and @live_action != :shared} class="py-16 text-center opacity-70">
+      <p
+        :if={is_nil(@build) and @live_action not in [:shared, :plan_link]}
+        class="py-16 text-center opacity-70"
+      >
         {gettext("The page reads your build from this device.")}
       </p>
 
-      <%= if @build && @live_action != :shared do %>
+      <%= if @build && @live_action not in [:shared, :plan_link] do %>
         <%= cond do %>
           <% is_nil(@build.door) -> %>
             <DIYWeb.Start.doors locale={@locale} />
@@ -1907,7 +2003,22 @@ defmodule DIYWeb.HomeLive do
                 answers={@answers}
                 hint={@hint}
                 shares={@shares}
+                origin={@origin}
               />
+            </div>
+          <% @live_action == :plans and plans_loading?(@weather, @market) -> %>
+            <div lang="en" class="contents">
+              <p id="plans-loading" class="py-8 opacity-80">
+                The page gets the plans of your area and the months of your house.
+              </p>
+            </div>
+          <% @live_action == :plans and plans_failed?(@weather, @market) != [] -> %>
+            <div lang="en" id="plans-failed" role="alert" class="py-8 space-y-3">
+              <p :for={message <- plans_failed?(@weather, @market)} class="text-error">
+                {message}
+              </p>
+              <p>The page needs the weather and the plans of your ZIP code to show the plans.</p>
+              <button type="button" phx-click="retry" class="btn btn-sm">Try again</button>
             </div>
           <% @live_action == :plans -> %>
             <div lang="en" class="contents">
@@ -2057,6 +2168,13 @@ defmodule DIYWeb.HomeLive do
   defp plans?(%Build{market: %{choice: true}}), do: true
   defp plans?(_build), do: false
 
+  # The page Plans waits for the weather and the market of the ZIP code.
+  # When one of them failed, it tells the error: the bill needs them.
+  defp plans_loading?(weather, market), do: :loading in [weather.status, market.status]
+
+  defp plans_failed?(weather, market),
+    do: for(%{status: {:error, message}} <- [weather, market], do: message)
+
   # The delivery charges of the utility of the house, when the app knows
   # them (DIY.Plan.tdu/1).
   defp tdu(%Build{market: %{utility: utility}}) when is_binary(utility), do: Plan.tdu(utility)
@@ -2065,6 +2183,7 @@ defmodule DIYWeb.HomeLive do
   # The page that the person sees: its name, the step of the lesson, and
   # the van. When it changes, the page goes to its top (the hook Top).
   defp page_key(%{live_action: :shared}), do: "shared"
+  defp page_key(%{live_action: :plan_link}), do: "plan_link"
   defp page_key(%{build: nil}), do: "load"
 
   defp page_key(%{build: build} = assigns) do

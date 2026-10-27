@@ -2,7 +2,8 @@ defmodule DIY.Share do
   @moduledoc """
   The link of a shared house (docs/design.md, "A shared house"): the
   path `/s/DATA`. `DATA` is the version of the format (`1`), then the
-  shared house as JSON, compressed with raw DEFLATE, in base64url.
+  shared house as JSON, compressed with raw DEFLATE, in base64url
+  (`DIY.Pack`).
 
   The JSON has the stripped build (`strip/2`) and its summary
   (`summary/5`). The picture and the title of the preview are in the
@@ -165,7 +166,7 @@ defmodule DIY.Share do
         }
       })
 
-    data = Base.url_encode64(deflate(json), padding: false)
+    data = DIY.Pack.encode(json)
 
     if small?(map) and byte_size(json) <= @max_json and byte_size(data) < @max_data,
       do: {:ok, @version <> data},
@@ -186,8 +187,7 @@ defmodule DIY.Share do
   """
   @spec decode(term()) :: {:ok, Build.t(), summary()} | {:error, atom()}
   def decode(@version <> data) when byte_size(data) < @max_data do
-    with {:ok, bytes} <- base64(data),
-         {:ok, json} <- inflate(bytes),
+    with {:ok, json} <- DIY.Pack.decode(data, @max_json),
          {:ok, %{"b" => b, "s" => s}} when is_map(b) <- decode_json(json),
          {:ok, summary} <- read_summary(s),
          {:ok, build} <- read_build(b) do
@@ -212,13 +212,6 @@ defmodule DIY.Share do
       with {:ok, data} <- DIY.Links.fetch(path), do: decode(data)
     else
       decode(path)
-    end
-  end
-
-  defp base64(data) do
-    case Base.url_decode64(data, padding: false) do
-      {:ok, bytes} -> {:ok, bytes}
-      :error -> {:error, :base64}
     end
   end
 
@@ -269,46 +262,5 @@ defmodule DIY.Share do
       {:error, :too_large} -> {:error, :too_large}
       {:error, _reason} -> {:error, :build}
     end
-  end
-
-  defp deflate(data) do
-    z = :zlib.open()
-    :ok = :zlib.deflateInit(z, 9, :deflated, -15, 9, :default)
-    out = :zlib.deflate(z, data, :finish)
-    :zlib.deflateEnd(z)
-    :zlib.close(z)
-    IO.iodata_to_binary(out)
-  end
-
-  # The inflate stops at @max_json bytes: a small link cannot become a
-  # large text.
-  defp inflate(bytes) do
-    z = :zlib.open()
-    :ok = :zlib.inflateInit(z, -15)
-
-    try do
-      z |> :zlib.safeInflate(bytes) |> collect(z, [], 0)
-    rescue
-      ErlangError -> {:error, :inflate}
-    after
-      :zlib.close(z)
-    end
-  end
-
-  defp collect(_result, _z, _acc, size) when size > @max_json, do: {:error, :too_large}
-
-  # A stream that ends before its end gives no output and asks for more
-  # input: it is not a link.
-  defp collect({:continue, out}, z, acc, size) do
-    case IO.iodata_length(out) do
-      0 -> {:error, :inflate}
-      n -> z |> :zlib.safeInflate([]) |> collect(z, [acc | out], size + n)
-    end
-  end
-
-  defp collect({:finished, out}, _z, acc, size) do
-    if size + IO.iodata_length(out) > @max_json,
-      do: {:error, :too_large},
-      else: {:ok, IO.iodata_to_binary([acc | out])}
   end
 end

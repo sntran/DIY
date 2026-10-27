@@ -38,6 +38,7 @@ defmodule DIYWeb.LessonPage do
   attr :hint, :boolean, default: false
   attr :shares, :map, default: %{}
   attr :tdu, :map, default: nil, doc: "the delivery charges of the utility (DIY.Plan.tdu/1)"
+  attr :origin, :string, default: "", doc: "the scheme and the host of the page, for a link"
 
   def page(assigns) do
     {months, source} = Lesson.months(assigns.build, assigns.bill)
@@ -102,6 +103,7 @@ defmodule DIYWeb.LessonPage do
         efl={@efl}
         shares={@shares}
         tdu={@tdu}
+        origin={@origin}
       />
     </section>
     """
@@ -445,6 +447,7 @@ defmodule DIYWeb.LessonPage do
   attr :efl, :map, default: nil
   attr :shares, :map, required: true
   attr :tdu, :map, default: nil
+  attr :origin, :string, default: ""
 
   defp worksheet(assigns) do
     years =
@@ -459,77 +462,103 @@ defmodule DIYWeb.LessonPage do
       <p class="text-sm">
         Each plan with your months, in the order that you added them. The app shows the math. You choose.
       </p>
+      <DIYWeb.PlanLinkPage.chart
+        :if={@years != []}
+        id="worksheet-chart"
+        plans={Enum.take(@build.plans, DIY.PlanLink.max_plans())}
+        months={@months}
+      />
+      <p :if={length(@years) > DIY.PlanLink.max_plans()} class="text-xs opacity-80">
+        The chart shows the first 6 plans.
+      </p>
       <p :if={@years != []} class="text-xs opacity-70 sm:hidden">
         Swipe the table to see all of it.
       </p>
+      <%!-- On a wide screen, the table can be wider than the text of the
+      page (64rem at most), so that it shows more plans. It is at the middle
+      of the page. A table that is still too wide scrolls. --%>
       <div
         :if={@years != []}
-        class="overflow-x-auto"
-        tabindex="0"
-        role="region"
-        aria-label="The worksheet"
+        class="relative left-1/2 flex w-[min(64rem,calc(100vw-2rem))] -translate-x-1/2 justify-center"
       >
-        <table class="table table-xs sm:table-sm" id="worksheet-table">
-          <thead>
-            <tr>
-              <th>Month</th>
-              <th class="text-right">kWh</th>
-              <th :if={@source == :estimate} class="text-right">Range (kWh)</th>
-              <th :for={{p, _year} <- @years} class="text-right">{p.name}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr :for={m <- @months}>
-              <td>{m.name}</td>
-              <td class="text-right">{Format.int(m.kwh)}</td>
-              <td :if={@source == :estimate} class="text-right">
-                {Format.int(m.low)} to {Format.int(m.high)}
-              </td>
-              <td :for={{_p, year} <- @years} class="text-right">
-                {money(Enum.at(year.rows, m.month - 1).total)}
-              </td>
-            </tr>
-          </tbody>
-          <tfoot>
-            <tr>
-              <th>Year</th>
-              <th class="text-right">{Format.int(Enum.sum(Enum.map(@months, & &1.kwh)))}</th>
-              <td :if={@source == :estimate}></td>
-              <th :for={{_p, year} <- @years} class="text-right">{Format.money(year.total)}</th>
-            </tr>
-            <tr :if={@source == :estimate}>
-              <th>Range of the year</th>
-              <td></td>
-              <td></td>
-              <td :for={{_p, year} <- @years} class="text-right">
-                {Format.money(year.total_low)} to {Format.money(year.total_high)}
-              </td>
-            </tr>
-            <tr>
-              <th>For each kWh</th>
-              <td></td>
-              <td :if={@source == :estimate}></td>
-              <th :for={{_p, year} <- @years} class="text-right">{cents(year.cents)}</th>
-            </tr>
-            <tr>
-              <th>Remove</th>
-              <td></td>
-              <td :if={@source == :estimate}></td>
-              <td :for={{p, _year} <- @years} class="text-right">
-                <button
-                  type="button"
-                  phx-click="delete_plan"
-                  phx-value-id={p.id}
-                  class="btn btn-xs btn-ghost"
-                  aria-label={"Remove #{p.name}"}
+        <div
+          class="min-w-[min(36rem,100%)] max-w-full overflow-x-auto"
+          tabindex="0"
+          role="region"
+          aria-label="The worksheet"
+        >
+          <table class="table table-xs sm:table-sm" id="worksheet-table">
+            <thead>
+              <tr>
+                <th>Month</th>
+                <th class="text-right">kWh</th>
+                <th :if={@source == :estimate} class="text-right">Range (kWh)</th>
+                <th
+                  :for={{p, _year} <- @years}
+                  class="text-right align-bottom whitespace-normal min-w-24 max-w-40"
                 >
-                  <.icon name="hero-x-mark" class="size-4" />
-                </button>
-              </td>
-            </tr>
-          </tfoot>
-        </table>
+                  {p.name}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr :for={m <- @months}>
+                <td>{m.name}</td>
+                <td class="text-right">{Format.int(m.kwh)}</td>
+                <td :if={@source == :estimate} class="text-right">
+                  {Format.int(m.low)} to {Format.int(m.high)}
+                </td>
+                <td :for={{_p, year} <- @years} class="text-right whitespace-nowrap">
+                  {money(Enum.at(year.rows, m.month - 1).total)}<.missed row={
+                    Enum.at(year.rows, m.month - 1)
+                  } />
+                </td>
+              </tr>
+            </tbody>
+            <tfoot>
+              <tr>
+                <th>Year</th>
+                <th class="text-right">{Format.int(Enum.sum(Enum.map(@months, & &1.kwh)))}</th>
+                <td :if={@source == :estimate}></td>
+                <th :for={{_p, year} <- @years} class="text-right">{Format.money(year.total)}</th>
+              </tr>
+              <tr :if={@source == :estimate}>
+                <th>Range of the year</th>
+                <td></td>
+                <td></td>
+                <td :for={{_p, year} <- @years} class="text-right">
+                  {Format.money(year.total_low)} to {Format.money(year.total_high)}
+                </td>
+              </tr>
+              <tr>
+                <th>For each kWh</th>
+                <td></td>
+                <td :if={@source == :estimate}></td>
+                <th :for={{_p, year} <- @years} class="text-right">{cents(year.cents)}</th>
+              </tr>
+              <tr>
+                <th>Remove</th>
+                <td></td>
+                <td :if={@source == :estimate}></td>
+                <td :for={{p, _year} <- @years} class="text-right">
+                  <button
+                    type="button"
+                    phx-click="delete_plan"
+                    phx-value-id={p.id}
+                    class="btn btn-xs btn-ghost"
+                    aria-label={"Remove #{p.name}"}
+                  >
+                    <.icon name="hero-x-mark" class="size-4" />
+                  </button>
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
       </div>
+      <p :if={missed?(@years)} id="worksheet-missed" class="text-xs opacity-80">
+        * No credit: the month is under the kWh of a credit of the plan.
+      </p>
       <p :if={@source == :estimate} class="text-xs opacity-80">
         The range: the kWh of each month from the weather of 10 years and the limits of the model, and the least and the most bill in that range.
       </p>
@@ -548,11 +577,26 @@ defmodule DIYWeb.LessonPage do
       <p :if={@years == []} class="text-sm">
         No plan yet. Open an EFL, or give the numbers of a plan.
       </p>
+      <DIYWeb.PlanLinkPage.share :if={@years != []} plans={@build.plans} origin={@origin} />
       <.efl_reader efl={@efl} />
       <.plan_form tdu={@tdu} />
     </div>
     """
   end
+
+  attr :row, :map, required: true
+
+  # The mark of a month that does not get a credit of the plan.
+  defp missed(assigns) do
+    ~H"""
+    <span :if={@row.missed > 0} class="font-bold"><span aria-hidden="true">*</span><span class="sr-only">
+      (no credit of {money(@row.missed)})
+    </span></span>
+    """
+  end
+
+  defp missed?(years),
+    do: Enum.any?(years, fn {_p, year} -> Enum.any?(year.rows, &(&1.missed > 0)) end)
 
   defp night_source(%{night_from: :house}),
     do:
@@ -588,11 +632,12 @@ defmodule DIYWeb.LessonPage do
   end
 
   attr :plan, :map, required: true
+  attr :id, :string, default: "plan-numbers"
 
-  # The numbers of a plan, in the words of an EFL.
-  defp plan_numbers(assigns) do
+  @doc "The numbers of a plan, in the words of an EFL."
+  def plan_numbers(assigns) do
     ~H"""
-    <ul class="text-sm list-disc pl-5" id="plan-numbers">
+    <ul class="text-sm list-disc pl-5" id={@id}>
       <li>Base charge: {money(@plan.base)} each month.</li>
       <li :for={{from, cents} <- @plan.energy}>
         Energy charge: {num(cents)}¢ for each kWh{if from > 0, do: " above #{Format.kwh(from)}"}{if @plan.night,
