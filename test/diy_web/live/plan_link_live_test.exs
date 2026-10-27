@@ -252,7 +252,7 @@ defmodule DIYWeb.PlanLinkLiveTest do
       {:ok, view, _html} = live(conn, ~p"/plans")
       restore(view, house())
       refute has_element?(view, "#plans-loading")
-      assert has_element?(view, "#plans-failed p.text-error")
+      assert has_element?(view, "#plans-failed[role=alert] p.text-error")
       assert has_element?(view, "#plans-failed", "The page needs the weather")
 
       Stubs.weather()

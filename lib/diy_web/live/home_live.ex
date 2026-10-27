@@ -2013,7 +2013,7 @@ defmodule DIYWeb.HomeLive do
               </p>
             </div>
           <% @live_action == :plans and plans_failed?(@weather, @market) != [] -> %>
-            <div lang="en" id="plans-failed" class="py-8 space-y-3">
+            <div lang="en" id="plans-failed" role="alert" class="py-8 space-y-3">
               <p :for={message <- plans_failed?(@weather, @market)} class="text-error">
                 {message}
               </p>
