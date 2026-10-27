@@ -88,6 +88,8 @@ defmodule DIYWeb.Cutaway do
   (meters). Then it has its parts in the order of the paint:
 
   - the lot (`ground`), and the surfaces of the rooms outside (`low`);
+  - the shell to the floor over it (`shell`), empty here. The picture of
+    a share adds it (`shell/4`);
   - the slabs, and the surfaces of the other rooms (`rooms`);
   - the walls, the furniture and the items (`objects`, from the back to
     the front);
@@ -129,6 +131,39 @@ defmodule DIYWeb.Cutaway do
   end
 
   @doc """
+  The shell between two layers of a view, for the picture of a share
+  (`DIYWeb.Picture`). The layers have a gap, so that a layer does not
+  hide the layer under it. In the picture, the gap makes the floors look
+  apart. The shell joins them: the wall at the back and the wall at the
+  left of the upper floor. Each wall goes from the ground (or from the
+  bottom of the slab of the lower floor) up to the slab of the upper
+  floor. It stands at the outer edge of the slab, as an outer wall.
+
+  The lower layer paints it after its yards and before its slabs (its
+  `shell`). Thus the yard at the back is behind it. The rooms of the
+  lower floor are in front of it.
+
+  `plan` has the places of the walls on the plan (inches): `back` is
+  `{x0, x1, y}` and `left` is `{x, y0, y1}`. It gives SVG polygons
+  (`{points, class}`), with the classes `p-shell-l` and `p-shell-r`.
+  """
+  def shell(camera, below, above, %{back: {bx0, bx1, by}, left: {lx, ly0, ly1}}) do
+    m = &(&1 * @m)
+    bottom = if below.id == "ground", do: below.z, else: below.z - @slab
+    {z0, z1} = {bottom, above.z - @slab}
+    {bx0, bx1, by} = {m.(bx0) - @thick, m.(bx1) + @thick, m.(by) - @thick}
+    {lx, ly0, ly1} = {m.(lx) - @thick, m.(ly0) - @thick, m.(ly1) + @thick}
+    back = [{bx0, by, z0}, {bx1, by, z0}, {bx1, by, z1}, {bx0, by, z1}]
+    left = [{lx, ly0, z0}, {lx, ly1, z0}, {lx, ly1, z1}, {lx, ly0, z1}]
+    # The back wall faces the way of the front of a box (`DIYWeb.Geometry.box/2`).
+    {back_class, left_class} =
+      if camera.lit == :front, do: {"p-shell-l", "p-shell-r"}, else: {"p-shell-r", "p-shell-l"}
+
+    for {corners, class} <- [{back, back_class}, {left, left_class}],
+        do: {Camera.points(camera, {0, 0}, corners), class}
+  end
+
+  @doc """
   A view of layers (`layer/2`) with a camera: the layers, the camera, and
   the box of the SVG.
   """
@@ -142,7 +177,7 @@ defmodule DIYWeb.Cutaway do
     {outdoor, indoor} = Enum.split_with(rooms, &(id == "ground" and &1.place == :outdoor))
     low = Enum.map(outdoor, &room_view(&1, floor_z.(&1), camera))
     others = Enum.map(indoor, &room_view(&1, floor_z.(&1), camera))
-    {ground, slabs, walls} = shell(level, rooms, house, floor_z, items)
+    {ground, slabs, walls} = structure(level, rooms, house, floor_z, items)
 
     item_views =
       for room <- rooms,
@@ -204,6 +239,8 @@ defmodule DIYWeb.Cutaway do
     room}`): a tap on its edge chooses the room;
   - the surfaces of the rooms (`floor/5`) on the ground (`low`) and over
     the slabs (`rooms`);
+  - the shell (`shell`), empty. The picture of a share adds it
+    (`shell/4`);
   - the objects (walls, furniture with `decor_view/6`, and items with
     `item_view/4`), and the labels
     (`label/3`).
@@ -240,6 +277,9 @@ defmodule DIYWeb.Cutaway do
           part -> svg_polys.(part)
         end),
       labels: parts.labels,
+      # The shell to the layer over it: only the picture of a share has it
+      # (`shell/4`).
+      shell: [],
       box: bounds(polys, camera)
     }
   end
@@ -256,14 +296,14 @@ defmodule DIYWeb.Cutaway do
   defp floor_height("ground", _room), do: 0.1
   defp floor_height(_layer, _room), do: 0.0
 
-  ## The shell: the lot, the slabs and the walls
+  ## The structure: the lot, the slabs and the walls
 
   # The lot (on the ground), a slab under each room, and the walls of the
   # rooms inside (as objects, `walls/5`). A yard is on the ground: it has
   # no slab. A floor with no room has the slab of the house.
-  defp shell(%{id: "roof"}, _rooms, _house, _floor_z, _items), do: {[], [], []}
+  defp structure(%{id: "roof"}, _rooms, _house, _floor_z, _items), do: {[], [], []}
 
-  defp shell(%{id: id, z: z, camera: camera}, rooms, house, floor_z, items) do
+  defp structure(%{id: id, z: z, camera: camera}, rooms, house, floor_z, items) do
     on_slab = Enum.reject(rooms, &(id == "ground" and &1.place == :outdoor))
 
     slabs =
@@ -1296,6 +1336,7 @@ defmodule DIYWeb.Cutaway do
       <g :for={level <- @view.levels} id={"plan-#{level.id}"} data-box={box_text(level.box)}>
         <polygon :for={{points, class} <- level.ground} points={points} class={class} />
         <.surface :for={room <- level.low} :key={room.id} room={room} selected={@selected} />
+        <polygon :for={{points, class} <- level.shell} points={points} class={class} />
         <polygon
           :for={{points, class, room} <- level.slabs}
           points={points}

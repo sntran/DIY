@@ -637,6 +637,22 @@
    "stop-color": "rgb(31, 35, 40)",
    "stop-opacity": "0"
   },
+  "p-shell-l": {
+   "fill": "rgb(251, 246, 238)",
+   "fill-opacity": "0.55",
+   "stroke": "rgba(64, 44, 31, 0.45)",
+   "stroke-width": "0.6px",
+   "stroke-linejoin": "round",
+   "vector-effect": "non-scaling-stroke"
+  },
+  "p-shell-r": {
+   "fill": "rgb(230, 220, 205)",
+   "fill-opacity": "0.55",
+   "stroke": "rgba(64, 44, 31, 0.45)",
+   "stroke-width": "0.6px",
+   "stroke-linejoin": "round",
+   "vector-effect": "non-scaling-stroke"
+  },
   "p-side-low": {
    "stop-color": "rgb(220, 197, 168)"
   },
@@ -1502,6 +1518,22 @@
    "stop-color": "rgb(31, 35, 40)",
    "stop-opacity": "0"
   },
+  "p-shell-l": {
+   "fill": "rgb(251, 246, 238)",
+   "fill-opacity": "0.55",
+   "stroke": "rgba(64, 44, 31, 0.45)",
+   "stroke-width": "0.6px",
+   "stroke-linejoin": "round",
+   "vector-effect": "non-scaling-stroke"
+  },
+  "p-shell-r": {
+   "fill": "rgb(230, 220, 205)",
+   "fill-opacity": "0.55",
+   "stroke": "rgba(64, 44, 31, 0.45)",
+   "stroke-width": "0.6px",
+   "stroke-linejoin": "round",
+   "vector-effect": "non-scaling-stroke"
+  },
   "p-side-low": {
    "stop-color": "rgb(220, 197, 168)"
   },
@@ -2366,6 +2398,22 @@
   },
   "p-shadow-2": {
    "stop-opacity": "0"
+  },
+  "p-shell-l": {
+   "fill": "rgb(138, 127, 112)",
+   "fill-opacity": "0.55",
+   "stroke": "rgba(255, 255, 255, 0.22)",
+   "stroke-width": "0.6px",
+   "stroke-linejoin": "round",
+   "vector-effect": "non-scaling-stroke"
+  },
+  "p-shell-r": {
+   "fill": "rgb(110, 100, 88)",
+   "fill-opacity": "0.55",
+   "stroke": "rgba(255, 255, 255, 0.22)",
+   "stroke-width": "0.6px",
+   "stroke-linejoin": "round",
+   "vector-effect": "non-scaling-stroke"
   },
   "p-side-low": {
    "stop-color": "rgb(125, 92, 65)"

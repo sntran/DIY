@@ -29,6 +29,9 @@ defmodule DIYWeb.Decor do
   # The space between a piece in a yard and the edge of the yard (inches).
   # The walls and the slab of the house go out of the house.
   @yard_gap 8
+  # The most steps of stairs, and the depth of a step (inches).
+  @steps 13
+  @step 11
   # The depth of a kitchen counter (inches), and its least length.
   @counter 25
   @least 18
@@ -215,6 +218,16 @@ defmodule DIYWeb.Decor do
           {model("vanity"), :front_right, 2}
         ]
 
+      # The word "stair" or "stairs" (not "upstairs"). On floor 1, the
+      # stairs go up to the back of the room: as many steps as the room
+      # has space for. On an upper floor, the room has the opening of the
+      # stairs, with a rail.
+      Regex.match?(~r/\bstairs?\b/, name) and room.level == "f1" ->
+        stairs(room)
+
+      Regex.match?(~r/\bstairs?\b/, name) ->
+        [{model("stair_well"), :front_center, 0}, {model("plant"), :back_left, 0}]
+
       String.contains?(name, "garage") ->
         [{model("bench"), :back_right, 0}, {model("shelf"), :back_left, 0}]
 
@@ -230,6 +243,13 @@ defmodule DIYWeb.Decor do
   end
 
   defp plan(_room, _boxes), do: []
+
+  # The stairs of a room: 13 steps at most, each 11 inches deep, in the
+  # depth of the room. A room with space for less than 4 steps has none.
+  defp stairs(room) do
+    steps = min(@steps, div(room.plan.d - 2 * @gap, @step))
+    if steps >= 4, do: [{model({"stairs", steps}), :back_right, 0}], else: []
+  end
 
   # The counters of a kitchen fill the back wall where no item is. They
   # stop 4 inches from the left wall and from the right wall. An item
@@ -335,6 +355,36 @@ defmodule DIYWeb.Decor do
     [round_box({0, 0, 0}, {1.0, 0.45, 0.8}, 0.03, "light-wood")] ++
       for(z <- [0.18, 0.42, 0.66], do: {:box, {0.45, 0.45, z}, {0.1, 0.01, 0.02}, "wood"}) ++
       [{:cyl, {0.8, 0.22, 0.8}, 0.07, 0.2, "clay"}] ++ ball({0.8, 0.22, 1.14}, 0.12, "leaf")
+  end
+
+  # Stairs of a number of steps, each 18.5 cm up and 11 inches deep. With
+  # 13 steps, they go up to the top of the walls of floor 1 (2.4 m). The
+  # top step is at the back. The side at the right is a panel on the slope
+  # of the steps.
+  def model({"stairs", steps}) do
+    run = @step * @m
+    depth = steps * run
+
+    for(
+      i <- 0..(steps - 1),
+      do: {:box, {0, i * run, 0}, {0.9, run, (steps - i) * 0.185}, "light-wood"}
+    ) ++
+      [
+        {:face, [{0.9, 0, 0}, {0.9, depth, 0}, {0.9, depth, 0.185}, {0.9, 0, steps * 0.185}], nil,
+         "i-wood-r i-face"}
+      ]
+  end
+
+  # The opening of the stairs on an upper floor: a dark well. Two posts
+  # stand at its front corners, with a rail over them.
+  def model("stair_well") do
+    [
+      {:face, [{0, 0, 0.01}, {0.9, 0, 0.01}, {0.9, 1.2, 0.01}, {0, 1.2, 0.01}], nil,
+       "i-dark-t i-face"},
+      {:box, {0, 1.16, 0}, {0.04, 0.04, 0.9}, "wood"},
+      {:box, {0.86, 1.16, 0}, {0.04, 0.04, 0.9}, "wood"},
+      {:box, {0, 1.16, 0.9}, {0.9, 0.04, 0.04}, "wood"}
+    ]
   end
 
   def model("rug"), do: [mat({2.0, 1.5}, 0.15)]

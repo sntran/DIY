@@ -2,7 +2,7 @@ defmodule DIYWeb.Picture.Labels do
   @moduledoc """
   The places of the labels in the picture of a shared house
   (`DIYWeb.Picture`, docs/design.md, "The preview of a link"). A label is
-  a box above the top of its item, with a line down to the item.
+  a bubble above the top of its item, with a pointer down to the item.
 
   The labels come in their order: the first label has the best place.
   Each label goes to the nearest free place above its item, in the box of

@@ -49,7 +49,7 @@ defmodule DIY.Links do
   keeps the result. When it fails, the app starts without the short
   links. Then a request tries the migration again, once a minute at most.
   """
-  def boot(opts \\ []), do: ready(migrate(opts))
+  def boot(opts \\ []), do: ready(migrate(opts), opts)
 
   @doc """
   Runs the migration of the table. It can run again after a start that
@@ -65,8 +65,10 @@ defmodule DIY.Links do
       :error
   end
 
-  defp ready(:ok), do: :ets.insert(Guard, {:ready, true})
-  defp ready(:error), do: :ets.insert(Guard, {:ready, false, now()})
+  # The state keeps the options of the migration of the start: a new try
+  # uses the same options.
+  defp ready(:ok, _opts), do: :ets.insert(Guard, {:ready, true})
+  defp ready(:error, opts), do: :ets.insert(Guard, {:ready, false, now(), opts})
 
   # True when the table is ready. Else a migration again, when the last
   # try is one minute old. Only one request runs it: the request that
@@ -74,12 +76,12 @@ defmodule DIY.Links do
   # migration that works changes the state.
   defp ready? do
     case :ets.lookup(Guard, :ready) do
-      [{:ready, false, at} = last] ->
+      [{:ready, false, at, opts} = last] ->
         now = now()
 
         now - at >= @retry_ms and
-          :ets.select_replace(Guard, [{last, [], [{{:ready, false, now}}]}]) == 1 and
-          migrate() == :ok and
+          :ets.select_replace(Guard, [{last, [], [{{:ready, false, now, {:const, opts}}}]}]) == 1 and
+          migrate(opts) == :ok and
           :ets.insert(Guard, {:ready, true})
 
       _ready ->

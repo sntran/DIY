@@ -120,6 +120,35 @@ defmodule DIYWeb.CutawayTest do
     assert ids.(build) == ["ground", "f2"]
   end
 
+  test "the shell between two floors: from the ground or the slab under it to the slab over it" do
+    camera = Camera.house()
+    pts = &Camera.points(camera, {0, 0}, &1)
+    # A floor of 100 by 50 inches: 2.54 by 1.27 m. The walls stand at the
+    # outer edge of the slab: 0.16 m out of the floor. Their ends also go
+    # 0.16 m farther, so they meet at the corner.
+    plan = %{back: {0, 100, 0}, left: {0, 0, 50}}
+    {t, x1, y1} = {-0.16, 2.54 + 0.16, 1.27 + 0.16}
+
+    # From the ground to the slab of floor 2, 0.3 m under its floor at
+    # 10 m.
+    assert Cutaway.shell(camera, %{id: "ground", z: 0.0}, %{id: "f2", z: 10.0}, plan) == [
+             {pts.([{t, t, 0.0}, {x1, t, 0.0}, {x1, t, 9.7}, {t, t, 9.7}]), "p-shell-l"},
+             {pts.([{t, t, 0.0}, {t, y1, 0.0}, {t, y1, 9.7}, {t, t, 9.7}]), "p-shell-r"}
+           ]
+
+    # From the bottom of the slab of floor 2 to the slab of floor 3.
+    [{back, _class}, _left] =
+      Cutaway.shell(camera, %{id: "f2", z: 10.0}, %{id: "f3", z: 20.0}, plan)
+
+    assert back == pts.([{t, t, 9.7}, {x1, t, 9.7}, {x1, t, 19.7}, {t, t, 19.7}])
+
+    # A camera that sees the side of a box more: the classes change.
+    side = Camera.new(:test, 30, 34)
+
+    assert [{_back, "p-shell-r"}, {_left, "p-shell-l"}] =
+             Cutaway.shell(side, %{id: "ground", z: 0.0}, %{id: "f2", z: 10.0}, plan)
+  end
+
   test "the surfaces of the rooms, with the data for the hook" do
     build = house()
     html = html(build, room(build, "Kitchen"))
