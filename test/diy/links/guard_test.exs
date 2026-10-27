@@ -36,6 +36,27 @@ defmodule DIY.Links.GuardTest do
     assert Links.allow("d", tomorrow) == {:error, :many}
   end
 
+  test "the counts go up first: no address row after the 1,000 links of a day" do
+    for n <- 1..1_000, do: assert(Links.allow("address #{n}", @day) == :ok)
+    assert Links.allow("late", @day) == {:error, :many}
+
+    day = Date.to_gregorian_days(@day)
+    assert :ets.lookup(Guard, {:count, :all, day}) == [{{:count, :all, day}, 1_000}]
+    assert :ets.lookup(Guard, {:count, "late", day}) == []
+  end
+
+  test "a page with no address gets no link, and a link that the app did not make gives its count back" do
+    assert Links.create(data(), @day, address: nil) == {:error, :many}
+
+    # The table is not ready: 25 tries spend no count of the address.
+    :ets.insert(Guard, {:ready, false, System.monotonic_time(:millisecond)})
+    for _n <- 1..25, do: assert(Links.create(data(), @day, address: "a") == {:error, :storage})
+    :ets.insert(Guard, {:ready, true})
+
+    for _n <- 1..20, do: assert({:ok, _id} = Links.create(data(), @day, address: "a"))
+    assert Links.create(data(), @day, address: "a") == {:error, :many}
+  end
+
   test "a table that is not ready gets no statement, and a request tries the migration again after one minute" do
     {:ok, repo} = Repo.start_link(name: nil, database: ":memory:", pool_size: 1)
     GenServer.stop(repo)
@@ -47,6 +68,11 @@ defmodule DIY.Links.GuardTest do
 
     assert Links.create(data(), @day) == {:error, :storage}
     assert Links.fetch("2" <> String.duplicate("A", 16), @day) == {:error, :storage}
+
+    # A different request wrote a new time first: this request does not run
+    # the migration.
+    :ets.insert(Guard, {:ready, false, at})
+    assert Links.create(data(), @day) == {:error, :storage}
 
     # One minute later, a request runs the migration again. It works: the
     # table is ready.

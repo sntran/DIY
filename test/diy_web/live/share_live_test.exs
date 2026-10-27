@@ -243,8 +243,9 @@ defmodule DIYWeb.ShareLiveTest do
     end
 
     test "an address makes 20 short links a day at most", %{conn: conn} do
-      # The address of the tests already made 20 links today.
-      key = DIYWeb.Address.key(conn)
+      # The address of the tests (the WebSocket) already made 20 links
+      # today.
+      key = DIYWeb.Address.key({127, 0, 0, 1})
       day = Date.to_gregorian_days(Date.utc_today())
       :ets.insert(DIY.Links.Guard, {{:count, key, day}, 20})
       on_exit(fn -> :ets.match_delete(DIY.Links.Guard, {{:count, :_, :_}, :_}) end)
@@ -256,6 +257,12 @@ defmodule DIYWeb.ShareLiveTest do
       view |> element("#share-short") |> render_click()
       assert has_element?(view, "#share-short-error", "Share the long link.")
       assert DIY.Repo.aggregate(DIY.Links.Link, :count) == 0
+      assert :ets.lookup(DIY.Links.Guard, {:count, key, day}) == [{{:count, key, day}, 20}]
+
+      # One link fewer: the page makes the link.
+      :ets.insert(DIY.Links.Guard, {{:count, key, day}, 19})
+      view |> element("#share-short") |> render_click()
+      assert DIY.Repo.aggregate(DIY.Links.Link, :count) == 1
     end
 
     test "a page makes 20 short links at most", %{conn: conn} do

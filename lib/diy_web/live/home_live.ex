@@ -73,8 +73,17 @@ defmodule DIYWeb.HomeLive do
     VanCutaway
   }
 
+  # The key of the address of the WebSocket (DIYWeb.Address). The first
+  # render has no WebSocket and no events: it has no key.
+  defp address(socket) do
+    case connected?(socket) && get_connect_info(socket, :peer_data) do
+      %{address: ip} -> DIYWeb.Address.key(ip)
+      _none -> nil
+    end
+  end
+
   @impl true
-  def mount(_params, session, socket) do
+  def mount(_params, _session, socket) do
     {:ok,
      socket
      |> assign(:page_title, "Small Steps Home")
@@ -113,7 +122,7 @@ defmodule DIYWeb.HomeLive do
      |> assign(shared: nil, meta: nil, adopt: nil, share: nil, share_zip: true, origin: "")
      # The short links that this page made: the id of each DATA (DIY.Links).
      # The key of the address counts the links of the person in a day.
-     |> assign(share_links: %{}, share_short: nil, address: session["address"] || "")
+     |> assign(share_links: %{}, share_short: nil, address: address(socket))
      |> allow_upload(:build_file,
        accept: ~w(.json),
        max_entries: 1,
@@ -1119,7 +1128,7 @@ defmodule DIYWeb.HomeLive do
       cond do
         Map.has_key?(links, data) -> {:ok, links[data]}
         map_size(links) >= @max_short -> {:error, :many}
-        true -> with :ok <- Links.allow(socket.assigns.address), do: Links.create(data)
+        true -> Links.create(data, Date.utc_today(), address: socket.assigns.address)
       end
 
     case result do

@@ -69,16 +69,18 @@ defmodule DIY.Links do
   defp ready(:error), do: :ets.insert(Guard, {:ready, false, now()})
 
   # True when the table is ready. Else a migration again, when the last
-  # try is one minute old.
+  # try is one minute old. Only one request runs it: the request that
+  # writes the time of the new try first (an atomic replace). Only a
+  # migration that works changes the state.
   defp ready? do
     case :ets.lookup(Guard, :ready) do
-      [{:ready, false, at}] ->
-        if now() - at >= @retry_ms do
-          ready(migrate())
-          ready?()
-        else
-          false
-        end
+      [{:ready, false, at} = last] ->
+        now = now()
+
+        now - at >= @retry_ms and
+          :ets.select_replace(Guard, [{last, [], [{{:ready, false, now}}]}]) == 1 and
+          migrate() == :ok and
+          :ets.insert(Guard, {:ready, true})
 
       _ready ->
         true
@@ -89,35 +91,46 @@ defmodule DIY.Links do
 
   @doc """
   `:ok` when the app can make one more short link today for the address
-  (a hash, `DIYWeb.Address`), and it counts it. Else `{:error, :many}`:
-  1,000 links today for all the persons, or 20 for the address. The
-  counts are in the memory of the VM.
+  (a key, `DIYWeb.Address`), and it counts it. Else `{:error, :many}`:
+  1,000 links today for all the persons, or 20 for the address. No
+  address (`nil`) gets no link. The counts are in the memory of the VM.
+
+  Each count goes up first, and then the check reads the new count. Thus
+  two requests at the same time cannot both get the last link. The count
+  of all the persons is first: an address gets a count only when the app
+  can still make links today.
   """
-  @spec allow(String.t(), Date.t()) :: :ok | {:error, :many}
-  def allow(address, today \\ Date.utc_today()) do
+  @spec allow(String.t() | nil, Date.t()) :: :ok | {:error, :many}
+  def allow(nil, _today), do: {:error, :many}
+
+  def allow(address, today) do
     day = Date.to_gregorian_days(today)
 
     # The counts of the days before today go.
     :ets.select_delete(Guard, [{{{:count, :_, :"$1"}, :_}, [{:"/=", :"$1", day}], [true]}])
 
-    all = {:count, :all, day}
-    one = {:count, address, day}
+    cond do
+      add({:count, :all, day}, 1) > @per_day ->
+        add({:count, :all, day}, -1)
+        {:error, :many}
 
-    if count(all) < @per_day and count(one) < @per_address do
-      :ets.update_counter(Guard, all, 1, {all, 0})
-      :ets.update_counter(Guard, one, 1, {one, 0})
-      :ok
-    else
-      {:error, :many}
+      add({:count, address, day}, 1) > @per_address ->
+        give_back(address, today)
+        {:error, :many}
+
+      true ->
+        :ok
     end
   end
 
-  defp count(key) do
-    case :ets.lookup(Guard, key) do
-      [{^key, n}] -> n
-      [] -> 0
-    end
+  # A link that the app did not make gives its counts back.
+  defp give_back(address, today) do
+    day = Date.to_gregorian_days(today)
+    add({:count, :all, day}, -1)
+    add({:count, address, day}, -1)
   end
+
+  defp add(key, n), do: :ets.update_counter(Guard, key, n, {key, 0})
 
   @doc "True for the text of a short link: `2` and 16 letters or digits."
   @spec id?(term()) :: boolean()
@@ -131,11 +144,35 @@ defmodule DIY.Links do
   The day is the day of today (UTC). It first deletes the links that
   ended. A full table gives `{:error, :full}`, and a `DATA` that is not
   of a long link gives `{:error, :data}`.
-  """
-  @spec create(String.t(), Date.t()) :: {:ok, String.t()} | {:error, :full | :data | :storage}
-  def create(data, today \\ Date.utc_today())
 
-  def create("1" <> _rest = data, today) when byte_size(data) <= @max_data do
+  With the option `address`, the link counts for that address
+  (`allow/2`), and too many links give `{:error, :many}`. A link that the
+  app could not make gives its count back.
+  """
+  @spec create(String.t(), Date.t(), keyword()) ::
+          {:ok, String.t()} | {:error, :full | :data | :storage | :many}
+  def create(data, today \\ Date.utc_today(), opts \\ [])
+
+  def create("1" <> _rest = data, today, opts) when byte_size(data) <= @max_data do
+    case Keyword.fetch(opts, :address) do
+      {:ok, address} ->
+        with :ok <- allow(address, today), do: data |> insert(today) |> counted(address, today)
+
+      :error ->
+        insert(data, today)
+    end
+  end
+
+  def create(_data, _today, _opts), do: {:error, :data}
+
+  defp counted({:ok, _id} = made, _address, _today), do: made
+
+  defp counted(error, address, today) do
+    give_back(address, today)
+    error
+  end
+
+  defp insert(data, today) do
     storage(fn ->
       Repo.delete_all(from(l in Link, where: l.used_on < ^Date.add(today, -@days)))
 
@@ -149,8 +186,6 @@ defmodule DIY.Links do
       end
     end)
   end
-
-  def create(_data, _today), do: {:error, :data}
 
   @doc """
   The `DATA` of the long link of a short link, and the day of the visit

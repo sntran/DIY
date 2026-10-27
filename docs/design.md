@@ -2231,12 +2231,22 @@ The rules of a short link:
   The same house on the same page gives the same link again.
 - The app makes 1,000 new links a day at most, and 20 a day for each
   address (`DIY.Links.allow/2`). The counts are in the memory of the VM
-  (`DIY.Links.Guard`), so a new start of the VM starts them again. The
-  key of an address is an HMAC of the IP address with the secret key
-  base (`DIYWeb.Address`): the app does not keep the address. On
-  Cloudflare, beam.com gives the connection the address of the client
-  (`cf-connecting-ip`). Thus a script must use many addresses and many
-  days to fill the table: 100 days at 1,000 links a day.
+  (`DIY.Links.Guard`), so a new start of the VM starts them again:
+  - The LiveView reads the address of its WebSocket (`peer_data`). On
+    Cloudflare, beam.com gives the connection the address of the client
+    (`cf-connecting-ip`).
+  - An IPv6 address counts as its network of 64 bits, because a person
+    can change the other 64 bits. An IPv4 address in IPv6 counts as the
+    IPv4 address.
+  - The key of an address is an HMAC of the address (`DIYWeb.Address`).
+    The app does not keep the address, and the key is not in the page.
+  - A count goes up first, and then the check reads the new count. Thus
+    two requests at the same time cannot both get the last link.
+  - A link that the app could not make (an error of the storage, a full
+    table) gives its count back.
+
+  Thus a script must use many networks and many days to fill the table:
+  100 days at 1,000 links a day.
 - The `DATA` has the limits of a long link (6,000 characters).
 - When the app cannot make a short link (a full table, an error of the
   storage), the sheet tells it and keeps the long link. When the app
@@ -2266,7 +2276,9 @@ The migration of the table runs at the start (`DIY.Links.Guard`). It
 makes only what is not there, so it can run again after a start that
 stopped in it. When it fails, the app starts without the short links.
 Then no statement goes to the storage, and a request runs the migration
-again, once a minute at most.
+again, once a minute at most. Only one request runs it: the request
+that writes the time of the new try first. Only a migration that works
+changes the state to ready.
 
 The model `specs/Links.tla` checks these rules with TLC. A visit is two
 steps (`Read`, `Write`), and other steps can come between them:
@@ -2282,7 +2294,6 @@ Three configurations have a fault that TLC must find. In
 upsert. The tests also run the steps `Write` and `Expire` one by one,
 with a change of the row between them (`DIY.Links.visit/2`,
 `DIY.Links.expire/2`).
-
 
 ### The share
 
