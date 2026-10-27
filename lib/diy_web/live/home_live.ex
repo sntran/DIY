@@ -73,6 +73,15 @@ defmodule DIYWeb.HomeLive do
     VanCutaway
   }
 
+  # The key of the address of the WebSocket (DIYWeb.Address). The first
+  # render has no WebSocket and no events: it has no key.
+  defp address(socket) do
+    case connected?(socket) && get_connect_info(socket, :peer_data) do
+      %{address: ip} -> DIYWeb.Address.key(ip)
+      _none -> nil
+    end
+  end
+
   @impl true
   def mount(_params, _session, socket) do
     {:ok,
@@ -112,7 +121,8 @@ defmodule DIYWeb.HomeLive do
      |> assign(:status, nil)
      |> assign(shared: nil, meta: nil, adopt: nil, share: nil, share_zip: true, origin: "")
      # The short links that this page made: the id of each DATA (DIY.Links).
-     |> assign(share_links: %{}, share_short: nil)
+     # The key of the address counts the links of the person in a day.
+     |> assign(share_links: %{}, share_short: nil, address: address(socket))
      |> allow_upload(:build_file,
        accept: ~w(.json),
        max_entries: 1,
@@ -1108,7 +1118,8 @@ defmodule DIYWeb.HomeLive do
     do: {:noreply, socket |> assign(:share_zip, zip == "true") |> share()}
 
   # A short link of the link of the sheet (DIY.Links). A page makes 20 at
-  # most: each one keeps a house on the server for one year.
+  # most: each one keeps a house on the server for one year. The address
+  # of the person also has a limit for each day (DIY.Links.allow/2).
   def handle_event("share_short", _params, %{assigns: %{share: %{data: data}}} = socket)
       when is_binary(data) do
     links = socket.assigns.share_links
@@ -1117,7 +1128,7 @@ defmodule DIYWeb.HomeLive do
       cond do
         Map.has_key?(links, data) -> {:ok, links[data]}
         map_size(links) >= @max_short -> {:error, :many}
-        true -> Links.create(data)
+        true -> Links.create(data, Date.utc_today(), address: socket.assigns.address)
       end
 
     case result do

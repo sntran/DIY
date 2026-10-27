@@ -16,7 +16,12 @@ defmodule DIYWeb.Endpoint do
   # DIYWeb.Device). The fallback of long polls is off: it reads a body of
   # 8 MB at most.
   socket "/live", Phoenix.LiveView.Socket,
-    websocket: [connect_info: [session: @session_options], max_frame_size: 1_048_576],
+    # peer_data: the address of the client, for the limit of the short
+    # links (DIYWeb.Address).
+    websocket: [
+      connect_info: [:peer_data, session: @session_options],
+      max_frame_size: 1_048_576
+    ],
     longpoll: false
 
   # Serve at "/" the static files from "priv/static" directory.
