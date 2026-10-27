@@ -255,7 +255,7 @@ defmodule DIYWeb.VanPage do
           id="van-no-engine"
           class="text-sm"
         >
-          You drive {Format.value(@hours)} h in one day, but the engine gives no power: the van has no alternator charger (DC-DC). Add one in the cab or in the electrical bay.
+          You drive {Format.value(@hours)} h in one day, but the engine gives no power: the van has no alternator charger (DC-DC) and no second alternator. Add a charger in the cab or in the electrical bay. Or add a second alternator in the engine bay.
         </p>
         <div class="overflow-x-auto" tabindex="0" role="region" aria-label="The power of each month">
           <table class="table table-xs" id="van-months">
@@ -280,7 +280,7 @@ defmodule DIYWeb.VanPage do
           </table>
         </div>
         <p class="text-xs opacity-80">
-          Wh in one day. The sun and the temperature come from NASA POWER at your house. A trip to a different place has a different sun and temperature. A 12 V fridge uses more in the heat. The panels give 80% of their watts in full sun. The engine: the amps of the alternator charger at the voltage of the batteries (12.8 V for each 12 V), for the hours that you drive. A lithium battery gives 90% of its label, a lead acid battery 50%, and a power station 95%. An item on an outlet of 120 V loses 10% in the inverter. The app does not count the loss of the outlets of a station.
+          Wh in one day. The sun and the temperature come from NASA POWER at your house. A trip to a different place has a different sun and temperature. A 12 V fridge uses more in the heat. The panels give 80% of their watts in full sun. The engine: the amps of the alternator charger and of the second alternator at the voltage of the batteries (12.8 V for each 12 V), for the hours that you drive. A lithium battery gives 90% of its label, a lead acid battery 50%, and a power station 95%. An item on an outlet of 120 V loses 10% in the inverter. The app does not count the loss of the outlets of a station.
         </p>
       <% end %>
     </div>
@@ -371,6 +371,10 @@ defmodule DIYWeb.VanPage do
     do:
       "An item on an outlet of 120 V needs an inverter or a power station. Add one to the electrical bay."
 
+  defp note({:hot, %{params: p}}),
+    do:
+      "The alternator charger of #{p["amps"]} A is in the engine bay, but it is not made for it. The heat under the hood can stop it. Move it to the cab or the electrical bay, or use a charger for the engine bay. Then mark it: \"It is made for the engine bay\"."
+
   defp note(:no_battery),
     do: "The items of the van use power, and the van has no battery and no power station."
 
@@ -456,12 +460,14 @@ defmodule DIYWeb.VanPage do
     """
   end
 
-  # The cab and the roof of a van do not move (`DIY.Build.move_room/4`).
-  defp movable?(zone), do: zone.place not in [:cab, :van_roof]
+  # The cab, the engine bay and the roof of a van do not move
+  # (`DIY.Build.move_room/4`).
+  defp movable?(zone), do: zone.place not in [:cab, :engine, :van_roof]
 
   # A zone with a name that a person may not know: what it is.
   defp zone_note(:galley), do: "The kitchen of the van · "
   defp zone_note(:bay), do: "The batteries and the chargers · "
+  defp zone_note(:engine), do: "Under the hood · "
   defp zone_note(_place), do: nil
 
   attr :van, :map, required: true

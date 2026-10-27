@@ -32,8 +32,9 @@ defmodule DIY.Van do
 
   - The panels give 80% of their watts in full sun, for the hours of the
     sun of NASA POWER at the house (as `DIY.Power`).
-  - The alternator charger gives its amps when the engine runs, at the
-    voltage of the batteries (12.8 V for each 12 V).
+  - The alternator charger and the second alternator give their amps
+    when the engine runs. They charge at the voltage of the batteries
+    (12.8 V for each 12 V).
 
   The batteries keep power:
 
@@ -182,7 +183,8 @@ defmodule DIY.Van do
     items = items(build, van.id)
     storage = storage(build, van)
     panels = sum(items, "van_solar", "watts")
-    drive = sum(items, "dc_charger", "amps") * volts(items) * van.params["drive_hours"]
+    amps = sum(items, "dc_charger", "amps") + sum(items, "second_alternator", "amps")
+    drive = amps * volts(items) * van.params["drive_hours"]
 
     months =
       for m <- 1..12 do
@@ -304,9 +306,13 @@ defmodule DIY.Van do
   - `{:output, load, output}`: the items on 120 V need more watts than the
     inverters and the stations give.
   - `:no_battery`: items that use power, with no battery and no station.
+  - `{:hot, item}`: an alternator charger in the engine bay that is not
+    made for it. The heat under the hood can stop it (REDARC, "Where to
+    mount your BCDC").
   """
   def warnings(build, van) do
-    items = Enum.map(items(build, van.id), &elem(&1, 1))
+    placed = items(build, van.id)
+    items = Enum.map(placed, &elem(&1, 1))
     types = Enum.map(items, & &1.type)
     fuel = Enum.filter(items, &burns?/1)
     load = items |> Enum.filter(&ac?/1) |> Enum.map(& &1.params["watts"]) |> Enum.sum()
@@ -318,6 +324,11 @@ defmodule DIY.Van do
           Enum.with_index(Enum.filter(items, &(&1.type == "van_battery")), 1),
         do: {:fuse, b, n}
       ) ++
+        for(
+          {:engine, %{type: "dc_charger"} = charger} <- placed,
+          charger.params["engine_bay"] != true,
+          do: {:hot, charger}
+        ) ++
         [
           fuel != [] && :air,
           (fuel != [] and "co_alarm" not in types) && :co,

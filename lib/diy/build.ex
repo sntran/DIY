@@ -933,7 +933,8 @@ defmodule DIY.Build do
   Moves a room of the house or a zone of a van: `x` and `y` are its new
   back corner, in inches. Its items go with it. The room must not overlap
   a room of its layer (`DIY.Layout.layer/1`), and a zone stays in its van
-  (else `:van`). The cab and the roof of a van do not move (`:fixed`).
+  (else `:van`). The cab, the engine bay and the roof of a van do not
+  move (`:fixed`).
   """
   @spec move_room(t(), String.t(), integer(), integer()) :: {:ok, t()} | {:error, atom()}
   def move_room(build, id, x, y) when is_integer(x) and is_integer(y) do
@@ -952,10 +953,11 @@ defmodule DIY.Build do
          do: put_room_plan(build, room, plan, {x - room.plan.x, y - room.plan.y})
   end
 
-  # A room with a plan that moves: not the cab or the roof of a van.
+  # A room with a plan that moves: not the cab, the engine bay or the roof
+  # of a van.
   defp movable_room(build, id) do
     case plan_room(build, id) do
-      {:ok, %{place: place}} when place in [:cab, :van_roof] -> {:error, :fixed}
+      {:ok, %{place: place}} when place in [:cab, :engine, :van_roof] -> {:error, :fixed}
       other -> other
     end
   end
@@ -1211,6 +1213,10 @@ defmodule DIY.Build do
   (`DIY.Wire.defaults/2`). The two items must take wires, in one place
   (`world/2`). A build has 100 wires at most, and an item has 24 at most
   (`:wires`). A wire stays when a station goes to a van and back.
+
+  In a van, the length of the new wire comes from the plan. It is the
+  distance between the middles of the two items, along the van and across
+  it, and 2 ft more for the ends. It is 3 ft or more.
   """
   @spec add_wire(t(), String.t(), String.t()) :: {:ok, t(), String.t()} | {:error, atom()}
   def add_wire(build, from, to) do
@@ -1221,7 +1227,29 @@ defmodule DIY.Build do
          true <- not (wires_full?(build, from) or wires_full?(build, to)) || {:error, :wires} do
       {id, build} = next_id(build, "w")
       wire = Map.merge(%{id: id, from: from, to: to}, Wire.defaults(a, b))
+      wire = %{wire | feet: run(build, a, b) || wire.feet}
       {:ok, change(build, &%{&1 | wires: &1.wires ++ [wire]}), id}
+    end
+  end
+
+  # The run of a wire between two items of a van, in feet (`add_wire/3`).
+  # It is nil in the house. It is nil when an item has no place on the
+  # plan: an item of the shell.
+  defp run(build, a, b) do
+    case Enum.map([a, b], &middle(build, &1)) do
+      [{x1, y1}, {x2, y2}] -> max(3.0, Float.ceil((abs(x1 - x2) + abs(y1 - y2)) / 12 + 2))
+      _other -> nil
+    end
+  end
+
+  defp middle(build, item) do
+    {:ok, zone} = room(build, item.room)
+
+    if (van_level?(zone.level) and zone.plan) && item.at do
+      box =
+        Layout.item_box(%{item | at: %{x: zone.plan.x + item.at.x, y: zone.plan.y + item.at.y}})
+
+      {box.x + box.w / 2, box.y + box.d / 2}
     end
   end
 

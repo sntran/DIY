@@ -92,6 +92,7 @@ defmodule DIY.Catalog do
   # The zones of a camper van: the rooms of its build.
   @zones [
     cab: "Cab",
+    engine: "Engine bay",
     galley: "Galley",
     living: "Living area",
     bed: "Bed",
@@ -1122,7 +1123,7 @@ defmodule DIY.Catalog do
     %{
       type: "dc_charger",
       name: "Alternator charger (DC-DC)",
-      places: [:cab, :bay],
+      places: [:cab, :bay, :engine],
       features: [:weight, :van_power, :wires],
       params: [
         int(
@@ -1134,7 +1135,37 @@ defmodule DIY.Catalog do
           200,
           "It charges the batteries from the engine while you drive. The label gives its amps."
         ),
+        %{
+          key: "engine_bay",
+          label: "It is made for the engine bay",
+          unit: nil,
+          type: :bool,
+          default: false,
+          note:
+            "The manual says so. For example, the REDARC BCDC Classic can go under the hood, and the BCDC Core cannot."
+        },
         weight(5)
+      ]
+    },
+    %{
+      type: "second_alternator",
+      name: "Second alternator",
+      places: [:engine],
+      features: [:weight, :van_power, :wires],
+      params: [
+        int(
+          "amps",
+          "Charge",
+          "A",
+          150,
+          1,
+          400,
+          "Its regulator sets the charge of the batteries while you drive. The label gives the most amps, at a high speed of the engine."
+        ),
+        weight(
+          25,
+          "The kit of the maker gives it: the alternator, its bracket and its regulator."
+        )
       ]
     },
     %{
@@ -1582,6 +1613,8 @@ defmodule DIY.Catalog do
     "swivel_seat" => {26, 26, 40},
     # Victron Orion-Tr Smart 12/12-30: 186 by 80 by 130 mm (retailer listings).
     "dc_charger" => {7, 3, 5},
+    # No source: an alternator of about 7 in, on its bracket.
+    "second_alternator" => {8, 8, 7},
     # Dometic CFX3 45: 15.7 by 24.8 (no handle) by 18.7 in (retailer listing of the spec).
     "van_fridge" => {16, 25, 19},
     # No source: a stove of two burners.

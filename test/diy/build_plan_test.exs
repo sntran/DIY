@@ -338,15 +338,22 @@ defmodule DIY.BuildPlanTest do
     {house, vans} = Enum.split_with(build.rooms, &(not Build.van_level?(&1.level)))
     assert Enum.all?(house, &Layout.valid_plan?(&1.plan))
 
-    # The shell of a van has no plan; each other zone is in its van.
+    # The shell of a van has no plan. The engine bay is in front of the
+    # dash, and each other zone is in its van.
     for zone <- vans do
       "van:" <> van = zone.level
       {:ok, van} = Build.item(build, van)
 
-      if zone.place == :shell,
-        do: assert(zone.plan == nil),
-        else:
-          assert(Layout.valid_plan?(zone.plan) and Layout.inside?(zone.plan, Layout.van_box(van)))
+      case zone.place do
+        :shell ->
+          assert zone.plan == nil
+
+        :engine ->
+          assert zone.plan == Layout.engine_box(van)
+
+        _place ->
+          assert Layout.valid_plan?(zone.plan) and Layout.inside?(zone.plan, Layout.van_box(van))
+      end
 
       # The cab and the roof are at their places for the model.
       if zone.place in [:cab, :van_roof], do: assert([zone.plan] == Layout.van_draft(van, [zone]))

@@ -14,10 +14,11 @@ defmodule DIY.Layout do
     (`DIY.Catalog.size/1`).
   - A zone of a van has a plan in the van. `x` goes across the van (from
     its right side), and `y` along it, from the doors at the back. The cab
-    is the zone at the front of the cargo area (`van_box/1`). The roof of
-    the van is a layer of its own. The shell (the insulation, the walls
-    and the floor) has no plan: its items are the materials of the van,
-    with no place.
+    is the zone at the front of the cargo area (`van_box/1`). The engine
+    bay is under the hood, in front of the dash (`engine_box/1`). The roof
+    of the van and the engine bay are layers of their own. The shell (the
+    insulation, the walls and the floor) has no plan: its items are the
+    materials of the van, with no place.
 
   The app makes a draft of the plan (`draft/2`). The size of the house
   gives the size of its floors, and the rooms of a floor are in rows. The
@@ -30,11 +31,13 @@ defmodule DIY.Layout do
 
   - Two rooms of the same layer do not overlap. A layer is a surface
     (`layer/1`): the ground (outside and floor 1), floor 2, floor 3, the
-    attic and the roof. Each van has two layers: its floor and its roof.
+    attic and the roof. Each van has three layers: its floor, its roof
+    and its engine bay.
   - A zone of a van is in the van (`van_box/1`), and the cab and the roof
     are at their places for the model. A different model, or a stored text
     that a person changed, can break this rule. Then all the zones of the
-    van get the draft again (`van_draft/2`).
+    van get the draft again (`van_draft/2`). The engine bay is always at
+    its place for the model, and it does not change the other zones.
   - An item is in its room: `0 <= x <= w(room) - w(item)`, and the same
     for `y`. An item that is larger than its room is at 0. It goes
     through the walls of the room, and the picture can paint a wall over
@@ -74,6 +77,7 @@ defmodule DIY.Layout do
   they do not overlap.
   """
   def layer(%{level: "van:" <> _ = level, place: :van_roof}), do: level <> ":roof"
+  def layer(%{level: "van:" <> _ = level, place: :engine}), do: level <> ":engine"
   def layer(%{level: level}) when level in ["outside", "f1"], do: "ground"
   def layer(%{level: "roof", place: :roof}), do: "roof"
   def layer(%{level: "roof"}), do: "attic"
@@ -356,6 +360,10 @@ defmodule DIY.Layout do
   # of the app (no source): a seat and the space for the legs.
   @cab 36
 
+  # The depth of the dash, between the cab and the engine bay. A guess of
+  # the app (no source).
+  @dash 14
+
   @doc "True for a zone of a van."
   def van?(%{level: level}), do: String.starts_with?(level, "van:")
 
@@ -371,6 +379,19 @@ defmodule DIY.Layout do
   @doc "The depth of the cab zone of a van, in inches."
   def cab, do: @cab
 
+  @doc "The depth of the dash of a van, in inches."
+  def dash, do: @dash
+
+  @doc """
+  The box of the engine bay of a van: under the hood, from the dash to the
+  front of the van. It is as wide as the cargo area.
+  """
+  def engine_box(van) do
+    size = Catalog.van_size(van.params["model"])
+    y = size.cargo_length + @cab + @dash
+    %{x: 0, y: y, w: size.cargo_width, d: size.length - DIY.Van.doors() - y}
+  end
+
   @doc "True when a plan is in a box."
   def inside?(plan, box),
     do:
@@ -381,7 +402,8 @@ defmodule DIY.Layout do
   The draft plans of the zones of a van, in the order of the zones. From
   the doors at the back: the bed, the electrical bay, the living area and
   the galley, each across the van. The cab is at the front, and the roof
-  of the van is over all of it. The shell has no plan.
+  of the van is over all of it. The engine bay is in front of the dash
+  (`engine_box/1`). The shell has no plan.
   """
   def van_draft(van, zones) do
     %{w: w, d: d} = van_box(van)
@@ -398,6 +420,7 @@ defmodule DIY.Layout do
       living: %{x: 0, y: bed + bay, w: w, d: living},
       galley: %{x: 0, y: bed + bay + living, w: w, d: cargo - bed - bay - living},
       cab: %{x: 0, y: cargo, w: w, d: @cab},
+      engine: engine_box(van),
       van_roof: %{x: 0, y: 0, w: w, d: d}
     }
 
@@ -468,7 +491,9 @@ defmodule DIY.Layout do
   # The zones of each van keep their plans when each plan is valid, in the
   # van, and not over a different zone of its layer. The cab and the roof
   # must be at their places for the model (a new model moves them). Else all
-  # the zones get the draft again. The shell has no plan.
+  # the zones get the draft again. The engine bay always gets its draft. It
+  # is out of the box of the floor. A van of an older version does not have
+  # it. The shell has no plan.
   defp vans(rooms, items) do
     vans = Map.new(for(i <- items, i.type == "camper_van", do: {"van:" <> i.id, i}))
 
@@ -478,12 +503,15 @@ defmodule DIY.Layout do
       |> Enum.group_by(& &1.level)
 
     plans =
-      for {level, list} <- zones, van = vans[level], van != nil, reduce: %{} do
+      for {level, all} <- zones, van = vans[level], van != nil, reduce: %{} do
         plans ->
+          {engine, list} = Enum.split_with(all, &(&1.place == :engine))
+          plans = Enum.reduce(engine, plans, &Map.put(&2, &1.id, engine_box(van)))
           box = van_box(van)
           draft = van_draft(van, list)
 
           # The cab and the roof are fixed: at their places for the model.
+          # The engine bay is not in this list: it has its draft above.
           fixed? =
             Enum.all?(Enum.zip(list, draft), fn {zone, plan} ->
               zone.place not in [:cab, :van_roof] or zone.plan == plan

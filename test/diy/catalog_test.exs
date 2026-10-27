@@ -43,8 +43,8 @@ defmodule DIY.CatalogTest do
   end
 
   test "the zones and the models of a camper van" do
-    assert [{:cab, "Cab"} | _] = Catalog.zones()
-    assert length(Catalog.zones()) == 7
+    assert [{:cab, "Cab"}, {:engine, "Engine bay"} | _] = Catalog.zones()
+    assert length(Catalog.zones()) == 8
     assert Enum.any?(Catalog.kinds_for(:bay), &(&1.type == "power_station"))
     refute Enum.any?(DIY.Kinds.house(), &(&1.type == "van_fridge"))
     assert Enum.any?(DIY.Kinds.house(), &(&1.type == "camper_van"))

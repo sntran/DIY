@@ -1572,6 +1572,21 @@ defmodule DIYWeb.Icon.Shapes do
       tube({w, 0.051, 0.03}, 0.007, 0.04, :x, "dark")
   end
 
+  # A second alternator on its bracket: a steel body with dark rings of
+  # vents, and the pulley of the belt at the front.
+  def model("second_alternator") do
+    {w, d, c, r} = {0.2, 0.2, 0.1, 0.075}
+
+    box({0, 0.02, 0}, {w, d - 0.04, 0.015}, "dark") ++
+      box({w / 2 - 0.02, 0.05, 0.015}, {0.04, 0.1, c - r - 0.015}, "dark") ++
+      Enum.flat_map(
+        [{0.0, 0.04, "steel"}, {0.04, 0.012, "dark"}, {0.052, 0.068, "steel"}] ++
+          [{0.12, 0.012, "dark"}, {0.132, 0.028, "steel"}],
+        fn {y, length, material} -> tube({w / 2, y, c}, r, length, :y, material) end
+      ) ++
+      tube({w / 2, 0.16, c}, 0.035, 0.04, :y, "dark")
+  end
+
   # A fridge of 12 V: a gray chest with round corners, and a dark lid with
   # its handle. The panel with its display is on the front.
   def model("van_fridge") do

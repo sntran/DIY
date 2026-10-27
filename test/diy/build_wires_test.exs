@@ -200,6 +200,34 @@ defmodule DIY.BuildWiresTest do
     assert loaded.wires == []
   end
 
+  test "a new wire in a van has the length of its run on the plan" do
+    build = preset()
+    {:ok, build, van} = Build.add_item(build, room(build, "Driveway"), "camper_van")
+    [bay, engine] = for place <- [:bay, :engine], do: Build.zone(build, van, place).id
+    {build, battery} = add(build, bay, "van_battery")
+    {build, inverter} = add(build, bay, "inverter")
+    {build, charger} = add(build, engine, "dc_charger")
+    {:ok, build, near} = Build.add_wire(build, battery, inverter)
+    {:ok, build, far} = Build.add_wire(build, charger, battery)
+    {:ok, %{feet: short}} = Build.wire(build, near)
+    {:ok, %{feet: long}} = Build.wire(build, far)
+
+    # The middle of an item on the plan of the van, in inches.
+    middle = fn id ->
+      {:ok, item} = Build.item(build, id)
+      {:ok, zone} = Build.room(build, item.room)
+      at = %{x: zone.plan.x + item.at.x, y: zone.plan.y + item.at.y}
+      box = DIY.Layout.item_box(%{item | at: at})
+      {box.x + box.w / 2, box.y + box.d / 2}
+    end
+
+    # The run from the engine bay to the battery: along the van and across
+    # it, and 2 ft for the ends. A short run is 3 ft or more.
+    {{x1, y1}, {x2, y2}} = {middle.(charger), middle.(battery)}
+    assert long == Float.ceil((abs(x1 - x2) + abs(y1 - y2)) / 12 + 2)
+    assert long > 10 and short >= 3.0 and short < long
+  end
+
   test "a wire between two batteries, or a battery on three busbars, makes one node" do
     build = preset()
     {:ok, build, van} = Build.add_item(build, room(build, "Driveway"), "camper_van")

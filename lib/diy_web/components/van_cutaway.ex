@@ -8,8 +8,8 @@ defmodule DIYWeb.VanCutaway do
   The plan of the van is `DIY.Layout.van_box/1`. `x` goes across the van,
   from its right side (the side of the sliding door). `y` goes along it,
   from the doors at the back to the cab. The zones (`DIY.Catalog.zones/0`)
-  are the rooms of the van. The cab and the roof of the van are fixed:
-  they have no handles.
+  are the rooms of the van. The cab, the engine bay and the roof of the van
+  are fixed: they have no handles.
 
   The camera of a van (`DIYWeb.Camera.van/0`) is at its left side (the
   side of the driver). The cab is at the left of the screen. The floor
@@ -18,7 +18,9 @@ defmodule DIYWeb.VanCutaway do
   opening of the sliding door. The doors at the back are cut on a slope:
   full at the right side, and near the floor at the left side. The wall on
   the left side is cut near the floor. The floor also shows the wheel
-  wells, the wheels, the seats, the dash, the steering wheel and the hood.
+  wells, the wheels, the seats, the dash and the steering wheel. The engine
+  bay is open in front of the dash, with the engine, the fenders and the
+  front of the van. The lid of the hood is on the layer of the roof.
   The shell of the build gives the materials: the floor of wood, the walls
   with panels, and the insulation in the cut of the walls.
   """
@@ -33,12 +35,11 @@ defmodule DIYWeb.VanCutaway do
   # The numbers of the picture, in inches. They are near the real vans, but
   # they are for the picture only. They are the cargo floor over the
   # ground, the radius of a tire, and the length and the height of a wheel
-  # well. Then the depth of the dash, and the opening of the sliding door.
+  # well. Then the opening of the sliding door.
   @floor 24
   @tire 15
   @well_d 34
   @well_h 11
-  @dash 14
   @door 48
 
   # The cut of a wall near the floor (meters).
@@ -71,7 +72,7 @@ defmodule DIYWeb.VanCutaway do
     Cutaway.frame(
       [
         floor_layer(van, size, on_floor, items, shell, camera),
-        roof_layer(size, on_roof, items, roof_z, camera)
+        roof_layer(van, size, on_roof, items, roof_z, camera)
       ],
       camera
     )
@@ -114,18 +115,25 @@ defmodule DIYWeb.VanCutaway do
             Cutaway.floor(
               zone,
               0.0,
-              if(zone.place == :cab, do: "vmat", else: floor),
+              zone_floor(zone.place, floor),
               camera,
-              zone.place == :cab
+              zone.place in [:cab, :engine]
             )
         ),
       objects:
         walls(size, t, shell, camera) ++
           wells(size, axles.rear, camera) ++
-          seats(size, swivels, camera) ++ cab(size, t, axles.nose, van, camera) ++ item_views,
+          seats(size, swivels, camera) ++
+          cab(size, camera) ++ engine_bay(t, axles.nose, van, camera) ++ item_views,
       labels: Enum.map(zones, &Cutaway.label(&1, 0.0, camera))
     })
   end
+
+  # The material of the floor of a zone. The cab has a mat, and the engine
+  # bay is metal. The other zones have the floor of the shell.
+  defp zone_floor(:cab, _floor), do: "vmat"
+  defp zone_floor(:engine, _floor), do: "vmetal"
+  defp zone_floor(_place, floor), do: floor
 
   # The thickness of a side of the van, in inches: the body is wider than
   # the cargo floor.
@@ -278,17 +286,16 @@ defmodule DIYWeb.VanCutaway do
   end
 
   # The front of the cab: the dash, and the steering wheel in front of the
-  # driver. Then the hood, with its lights and its bumper.
-  defp cab(size, t, front, van, camera) do
+  # driver.
+  defp cab(size, camera) do
     {cw, dash} = {size.cargo_width, size.cargo_length + Layout.cab()}
-    hood = max(0.25, Shapes.hood_height(van.params["model"]) - @floor * @m)
     wheel = {(cw - 13) * @m, (dash - 4) * @m, 0.67}
     tilt = {0, -0.5, 0.866}
 
     [
       fixture(
         "dash",
-        solid(camera, {0, dash * @m, 0}, {cw * @m, @dash * @m, 0.5}, "dark"),
+        solid(camera, {0, dash * @m, 0}, {cw * @m, Layout.dash() * @m, 0.5}, "dark"),
         nil,
         camera
       ),
@@ -301,15 +308,80 @@ defmodule DIYWeb.VanCutaway do
         ],
         nil,
         camera
+      )
+    ]
+  end
+
+  # The engine bay, open (`DIY.Layout.engine_box/1`): the lid of the hood
+  # is on the layer of the roof. Under the bay, the body goes down to the
+  # frame. The fenders on the two sides are low. The engine is at the back
+  # of the bay, under the windshield. At the front, the grille and the
+  # lights go up to the hood (`DIYWeb.Icon.VanShapes.hood_height/1`). Then
+  # the bumper.
+  defp engine_bay(t, front, van, camera) do
+    %{y: bay, w: cw} = Layout.engine_box(van)
+    hood = max(0.25, Shapes.hood_height(van.params["model"]) - @floor * @m)
+    {fender, long} = {4, front - bay - 3}
+    body = {(cw + 2 * t - 2) * @m, (front - bay) * @m, 0.16}
+
+    [
+      fixture(
+        "engine-body",
+        solid(camera, {(-t + 1) * @m, bay * @m, -0.16}, body, "white"),
+        -1.0,
+        camera
       ),
       fixture(
-        "hood",
+        "fender-right",
         solid(
           camera,
-          {(-t + 1) * @m, (dash + @dash) * @m, -0.16},
-          {(cw + 2 * t - 2) * @m, (front - dash - @dash) * @m, hood + 0.16},
+          {(-t + 1) * @m, bay * @m, 0},
+          {(fender + t - 1) * @m, long * @m, @low},
+          "white"
+        ),
+        nil,
+        camera
+      ),
+      fixture(
+        "fender-left",
+        solid(
+          camera,
+          {(cw - fender) * @m, bay * @m, 0},
+          {(fender + t - 1) * @m, long * @m, @low},
+          "white"
+        ),
+        nil,
+        camera
+      ),
+      fixture(
+        "engine",
+        solid(camera, {(cw / 2 - 14) * @m, (bay + 3) * @m, 0}, {28 * @m, 18 * @m, 0.22}, "dark") ++
+          solid(
+            camera,
+            {(cw / 2 - 11) * @m, (bay + 5) * @m, 0.22},
+            {22 * @m, 13 * @m, 0.04},
+            "gray"
+          ),
+        nil,
+        camera
+      ),
+      fixture(
+        "grille",
+        solid(
+          camera,
+          {(-t + 1) * @m, (front - 3) * @m, 0},
+          {(cw + 2 * t - 2) * @m, 3 * @m, hood},
           "white"
         ) ++
+          [
+            {Geometry.on_plane(
+               {(cw / 2 - 18) * @m, front * @m + 0.002, hood - 0.2},
+               {1, 0, 0},
+               {0, 0, 1},
+               {0, 0},
+               {36 * @m, 0.14}
+             ), "i-black"}
+          ] ++
           for(
             x <- [0, cw - 10],
             do:
@@ -361,10 +433,12 @@ defmodule DIYWeb.VanCutaway do
   ## The roof
 
   # The roof of the van over its floor: the zone of the roof on it, with its
-  # items (the fan and the panels).
-  defp roof_layer(size, zones, items, z, camera) do
+  # items (the fan and the panels). The lid of the hood is up at the same
+  # height, over the engine bay: so the engine bay shows open.
+  defp roof_layer(van, size, zones, items, z, camera) do
     t = side(size)
     cab_end = size.cargo_length + Layout.cab()
+    engine = Layout.engine_box(van)
 
     Cutaway.layer(%{id: "roof", name: "Roof of the van", z: z, camera: camera}, %{
       ground: [],
@@ -378,11 +452,24 @@ defmodule DIYWeb.VanCutaway do
         ),
       rooms: Enum.map(zones, &Cutaway.floor(&1, z, "vroof", camera, true)),
       objects:
-        for(
-          zone <- zones,
-          item <- Map.get(items, zone.id, []),
-          do: Cutaway.item_view(item, zone, z, camera)
-        ),
+        [
+          fixture(
+            "hood-lid",
+            solid(
+              camera,
+              {(-t + 1) * @m, engine.y * @m, z - 0.05},
+              {(engine.w + 2 * t - 2) * @m, engine.d * @m, 0.05},
+              "white"
+            ),
+            nil,
+            camera
+          )
+        ] ++
+          for(
+            zone <- zones,
+            item <- Map.get(items, zone.id, []),
+            do: Cutaway.item_view(item, zone, z, camera)
+          ),
       labels: Enum.map(zones, &Cutaway.label(&1, z, camera))
     })
   end

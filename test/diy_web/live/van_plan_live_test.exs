@@ -47,7 +47,8 @@ defmodule DIYWeb.VanPlanLiveTest do
     assert has_element?(view, "polygon[data-room=#{galley.id}]")
     assert has_element?(view, "g[data-item=#{fridge}][data-in=#{galley.id}]")
     assert has_element?(view, "#plan-fixture-van-seat-driver")
-    assert has_element?(view, "#plan-fixture-van-hood")
+    assert has_element?(view, "#plan-fixture-van-engine")
+    assert has_element?(view, "#plan-fixture-van-hood-lid")
     assert has_element?(view, "button[data-zoom=fit][aria-label='Show all the van']")
 
     # In the house, the sheet of the van has no size: the model gives it.
@@ -98,7 +99,11 @@ defmodule DIYWeb.VanPlanLiveTest do
     assert has_element?(view, "#plan-selection [data-handle=x0]")
 
     # The galley and the bay: the bar tells what they are.
-    for {place, note} <- [galley: "The kitchen of the van", bay: "The batteries and the chargers"] do
+    for {place, note} <- [
+          galley: "The kitchen of the van",
+          bay: "The batteries and the chargers",
+          engine: "Under the hood"
+        ] do
       render_hook(view, "select_room", %{"id" => zone(view, van, place).id})
       assert has_element?(view, "#zone-bar", note)
     end
@@ -163,7 +168,14 @@ defmodule DIYWeb.VanPlanLiveTest do
     render_patch(view, ~p"/van?#{[id: van, room: cab.id, sheet: "zone"]}")
     refute has_element?(view, "#zone-sheet")
     html = render_hook(view, "nudge_room", %{"id" => cab.id, "dx" => -6, "dy" => 0})
-    assert html =~ "The cab and the roof of the van stay where they are."
+    assert html =~ "The cab, the engine bay and the roof of the van stay where they are."
+
+    # The engine bay is fixed too.
+    engine = zone(view, van, :engine)
+    render_hook(view, "select_room", %{"id" => engine.id})
+    assert has_element?(view, "#zone-bar", "Under the hood")
+    assert has_element?(view, "#zone-bar", "It stays where it is.")
+    refute has_element?(view, "#plan-selection [data-handle]")
 
     # The bar closes.
     view |> element("#zone-bar a[aria-label=Close]") |> render_click()

@@ -2,7 +2,7 @@ defmodule DIY.VanTest do
   use ExUnit.Case, async: true
   use ExUnitProperties
 
-  alias DIY.{Build, Catalog, Estimate, House, Stubs, Van, Weather}
+  alias DIY.{Build, Catalog, Estimate, House, Layout, Stubs, Van, Weather}
 
   defp climate do
     {:ok, climate} = Weather.parse(Stubs.power(), 33.25, -96.75, 2016, 2025)
@@ -95,6 +95,48 @@ defmodule DIY.VanTest do
 
       # A van can go in the garage.
       assert {:ok, _} = Build.move_item(build, id, room(build, "Garage"))
+    end
+
+    test "the engine bay: a fixed zone under the hood, for the chargers of the engine" do
+      {build, id} = with_van()
+      engine = Build.zone(build, id, :engine)
+      size = Catalog.van_size(van(build, id).params["model"])
+
+      # It is in front of the dash, to the front of the van.
+      assert engine.name == "Engine bay"
+      assert engine.plan == Layout.engine_box(van(build, id))
+      assert engine.plan.y == size.cargo_length + Layout.cab() + Layout.dash()
+      assert engine.plan.y + engine.plan.d == size.length - Van.doors()
+      assert Layout.layer(engine) == "van:#{id}:engine"
+
+      # It does not move.
+      assert Build.move_room(build, engine.id, 0, 0) == {:error, :fixed}
+      assert Build.size_room(build, engine.id, %{engine.plan | d: 10}) == {:error, :fixed}
+      refute Build.can_move?(build, engine.id, 1, 0)
+
+      # The chargers of the engine go in it. A fridge does not, and a second
+      # alternator goes only there.
+      {build, _} = add(build, id, :engine, "dc_charger")
+      {build, _} = add(build, id, :engine, "second_alternator")
+      assert Build.add_item(build, engine.id, "van_fridge") == {:error, :place}
+      bay = Build.zone(build, id, :bay).id
+      assert Build.add_item(build, bay, "second_alternator") == {:error, :place}
+
+      # A new model moves the engine bay with the front of the van.
+      {:ok, long} = Build.update_item(build, id, %{"model" => "sprinter_170_ext"})
+      assert Build.zone(long, id, :engine).plan == Layout.engine_box(van(long, id))
+      assert Build.zone(long, id, :engine).plan != engine.plan
+
+      # A van of an older version has no engine bay. It gets it at its
+      # place, and the other zones keep their plans.
+      bed = Build.zone(build, id, :bed)
+      {:ok, build} = Build.size_room(build, bed.id, %{bed.plan | d: bed.plan.d - 12})
+      map = build |> Build.to_json() |> Jason.decode!()
+      rooms = Enum.reject(map["rooms"], &(&1["id"] == engine.id))
+      items = Enum.reject(map["items"], &(&1["room"] == engine.id))
+      {:ok, old} = Build.from_json(Jason.encode!(%{map | "rooms" => rooms, "items" => items}))
+      assert Build.zone(old, id, :engine).plan == engine.plan
+      assert Build.zone(old, id, :bed).plan == %{bed.plan | d: bed.plan.d - 12}
     end
 
     test "the removal of the van, or of its room, removes its zones and items" do
@@ -221,7 +263,7 @@ defmodule DIY.VanTest do
       for bad <- [nil, 7, hd(zones)["id"], kitchen] do
         rooms = map["rooms"] ++ [%{hd(zones) | "id" => bad}]
         {:ok, loaded} = load.(%{map | "rooms" => rooms})
-        assert length(Build.zones(loaded, id)) == 7
+        assert length(Build.zones(loaded, id)) == 8
         assert Enum.count(loaded.rooms, &(&1.id == kitchen)) == 1
       end
 
@@ -721,6 +763,19 @@ defmodule DIY.VanTest do
       assert_in_delta Van.power(build, van(build, id), climate).storage, 1080 + 1200 + 950, 1.0e-9
     end
 
+    test "a second alternator in the engine bay charges with the alternator charger" do
+      {build, id} = with_van()
+      {:ok, build} = Build.update_item(build, id, %{"drive_hours" => "2"})
+      {build, _} = add(build, id, :bay, "van_battery", %{"volts" => "12"})
+      {build, _} = add(build, id, :engine, "second_alternator", %{"amps" => "150"})
+
+      {build, _} =
+        add(build, id, :engine, "dc_charger", %{"amps" => "20", "engine_bay" => "true"})
+
+      july = Enum.at(Van.power(build, van(build, id), climate()).months, 6)
+      assert_in_delta july.drive, (150 + 20) * 12.8 * 2, 1.0e-9
+    end
+
     test "the Wh of each kind in one day" do
       item = fn type, params ->
         %{type: type, params: Map.merge(Catalog.defaults(type), params)}
@@ -815,5 +870,15 @@ defmodule DIY.VanTest do
     {build3, _} = add(build3, id3, :bay, "inverter", %{"watts" => "300"})
     {build3, _} = add(build3, id3, :bay, "van_battery", %{"fused" => "true"})
     assert Van.warnings(build3, van(build3, id3)) == [{:output, 1800, 300}]
+
+    # An alternator charger in the engine bay that is not made for it. In
+    # the cab, it has no note.
+    {build4, id4} = with_van()
+    {build4, _} = add(build4, id4, :cab, "dc_charger")
+    {build4, hot} = add(build4, id4, :engine, "dc_charger", %{"amps" => "40"})
+    {:ok, charger} = Build.item(build4, hot)
+    assert Van.warnings(build4, van(build4, id4)) == [{:hot, charger}]
+    {:ok, build4} = Build.update_item(build4, hot, %{"engine_bay" => "true"})
+    assert Van.warnings(build4, van(build4, id4)) == []
   end
 end
