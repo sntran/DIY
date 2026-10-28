@@ -173,7 +173,7 @@ defmodule DIY.LinksTest do
 
     # A process with no connection of the sandbox: each statement fails.
     # The failure can take more than the 100 ms of `assert_receive` when
-    # many tests run at the same time: the test waits 5 seconds at most.
+    # many tests run at the same time. So the test waits 5 seconds at most.
     task = fn fun ->
       parent = self()
       spawn(fn -> send(parent, {:result, fun.()}) end)
