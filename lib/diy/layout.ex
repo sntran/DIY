@@ -700,13 +700,18 @@ defmodule DIY.Layout do
   of the other items. It is the first place from the back corner, row by
   row. With no free place, it is the back corner.
   """
-  def free_at(item, room, others) do
+  def free_at(item, room, others), do: free_place(item, room, others) || %{x: 0, y: 0}
+
+  @doc """
+  A free place for an item in a room, as `free_at/3`. With no free place,
+  it is `nil`.
+  """
+  def free_place(item, room, others) do
     {w, d} = extent(item)
     step = max(6, round6(max(room.w, room.d) / 60))
 
     Enum.find_value(
       for(y <- range(0, room.d - d, step), x <- range(0, room.w - w, step), do: {x, y}),
-      %{x: 0, y: 0},
       fn {x, y} ->
         box = %{x: x, y: y, w: w, d: d}
         if not Enum.any?(others, &overlap?(&1, box)), do: %{x: x, y: y}

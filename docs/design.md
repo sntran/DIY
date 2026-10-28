@@ -1757,12 +1757,18 @@ its turn. A length is in inches.
 - Nothing blocks a door (the owner, October 2026). A door has a space on
   each side of its wall: as wide as the door, and 36 inches deep
   (`DIY.Layout.door_spaces/2`, `DIY.Build.door_spaces/2`). A drop, a turn
-  or a size can put an item in such a space. Then the change does not go,
-  and the item stays. The message is "An item cannot stand in front of a
-  door". An item on a wall over a door does not block it: 80 inches and
-  up, for example a mini split. A different change can put an item in
-  front of a door: a new door, a file or a new item. Then the item goes
-  to a free place of its room, with the items on it. The furniture of a
+  or a size can put an item further in front of a door. Then the change
+  does not go, and the item stays. The check uses the items after the
+  change: an item stays in its room first, and the items on an item go
+  with it. The message is "An item cannot stand in front of a door". An
+  item in front of a door can go out step by step, or get smaller. An item
+  with its bottom 80 inches up or more does not block a door: for example
+  a mini split on a wall, or an item on a tall stack. A different change
+  can put an item in front of a door: a new door, a file, a share link or
+  a new item. Then the item goes to a free place of its room, with the
+  items on it (`DIY.Layout.free_place/3`). An item on an item that is
+  still in front of a door goes to the floor. In a room with no free
+  place, the item stays, and the person can move it. The furniture of a
   room (`DIYWeb.Decor`) does not stand in a space of a door, and the
   counters of a kitchen stop at a door. A rug is flat: it stays. The
   stairs stay too: they are a part of the house.

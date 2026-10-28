@@ -235,11 +235,7 @@ defmodule DIY.Build do
     changed = fit_open(changed, changed.open)
     # A door stays only when its rooms still touch, in their common part.
     changed = fit_doorways(changed, changed.doorways)
-    # No item stands in front of a door (`clear_doorways/1`).
-    changed = clear_doorways(changed)
-    # An item stays on an item only when the two still stack (`DIY.Stack`).
-    rooms = Map.new(changed.rooms, &{&1.id, &1})
-    changed = %{changed | items: changed.items |> DIY.Stack.normalize(rooms) |> fit_mounts(rooms)}
+    changed = fit_items(changed)
     # An item that went away takes its links and its wires with it.
     ids = Enum.map(changed.items, & &1.id)
     devices = Map.take(changed.devices, ids)
@@ -1222,10 +1218,9 @@ defmodule DIY.Build do
       moved = %{item | room: room.id, at: at}
       moved = if on, do: Map.put(moved, :on, on), else: Map.delete(moved, :on)
       rooms = Map.new(build.rooms, &{&1.id, &1})
+      items = DIY.Stack.carry(build.items, item, moved, rooms)
 
-      if blocks_door?(build, moved),
-        do: {:error, :door},
-        else: {:ok, change(build, &%{&1 | items: DIY.Stack.carry(&1.items, item, moved, rooms)})}
+      with :ok <- door_check(build, items), do: {:ok, change(build, &%{&1 | items: items})}
     end
   end
 
@@ -1253,9 +1248,8 @@ defmodule DIY.Build do
 
       turned = %{turned | at: Layout.clamp(at, turned, room.plan)}
 
-      if blocks_door?(build, turned),
-        do: {:error, :door},
-        else: {:ok, replace_item(build, turned)}
+      with :ok <- door_check(build, swap(build.items, turned)),
+           do: {:ok, replace_item(build, turned)}
     end
   end
 
@@ -1279,15 +1273,13 @@ defmodule DIY.Build do
          # a size goes, and no size comes.
          true <-
            (size == nil or item.type not in ["solar_panels", "camper_van"]) || {:error, :size},
-         false <- blocks_door?(build, %{item | size: size}) && {:error, :door},
+         :ok <- door_check(build, swap(build.items, %{item | size: size})),
          do: {:ok, replace_item(build, %{item | size: size})}
   end
 
-  defp replace_item(build, item) do
-    change(build, fn build ->
-      %{build | items: Enum.map(build.items, &if(&1.id == item.id, do: item, else: &1))}
-    end)
-  end
+  defp replace_item(build, item), do: change(build, &%{&1 | items: swap(&1.items, item)})
+
+  defp swap(items, item), do: Enum.map(items, &if(&1.id == item.id, do: item, else: &1))
 
   @doc "Removes an item."
   @spec delete_item(t(), String.t()) :: {:ok, t()} | {:error, :item}
@@ -1613,10 +1605,7 @@ defmodule DIY.Build do
        |> Layout.fill()
        |> fit_open(open)
        |> fit_doorways(doorways)
-       |> then(fn build ->
-         rooms = Map.new(build.rooms, &{&1.id, &1})
-         %{build | items: build.items |> DIY.Stack.normalize(rooms) |> fit_mounts(rooms)}
-       end)}
+       |> fit_items()}
     end
   end
 
@@ -2241,36 +2230,85 @@ defmodule DIY.Build do
     end
   end
 
-  # True when an item stands in front of a door of its room. Its box on the
-  # plan is over a space of a door, and its bottom is under the top of the
-  # door. An item with no place (in the shell of a van) blocks no door.
-  defp blocks_door?(build, item) do
-    item.at != nil and Catalog.lift(item.type) < @door_height and
-      Enum.any?(door_spaces(build, item.room), &Layout.overlap?(&1, Layout.item_box(item)))
+  # The items with the rules of the stacks and of the doors. An item stays
+  # on an item only when the two still stack (`DIY.Stack`). No item stands
+  # in front of a door (`clear_doorways/1`). Then the stacks are whole again:
+  # an item that went with the item under it can be out of its room.
+  defp fit_items(build) do
+    rooms = Map.new(build.rooms, &{&1.id, &1})
+    build = %{build | items: DIY.Stack.normalize(build.items, rooms)}
+    build = clear_doorways(build)
+    %{build | items: build.items |> DIY.Stack.normalize(rooms) |> fit_mounts(rooms)}
   end
 
-  # Each item on the floor in front of a door goes to a free place of its
-  # room, with the items on it. A free place is not over an item, and not
-  # in front of a door (`DIY.Layout.free_at/3`).
+  # The spaces in front of the doors of each room, by the id of the room.
+  defp space_map(build), do: Map.new(build.rooms, &{&1.id, door_spaces(build, &1.id)})
+
+  # A change of the items goes only when the items do not go more in front
+  # of the doors. Thus an item in front of a door can go out of the space
+  # step by step. The items stay in their rooms first (`DIY.Layout.fill/1`).
+  defp door_check(build, items) do
+    spaces = space_map(build)
+    %{items: after_items} = Layout.fill(%{build | items: items})
+
+    if door_area(spaces, after_items) > door_area(spaces, build.items),
+      do: {:error, :door},
+      else: :ok
+  end
+
+  # How much the items stand in front of the doors: the sum of the areas of
+  # the items over the spaces of the doors, in square inches.
+  defp door_area(spaces, items),
+    do: items |> Enum.map(&door_area(spaces, items, &1)) |> Enum.sum()
+
+  # How much an item stands in front of the doors of its room. Only an item
+  # with its bottom under the top of a door counts. The bottom of an item
+  # on an item is the top of the item under it (`DIY.Stack.heights/1`). An
+  # item with no place (in the shell of a van) blocks no door.
+  defp door_area(spaces, items, item) do
+    spaces = if item.at, do: Map.get(spaces, item.room, []), else: []
+    area = spaces |> Enum.map(&overlap_area(&1, Layout.item_box(item))) |> Enum.sum()
+    bottom = Catalog.lift(item.type) + Map.get(DIY.Stack.heights(items), item.id, 0)
+    if area > 0 and bottom < @door_height, do: area, else: 0
+  end
+
+  defp overlap_area(a, b) do
+    w = min(a.x + a.w, b.x + b.w) - max(a.x, b.x)
+    d = min(a.y + a.d, b.y + b.d) - max(a.y, b.y)
+    max(w, 0) * max(d, 0)
+  end
+
+  # Each item in front of a door goes to a free place of its room, with the
+  # items on it. A free place is not over an item, and not in front of a
+  # door (`DIY.Layout.free_place/3`). The items on the floor go first. An
+  # item on an item that is still in front of a door goes to the floor.
+  # With no free place, the item stays: the person can move it.
   defp clear_doorways(%{doorways: []} = build), do: build
 
   defp clear_doorways(build) do
     rooms = Map.new(build.rooms, &{&1.id, &1})
+    spaces = space_map(build)
+    ids = build.items |> Enum.sort_by(&(DIY.Stack.on(&1) != nil)) |> Enum.map(& &1.id)
 
     items =
-      build.items
-      |> Enum.filter(&(DIY.Stack.on(&1) == nil and blocks_door?(build, &1)))
-      |> Enum.reduce(build.items, fn item, items ->
-        room = rooms[item.room]
-
-        others =
-          for o <- items, o.room == room.id, o.id != item.id, o.at != nil, do: Layout.item_box(o)
-
-        at = Layout.free_at(item, room.plan, others ++ door_spaces(build, room.id))
-        DIY.Stack.carry(items, item, %{item | at: at}, rooms)
+      Enum.reduce(ids, build.items, fn id, items ->
+        item = Enum.find(items, &(&1.id == id))
+        clear_doorway(items, item, door_area(spaces, items, item) > 0, rooms, spaces)
       end)
 
     %{build | items: items}
+  end
+
+  defp clear_doorway(items, _item, false, _rooms, _spaces), do: items
+
+  defp clear_doorway(items, item, true, rooms, spaces) do
+    others =
+      for o <- items, o.room == item.room, o.id != item.id, o.at != nil, do: Layout.item_box(o)
+
+    case Layout.free_place(item, rooms[item.room].plan, others ++ spaces[item.room]) do
+      nil -> items
+      at -> DIY.Stack.carry(items, item, item |> Map.put(:at, at) |> Map.delete(:on), rooms)
+    end
   end
 
   @doc """

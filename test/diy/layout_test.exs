@@ -155,6 +155,8 @@ defmodule DIY.LayoutTest do
     assert Layout.free_at(fridge, room, [%{x: 0, y: 0, w: 36, d: 33}]) == %{x: 36, y: 0}
     full = [%{x: 0, y: 0, w: 72, d: 33}]
     assert Layout.free_at(fridge, room, full) == %{x: 0, y: 0}
+    assert Layout.free_place(fridge, room, full) == nil
+    assert Layout.free_place(fridge, room, []) == %{x: 0, y: 0}
   end
 
   test "the limits of the plan" do
