@@ -52,14 +52,16 @@ defmodule DIYWeb.ConnCase do
 
   @doc """
   Waits until the page has the answers of the weather, of the sky and of
-  the market: no request is open. It waits for 10 seconds at most. A
+  the market: no request is open. The page also has no message left to
+  handle. It waits for 10 seconds at most. A
   fixed sleep fails when the computer is slow.
   """
   def settle(view, tries \\ 500) do
     assigns = :sys.get_state(view.pid).socket.assigns
 
     if tries > 0 and
-         :loading in [assigns.weather.status, assigns.sky.status, assigns.market.status] do
+         (:loading in [assigns.weather.status, assigns.sky.status, assigns.market.status] or
+            busy?(view)) do
       Process.sleep(20)
       settle(view, tries - 1)
     else
@@ -67,4 +69,10 @@ defmodule DIYWeb.ConnCase do
       Phoenix.LiveViewTest.render(view)
     end
   end
+
+  # True when the LiveView has messages that it did not handle yet. On a
+  # busy machine, the next call of a test can wait for them more than 5
+  # seconds.
+  defp busy?(view),
+    do: match?({:message_queue_len, n} when n > 0, Process.info(view.pid, :message_queue_len))
 end

@@ -963,7 +963,10 @@ defmodule DIYWeb.Cutaway do
 
     # A rug is flat: it paints first, so the pieces on it show. It is out
     # of the order of the boxes: a part that stands on its floor behind it
-    # does not cover it on the screen.
+    # does not cover it on the screen. It is in the floor (`flat`), as a
+    # pool: each part that rises over it paints after it. So a part that
+    # must paint after a pool lower than the rug does not keep the rug
+    # after the pieces on it (issue #50).
     flat? = z1 - z0 < 0.02
 
     key =
@@ -976,6 +979,7 @@ defmodule DIYWeb.Cutaway do
       kind: :fixture,
       room: room.id,
       loose: flat?,
+      flat: flat?,
       box: {x0, y0, z0, x1, y1, z1},
       key: key,
       polys: polys
