@@ -1729,6 +1729,20 @@ its turn. A length is in inches.
   room (`DIY.Build.open_choices/2`, `set_open/3`). The build keeps the
   pairs (`open`, 200 at most), and a link of a share keeps them too. A
   pair goes away with a room, or when a room moves away from the other.
+- Doors (the owner, October 2026). Two rooms on a layer that touch along
+  30 inches at least can have a door between them. One of the two rooms
+  is inside: so a kitchen can have a door to the backyard. A door is an
+  opening of 32 inches in the wall, with no wall in it. The sheet of a
+  room has a part "Doors", with a box for each such room
+  (`DIY.Build.doorway_choices/2`, `set_doorways/3`). A new door is in the
+  middle of the common part of the two sides (`DIY.Layout.shared/2`). A
+  range moves it along the wall. The build keeps the doors (`doorways`,
+  200 at most, one for each pair): the two rooms and the place of the
+  middle of the door, in inches from the start of the common part. A
+  place goes into the common part, with the half of the door on each
+  side. A door goes away with a room, or when a room moves away from the
+  other. A link of a share keeps the doors. The picture of the house
+  from outside has no door of the plan: it has its own front door.
 - The picture of an item is its icon at the size of the item
   (`DIYWeb.Icon.Shapes.placed/2`). A turn turns the model, and a face
   that looks away does not show. Solar panels on a roof lie on its slope.
