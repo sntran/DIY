@@ -247,8 +247,8 @@ defmodule DIY.Layout do
     if rem(item.turn, 2) == 0, do: {w, d}, else: {d, w}
   end
 
-  # The trunks of each kind of tree: the least and the most radius
-  # (inches), and the place of each trunk from the middle of the tree, in
+  # The trunks of each kind of tree: the least and the most radius in
+  # inches. Also the place of each trunk from the middle of the tree, in
   # radii. A crape myrtle has three thin trunks.
   @trunks %{
     "live_oak" => {5, 18, [{0, 0}]},
