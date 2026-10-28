@@ -4674,19 +4674,29 @@ over a part of the house. Its shape is in its `roof` field (`DIY.Roof`):
 
 The sheet of a roof has the shape: six choices of the slope, the pitch,
 and the floor under the eaves (`Build.set_roof/3`). A file keeps the
-shape. A shape that the app cannot read gives the first shape.
+shape. A shape that the app cannot read gives the first shape. A base
+that the house does not have is the top floor:
+
+- When the house gets fewer floors, a roof on a floor that goes away
+  goes on the top floor.
+- A file with such a base keeps the slope and the pitch of the roof.
+- When the floor of the base has no rooms, the eaves are on the top
+  floor with rooms.
 
 The roof uses the shape in each view:
 
 - The house from outside (`DIYWeb.Outside`): the slopes go past the
-  walls (35 cm), and the eaves are on the base. The slopes that look to
-  the back paint first, then the ends, then the slopes that look to the
-  front.
+  walls (35 cm), and the eaves are on the base. The slopes that look
+  away from the camera paint first, then the ends, then the slopes that
+  look to the camera (`Camera.shows?/2` with `Roof.normal/2`). The ends
+  are under the roof, so a slope that the camera sees is in front of
+  them. A slope that looks to the back is in view up to 9 in 12.
 - The plan (`DIYWeb.Cutaway`): the roofs are on the level of the roof.
   Each roof has its slopes, and its ends at the front and at the right
   (`DIYWeb.Cutaway.roof_ends/3`). The panels on a roof are on its slopes:
-  a panel over the ridge has two parts. An item on a roof stands on its
-  slope.
+  a panel over the ridge has two parts. A panel on a slope that looks
+  away from the camera does not show. An item on a roof stands on its
+  slope. The name of a roof is on its slope.
 - The hook of the plan (`assets/js/plan.js`): `data-rise` and
   `data-slope` give the planes of the roof. A drag on a roof follows its
   slope. Where the eye sees two slopes at one point, the higher slope is

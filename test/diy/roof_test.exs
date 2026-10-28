@@ -88,6 +88,20 @@ defmodule DIY.RoofTest do
     end
   end
 
+  test "the plane at a point, and its normal" do
+    assert Roof.side(roof("x"), {150, 60}) == :back
+    assert Roof.side(roof("x"), {150, 110}) == :front
+    assert Roof.side(roof("y"), {150, 60}) == :left
+    assert Roof.side(roof("y"), {300, 60}) == :right
+    assert Roof.side(roof("left"), {300, 60}) == :left
+
+    # 6 in 12: the plane goes up half an inch for each inch to its high side.
+    assert Roof.normal(roof("x"), :front) == {0.0, 0.5, 1.0}
+    assert Roof.normal(roof("x"), :back) == {0.0, -0.5, 1.0}
+    assert Roof.normal(roof("y"), :left) == {-0.5, 0.0, 1.0}
+    assert Roof.normal(roof("y"), :right) == {0.5, 0.0, 1.0}
+  end
+
   test "the top of a wall under a roof, at each side" do
     box = %{x: 100, y: 50, w: 240, d: 120}
 
@@ -138,6 +152,20 @@ defmodule DIY.RoofTest do
 
       assert_in_delta Enum.max(heights), Roof.rise(room), 1.0e-6
       assert_in_delta Enum.min(heights), 0, 1.0e-6
+
+      # The normal of each plane is at a right angle to it, and goes up the
+      # slope: each plane goes down to the side that it looks to.
+      for {corners, side} <- Roof.planes(room, room.plan),
+          {x, y} = a <- corners,
+          {u, v} = b <- corners do
+        {nx, ny, 1.0} = Roof.normal(room, side)
+
+        assert_in_delta Roof.height(room, b) - Roof.height(room, a),
+                        -(nx * (u - x) + ny * (v - y)),
+                        1.0e-6
+
+        assert Roof.side(room, {(x + u) / 2, (y + v) / 2}) in [side, :front, :right]
+      end
 
       for side <- [:front, :back, :left, :right],
           {point, h} <- Roof.profile(room, side, room.plan),

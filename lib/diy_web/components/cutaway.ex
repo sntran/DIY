@@ -191,15 +191,21 @@ defmodule DIYWeb.Cutaway do
     others = Enum.map(indoor, &room_view(&1, floor_z.(&1), camera))
     {ground, slabs, walls} = structure(level, rooms, house, floor_z, items)
 
+    # An item with no shapes does not show: panels on a slope of a roof that
+    # looks away from the camera.
     item_views =
       for room <- rooms,
           item <- Map.get(items, room.id, []),
-          do: item_view(item, room, floor_z.(room), camera)
+          view = item_view(item, room, floor_z.(room), camera),
+          view.polys != [],
+          do: view
 
     ghost_views =
       for room <- rooms,
           {ghost, i} <- Map.get(ghosts, room.id, []),
-          do: ghost_view(ghost, i, room, floor_z.(room), camera)
+          view = ghost_view(ghost, i, room, floor_z.(room), camera),
+          view.polys != [],
+          do: view
 
     # The furniture of each room: it does not hide the items of the layer.
     house = Decor.house(rooms)
@@ -850,15 +856,19 @@ defmodule DIYWeb.Cutaway do
 
   @doc """
   The label of a room for a camera: its name, near the front of the room,
-  at a height (meters). Its rank is the area of the room: where two labels
-  overlap, the hook Plan shows the label of the larger room.
+  at a height (meters). A label on a roof is on its slope. Its rank is the
+  area of the room: where two labels overlap, the hook Plan shows the
+  label of the larger room.
   """
   def label(room, z, camera) do
     p = meters(room.plan)
 
     z =
       if room.place == :roof and room.level == "roof",
-        do: z + Roof.rise(room) * @m / 2,
+        do:
+          z +
+            Roof.height(room, {room.plan.x + room.plan.w / 2, room.plan.y + room.plan.d * 0.75}) *
+              @m,
         else: z
 
     {sx, sy} = Camera.at(camera, {0, 0}, {p.x + p.w / 2, p.y + p.d * 0.75, z})
@@ -1046,7 +1056,7 @@ defmodule DIYWeb.Cutaway do
           end
 
         {"solar_panels", roof} ->
-          on_roof(item, roof, z)
+          on_roof(item, roof, z, camera)
 
         {"camper_van", nil} ->
           frame = %{at: {x * @m, y * @m, z}, size: size, turn: item.turn, camera: camera}
@@ -1101,8 +1111,13 @@ defmodule DIYWeb.Cutaway do
     polys = shadow ++ polys
 
     # The box of the item: its space on the plan, and the height of its
-    # shapes.
-    {low, high} = polys |> Enum.flat_map(&elem(&1, 1)) |> Enum.map(&elem(&1, 2)) |> Enum.min_max()
+    # shapes. Panels on a slope that looks away have no shapes: their box
+    # is flat, at z.
+    {low, high} =
+      polys
+      |> Enum.flat_map(&elem(&1, 1))
+      |> Enum.map(&elem(&1, 2))
+      |> Enum.min_max(fn -> {z, z} end)
 
     %{
       id: item.id,
@@ -1166,8 +1181,9 @@ defmodule DIYWeb.Cutaway do
   end
 
   # The panels on a roof: on its surface, in rows. A panel over the ridge
-  # has two parts.
-  defp on_roof(item, roof, z) do
+  # has two parts. A part on a slope that looks away from the camera does
+  # not show: the roof is in front of it.
+  defp on_roof(item, roof, z, camera) do
     %{cols: cols, rows: rows, count: count, panel: {w, d}} = Layout.array(item)
     {pw, pd} = if rem(item.turn, 2) == 0, do: {w, d}, else: {d, w}
     {cols, rows} = if rem(item.turn, 2) == 0, do: {cols, rows}, else: {rows, cols}
@@ -1178,7 +1194,9 @@ defmodule DIYWeb.Cutaway do
         {col, row} = panel_cell(k, cols, rows, item.turn),
         {x0, y0} = {ax + col * pw + 1, ay + row * pd + 1},
         {xa, xb} <- split(x0, x0 + pw - 2, Roof.ridge(roof), :x),
-        {ya, yb} <- split(y0, y0 + pd - 2, Roof.ridge(roof), :y) do
+        {ya, yb} <- split(y0, y0 + pd - 2, Roof.ridge(roof), :y),
+        side = Roof.side(roof, {(xa + xb) / 2, (ya + yb) / 2}),
+        Camera.shows?(camera, Roof.normal(roof, side)) do
       {:poly, [point.(xa, ya), point.(xb, ya), point.(xb, yb), point.(xa, yb)], "i-pv"}
     end
   end

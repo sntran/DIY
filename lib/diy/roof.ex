@@ -136,6 +136,35 @@ defmodule DIY.Roof do
   end
 
   @doc """
+  The plane of a roof at a point of the plan `{x, y}`: the side that it
+  looks to (`:front`, `:back`, `:left` or `:right`). At the ridge, it is
+  the front or the right plane.
+  """
+  def side(room, {x, y}) do
+    case {ridge(room), shape(room).slope} do
+      {{:y, r}, _} -> if y < r, do: :back, else: :front
+      {{:x, r}, _} -> if x < r, do: :left, else: :right
+      {nil, side} -> String.to_existing_atom(side)
+    end
+  end
+
+  @doc """
+  The normal of the plane of a roof that looks to a side: a vector `{x, y,
+  z}` that goes up from the plane. The front is along y, the right is
+  along x.
+  """
+  def normal(room, side) do
+    k = shape(room).pitch / 12
+
+    case side do
+      :front -> {0.0, k, 1.0}
+      :back -> {0.0, -k, 1.0}
+      :left -> {-k, 0.0, 1.0}
+      :right -> {k, 0.0, 1.0}
+    end
+  end
+
+  @doc """
   The top of a wall of the house under the roof, at a side of a box of the
   plan (`:front`, `:back`, `:left` or `:right`). It is the points `{x, y}`
   along that side, each with the height of the roof over it, from one end

@@ -474,11 +474,20 @@ defmodule DIY.Build do
   def update_house(%__MODULE__{house: house} = build, changes) when is_map(house) do
     with {:ok, new} <- house(Map.merge(house, changes)),
          :ok <- fit(build.rooms, new.floors) do
-      {:ok, change(build, &%{&1 | house: new})}
+      rooms = Enum.map(build.rooms, &fit_base(&1, new.floors))
+      {:ok, change(build, &%{&1 | house: new, rooms: rooms})}
     end
   end
 
   def update_house(_build, _changes), do: {:error, :house}
+
+  # A roof on a floor that the house does not have now goes on the top
+  # floor.
+  defp fit_base(%{roof: %{base: "f" <> n} = roof} = room, floors) do
+    if String.to_integer(n) > floors, do: %{room | roof: %{roof | base: nil}}, else: room
+  end
+
+  defp fit_base(room, _floors), do: room
 
   defp fit(rooms, floors) do
     levels = levels(floors)
@@ -1923,15 +1932,20 @@ defmodule DIY.Build do
 
   defp read_room(_room, _levels), do: :error
 
-  # The shape of a roof (`DIY.Roof`). A roof with a shape that the app
-  # cannot read gets the first shape. A room that is not a roof has no
-  # shape.
+  # The shape of a roof (`DIY.Roof`). A roof with a base that the house
+  # does not have keeps its slope and its pitch, on the top floor. A roof
+  # with a shape that the app cannot read gets the first shape. A room
+  # that is not a roof has no shape.
   defp read_roof(%{place: :roof} = room, roof, levels) do
     floors = Enum.count(levels, &String.starts_with?(&1, "f"))
 
-    case DIY.Roof.read(roof, floors) do
+    with :error <- DIY.Roof.read(roof, floors),
+         true <- is_map(roof),
+         {:ok, shape} <- DIY.Roof.read(Map.delete(roof, "base"), floors) do
+      Map.put(room, :roof, shape)
+    else
       {:ok, shape} -> Map.put(room, :roof, shape)
-      :error -> room
+      _bad -> room
     end
   end
 

@@ -809,7 +809,7 @@ defmodule DIYWeb.Inside do
           </select>
         </label>
         <label>
-          <span class="text-xs">The walls under the eaves</span>
+          <span class="text-xs">The floor under the eaves</span>
           <select id={"roof-base-#{@room.id}"} name="base" class="select select-sm">
             <option value="" selected={@shape.base == nil}>The top floor</option>
             <option

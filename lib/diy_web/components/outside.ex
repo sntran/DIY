@@ -129,7 +129,8 @@ defmodule DIYWeb.Outside do
 
   # The height of the floor of a room (meters). Floor 1 is on its slab, and
   # each floor is on the floor under it. A garage is on a lower slab. A
-  # roof is on the walls of its base, else of the top floor (`top`). A yard
+  # roof is on the walls of its base, else of the top floor (`top`). A base
+  # over the top floor with rooms is the top floor. A yard
   # is on the ground.
   defp floor_z(%{level: "f" <> n}, _top),
     do: @slab + (String.to_integer(n) - 1) * (@full + @slab)
@@ -137,7 +138,7 @@ defmodule DIYWeb.Outside do
   defp floor_z(%{level: "roof"} = roof, top) do
     floor =
       case Roof.shape(roof).base do
-        "f" <> n -> String.to_integer(n)
+        "f" <> n -> min(String.to_integer(n), top)
         nil -> top
       end
 
@@ -433,17 +434,21 @@ defmodule DIYWeb.Outside do
   # A roof on the walls of its floor (`DIY.Roof`). It has its slopes with
   # their shingles, its ends that look to the camera (a gable), and the
   # items on the roof (panels). It goes past the walls (`@eave`). The
-  # slopes that look away paint first, then the ends, then the other
-  # slopes.
+  # slopes that look away from the camera paint first, then the ends, then
+  # the other slopes. The ends are under the roof: a slope that looks to
+  # the camera is in front of them.
   defp roof(room, items, z, camera) do
     grow = fn plan, by ->
       %{x: plan.x - by, y: plan.y - by, w: plan.w + 2 * by, d: plan.d + 2 * by}
     end
 
     eaves = grow.(room.plan, @eave / @m)
+    planes = Roof.planes(room, eaves)
 
-    {back, front} =
-      room |> Roof.planes(eaves) |> Enum.split_with(&(elem(&1, 1) in [:back, :left]))
+    {front, back} =
+      Enum.split_with(planes, fn {_corners, side} ->
+        Camera.shows?(camera, Roof.normal(room, side))
+      end)
 
     draw =
       &Enum.flat_map(&1, fn {corners, side} -> Cutaway.roof_plane(room, corners, side, z) end)
@@ -451,7 +456,12 @@ defmodule DIYWeb.Outside do
     ends = Cutaway.roof_ends(room, grow.(room.plan, @thick / @m), z)
     panels = Enum.flat_map(items, &Cutaway.item_view(&1, room, z, camera).polys)
     p = meters(eaves)
-    top = z + Roof.rise(room) * @m
+
+    # The top is the ridge, or the high eaves of one slope.
+    high =
+      Enum.max(for {corners, _side} <- planes, point <- corners, do: Roof.height(room, point))
+
+    top = z + high * @m
 
     # For the order of the paint, the roof starts at its eaves: the walls
     # under it paint first.

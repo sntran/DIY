@@ -105,6 +105,19 @@ defmodule DIYWeb.RoofShapesTest do
     assert {cols, rows} == {7, 3}
     assert length(pv) == 20 + 3
 
+    # The name of the roof is on its slope.
+    label = Cutaway.label(room(build, "Roof"), 0.0, Camera.house())
+
+    on =
+      Camera.at(
+        Camera.house(),
+        {0, 0},
+        {(roof.plan.x + roof.plan.w / 2) * @m, (roof.plan.y + roof.plan.d * 0.75) * @m,
+         Roof.height(room(build, "Roof"), {roof.plan.x + roof.plan.w / 2, 0}) * @m}
+      )
+
+    assert {label.x, label.y} == {Camera.round1(elem(on, 0)), Camera.round1(elem(on, 1))}
+
     # An AC on the slope of the roof stands on it, over the eaves.
     {:ok, build, ac} = Build.add_item(build, roof.id, "ac")
     {:ok, build} = Build.place_item(build, ac, roof.id, %{x: ridge + 60, y: 200})
@@ -127,18 +140,105 @@ defmodule DIYWeb.RoofShapesTest do
     assert_in_delta z2, 0.3 + 2.4 + 0.3 + 2.4, 1.0e-9
 
     # On floor 1: the eaves are over one floor. The roof has its slope, its
-    # shingles and its end at the right.
+    # shingles and its end at the right. Its top is its high eaves, past
+    # the back wall (35 cm at 6 in 12).
     {:ok, low} = Build.set_roof(build, roof.id, shape("front", 6, "f1"))
     %{box: {_, _, z1, _, _, z1top}, polys: polys} = top.(low)
     assert_in_delta z1, 0.3 + 2.4, 1.0e-9
-    assert_in_delta z1top - z1, Roof.rise(room(low, "Roof")) * @m, 1.0e-9
+    assert_in_delta z1top - z1, Roof.rise(room(low, "Roof")) * @m + 0.35 / 2, 1.0e-9
     classes = Enum.map(polys, &elem(&1, 1))
     assert Enum.count(classes, &(&1 == "p-gable")) == 1
     assert "p-floor p-roof-f" in classes
+  end
 
-    # A roof that looks to the back: its slope paints first.
-    {:ok, back} = Build.set_roof(build, roof.id, shape("back"))
-    assert [{_corners, "p-floor p-roof-b"} | _] = top.(back).polys
+  test "a slope that the camera sees paints after the ends, and a slope that looks away before" do
+    build = house()
+    roof = room(build, "Roof")
+    camera = Camera.house()
+
+    classes = fn shape ->
+      {:ok, build} = Build.set_roof(build, roof.id, shape)
+      object = Enum.find(Outside.view(build).level.objects, &(&1.id == "roof-" <> roof.id))
+      Enum.map(object.polys, &elem(&1, 1))
+    end
+
+    # The camera sees each slope of these shapes: the ends paint first.
+    for slope <- ~w(x y front back left right) do
+      assert Camera.shows?(camera, Roof.normal(%{roof: %{pitch: 5}}, :back))
+      list = classes.(shape(slope))
+      last_end = list |> Enum.with_index() |> Enum.filter(&(elem(&1, 0) == "p-gable"))
+      first_slope = Enum.find_index(list, &String.starts_with?(&1, "p-floor"))
+      assert last_end != [], slope
+      assert elem(List.last(last_end), 1) < first_slope, slope
+    end
+
+    # At 12 in 12, the slope at the back looks away: it paints before the
+    # end at the right, and the front slope paints after it.
+    refute Camera.shows?(camera, Roof.normal(%{roof: %{pitch: 12}}, :back))
+    list = classes.(shape("x", 12))
+    assert ["p-floor p-roof-b", "p-tex p-tex-roof", "p-gable" | rest] = list
+    assert "p-floor p-roof-f" in rest
+  end
+
+  test "a base that the house does not have is the top floor" do
+    build = house()
+    roof = room(build, "Roof")
+    {:ok, build} = Build.set_roof(build, roof.id, shape("front", 9, "f2"))
+
+    eaves = fn build ->
+      object =
+        Enum.find(Outside.view(build).level.objects, &(&1.id == "roof-" <> roof.id))
+
+      elem(object.box, 2)
+    end
+
+    # With no rooms on floor 2, the eaves are on the walls of floor 1.
+    upper = for room <- build.rooms, room.level == "f2", do: room.id
+    no_f2 = Enum.reduce(upper, build, fn id, b -> elem(Build.delete_room(b, id), 1) end)
+    assert room(no_f2, "Roof").roof.base == "f2"
+    assert_in_delta eaves.(no_f2), 0.3 + 2.4, 1.0e-9
+
+    # One floor: the roof goes on the top floor, with its slope and pitch.
+    {:ok, one} = Build.update_house(no_f2, %{floors: 1})
+    assert room(one, "Roof").roof == %{slope: "front", pitch: 9, base: nil}
+    {:ok, two} = Build.update_house(build, %{year: 2006})
+    assert room(two, "Roof").roof.base == "f2"
+
+    # A file with a base that the house does not have keeps the slope and
+    # the pitch.
+    map = no_f2 |> Build.to_json() |> Jason.decode!()
+
+    {:ok, read} =
+      %{map | "house" => %{map["house"] | "floors" => 1}} |> Jason.encode!() |> Build.from_json()
+
+    assert room(read, "Roof").roof == %{slope: "front", pitch: 9, base: nil}
+  end
+
+  test "panels on a slope that looks away from the camera do not show" do
+    build = house()
+    roof = room(build, "Roof")
+    {:ok, build, panels} = Build.add_item(build, roof.id, "solar_panels")
+
+    count = fn pitch ->
+      {:ok, build} = Build.set_roof(build, roof.id, shape("x", pitch))
+      {:ok, build} = Build.place_item(build, panels, roof.id, %{x: 60, y: 10})
+      [layer] = for level <- Cutaway.view(build).levels, level.id == "roof", do: level
+
+      case Enum.find(layer.objects, &(&1.id == panels)) do
+        nil -> 0
+        object -> length(for {_points, "i-pv"} <- object.polys, do: 1)
+      end
+    end
+
+    # The panels are on the back slope. At 12 in 12, the roof hides them:
+    # the panels are not an object of the plan, and they have a flat box.
+    assert count.(9) > 0
+    assert count.(12) == 0
+    {:ok, steep} = Build.set_roof(build, roof.id, shape("x", 12))
+    {:ok, steep} = Build.place_item(steep, panels, roof.id, %{x: 60, y: 10})
+    {:ok, item} = Build.item(steep, panels)
+    view = Cutaway.item_view(item, room(steep, "Roof"), 1.0, Camera.house())
+    assert {view.polys, elem(view.box, 2), elem(view.box, 5)} == {[], 1.0, 1.0}
   end
 
   test "a tall item in a yard paints after a box all behind it, and before a box all in front" do
