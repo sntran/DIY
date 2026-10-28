@@ -1,7 +1,7 @@
 defmodule DIYWeb.Decor do
   @moduledoc """
   The furniture of a room on the plan (`DIYWeb.Cutaway`). For example, a
-  bedroom has a bed, and a kitchen has counters and a table. The furniture
+  bedroom has a bed, and a kitchen has counters. The furniture
   is for the eyes only, as in a drawn picture of a house. It uses
   no power, it is not an item, and a tap goes through it to the floor of
   the room.
@@ -12,7 +12,9 @@ defmodule DIYWeb.Decor do
   piece does not show when it is larger than the room, or when it touches
   an item or a piece before it. A piece also does not show when it hides
   an item on the screen (`hides?/3`). This is also true for an item of a
-  different room of the layer. So the items show. A rug is flat: the other
+  different room of the layer. So the items show. The stairs are a part of
+  the house: they always show, also when they hide an item of a different
+  room. A rug is flat: the other
   pieces and the items can stand on it, and it hides nothing.
 
   The models use the parts of `DIYWeb.Icon.Shapes`, in meters, with round
@@ -48,6 +50,7 @@ defmodule DIYWeb.Decor do
   def pieces(room, items, around \\ []) do
     boxes = boxes(items, {0, 0})
     gap = if room.place == :outdoor, do: @yard_gap, else: @gap
+    around = if stairs?(room), do: [], else: around
 
     room
     |> plan(boxes)
@@ -169,30 +172,46 @@ defmodule DIYWeb.Decor do
   end
 
   # The pieces of a room, from its name: a model, its place, and its turn.
+  # A yard has a round table with chairs, and one big tree. The tree is at
+  # the left, away from the house: at the front of a front yard, and at the
+  # back of a different yard. A side yard has no furniture.
   defp plan(%{place: :outdoor, name: name}, _boxes) do
-    if String.contains?(String.downcase(name), "yard"),
-      do: [
-        {model("patio"), :center, 0},
-        {model("tree"), :back_left, 0},
-        {model("tree"), :front_right, 0},
-        {model("bush"), :back_right, 0},
-        {model("bush"), :front_left, 0}
-      ],
+    name = String.downcase(name)
+    tree = if String.contains?(name, "front"), do: :front_left, else: :back_left
+
+    if String.contains?(name, "yard") and not String.contains?(name, "side"),
+      do: [{model("round_table"), :center, 0}, {model("tree"), tree, 0}],
       else: []
   end
 
+  # A room inside. It has no plant: plants hide the plan. A hall and a
+  # closet have no furniture: the way stays open, also in the closet of a
+  # bedroom. A name with the word "stairs" gives the stairs first, also
+  # with the word "hall".
   defp plan(%{place: :indoor, name: name} = room, boxes) do
     name = String.downcase(name)
 
     cond do
+      # The word "stair" or "stairs" (not "upstairs"). On floor 1, the
+      # stairs go up to the back of the room: as many steps as the room
+      # has space for. On an upper floor, the room has the opening of the
+      # stairs, with a rail.
+      stairs?(room) and room.level == "f1" ->
+        stairs(room)
+
+      stairs?(room) ->
+        [{model("stair_well"), :front_center, 0}]
+
+      String.contains?(name, "hall") or String.contains?(name, "closet") ->
+        []
+
       String.contains?(name, "bed") ->
         [
           {model("rug"), :center, 0},
           {model("bed"), :back_center, 0},
           {model("nightstand"), :beside_left, 0},
           {model("nightstand"), :beside_right, 0},
-          {model("dresser"), :left_center, 0},
-          {model("plant"), :front_right, 0}
+          {model("dresser"), :left_center, 0}
         ]
 
       String.contains?(name, "living") ->
@@ -201,14 +220,22 @@ defmodule DIYWeb.Decor do
           {model("sofa"), :front_center, 2},
           {model("coffee_table"), :center, 0},
           {model("armchair"), :left_center, 0},
-          {model("shelf_books"), :back_right, 0},
-          {model("plant"), :back_left, 0},
-          {model("plant"), :front_right, 0}
+          {model("shelf_books"), :back_right, 0}
         ]
 
+      # A kitchen has counters. A table with chairs is in the dining room,
+      # and a small round table is in the breakfast room.
+      String.contains?(name, "kitchen") and String.contains?(name, "dining") ->
+        counters(room, boxes) ++ [{model("dining"), :front_center, 0}]
+
       String.contains?(name, "kitchen") ->
-        counters(room, boxes) ++
-          [{model("dining"), :front_center, 0}, {model("plant"), :front_left, 0}]
+        counters(room, boxes)
+
+      String.contains?(name, "dining") ->
+        [{model("dining"), :center, 0}]
+
+      String.contains?(name, "breakfast") ->
+        [{model("round_table"), :center, 0}]
 
       String.contains?(name, "bath") ->
         [
@@ -217,16 +244,6 @@ defmodule DIYWeb.Decor do
           {model("toilet"), :back_right, 0},
           {model("vanity"), :front_right, 2}
         ]
-
-      # The word "stair" or "stairs" (not "upstairs"). On floor 1, the
-      # stairs go up to the back of the room: as many steps as the room
-      # has space for. On an upper floor, the room has the opening of the
-      # stairs, with a rail.
-      Regex.match?(~r/\bstairs?\b/, name) and room.level == "f1" ->
-        stairs(room)
-
-      Regex.match?(~r/\bstairs?\b/, name) ->
-        [{model("stair_well"), :front_center, 0}, {model("plant"), :back_left, 0}]
 
       String.contains?(name, "garage") ->
         [{model("bench"), :back_right, 0}, {model("shelf"), :back_left, 0}]
@@ -238,11 +255,18 @@ defmodule DIYWeb.Decor do
         [{model("boxes"), :back_left, 0}, {model("boxes"), :back_right, 0}]
 
       true ->
-        [{model("plant"), :back_left, 0}]
+        []
     end
   end
 
   defp plan(_room, _boxes), do: []
+
+  # True when the name of a room has the word "stair" or "stairs" (not
+  # "upstairs").
+  defp stairs?(%{place: :indoor, name: name}),
+    do: Regex.match?(~r/\bstairs?\b/, String.downcase(name))
+
+  defp stairs?(_room), do: false
 
   # The stairs of a room: 13 steps at most, each 11 inches deep, in the
   # depth of the room. A room with space for less than 4 steps has none.
@@ -353,8 +377,7 @@ defmodule DIYWeb.Decor do
 
   def model("dresser") do
     [round_box({0, 0, 0}, {1.0, 0.45, 0.8}, 0.03, "light-wood")] ++
-      for(z <- [0.18, 0.42, 0.66], do: {:box, {0.45, 0.45, z}, {0.1, 0.01, 0.02}, "wood"}) ++
-      [{:cyl, {0.8, 0.22, 0.8}, 0.07, 0.2, "clay"}] ++ ball({0.8, 0.22, 1.14}, 0.12, "leaf")
+      for(z <- [0.18, 0.42, 0.66], do: {:box, {0.45, 0.45, z}, {0.1, 0.01, 0.02}, "wood"})
   end
 
   # Stairs of a number of steps, each 18.5 cm up and 11 inches deep. With
@@ -467,19 +490,11 @@ defmodule DIYWeb.Decor do
       end
   end
 
-  def model("plant") do
-    [{:cyl, {0.2, 0.2, 0}, 0.14, 0.3, "clay"}] ++
-      ball({0.2, 0.2, 0.55}, 0.22, "leaf") ++ ball({0.14, 0.2, 0.8}, 0.14, "leaf")
-  end
-
+  # A big tree: about 4 meters high, with a crown 2.4 meters wide.
   def model("tree") do
-    [{:cyl, {0.5, 0.5, 0}, 0.07, 0.9, "wood"}] ++
-      ball({0.5, 0.5, 1.35}, 0.5, "leaf") ++
-      ball({0.35, 0.5, 1.75}, 0.32, "leaf") ++ ball({0.65, 0.55, 1.7}, 0.3, "leaf")
-  end
-
-  def model("bush") do
-    ball({0.25, 0.3, 0.25}, 0.25, "leaf") ++ ball({0.45, 0.3, 0.3}, 0.25, "leaf")
+    [{:cyl, {1.2, 1.2, 0}, 0.14, 2.0, "wood"}] ++
+      ball({1.2, 1.2, 2.6}, 1.2, "leaf") ++
+      ball({0.85, 1.2, 3.4}, 0.75, "leaf") ++ ball({1.55, 1.3, 3.3}, 0.7, "leaf")
   end
 
   def model("tub") do
@@ -540,7 +555,8 @@ defmodule DIYWeb.Decor do
     ]
   end
 
-  def model("patio") do
+  # A small round table with two chairs.
+  def model("round_table") do
     [
       {:cyl, {0.8, 0.8, 0}, 0.05, 0.7, "dark"},
       {:cyl, {0.8, 0.8, 0.7}, 0.5, 0.04, "light-wood"}

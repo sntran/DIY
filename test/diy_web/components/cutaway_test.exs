@@ -749,7 +749,7 @@ defmodule DIYWeb.CutawayTest do
     # All the models: the pieces of large rooms of each name that the app
     # knows, with no item.
     rooms =
-      for name <- ~w(Bedroom Living Kitchen Bathroom Garage Laundry Attic Office),
+      for name <- ~w(Bedroom Living Kitchen Dining Bathroom Garage Laundry Attic Office),
           do: %{name: name, place: :indoor, plan: %{x: 0, y: 0, w: 400, d: 400}}
 
     yard = %{name: "Backyard", place: :outdoor, plan: %{x: 0, y: 0, w: 400, d: 400}}
@@ -758,7 +758,7 @@ defmodule DIYWeb.CutawayTest do
       for(room <- [yard | rooms], {model, _x, _y, _turn} <- Decor.pieces(room, []), do: model)
       |> Enum.uniq()
 
-    assert length(models) == 22
+    assert length(models) == 20
 
     # A ball of leaves (or a rug) looks to the camera at the turn 0 only. A
     # piece with leaves stays at the turn 0 on the plan.
