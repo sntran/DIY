@@ -260,7 +260,12 @@ defmodule DIYWeb.Inside do
         room={elem(Build.room(@build, @add), 1)}
         query={@add_query}
       />
-      <.room_sheet :if={@chosen && @sheet == "room"} room={@chosen} />
+      <.room_sheet
+        :if={@chosen && @sheet == "room"}
+        room={@chosen}
+        next={Build.open_choices(@build, @chosen)}
+        open={Build.open_to(@build, @chosen.id)}
+      />
       <.new_room_sheet :if={@sheet == "new_room"} levels={@levels} />
       <HomeAssistant.rooms_sheet
         :if={@sheet == "ha_rooms"}
@@ -755,8 +760,11 @@ defmodule DIYWeb.Inside do
   defp state_note(nil), do: ""
 
   attr :room, :map, required: true
+  attr :next, :list, default: [], doc: "the rooms that it can be open to"
+  attr :open, :list, default: [], doc: "the ids of the rooms that it is open to"
 
-  # The sheet of a room: its name, its size, and its removal.
+  # The sheet of a room: its name, its size, the rooms that it is open to,
+  # and its removal.
   defp room_sheet(assigns) do
     ~H"""
     <.sheet id="room-sheet" title={@room.name} close={~p"/inside?#{[room: @room.id]}"}>
@@ -810,6 +818,27 @@ defmodule DIYWeb.Inside do
         <p class="text-xs opacity-70">
           The walls at the front move. On the plan, the handles on the walls move them too.
         </p>
+      </form>
+
+      <form :if={@next != []} id={"open-#{@room.id}"} phx-change="room_open">
+        <input type="hidden" name="room_id" value={@room.id} />
+        <fieldset class="space-y-1">
+          <legend class="text-sm font-semibold">No wall to</legend>
+          <label :for={other <- @next} class="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              id={"open-#{@room.id}-#{other.id}"}
+              name="open[]"
+              value={other.id}
+              checked={other.id in @open}
+              class="checkbox checkbox-sm"
+            />
+            {other.name}
+          </label>
+          <p class="text-xs opacity-70">
+            An open plan: the rooms join, with no wall between them.
+          </p>
+        </fieldset>
       </form>
 
       <button
