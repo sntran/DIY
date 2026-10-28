@@ -4528,8 +4528,8 @@ pool.
 
 ### Furniture as an item
 
-The owner asked for this (October 2026): the name of a room does not put
-a fireplace, a bath or a tree at its real place. The person puts these
+The owner asked for this (October 2026). The name of a room does not put
+a fireplace, a bath or a tree at its real place. So the person puts these
 pieces at their place, as items (`DIY.Catalog.furniture/0`):
 
 - a fireplace, a bathtub, a shower and a pantry go in a room inside;

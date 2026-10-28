@@ -1,8 +1,8 @@
 defmodule DIYWeb.FurnitureTest do
   @moduledoc """
   Furniture that the person puts at its place, as an item
-  (`DIY.Catalog.furniture/0`): a fireplace, a bathtub, a shower, a pantry,
-  a table with chairs and a tree.
+  (`DIY.Catalog.furniture/0`). These are a fireplace, a bathtub, a shower,
+  a pantry, a table with chairs and a tree.
   """
   use ExUnit.Case, async: true
 

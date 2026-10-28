@@ -13,7 +13,7 @@ defmodule DIYWeb.Decor do
   an item or a piece before it. A piece also does not show when it hides
   an item on the screen (`hides?/3`). This is also true for an item of a
   different room of the layer. So the items show. The person can also put
-  furniture at its place, as an item (`DIY.Catalog.furniture/0`): a placed
+  furniture at its place, as an item (`DIY.Catalog.furniture/0`). A placed
   bath, shower, table or tree takes the place of the piece of the name.
   The stairs are a part of the house: they always show, also when they
   hide an item of a different room. A rug is flat: the other pieces and

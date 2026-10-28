@@ -1240,8 +1240,8 @@ defmodule DIYWeb.Icon.Shapes do
       ]
   end
 
-  # A shower stall: a white tray, two walls of glass at the front and at
-  # the right, and the pipe and the head on the back wall.
+  # A shower stall: a white tray, and two walls of glass at the front and
+  # at the right. The pipe and the head are on the back wall.
   def model("shower") do
     {w, h} = {0.91, 2.03}
 
