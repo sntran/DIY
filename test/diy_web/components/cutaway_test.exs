@@ -328,9 +328,13 @@ defmodule DIYWeb.CutawayTest do
     assert back.(before) == [{144, 438}]
     assert back.(now) == [{216, 438}]
 
-    # The other walls do not change.
-    assert Enum.reject(before, &(elem(&1, 0) == three and elem(&1, 1) =~ "-y0-")) ==
-             Enum.reject(now, &(elem(&1, 0) == three and elem(&1, 1) =~ "-y0-"))
+    # The other walls do not change. Their order of the paint can change:
+    # the order of the parts that cover each other on the screen.
+    other = fn walls ->
+      walls |> Enum.reject(&(elem(&1, 0) == three and elem(&1, 1) =~ "-y0-")) |> Enum.sort()
+    end
+
+    assert other.(before) == other.(now)
   end
 
   test "a wall between two rooms is low where it can hide an item of the room behind it" do

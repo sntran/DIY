@@ -187,9 +187,9 @@ defmodule DIYWeb.Decor do
   # The pieces of a room, from its name: a model, its place, and its turn.
   # A yard has a round table with chairs, and one big tree. The tree is at
   # the left, away from the house. In a yard in front of the house, it is
-  # at the front. In a yard behind the house, it is at the back. With no house, the yard is
-  # in front of the house, as in a new layout (`DIY.Layout`). A side yard
-  # has no furniture.
+  # at the front. In a yard behind the house, it is at the back. With no
+  # house, the yard is in front of the house, as in a new layout
+  # (`DIY.Layout`). A side yard has no furniture.
   defp plan(%{place: :outdoor, name: name, plan: plan}, _boxes, house) do
     name = String.downcase(name)
 
