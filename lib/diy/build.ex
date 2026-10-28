@@ -556,9 +556,9 @@ defmodule DIY.Build do
   end
 
   @doc """
-  The doors of a room (`set_doorways/3`): the other room, the place of
-  the door (`at`), and the places that it can have (`range`), in inches
-  from the start of the common part of their sides.
+  The doors of a room (`set_doorways/3`). Each door has the other room,
+  its place (`at`), and the places that it can have (`range`). A place is
+  in inches from the start of the common part of their sides.
   """
   @spec doorways_of(t(), String.t()) :: [
           %{other: String.t(), at: integer(), range: {integer(), integer()}}
@@ -573,8 +573,8 @@ defmodule DIY.Build do
     end
   end
 
-  # The places of the middle of a door in a common part of a length: the
-  # door and a wall of 4 inches at each side.
+  # The places of the middle of a door in a common part of a length. The
+  # door has a wall of 4 inches at each side.
   defp doorway_range(length),
     do: {div(@doorway, 2) + @jamb, length - div(@doorway, 2) - @jamb}
 

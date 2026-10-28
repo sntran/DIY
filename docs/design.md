@@ -1740,8 +1740,8 @@ its turn. A length is in inches.
   middle of the common part of the two sides (`DIY.Layout.shared/2`). A
   range moves it along the wall. The build keeps the doors (`doorways`,
   200 at most, one for each pair). A door has its two rooms and the place
-  of its middle, in inches from the start of the common part: the back
-  or the left end of the wall. A place goes into the common part, with
+  of its middle. The place is in inches from the start of the common
+  part: the back or the left end of the wall. A place goes into the common part, with
   the door and its walls. A door goes away with a room, or when a room moves away from the
   other. A link of a share keeps the doors. The picture of the house
   from outside has no door of the plan: it has its own front door.
