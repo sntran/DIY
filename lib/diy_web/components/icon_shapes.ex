@@ -59,7 +59,11 @@ defmodule DIYWeb.Icon.Shapes do
   def placed(type, frame)
 
   # A tree looks the same at each turn: its leaves look to the camera of
-  # the house, and its space is a square.
+  # the house. So it has no turn. After a quarter turn, its space is d by
+  # w (`DIY.Layout.extent/1`): the tree fills that space.
+  def placed("tree", %{turn: turn, size: {w, d, h}} = frame) when rem(turn, 2) == 1,
+    do: draw(model("tree"), %{frame | turn: 0, size: {d, w, h}}, frame.camera)
+
   def placed("tree", frame), do: draw(model("tree"), %{frame | turn: 0}, frame.camera)
   def placed(type, frame), do: draw(model(type), frame, frame.camera)
 

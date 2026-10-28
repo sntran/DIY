@@ -92,7 +92,7 @@ defmodule DIYWeb.FurnitureTest do
 
     # A bathtub or a shower takes the place of the bath of the name.
     assert ~w(bath_mat toilet vanity) == names(bath, [item("bathtub", 4, 100)])
-    assert ~w(bath_mat toilet vanity) == names(bath, [item("shower", 4, 4)])
+    assert ~w(bath_mat toilet vanity) == names(bath, [item("shower", 40, 60)])
 
     # A half bath has no bath.
     assert ~w(toilet vanity) == names(%{bath | name: "Half bath"}, [])
@@ -128,5 +128,25 @@ defmodule DIYWeb.FurnitureTest do
     end
 
     assert Enum.all?(1..3, &(look.(&1) == look.(0)))
+
+    # A tree of 91 by 60 inches, after a quarter turn: its space is 60 by
+    # 91 inches (`DIY.Layout.extent/1`), and the tree fills it.
+    item = %{type: "tree", at: %{x: 0, y: 0}, size: %{w: 91, d: 60, h: 158}, turn: 1, params: %{}}
+    assert Layout.extent(item) == {60, 91}
+
+    points =
+      for {:poly, corners, _class} <-
+            Shapes.placed("tree", %{
+              at: {0, 0, 0},
+              size: {91 * 0.0254, 60 * 0.0254, 158 * 0.0254},
+              turn: 1,
+              camera: Camera.house()
+            }),
+          {x, y, _z} <- corners,
+          do: {x / 0.0254, y / 0.0254}
+
+    {xs, ys} = Enum.unzip(points)
+    assert_in_delta Enum.max(xs) - Enum.min(xs), 60, 0.5
+    assert_in_delta Enum.max(ys) - Enum.min(ys), 91, 0.5
   end
 end
