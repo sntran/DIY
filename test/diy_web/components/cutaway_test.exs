@@ -337,6 +337,33 @@ defmodule DIYWeb.CutawayTest do
     assert other.(before) == other.(now)
   end
 
+  test "a door is an opening of 32 inches in the wall" do
+    build = house()
+    {kitchen, living} = {kitchen_room(build), Enum.find(build.rooms, &(&1.name == "Living room"))}
+    yard = Enum.find(build.rooms, &(&1.name == "Backyard"))
+
+    # The parts of the walls of a room on a side, along the side (inches).
+    parts = fn build, room, side ->
+      [ground | _] = Cutaway.view(build).levels
+
+      for %{kind: :wall, room: ^room, id: id, box: {x0, y0, _, x1, y1, _}} <- ground.objects,
+          id =~ "-#{side}-" do
+        if side in ~w(x0 x1),
+          do: {round(y0 / 0.0254), round(y1 / 0.0254)},
+          else: {round(x0 / 0.0254), round(x1 / 0.0254)}
+      end
+    end
+
+    # The living room draws the wall between it and the kitchen. A door in
+    # its middle cuts it in two. A door to the yard cuts the front wall of
+    # the kitchen.
+    assert parts.(build, living.id, "x0") == [{0, 294}]
+    doors = %{living.id => nil, yard.id => 40}
+    {:ok, door} = Build.set_doorways(build, kitchen.id, doors)
+    assert parts.(door, living.id, "x0") == [{0, 131}, {163, 294}]
+    assert [{_, 24}, {56, _}] = parts.(door, kitchen.id, "y1")
+  end
+
   test "a wall between two rooms is low where it can hide an item of the room behind it" do
     build = house()
 

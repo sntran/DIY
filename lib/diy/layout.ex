@@ -123,6 +123,25 @@ defmodule DIY.Layout do
     beside or over
   end
 
+  @doc """
+  The common part of the sides of two boxes that touch (`touch?/2`):
+  `{side, {from, to}}`. The side is the side of `a` (`"x0"`, `"x1"`, `"y0"`
+  or `"y1"`). `from` and `to` are along that side, on the plan. Two boxes
+  that do not touch give nil.
+  """
+  def shared(a, b) do
+    {ys, xs} =
+      {{max(a.y, b.y), min(a.y + a.d, b.y + b.d)}, {max(a.x, b.x), min(a.x + a.w, b.x + b.w)}}
+
+    cond do
+      elem(ys, 0) < elem(ys, 1) and a.x + a.w == b.x -> {"x1", ys}
+      elem(ys, 0) < elem(ys, 1) and b.x + b.w == a.x -> {"x0", ys}
+      elem(xs, 0) < elem(xs, 1) and a.y + a.d == b.y -> {"y1", xs}
+      elem(xs, 0) < elem(xs, 1) and b.y + b.d == a.y -> {"y0", xs}
+      true -> nil
+    end
+  end
+
   @doc "True when two boxes overlap (a common side is not an overlap)."
   def overlap?(a, b),
     do: a.x < b.x + b.w and b.x < a.x + a.w and a.y < b.y + b.d and b.y < a.y + a.d

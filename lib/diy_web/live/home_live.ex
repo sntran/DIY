@@ -837,6 +837,20 @@ defmodule DIYWeb.HomeLive do
     with_build(socket, Build.set_open(socket.assigns.build, id, ids))
   end
 
+  # The doors of a room: the other rooms, and the place of each door.
+  def handle_event("room_doors", %{"room_id" => id} = params, socket) do
+    at = if is_map(params["at"]), do: params["at"], else: %{}
+
+    doors =
+      for other <- List.wrap(params["door"]),
+          is_binary(other),
+          other != "",
+          into: %{},
+          do: {other, parse_int(at[other])}
+
+    with_build(socket, Build.set_doorways(socket.assigns.build, id, doors))
+  end
+
   # The search of the sheet Add (DIYWeb.Inside).
   def handle_event("add_search", %{"q" => q}, socket) when is_binary(q),
     do: {:noreply, assign(socket, :add_query, String.slice(q, 0, 40))}

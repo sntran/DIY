@@ -320,6 +320,44 @@ defmodule DIYWeb.PlanLiveTest do
     assert build(view).open == []
   end
 
+  test "the sheet of a room gives it doors, each at a place along the wall", %{conn: conn} do
+    view = open(conn, ~p"/inside", house())
+    {kitchen, living} = {room(view, "Kitchen"), room(view, "Living room")}
+    yard = room(view, "Backyard")
+    render_patch(view, ~p"/inside?#{[room: kitchen.id, sheet: "room"]}")
+
+    # A door to a room inside or to a yard.
+    assert has_element?(view, "#doors-#{kitchen.id} legend", "Doors")
+    assert has_element?(view, "#door-#{kitchen.id}-#{living.id}")
+    assert has_element?(view, "#door-#{kitchen.id}-#{yard.id}")
+    refute has_element?(view, "#door-at-#{kitchen.id}-#{living.id}")
+
+    # A new door is in the middle. Its range moves it.
+    view
+    |> form("#doors-#{kitchen.id}", %{"door" => [living.id]})
+    |> render_change()
+
+    assert [%{other: other, at: 147}] = Build.doorways_of(build(view), kitchen.id)
+    assert other == living.id
+    assert has_element?(view, "#door-#{kitchen.id}-#{living.id}[checked]")
+    assert has_element?(view, "#door-at-#{kitchen.id}-#{living.id}[value='147'][max='294']")
+
+    render_change(view, "room_doors", %{
+      "room_id" => kitchen.id,
+      "door" => [living.id, yard.id],
+      "at" => %{living.id => "60", yard.id => "x"}
+    })
+
+    assert [%{at: 60}, %{other: yard_id, at: 72}] = Build.doorways_of(build(view), kitchen.id)
+    assert yard_id == yard.id
+
+    # A change with no box checked takes the doors away.
+    render_change(view, "room_doors", %{"room_id" => kitchen.id, "door" => [""], "at" => "x"})
+    assert build(view).doorways == []
+    render_change(view, "room_doors", %{"room_id" => kitchen.id})
+    assert build(view).doorways == []
+  end
+
   test "the sheet of a room sets its size in feet", %{conn: conn} do
     view = open(conn, ~p"/inside", house())
     kitchen = room(view, "Kitchen")
