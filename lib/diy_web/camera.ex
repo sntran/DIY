@@ -200,11 +200,11 @@ defmodule DIYWeb.Camera do
   Three boxes can each be behind the next one (a cycle). Then the box with
   the fewest boxes before it comes first.
 
-  An object with `flat: true` is in the floor (a pool), also when it is
-  loose. Each object that goes lower than it comes before it, for example
+  An object with `flat: true` is in the floor (a pool or a rug), also
+  when it is loose. Each object that goes lower than it comes before it, for example
   the slab of a balcony. Each object that rises over it comes after it,
-  for example a pump on its coping. An object at the same height (a rug)
-  has no rule with it. These two rules make no cycle by themselves:
+  for example a pump on its coping, or a bed on a rug. Two flat objects
+  have no rule between them. These two rules make no cycle by themselves:
   an object lower than it is behind each object over it, along z. A flat
   object through a wall can still be in a cycle with that wall.
   """

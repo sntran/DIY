@@ -1872,7 +1872,10 @@ its turn. A length is in inches.
     of the item. This is also true for an item of a different room of the
     layer. So the items show, and the person can tap them. A piece can hide
     more of the lower part of a tall item. A rug is flat: it paints first,
-    and the pieces and the items stand on it. The furniture is for the eyes
+    and the pieces and the items stand on it. In the order of the paint,
+    it is in the floor, as a pool (`flat`). So each part that rises over
+    it paints after it, also when a pool lower than the rug is behind it
+    on the screen. The furniture is for the eyes
     only. It uses no power, and a tap goes through it to the floor of the
     room. It moves with its room in a drag. The leaves of a tree are discs
     that look to the camera.

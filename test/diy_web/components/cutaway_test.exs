@@ -883,7 +883,10 @@ defmodule DIYWeb.CutawayTest do
     decor = for %{kind: :fixture, id: "decor-" <> id} = o <- ground.objects, do: {id, o}
     assert Enum.any?(decor, fn {id, _o} -> String.starts_with?(id, living <> "-") end)
 
-    # The rug of the living room paints before the table on it.
+    # The rug of the living room paints before the table on it. It is
+    # flat, and the table is not.
+    assert %{flat: true, loose: true} = Map.new(decor)["#{living}-0"]
+    assert %{flat: false} = Map.new(decor)["#{living}-2"]
     ids = Enum.map(ground.objects, & &1.id)
     index = fn id -> Enum.find_index(ids, &(&1 == id)) end
     assert index.("decor-#{living}-0") < index.("decor-#{living}-2")
@@ -1062,6 +1065,32 @@ defmodule DIYWeb.CutawayTest do
     assert Camera.order([c, b, a], camera) |> Enum.map(& &1.id) |> Enum.sort() == ["a", "b", "c"]
     # With no cycle: the box at the back first, whatever its key.
     assert Camera.order([%{b | key: -1}, a], camera) |> Enum.map(& &1.id) == ["a", "b"]
+  end
+
+  test "a rug is flat: it paints before a piece on it, also when a pool is behind it" do
+    # An object with the corners of its box as its polygon.
+    object = fn id, {x0, y0, z0, x1, y1, z1} = box, key, more ->
+      corners = for x <- [x0, x1], y <- [y0, y1], z <- [z0, z1], do: {x, y, z}
+      Map.merge(%{id: id, box: box, key: key, loose: false, polys: [{corners, "x"}]}, more)
+    end
+
+    # A pool in a yard under the floor of the room, and the slab under the
+    # pool: the slab paints first. The rug is on the floor over the pool
+    # (on the screen) and under the bed. The bed is far from the pool.
+    slab = object.("slab", {-5, 0, -0.5, -4, 1, -0.3}, 100, %{})
+    pool = object.("pool", {-5, 0, -0.3, -4, 1, 0.0}, 0, %{flat: true, loose: true})
+    rug = object.("rug", {-4.5, 0, 0.3, 2, 2, 0.3}, -1.0e6, %{flat: true, loose: true})
+    bed = object.("bed", {1, 1, 0.3, 2, 2, 1.3}, 5, %{})
+
+    order = [slab, pool, rug, bed] |> Camera.order(Camera.house()) |> Enum.map(& &1.id)
+    assert Enum.find_index(order, &(&1 == "rug")) < Enum.find_index(order, &(&1 == "bed"))
+    assert Enum.find_index(order, &(&1 == "slab")) < Enum.find_index(order, &(&1 == "pool"))
+
+    # A rug that is not flat waits for the pool, and the bed paints first:
+    # the fault of issue #50.
+    rug = Map.delete(rug, :flat)
+    order = [slab, pool, rug, bed] |> Camera.order(Camera.house()) |> Enum.map(& &1.id)
+    assert Enum.find_index(order, &(&1 == "rug")) > Enum.find_index(order, &(&1 == "bed"))
   end
 
   ## The property
