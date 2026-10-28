@@ -72,7 +72,8 @@ defmodule DIYWeb.Outside do
     lot = lot(rooms, house)
     pole = {lot.x + lot.w - 0.8, lot.y + 0.8}
     door = door(inside)
-    furnished = &yard(&1, Map.get(items, &1.id, []), z.(&1), camera)
+    inside_box = Decor.house(inside)
+    furnished = &yard(&1, Map.get(items, &1.id, []), inside_box, z.(&1), camera)
 
     # The slabs on the ground are under all the objects: they paint first,
     # as in the plan. A slab over a floor is an object.
@@ -463,19 +464,19 @@ defmodule DIYWeb.Outside do
     end
   end
 
-  # A yard, the driveway or a balcony: its furniture and its items. An item
-  # that is taller than floor 1 has no right order with the floors over it.
-  # It paints by its depth only (`loose`), as an item larger than its room.
-  defp yard(room, items, z, camera) do
+  # A yard, the driveway or a balcony: its furniture and its items. A piece
+  # or an item that is taller than floor 1 (a tree) has no right order with
+  # the floors over it. It paints by its depth only (`loose`), as an item
+  # larger than its room.
+  defp yard(room, items, house, z, camera) do
     decor =
-      for {piece, i} <- Enum.with_index(Decor.pieces(room, items)),
+      for {piece, i} <- Enum.with_index(Decor.pieces(room, items, [], house)),
           do: Cutaway.decor_view("#{room.id}-#{i}", piece, room, z, camera)
 
-    decor ++
-      for item <- items do
-        %{box: {_, _, z0, _, _, z1}} = view = Cutaway.item_view(item, room, z, camera)
-        %{view | loose: view.loose or z1 - z0 > @slab + @full}
-      end
+    items = for item <- items, do: Cutaway.item_view(item, room, z, camera)
+
+    for %{box: {_, _, z0, _, _, z1}} = view <- decor ++ items,
+        do: %{view | loose: view.loose or z1 - z0 > @slab + @full}
   end
 
   # The pole of the grid, at the back right of the lot.

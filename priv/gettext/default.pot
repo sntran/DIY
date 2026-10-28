@@ -1004,67 +1004,67 @@ msgstr ""
 msgid "This house is too large for a link. A link can have 150 items and 50 rooms at most."
 msgstr ""
 
-#: lib/diy_web/components/outside.ex:921
+#: lib/diy_web/components/outside.ex:922
 #, elixir-autogen, elixir-format
 msgid "Clouds"
 msgstr ""
 
-#: lib/diy_web/components/outside.ex:916
+#: lib/diy_web/components/outside.ex:917
 #, elixir-autogen, elixir-format
 msgid "Day"
 msgstr ""
 
-#: lib/diy_web/components/outside.ex:918
+#: lib/diy_web/components/outside.ex:919
 #, elixir-autogen, elixir-format
 msgid "Night"
 msgstr ""
 
-#: lib/diy_web/components/outside.ex:908
+#: lib/diy_web/components/outside.ex:909
 #, elixir-autogen, elixir-format
 msgid "Now"
 msgstr ""
 
-#: lib/diy_web/components/outside.ex:909
+#: lib/diy_web/components/outside.ex:910
 #, elixir-autogen, elixir-format
 msgid "Now (%{name})"
 msgstr ""
 
-#: lib/diy_web/components/outside.ex:898
+#: lib/diy_web/components/outside.ex:899
 #, elixir-autogen, elixir-format
 msgid "Now at the house: %{temp} °F, %{time}, %{weather}."
 msgstr ""
 
-#: lib/diy_web/components/outside.ex:922
+#: lib/diy_web/components/outside.ex:923
 #, elixir-autogen, elixir-format
 msgid "Rain"
 msgstr ""
 
-#: lib/diy_web/components/outside.ex:923
+#: lib/diy_web/components/outside.ex:924
 #, elixir-autogen, elixir-format
 msgid "Snow"
 msgstr ""
 
-#: lib/diy_web/components/outside.ex:920
+#: lib/diy_web/components/outside.ex:921
 #, elixir-autogen, elixir-format
 msgid "Sun"
 msgstr ""
 
-#: lib/diy_web/components/outside.ex:917
+#: lib/diy_web/components/outside.ex:918
 #, elixir-autogen, elixir-format
 msgid "Sunset"
 msgstr ""
 
-#: lib/diy_web/components/outside.ex:871
+#: lib/diy_web/components/outside.ex:872
 #, elixir-autogen, elixir-format
 msgid "Time of day"
 msgstr ""
 
-#: lib/diy_web/components/outside.ex:882
+#: lib/diy_web/components/outside.ex:883
 #, elixir-autogen, elixir-format
 msgid "Weather"
 msgstr ""
 
-#: lib/diy_web/components/outside.ex:913
+#: lib/diy_web/components/outside.ex:914
 #, elixir-autogen, elixir-format
 msgid "Sunrise"
 msgstr ""

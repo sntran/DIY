@@ -328,9 +328,13 @@ defmodule DIYWeb.CutawayTest do
     assert back.(before) == [{144, 438}]
     assert back.(now) == [{216, 438}]
 
-    # The other walls do not change.
-    assert Enum.reject(before, &(elem(&1, 0) == three and elem(&1, 1) =~ "-y0-")) ==
-             Enum.reject(now, &(elem(&1, 0) == three and elem(&1, 1) =~ "-y0-"))
+    # The other walls do not change. Their order of the paint can change:
+    # the order of the parts that cover each other on the screen.
+    other = fn walls ->
+      walls |> Enum.reject(&(elem(&1, 0) == three and elem(&1, 1) =~ "-y0-")) |> Enum.sort()
+    end
+
+    assert other.(before) == other.(now)
   end
 
   test "a wall between two rooms is low where it can hide an item of the room behind it" do
@@ -800,7 +804,7 @@ defmodule DIYWeb.CutawayTest do
     # All the models: the pieces of large rooms of each name that the app
     # knows, with no item.
     rooms =
-      for name <- ~w(Bedroom Living Kitchen Bathroom Garage Laundry Attic Office),
+      for name <- ~w(Bedroom Living Kitchen Dining Bathroom Garage Laundry Attic Office),
           do: %{name: name, place: :indoor, plan: %{x: 0, y: 0, w: 400, d: 400}}
 
     yard = %{name: "Backyard", place: :outdoor, plan: %{x: 0, y: 0, w: 400, d: 400}}
@@ -809,7 +813,7 @@ defmodule DIYWeb.CutawayTest do
       for(room <- [yard | rooms], {model, _x, _y, _turn} <- Decor.pieces(room, []), do: model)
       |> Enum.uniq()
 
-    assert length(models) == 22
+    assert length(models) == 20
 
     # A ball of leaves (or a rug) looks to the camera at the turn 0 only. A
     # piece with leaves stays at the turn 0 on the plan.

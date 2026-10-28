@@ -1784,23 +1784,38 @@ its turn. A length is in inches.
   - The furniture of a room (`DIYWeb.Decor`), as in the drawn picture. A
     word in the name of a room gives its pieces, in capital letters or
     not:
+    - "closet": no furniture, so the way stays open. This is also true
+      for the closet of a bedroom, or under the stairs;
     - "stair" or "stairs" as a word ("upstairs" is not): on floor 1,
       stairs that go up to the back of the room. They have 13 steps (up
       to the top of the walls), or less when the room is not as deep. A
       room with space for less than 4 steps has no stairs. On an upper
-      floor, the opening of the stairs with a rail, and a plant. In the
-      picture of a share, the stairs join the floors (the owner, October
-      2026);
-    - "bed": a bed, two nightstands, a dresser, a rug and a plant;
-    - "living": a sofa, an armchair, a table, books, a rug and two plants;
-    - "kitchen": counters, a table with chairs, and a plant;
+      floor, the opening of the stairs with a rail. In the picture of a
+      share, the stairs join the floors (the owner, October 2026). The
+      stairs are a part of the house: they always show, also when they
+      hide an item of a different room;
+    - "hall" (but not "hall bath"): no furniture, so the way stays open.
+      A name with "hall" and "stairs" has the stairs;
+    - "bed": a bed, two nightstands, a dresser (with no plant on it) and
+      a rug;
+    - "living": a sofa, an armchair, a table, books and a rug. With the
+      word "dining" also, a table with chairs;
+    - "kitchen": counters. With the word "dining" also, a table with
+      chairs;
+    - "dining": a table with chairs;
+    - "breakfast": a small round table with two chairs;
     - "bath": a bath, a toilet, a vanity and a mat;
     - "garage": a bench and a shelf;
     - "laundry": a shelf and a basket;
     - "attic": boxes;
-    - "yard" (a room outside): a table with chairs, trees and bushes;
-    - a different name inside: a plant. A different room outside, and a
-      roof, have no furniture.
+    - "yard" (a room outside): a small round table with chairs, and one
+      big tree. The tree is at the left, away from the house. In a yard
+      in front of the house, it is at the front. In a yard behind the
+      house, it is at the back. A side yard ("side" as a word in the
+      name) has no furniture;
+    - a different name has no furniture. No room inside has a plant:
+      plants hide the plan (the owner, October 2026). A roof has no
+      furniture.
 
     Each piece has its place: against the back wall, in the middle, or at
     the front. A piece is 4 inches from the walls, and 8 inches from the
@@ -1815,8 +1830,8 @@ its turn. A length is in inches.
     more of the lower part of a tall item. A rug is flat: it paints first,
     and the pieces and the items stand on it. The furniture is for the eyes
     only. It uses no power, and a tap goes through it to the floor of the
-    room. It moves with its room in a drag. The leaves of a plant or a tree
-    are discs that look to the camera.
+    room. It moves with its room in a drag. The leaves of a tree are discs
+    that look to the camera.
   - A long wall has a picture in a frame at the left of its window. A
     garage, a laundry and an attic have no picture, and no picture is
     behind an item (4 feet from the wall at most).
@@ -2187,8 +2202,9 @@ camera and the same look. A tap on the picture opens the plan.
   rooms.
 - The order of the paint is the order of the plan
   (`DIYWeb.Camera.order/2`). For the order, a wall is flat, on its line.
-  The slabs on the ground paint first. An item in a yard that is taller
-  than floor 1 paints by its depth only. No order is right for it and the
+  The slabs on the ground paint first. An item or a piece of furniture
+  (a tree) in a yard that is taller than floor 1 paints by its depth
+  only. No order is right for it and the
   floors over it.
 - The LiveView makes the picture only for the page House, as an assign
   (`DIYWeb.Outside.view/1`). The page Power keeps the picture of
