@@ -289,6 +289,37 @@ defmodule DIYWeb.PlanLiveTest do
     refute has_element?(view, "#size-form")
   end
 
+  test "the sheet of a room opens it to a room next to it: no wall", %{conn: conn} do
+    view = open(conn, ~p"/inside", house())
+    {kitchen, living} = {room(view, "Kitchen"), room(view, "Living room")}
+    render_patch(view, ~p"/inside?#{[room: kitchen.id, sheet: "room"]}")
+
+    # The rooms inside next to the kitchen, on its layer: not the backyard.
+    assert has_element?(view, "#open-#{kitchen.id} legend", "No wall to")
+    assert has_element?(view, "#open-#{kitchen.id}-#{living.id}")
+    refute has_element?(view, "#open-#{kitchen.id}-#{room(view, "Backyard").id}")
+
+    # Bedroom 2 touches the garage, but it is on floor 2.
+    garage = room(view, "Garage")
+    render_patch(view, ~p"/inside?#{[room: garage.id, sheet: "room"]}")
+    assert has_element?(view, "#open-#{garage.id}-#{room(view, "Laundry").id}")
+    refute has_element?(view, "#open-#{garage.id}-#{room(view, "Bedroom 2").id}")
+    render_patch(view, ~p"/inside?#{[room: kitchen.id, sheet: "room"]}")
+
+    view
+    |> form("#open-#{kitchen.id}", %{"open" => [living.id]})
+    |> render_change()
+
+    assert Build.open_to(build(view), kitchen.id) == [living.id]
+    assert has_element?(view, "#open-#{kitchen.id}-#{living.id}[checked]")
+
+    # A change with no box checked closes it again.
+    render_change(view, "room_open", %{"room_id" => kitchen.id, "open" => [""]})
+    assert build(view).open == []
+    render_change(view, "room_open", %{"room_id" => kitchen.id})
+    assert build(view).open == []
+  end
+
   test "the sheet of a room sets its size in feet", %{conn: conn} do
     view = open(conn, ~p"/inside", house())
     kitchen = room(view, "Kitchen")
