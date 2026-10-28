@@ -84,13 +84,25 @@ defmodule DIY.MarketTest do
     assert Market.old?(market.(Date.add(today, -400), "ptc"), today)
     refute Market.old?(market.(Date.add(today, -400), "user"), today)
     refute Market.old?(market.(Date.utc_today(), "ptc"))
+
+    # A date after today, from a file, is old too.
+    assert Market.old?(market.(Date.add(today, 1), "ptc"), today)
+  end
+
+  test "a new market with less in it: no retail choice, or no median" do
+    old = %{choice: true, median: 14.1}
+    refute Market.less?(%{choice: true, median: 13.2}, old)
+    assert Market.less?(%{choice: false, median: nil}, old)
+    assert Market.less?(%{choice: true, median: nil}, old)
+    refute Market.less?(%{choice: false, median: nil}, %{choice: false, median: nil})
+    refute Market.less?(%{choice: true, median: 9.9}, %{choice: false, median: nil})
   end
 
   property "a market is old from its seventh day" do
     check all(days <- integer(-30..400)) do
       today = ~D[2026-10-28]
       market = %{date: Date.to_iso8601(Date.add(today, -days)), source: "ptc"}
-      assert Market.old?(market, today) == days >= 7
+      assert Market.old?(market, today) == (days >= 7 or days < 0)
     end
   end
 

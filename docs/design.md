@@ -302,8 +302,8 @@ ZIP code, the build forgets its market. When the ZIP code comes back, the
 page asks again.
 
 The plans and their prices change, so a market of Power to Choose gets
-old after 7 days (`DIY.Market.old?/2`). The owner asked about a job that
-gets the plans each day (October 2026). The app has no such job: the
+old after 7 days (`DIY.Market.old?/2`). A date after today, from a file,
+is old too. The app has no job that gets the plans each day, because the
 server keeps no ZIP codes of people. Instead, the page asks again when it
 opens a build with an old market:
 
@@ -315,6 +315,12 @@ opens a build with an old market:
 - After an error, the build keeps its old market, and the page shows no
   error: the old median is still good for an estimate. The source of the
   price gives the date of the median.
+- A new market with less in it is an error too (`DIY.Market.less?/2`).
+  Power to Choose can give an empty answer one time. Then the new market
+  has no retail choice and no median, and the Plans page would go away.
+- The page asks one time for each ZIP code in a session. A build can
+  come later in the session from a file or a different tab. If it has an
+  old market of the same ZIP code, it waits for the next session.
 - A market that the person gave (`source: "user"`) does not get old.
 
 The cache of the server keeps the answer of Power to Choose for one ZIP

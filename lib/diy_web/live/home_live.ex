@@ -1928,12 +1928,15 @@ defmodule DIYWeb.HomeLive do
   end
 
   # The new market of an old one. The build takes it only when it still has
-  # that ZIP code and a market of Power to Choose: the person can change
-  # the ZIP code or the market while the page waits.
+  # that ZIP code and a market of Power to Choose. The person can change
+  # them while the page waits. A market with less in it is an error
+  # (`Market.less?/2`): the build keeps its old market.
   def handle_async({:market_again, zip}, {:ok, {:ok, market}}, socket) do
     case socket.assigns.build do
-      %{zip: ^zip, market: %{source: "ptc"}} = build ->
-        {:noreply, put(socket, Build.set_market(build, market))}
+      %{zip: ^zip, market: %{source: "ptc"} = old} = build ->
+        if Market.less?(market, old),
+          do: {:noreply, socket},
+          else: {:noreply, put(socket, Build.set_market(build, market))}
 
       _other ->
         {:noreply, socket}

@@ -16,7 +16,6 @@ defmodule DIYWeb.LessonLiveTest do
     utility: "Oncor",
     median: 14.1,
     plans: 168,
-    date: "2026-10-08",
     source: "ptc"
   }
 
@@ -36,7 +35,7 @@ defmodule DIYWeb.LessonLiveTest do
     # A market of today: the page asks again for an old market
     # (`DIY.Market.old?/2`), and the stub has a different market.
     today = Date.to_iso8601(Date.utc_today())
-    build = if market, do: Build.set_market(build, %{market | date: today}), else: build
+    build = if market, do: Build.set_market(build, Map.put(market, :date, today)), else: build
     Build.put_house(build, house, rooms, items)
   end
 

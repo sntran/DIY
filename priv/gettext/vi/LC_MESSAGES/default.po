@@ -641,7 +641,7 @@ msgid "The page has 1 month of your usage. The file stayed on this device."
 msgid_plural "The page has %{count} months of your usage. The file stayed on this device."
 msgstr[0] "Trang có %{count} tháng tiêu thụ của bạn. Tệp vẫn chỉ ở trên thiết bị này."
 
-#: lib/diy_web/live/home_live.ex:1994
+#: lib/diy_web/live/home_live.ex:1997
 #, elixir-autogen, elixir-format
 msgid "The page reads your build from this device."
 msgstr "Trang đang đọc mô hình của bạn từ thiết bị này."
@@ -676,7 +676,7 @@ msgstr "Bảng tính có 10 gói điện. Hãy xóa một gói trước."
 msgid "These numbers give %{price} for each kWh. Check the total and the kWh of the bill."
 msgstr "Các con số này cho ra %{price} mỗi kWh. Hãy kiểm tra tổng tiền và số kWh của hóa đơn."
 
-#: lib/diy_web/live/home_live.ex:1979
+#: lib/diy_web/live/home_live.ex:1982
 #, elixir-autogen, elixir-format
 msgid "This app needs JavaScript. Turn on JavaScript in the browser."
 msgstr "Ứng dụng này cần JavaScript. Hãy bật JavaScript trong trình duyệt."

@@ -643,7 +643,7 @@ msgid_plural "The page has %{count} months of your usage. The file stayed on thi
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/diy_web/live/home_live.ex:1994
+#: lib/diy_web/live/home_live.ex:1997
 #, elixir-autogen, elixir-format
 msgid "The page reads your build from this device."
 msgstr ""
@@ -678,7 +678,7 @@ msgstr ""
 msgid "These numbers give %{price} for each kWh. Check the total and the kWh of the bill."
 msgstr ""
 
-#: lib/diy_web/live/home_live.ex:1979
+#: lib/diy_web/live/home_live.ex:1982
 #, elixir-autogen, elixir-format
 msgid "This app needs JavaScript. Turn on JavaScript in the browser."
 msgstr ""

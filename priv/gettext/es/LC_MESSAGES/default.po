@@ -643,7 +643,7 @@ msgid_plural "The page has %{count} months of your usage. The file stayed on thi
 msgstr[0] "La página tiene 1 mes de su consumo. El archivo se quedó en este dispositivo."
 msgstr[1] "La página tiene %{count} meses de su consumo. El archivo se quedó en este dispositivo."
 
-#: lib/diy_web/live/home_live.ex:1994
+#: lib/diy_web/live/home_live.ex:1997
 #, elixir-autogen, elixir-format
 msgid "The page reads your build from this device."
 msgstr "La página lee su modelo de este dispositivo."
@@ -678,7 +678,7 @@ msgstr "La hoja de trabajo tiene 10 planes. Primero borre un plan."
 msgid "These numbers give %{price} for each kWh. Check the total and the kWh of the bill."
 msgstr "Estos números dan %{price} por cada kWh. Revise el total y los kWh de la factura."
 
-#: lib/diy_web/live/home_live.ex:1979
+#: lib/diy_web/live/home_live.ex:1982
 #, elixir-autogen, elixir-format
 msgid "This app needs JavaScript. Turn on JavaScript in the browser."
 msgstr "Esta app necesita JavaScript. Active JavaScript en el navegador."

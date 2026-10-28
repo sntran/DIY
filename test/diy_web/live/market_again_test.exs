@@ -98,6 +98,22 @@ defmodule DIYWeb.MarketAgainTest do
     refute_received :asked
   end
 
+  test "an empty answer does not take the place of a market with plans", %{conn: conn} do
+    market(&Req.Test.json(&1, %{"success" => true, "data" => []}))
+    old = house(8)
+    view = open(conn, old)
+    render_async(view)
+    assert_received :asked
+    assert build(view).market == old.market
+  end
+
+  test "a page that stops while it waits changes nothing" do
+    socket = %Phoenix.LiveView.Socket{assigns: %{__changed__: %{}, build: %{zip: "75070"}}}
+
+    assert DIYWeb.HomeLive.handle_async({:market_again, "75070"}, {:exit, :killed}, socket) ==
+             {:noreply, socket}
+  end
+
   # The person can change the ZIP code or the market while the page waits.
   # Then the answer changes nothing.
   test "an answer for a build that changed while the page waited changes nothing" do

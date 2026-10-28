@@ -118,15 +118,27 @@ defmodule DIY.Market do
 
   @doc """
   True when a market of Power to Choose in a build is old: #{@days} days or
-  more. A market that the user gave does not get old.
+  more. A date after today (from a file) is old too. A market that the
+  user gave does not get old.
   """
   @spec old?(t(), Date.t()) :: boolean()
   def old?(market, today \\ Date.utc_today())
 
-  def old?(%{source: "ptc", date: date}, today),
-    do: Date.diff(today, Date.from_iso8601!(date)) >= @days
+  def old?(%{source: "ptc", date: date}, today) do
+    days = Date.diff(today, Date.from_iso8601!(date))
+    days >= @days or days < 0
+  end
 
   def old?(_market, _today), do: false
+
+  @doc """
+  True when a new market has less than an old one: it has no retail
+  choice, or no median, and the old market has it. An empty answer of
+  Power to Choose gives such a market. Then the old market is better.
+  """
+  @spec less?(t(), t()) :: boolean()
+  def less?(new, old),
+    do: (old.choice and not new.choice) or (old.median != nil and new.median == nil)
 
   @doc """
   The market that the user gives: the user knows that the utility is a
