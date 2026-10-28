@@ -66,8 +66,9 @@ defmodule DIY.Build do
     (`link_unit/3`).
     A unit has one item at most.
   - `open`: the pairs of rooms of the house that are open to each other:
-    no wall stands between them (`set_open/3`). The two rooms are on the
-    same layer, next to each other. A pair goes away with a room.
+    no wall stands between them (`set_open/3`). The two rooms are inside,
+    on the same layer, next to each other. A pair goes away with a room.
+    A build has at most 200 pairs.
   - `wires`: the wires between the items, at most 100, and at most 24 for
     an item (`add_wire/3`). Each wire has an `id`, the item at each end
     (`from` gives the current, `to`), and its numbers (`DIY.Wire`). A
@@ -498,33 +499,43 @@ defmodule DIY.Build do
     do: for([a, b] <- build.open, id in [a, b], do: if(a == id, do: b, else: a))
 
   @doc """
+  The rooms that a room of the house can be open to (`set_open/3`): the
+  rooms inside on the same layer, next to it (`DIY.Layout.touch?/2`).
+  The plan draws walls only for the rooms inside, so a yard is not one.
+  """
+  @spec open_choices(t(), room()) :: [room()]
+  def open_choices(build, room), do: Enum.filter(build.rooms, &open_pair?(room, &1))
+
+  @doc """
   Opens a room of the house to the rooms in `ids`, and closes it to the
   other rooms: an open plan. No wall then stands between the room and
-  each of these rooms. Each room in `ids` must be a room of the house on
-  the same layer, next to it (`DIY.Layout.touch?/2`). The app ignores the
-  other ids.
+  each of these rooms. Each room in `ids` must be one of its choices
+  (`open_choices/2`). The app ignores the other ids. A build has at most
+  200 pairs (`:open`).
   """
-  @spec set_open(t(), String.t(), [String.t()]) :: {:ok, t()} | {:error, :room}
+  @spec set_open(t(), String.t(), [String.t()]) :: {:ok, t()} | {:error, :room | :open}
   def set_open(build, id, ids) when is_list(ids) do
     with {:ok, %{plan: %{}} = room} <- house_room(build, id) do
       pairs =
-        for other <- build.rooms,
-            other.id in ids,
-            open_pair?(room, other),
-            do: Enum.sort([id, other.id])
+        for other <- open_choices(build, room), other.id in ids, do: Enum.sort([id, other.id])
 
-      {:ok,
-       change(build, &%{&1 | open: Enum.reject(&1.open, fn pair -> id in pair end) ++ pairs})}
+      open = Enum.reject(build.open, &(id in &1)) ++ pairs
+
+      if length(open) <= @max_open,
+        do: {:ok, change(build, &%{&1 | open: open})},
+        else: {:error, :open}
     else
       _error -> {:error, :room}
     end
   end
 
-  # Two rooms of the house that can be open to each other: on the same
-  # layer, and next to each other.
+  # Two rooms of the house that can be open to each other: two rooms
+  # inside, on the same layer, next to each other.
   defp open_pair?(room, other) do
-    other.id != room.id and not van_level?(other.level) and other.plan != nil and
-      Layout.layer(other) == Layout.layer(room) and Layout.touch?(room.plan, other.plan)
+    other.id != room.id and room.place == :indoor and other.place == :indoor and
+      not van_level?(room.level) and not van_level?(other.level) and room.plan != nil and
+      other.plan != nil and Layout.layer(other) == Layout.layer(room) and
+      Layout.touch?(room.plan, other.plan)
   end
 
   @doc "Gives a room a new name."
@@ -557,12 +568,7 @@ defmodule DIY.Build do
                item.room != id,
                do: if(item.home == id, do: %{item | home: new_home(item, house)}, else: item)
 
-         %{
-           build
-           | rooms: rooms,
-             items: items,
-             areas: Map.delete(build.areas, id)
-         }
+         %{build | rooms: rooms, items: items, areas: Map.delete(build.areas, id)}
          |> drop_vans()
          |> no_meter_no_usage()
        end)}
@@ -2007,35 +2013,6 @@ defmodule DIY.Build do
   # older version has none. A link of a room that cannot have an area (it
   # is not there, or it is the roof) goes away. Two rooms cannot have one
   # area: the first room in the list keeps it.
-  # The pairs of rooms that are open to each other. A build of an older
-  # version has none.
-  defp open(nil), do: {:ok, []}
-
-  defp open(pairs) when is_list(pairs) and length(pairs) <= @max_open do
-    if Enum.all?(pairs, &match?([a, b] when is_binary(a) and is_binary(b), &1)),
-      do: {:ok, pairs},
-      else: {:error, :open}
-  end
-
-  defp open(_pairs), do: {:error, :open}
-
-  # A pair stays when its two rooms can be open to each other, after the
-  # fill of the plan. So it goes away with a room, or when a room moves
-  # away. A pair comes one time, in its order.
-  defp fit_open(build, pairs) do
-    rooms = Map.new(build.rooms, &{&1.id, &1})
-
-    open =
-      for [a, b] <- pairs,
-          room = rooms[a],
-          other = rooms[b],
-          room && other && not van_level?(room.level) && room.plan && open_pair?(room, other),
-          uniq: true,
-          do: Enum.sort([a, b])
-
-    %{build | open: open}
-  end
-
   defp areas(nil, _rooms), do: {:ok, %{}}
 
   defp areas(areas, rooms) when is_map(areas) do
@@ -2056,6 +2033,35 @@ defmodule DIY.Build do
   end
 
   defp areas(_areas, _rooms), do: {:error, :areas}
+
+  # The pairs of rooms that are open to each other. A build of an older
+  # version has none.
+  defp open(nil), do: {:ok, []}
+
+  defp open(pairs) when is_list(pairs) do
+    if Enum.all?(pairs, &match?([a, b] when is_binary(a) and is_binary(b), &1)),
+      do: {:ok, pairs},
+      else: {:error, :open}
+  end
+
+  defp open(_pairs), do: {:error, :open}
+
+  # A pair stays when its two rooms can be open to each other, after the
+  # fill of the plan. So it goes away with a room, or when a room moves
+  # away. A pair comes one time, in its order. The first 200 pairs stay.
+  defp fit_open(build, pairs) do
+    rooms = Map.new(build.rooms, &{&1.id, &1})
+
+    open =
+      for [a, b] <- pairs,
+          room = rooms[a],
+          other = rooms[b],
+          room && other && open_pair?(room, other),
+          uniq: true,
+          do: Enum.sort([a, b])
+
+    %{build | open: Enum.take(open, @max_open)}
+  end
 
   # The id of an area or of a device of Home Assistant: a short text.
   defp ha_id?(id), do: id != "" and byte_size(id) <= 255

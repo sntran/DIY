@@ -21,36 +21,44 @@ defmodule DIY.BuildPlanTest do
 
   test "two rooms next to each other can be open: no wall stands between them" do
     build = house()
-
-    [kitchen, living, bedroom] =
-      for n <- ["Kitchen", "Living room", "Bedroom 1"], do: room(build, n)
-
+    names = ["Kitchen", "Living room", "Backyard", "Garage", "Bedroom 2"]
+    [kitchen, living, yard, garage, bedroom] = for n <- names, do: room(build, n)
     assert Layout.touch?(kitchen.plan, living.plan)
 
-    # Bedroom 1 is on floor 2, and the kitchen does not touch itself. The
-    # app ignores them, and an id of no room.
-    ids = [living.id, bedroom.id, "nothing", kitchen.id]
-    {:ok, open} = Build.set_open(build, kitchen.id, ids)
+    # The backyard touches the kitchen, but the plan has no wall for a yard.
+    # Bedroom 2 touches the garage, but it is on floor 2. The app ignores
+    # them, an id of no room, and the kitchen itself.
+    assert Layout.touch?(kitchen.plan, yard.plan) and Layout.touch?(garage.plan, bedroom.plan)
+    assert Build.open_choices(build, kitchen) == [living]
+    assert Build.open_choices(build, garage) == [room(build, "Laundry")]
+    {:ok, open} = Build.set_open(build, kitchen.id, [living.id, yard.id, "nothing", kitchen.id])
     pair = Enum.sort([kitchen.id, living.id])
     assert open.open == [pair]
     assert Build.open_to(open, living.id) == [kitchen.id]
     assert Build.open_to(open, kitchen.id) == [living.id]
     assert open.revision == build.revision + 1
+    assert {:ok, %{open: []}} = Build.set_open(build, garage.id, [bedroom.id])
     assert Build.set_open(build, "nothing", []) == {:error, :room}
     {:ok, closed} = Build.set_open(open, living.id, [])
     assert closed.open == []
 
-    # The JSON keeps the pair. A pair with a room that is not there, or a
-    # second copy, goes away. A build of an older version has no pair.
+    # A build has at most 200 pairs.
+    full = %{build | open: for(n <- 1..200, do: ["a#{n}", "b#{n}"])}
+    assert Build.set_open(full, kitchen.id, [living.id]) == {:error, :open}
+
+    # The JSON keeps the pair. A pair with a room that is not there, a
+    # pair that cannot be open, or a second copy goes away. A build of an
+    # older version has no pair.
     {:ok, read} = Build.from_json(Build.to_json(open))
     assert read.open == [pair]
     map = open |> Build.to_json() |> Jason.decode!()
     load = &Build.from_json(Jason.encode!(&1))
-    stale = [[kitchen.id, "gone"], [living.id, kitchen.id], pair, [bedroom.id, kitchen.id]]
+    stale = [[kitchen.id, "gone"], [living.id, kitchen.id], pair, [garage.id, bedroom.id]]
     assert {:ok, %{open: [^pair]}} = load.(%{map | "open" => stale})
+    assert {:ok, %{open: [^pair]}} = load.(%{map | "open" => List.duplicate(pair, 300)})
     assert {:ok, %{open: []}} = load.(Map.delete(map, "open"))
 
-    for bad <- [[["a"]], "x", [[1, 2]], List.duplicate(pair, 201)],
+    for bad <- [[["a"]], "x", [[1, 2]]],
         do: assert(load.(%{map | "open" => bad}) == {:error, :open})
 
     # The pair goes away with a room, and when a room moves away.

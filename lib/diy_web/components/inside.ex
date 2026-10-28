@@ -263,7 +263,7 @@ defmodule DIYWeb.Inside do
       <.room_sheet
         :if={@chosen && @sheet == "room"}
         room={@chosen}
-        next={next_rooms(@build, @chosen)}
+        next={Build.open_choices(@build, @chosen)}
         open={Build.open_to(@build, @chosen.id)}
       />
       <.new_room_sheet :if={@sheet == "new_room"} levels={@levels} />
@@ -759,20 +759,8 @@ defmodule DIYWeb.Inside do
   defp state_note("unavailable"), do: ", Home Assistant cannot reach it now"
   defp state_note(nil), do: ""
 
-  # The rooms of the house next to a room, on its layer: it can be open to
-  # them (`DIY.Build.set_open/3`).
-  defp next_rooms(build, room) do
-    for other <- build.rooms,
-        other.id != room.id,
-        other.plan,
-        not Build.van_level?(other.level),
-        Layout.layer(other) == Layout.layer(room),
-        Layout.touch?(room.plan, other.plan),
-        do: other
-  end
-
   attr :room, :map, required: true
-  attr :next, :list, default: [], doc: "the rooms next to the room, on its layer"
+  attr :next, :list, default: [], doc: "the rooms that it can be open to"
   attr :open, :list, default: [], doc: "the ids of the rooms that it is open to"
 
   # The sheet of a room: its name, its size, the rooms that it is open to,
@@ -834,7 +822,6 @@ defmodule DIYWeb.Inside do
 
       <form :if={@next != []} id={"open-#{@room.id}"} phx-change="room_open">
         <input type="hidden" name="room_id" value={@room.id} />
-        <input type="hidden" name="open[]" value="" />
         <fieldset class="space-y-1">
           <legend class="text-sm font-semibold">No wall to</legend>
           <label :for={other <- @next} class="flex items-center gap-2 text-sm">
@@ -848,10 +835,10 @@ defmodule DIYWeb.Inside do
             />
             {other.name}
           </label>
+          <p class="text-xs opacity-70">
+            An open plan: the rooms join, with no wall between them.
+          </p>
         </fieldset>
-        <p class="text-xs opacity-70">
-          An open plan: the rooms join, with no wall between them.
-        </p>
       </form>
 
       <button

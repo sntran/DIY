@@ -294,13 +294,20 @@ defmodule DIYWeb.PlanLiveTest do
     {kitchen, living} = {room(view, "Kitchen"), room(view, "Living room")}
     render_patch(view, ~p"/inside?#{[room: kitchen.id, sheet: "room"]}")
 
-    # The rooms next to the kitchen, on its layer. Bedroom 1 is on floor 2.
+    # The rooms inside next to the kitchen, on its layer: not the backyard.
     assert has_element?(view, "#open-#{kitchen.id} legend", "No wall to")
     assert has_element?(view, "#open-#{kitchen.id}-#{living.id}")
-    refute has_element?(view, "#open-#{kitchen.id}-#{room(view, "Bedroom 1").id}")
+    refute has_element?(view, "#open-#{kitchen.id}-#{room(view, "Backyard").id}")
+
+    # Bedroom 2 touches the garage, but it is on floor 2.
+    garage = room(view, "Garage")
+    render_patch(view, ~p"/inside?#{[room: garage.id, sheet: "room"]}")
+    assert has_element?(view, "#open-#{garage.id}-#{room(view, "Laundry").id}")
+    refute has_element?(view, "#open-#{garage.id}-#{room(view, "Bedroom 2").id}")
+    render_patch(view, ~p"/inside?#{[room: kitchen.id, sheet: "room"]}")
 
     view
-    |> form("#open-#{kitchen.id}", %{"open" => ["", living.id]})
+    |> form("#open-#{kitchen.id}", %{"open" => [living.id]})
     |> render_change()
 
     assert Build.open_to(build(view), kitchen.id) == [living.id]

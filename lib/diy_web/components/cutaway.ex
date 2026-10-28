@@ -103,7 +103,7 @@ defmodule DIYWeb.Cutaway do
     by_layer =
       build.rooms
       |> Enum.filter(& &1.plan)
-      |> Enum.map(&Map.put(&1, :open, Build.open_to(build, &1.id)))
+      |> Enum.map(&Map.put(&1, :open_to, Build.open_to(build, &1.id)))
       |> Enum.group_by(&Layout.layer/1)
 
     items = build.items |> stacked() |> Enum.group_by(& &1.room)
@@ -467,7 +467,7 @@ defmodule DIYWeb.Cutaway do
     {open, closed} =
       others
       |> Enum.filter(&(across(&1.plan, side) == line))
-      |> Enum.split_with(&(&1.id in Map.get(room, :open, [])))
+      |> Enum.split_with(&(&1.id in Map.get(room, :open_to, [])))
 
     touch = Enum.map(closed, &along(&1.plan, side))
     back? = side in ~w(x0 y0)
