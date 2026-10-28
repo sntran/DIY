@@ -1758,8 +1758,8 @@ its turn. A length is in inches.
   each side of its wall: as wide as the door, and 36 inches deep
   (`DIY.Layout.door_spaces/2`, `DIY.Build.door_spaces/2`). A drop, a turn
   or a size can put an item in such a space. Then the change does not go,
-  and the item stays. A message tells "An item cannot stand in front of a
-  door."
+  and the item stays. The message is "An item cannot stand in front of a
+  door".
   An item on a wall over a door does not block it: 80 inches and up, for
   example a mini split. A different change can put an item in front of a door: a new
   door, a file or a new item. Then the item goes to a free place of its
