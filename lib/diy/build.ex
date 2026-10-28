@@ -2299,7 +2299,9 @@ defmodule DIY.Build do
     rooms = Map.new(build.rooms, &{&1.id, &1})
     spaces = space_map(build)
     heights = DIY.Stack.heights(build.items)
-    ids = build.items |> Enum.sort_by(&Map.get(heights, &1.id, 0)) |> Enum.map(& &1.id)
+    # An item on a pool is at the floor too: it goes after the items on the floor.
+    lowest = &{Map.get(heights, &1.id, 0), DIY.Stack.on(&1) != nil}
+    ids = build.items |> Enum.sort_by(lowest) |> Enum.map(& &1.id)
 
     items =
       Enum.reduce(ids, build.items, fn id, items ->
