@@ -63,11 +63,22 @@ defmodule DIYWeb.Decor do
     boxes = boxes(items, {0, 0})
     gap = if room.place == :outdoor, do: @yard_gap, else: @gap
     around = if stairs?(room), do: [], else: around
+    # The space in front of each door stays free, as of an item on the
+    # floor (`DIY.Layout.door_spaces/2`). The stairs are a part of the
+    # house: they stay.
+    spaces =
+      if stairs?(room),
+        do: [],
+        else:
+          for(
+            space <- Layout.door_spaces(room.plan, Map.get(room, :doorway_gaps, [])),
+            do: Map.merge(space, %{low: 0.0, high: 2.0})
+          )
 
     placed = for item <- items, name <- Map.get(@replaces, item.type, []), do: model(name)
 
     room
-    |> plan(boxes, house)
+    |> plan(boxes ++ spaces, house)
     |> Enum.reject(fn {model, _anchor, _turn} -> model in placed end)
     |> Enum.reduce({[], []}, fn {model, anchor, turn}, {done, placed} ->
       {w, d} = footprint(model, turn)
@@ -75,7 +86,7 @@ defmodule DIYWeb.Decor do
 
       with {x, y} <- place(anchor, {w, d}, room.plan, gap),
            box = %{x: x, y: y, w: w, d: d},
-           true <- high < 0.02 or free?(box, high, boxes ++ around, placed) do
+           true <- high < 0.02 or free?(box, high, boxes ++ around, placed, spaces) do
         {[{model, x, y, turn} | done], if(high < 0.02, do: placed, else: [box | placed])}
       else
         _ -> {done, placed}
@@ -102,12 +113,13 @@ defmodule DIYWeb.Decor do
   end
 
   # True when a piece (its box, and its height in meters) touches no piece
-  # before it, and no item under its top (on the plan). It also does not
-  # hide an item on the screen.
-  defp free?(box, high, boxes, placed) do
+  # before it, and no item under its top (on the plan). It is not in front
+  # of a door. It also does not hide an item on the screen.
+  defp free?(box, high, boxes, placed, spaces) do
     near = grow(box)
 
     not Enum.any?(placed, &Layout.overlap?(near, &1)) and
+      not Enum.any?(spaces, &Layout.overlap?(box, &1)) and
       not Enum.any?(
         boxes,
         &((&1.low < high and Layout.overlap?(near, &1)) or hides?(box, high, &1))

@@ -1687,9 +1687,10 @@ its turn. A length is in inches.
   it is on the body of the item, above its space.
 - With no drag. The part "Where it is" of the panel of an item has
   buttons that move it (6 inches for each tap). Other buttons turn it a
-  quarter turn, and give it a size. The panel tells the new place of the
-  item in words. The bar of a room has buttons that move it (2 feet for
-  each tap): the plan over the bar shows the move. The sheet of a room
+  quarter turn, and give it a size. An item against a wall stays against
+  it after a turn, for example a fireplace. The panel tells the new place
+  of the item in words. The bar of a room has buttons that move it (2
+  feet for each tap): the plan over the bar shows the move. The sheet of a room
   gives its size in feet. So a person with one finger and no drag can do
   each change (WCAG 2.2, 2.5.7). A handle is 24 pixels wide (2.5.8).
 - The rules (`DIY.Layout.fill/1`, after each change; `specs/Plan.tla`).
@@ -1726,8 +1727,10 @@ its turn. A length is in inches.
   An item over the wall (a fan) does not count. Each other wall is cut
   near the floor: at the front of a room and at the right end. A wall at
   the back is low where a room or a yard is behind it, also on a slant.
-  So a wall does not hide the items of a room or of a yard. The walls are
-  16 cm thick, and the slabs 30 cm. The van keeps its look: its walls,
+  So a wall does not hide the items of a room or of a yard. A wall on the
+  outside is 16 cm thick (6.3 inches). A wall between two rooms is a 2x4
+  with drywall on its two sides: 4.5 inches (`DIYWeb.Cutaway.thickness/1`,
+  the owner, October 2026). The slabs are 30 cm thick. The van keeps its look: its walls,
   its colors and its light background.
 - An open plan. Two rooms inside, next to each other on a layer, can be
   open. Then no wall stands between them: for example, a living room that
@@ -1751,6 +1754,18 @@ its turn. A length is in inches.
   the door and its walls. A door goes away with a room, or when a room moves away from the
   other. A link of a share keeps the doors. The picture of the house
   from outside has no door of the plan: it has its own front door.
+- Nothing blocks a door (the owner, October 2026). A door has a space on
+  each side of its wall: as wide as the door, and 36 inches deep
+  (`DIY.Layout.door_spaces/2`, `DIY.Build.door_spaces/2`). A drop, a turn
+  or a size that puts an item in such a space does not go: the item
+  stays, and a message tells "An item cannot stand in front of a door."
+  An item on a wall over a door (80 inches and up, a mini split) does not
+  block it. After a different change (a new door, a file, a new item), an
+  item in front of a door goes to a free place of its room, with the
+  items on it. The furniture of a room (`DIYWeb.Decor`) does not stand
+  in a space of a door, and the counters of a kitchen stop at a door. A
+  rug is flat: it stays. The stairs stay too: they are a part of the
+  house.
 - The picture of an item is its icon at the size of the item
   (`DIYWeb.Icon.Shapes.placed/2`). A turn turns the model, and a face
   that looks away does not show. Solar panels on a roof lie on its slope.

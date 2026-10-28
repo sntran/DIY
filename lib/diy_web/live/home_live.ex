@@ -619,6 +619,9 @@ defmodule DIYWeb.HomeLive do
           socket = socket |> assign(:item_error, nil) |> put(build)
           {:noreply, say_step(socket, id, {:size, key}, param, size[key], value)}
 
+        {:error, :door} ->
+          plan_result(socket, {:error, :door}, nil)
+
         {:error, _reason} ->
           {:noreply, socket}
       end
@@ -807,6 +810,9 @@ defmodule DIYWeb.HomeLive do
     case Build.size_item(socket.assigns.build, id, size) do
       {:ok, build} ->
         {:noreply, socket |> assign(item_error: nil, item_said: nil) |> put(build)}
+
+      {:error, :door} ->
+        plan_result(socket, {:error, :door}, nil)
 
       {:error, _reason} ->
         bad = for {side, {key, _label}} <- @sides, not Layout.valid_side?(size[key]), do: side
@@ -1377,6 +1383,7 @@ defmodule DIYWeb.HomeLive do
 
   defp move_error(:overlap), do: gettext("A room or a zone cannot go over a different one.")
   defp move_error(:place), do: gettext("This item cannot go in that room.")
+  defp move_error(:door), do: gettext("An item cannot stand in front of a door.")
   defp move_error(:van), do: gettext("A zone stays in the van.")
 
   defp move_error(:fixed),

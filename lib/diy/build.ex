@@ -235,6 +235,8 @@ defmodule DIY.Build do
     changed = fit_open(changed, changed.open)
     # A door stays only when its rooms still touch, in their common part.
     changed = fit_doorways(changed, changed.doorways)
+    # No item stands in front of a door (`clear_doorways/1`).
+    changed = clear_doorways(changed)
     # An item stays on an item only when the two still stack (`DIY.Stack`).
     rooms = Map.new(changed.rooms, &{&1.id, &1})
     changed = %{changed | items: changed.items |> DIY.Stack.normalize(rooms) |> fit_mounts(rooms)}
@@ -1220,13 +1222,17 @@ defmodule DIY.Build do
       moved = %{item | room: room.id, at: at}
       moved = if on, do: Map.put(moved, :on, on), else: Map.delete(moved, :on)
       rooms = Map.new(build.rooms, &{&1.id, &1})
-      {:ok, change(build, &%{&1 | items: DIY.Stack.carry(&1.items, item, moved, rooms)})}
+
+      if blocks_door?(build, moved),
+        do: {:error, :door},
+        else: {:ok, change(build, &%{&1 | items: DIY.Stack.carry(&1.items, item, moved, rooms)})}
     end
   end
 
   @doc """
-  Turns an item a quarter turn, around its center. The item stays in its
-  room (`DIY.Layout.clamp/3`). An item can be longer than its room along
+  Turns an item a quarter turn, around its center. An item against a wall
+  of its room stays against that wall: for example, a fireplace. The item
+  stays in its room (`DIY.Layout.clamp/3`). An item can be longer than its room along
   a side. Then it goes to the start of that side, and through the wall at
   the other end.
   """
@@ -1237,10 +1243,29 @@ defmodule DIY.Build do
       {w, d} = Layout.extent(item)
       turned = %{item | turn: rem(item.turn + 1, 4)}
       {tw, td} = Layout.extent(turned)
-      at = %{x: item.at.x + div(w - tw, 2), y: item.at.y + div(d - td, 2)}
-      {:ok, replace_item(build, %{turned | at: Layout.clamp(at, turned, room.plan)})}
+      %{w: rw, d: rd} = room.plan
+      %{x: x, y: y} = item.at
+
+      at = %{
+        x: wall_at(x, w, tw, rw),
+        y: wall_at(y, d, td, rd)
+      }
+
+      turned = %{turned | at: Layout.clamp(at, turned, room.plan)}
+
+      if blocks_door?(build, turned),
+        do: {:error, :door},
+        else: {:ok, replace_item(build, turned)}
     end
   end
+
+  # The place of a turned item along a side of its room (inches): against
+  # the wall at the start or at the end when it was there, else around its
+  # middle. `a` is the place, `l` the length before the turn, `t` after it,
+  # and `r` the length of the room.
+  defp wall_at(0, _l, _t, _r), do: 0
+  defp wall_at(a, l, t, r) when a + l == r, do: r - t
+  defp wall_at(a, l, t, _r), do: a + div(l - t, 2)
 
   @doc """
   Gives an item a size in inches (`%{w, d, h}`), or its typical size again
@@ -1254,6 +1279,7 @@ defmodule DIY.Build do
          # a size goes, and no size comes.
          true <-
            (size == nil or item.type not in ["solar_panels", "camper_van"]) || {:error, :size},
+         false <- blocks_door?(build, %{item | size: size}) && {:error, :door},
          do: {:ok, replace_item(build, %{item | size: size})}
   end
 
@@ -2197,6 +2223,54 @@ defmodule DIY.Build do
       |> Enum.uniq_by(&Enum.take(&1, 2))
 
     %{build | doorways: Enum.take(doorways, @max_doorways)}
+  end
+
+  # The height of a door (inches). An item on a wall over a door (a mini
+  # split) does not block it.
+  @door_height 80
+
+  @doc """
+  The spaces in front of the doors of a room, on the plan of the room
+  (`DIY.Layout.door_spaces/2`).
+  """
+  @spec door_spaces(t(), String.t()) :: [plan()]
+  def door_spaces(build, id) do
+    case Enum.find(build.rooms, &(&1.id == id)) do
+      %{plan: %{} = plan} -> Layout.door_spaces(plan, doorway_gaps(build, id))
+      _other -> []
+    end
+  end
+
+  # True when an item stands in front of a door of its room: its box on the
+  # plan is over a space of a door, and its bottom is under the top of the
+  # door. An item with no place (in the shell of a van) blocks no door.
+  defp blocks_door?(build, item) do
+    item.at != nil and Catalog.lift(item.type) < @door_height and
+      Enum.any?(door_spaces(build, item.room), &Layout.overlap?(&1, Layout.item_box(item)))
+  end
+
+  # Each item on the floor in front of a door goes to a free place of its
+  # room, with the items on it. A free place is not over an item, and not
+  # in front of a door (`DIY.Layout.free_at/3`).
+  defp clear_doorways(%{doorways: []} = build), do: build
+
+  defp clear_doorways(build) do
+    rooms = Map.new(build.rooms, &{&1.id, &1})
+
+    items =
+      build.items
+      |> Enum.filter(&(DIY.Stack.on(&1) == nil and blocks_door?(build, &1)))
+      |> Enum.reduce(build.items, fn item, items ->
+        room = rooms[item.room]
+
+        others =
+          for o <- items, o.room == room.id, o.id != item.id, o.at != nil, do: Layout.item_box(o)
+
+        at = Layout.free_at(item, room.plan, others ++ door_spaces(build, room.id))
+        DIY.Stack.carry(items, item, %{item | at: at}, rooms)
+      end)
+
+    %{build | items: items}
   end
 
   @doc """

@@ -131,12 +131,37 @@ defmodule DIYWeb.ItemMapTest do
     assert Layout.extent(turned) == {30, 56}
     assert turned.at.y + 56 == laundry.plan.d
 
-    # At the back wall: it would go 13 inches through the back wall.
+    # In the back left corner: it stays against the two walls. Away from
+    # the walls, it turns around its center.
     {:ok, build} = Build.turn_item(build, freezer)
     {:ok, build} = Build.place_item(build, freezer, laundry.id, %{x: 0, y: 0})
     {:ok, build} = Build.turn_item(build, freezer)
     {:ok, turned} = Build.item(build, freezer)
-    assert turned.at == %{x: 13, y: 0}
+    assert turned.at == %{x: 0, y: 0}
+    {:ok, build} = Build.place_item(build, freezer, laundry.id, %{x: 20, y: 20})
+    {:ok, build} = Build.turn_item(build, freezer)
+    {:ok, turned} = Build.item(build, freezer)
+    assert turned.at == %{x: 7, y: 33}
+  end
+
+  test "an item against a wall stays against it after a turn: a fireplace" do
+    build = house()
+    living = room(build, "Living room")
+    {:ok, build, fire} = Build.add_item(build, living.id, "fireplace")
+    %{w: rw, d: rd} = living.plan
+
+    # The fireplace (60 by 20) against the right wall, then against the
+    # front wall: each turn keeps it against its wall.
+    {:ok, item} = Build.item(build, fire)
+    assert Layout.extent(item) == {60, 20}
+    {:ok, build} = Build.place_item(build, fire, living.id, %{x: rw - 60, y: 100})
+    {:ok, build} = Build.turn_item(build, fire)
+    {:ok, item} = Build.item(build, fire)
+    assert item.at == %{x: rw - 20, y: 80}
+    {:ok, build} = Build.place_item(build, fire, living.id, %{x: 100, y: rd - 60})
+    {:ok, build} = Build.turn_item(build, fire)
+    {:ok, item} = Build.item(build, fire)
+    assert item.at == %{x: 80, y: rd - 20}
   end
 
   test "an item larger than its room both ways: a turn does not help", %{conn: conn} do

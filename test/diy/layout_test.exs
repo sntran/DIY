@@ -293,4 +293,25 @@ defmodule DIY.LayoutTest do
     assert Layout.shared(a, %{x: 200, y: 0, w: 10, d: 10}) == nil
     assert Layout.shared(a, %{x: 10, y: 10, w: 10, d: 10}) == nil
   end
+
+  test "the space in front of a door, on each side of the room" do
+    plan = %{x: 100, y: 200, w: 120, d: 30}
+
+    gaps = [
+      {"x0", {210, 242}},
+      {"x1", {210, 242}},
+      {"y0", {150, 182}},
+      {"y1", {150, 182}}
+    ]
+
+    # 36 inches deep, or the room when it is less deep (30 inches).
+    assert Layout.door_spaces(plan, gaps) == [
+             %{x: 0, y: 10, w: 36, d: 32},
+             %{x: 84, y: 10, w: 36, d: 32},
+             %{x: 50, y: 0, w: 32, d: 30},
+             %{x: 50, y: 0, w: 32, d: 30}
+           ]
+
+    assert Layout.door_spaces(plan, []) == []
+  end
 end

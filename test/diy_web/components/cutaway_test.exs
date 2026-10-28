@@ -337,6 +337,12 @@ defmodule DIYWeb.CutawayTest do
     assert other.(before) == other.(now)
   end
 
+  test "a wall between two rooms is 4.5 inches thick, and a wall on the outside 6.3" do
+    inches = &Float.round(Cutaway.thickness(&1) / 0.0254, 1)
+    assert inches.(:shared) == 4.5 and inches.(:shared_low) == 4.5
+    assert inches.(:high) == 6.3 and inches.(:low) == 6.3
+  end
+
   test "a door is an opening of 32 inches in the wall" do
     build = house()
     {kitchen, living} = {kitchen_room(build), Enum.find(build.rooms, &(&1.name == "Living room"))}
