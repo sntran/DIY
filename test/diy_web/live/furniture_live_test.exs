@@ -32,6 +32,8 @@ defmodule DIYWeb.FurnitureLiveTest do
 
   test "a fireplace in the living room and a tree in the yard", %{conn: conn} do
     build = house()
+    garage = Enum.find(build.rooms, &(&1.name == "Garage")).id
+    {:ok, build, _station} = Build.add_item(build, garage, "power_station")
     living = Enum.find(build.rooms, &(&1.name == "Living room")).id
     backyard = Enum.find(build.rooms, &(&1.name == "Backyard")).id
     view = open(conn, ~p"/inside?#{[add: living]}", build)
@@ -48,7 +50,8 @@ defmodule DIYWeb.FurnitureLiveTest do
     render_patch(view, ~p"/inside?#{[item: fire.id]}")
     assert has_element?(view, "#item-math", "It is furniture: it uses no power.")
     refute has_element?(view, "#item-year")
-    refute render(view) =~ "A power station runs it"
+    assert has_element?(view, "#flags-form [name=planned]")
+    refute has_element?(view, "#flags-form [name=backup]")
 
     # Outside: the tree, and it shows on the house from outside.
     render_patch(view, ~p"/inside?#{[add: backyard]}")

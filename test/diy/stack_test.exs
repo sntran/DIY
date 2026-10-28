@@ -42,12 +42,15 @@ defmodule DIY.StackTest do
     for type <- ~w(microwave dryer tv cpap computer hot_tub),
         do: assert(Stack.goes_on?(%{type: type}))
 
-    for type <- ~w(solar_panels camper_van pool ev smart_meter ceiling_fan),
+    for type <- ~w(solar_panels camper_van pool ev smart_meter ceiling_fan) ++ Catalog.furniture(),
         do: refute(Stack.goes_on?(%{type: type}))
 
-    for type <- ~w(washer range pool other), do: assert(Stack.takes?(%{type: type}))
+    # A table, a pantry and a fireplace take an item: a lamp, a box, a
+    # clock.
+    for type <- ~w(washer range pool other dining_table pantry fireplace),
+        do: assert(Stack.takes?(%{type: type}))
 
-    for type <- ~w(solar_panels camper_van ev smart_meter mini_split),
+    for type <- ~w(solar_panels camper_van ev smart_meter mini_split tree shower bathtub),
         do: refute(Stack.takes?(%{type: type}))
   end
 

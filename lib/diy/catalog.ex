@@ -1726,7 +1726,7 @@ defmodule DIY.Catalog do
     "other" => {24, 24, 24},
     # A fireplace with its mantel, on a wall. No source.
     "fireplace" => {60, 20, 54},
-    # A common alcove bathtub: 60 by 30 in, 20 in high (standard size).
+    # A common alcove bathtub: 60 by 30 in (standard size), 22 in high.
     "bathtub" => {60, 30, 22},
     # A common shower stall: 36 by 36 in (standard size). No source for
     # the height of its glass.
