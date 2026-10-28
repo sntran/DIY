@@ -190,6 +190,8 @@ defmodule DIYWeb.Cutaway do
           do: ghost_view(ghost, i, room, floor_z.(room), camera)
 
     # The furniture of each room: it does not hide the items of the layer.
+    house = Decor.house(rooms)
+
     decor =
       for room <- rooms,
           around =
@@ -204,7 +206,7 @@ defmodule DIYWeb.Cutaway do
                 ),
               do: box
             ),
-          pieces = Decor.pieces(room, Map.get(items, room.id, []), around),
+          pieces = Decor.pieces(room, Map.get(items, room.id, []), around, house),
           {piece, i} <- Enum.with_index(pieces),
           do: decor_view("#{room.id}-#{i}", piece, room, floor_z.(room), camera)
 
@@ -920,7 +922,7 @@ defmodule DIYWeb.Cutaway do
   ## The furniture
 
   @doc """
-  A piece of furniture of a room (`DIYWeb.Decor.pieces/3`), on a floor at a
+  A piece of furniture of a room (`DIYWeb.Decor.pieces/4`), on a floor at a
   height (meters), for a camera. It is a fixed object: a tap goes through
   it to the floor of the room.
   """

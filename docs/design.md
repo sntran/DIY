@@ -1778,6 +1778,8 @@ its turn. A length is in inches.
   - The furniture of a room (`DIYWeb.Decor`), as in the drawn picture. A
     word in the name of a room gives its pieces, in capital letters or
     not:
+    - "closet": no furniture, so the way stays open. This is also true
+      for the closet of a bedroom, or under the stairs;
     - "stair" or "stairs" as a word ("upstairs" is not): on floor 1,
       stairs that go up to the back of the room. They have 13 steps (up
       to the top of the walls), or less when the room is not as deep. A
@@ -1786,11 +1788,12 @@ its turn. A length is in inches.
       share, the stairs join the floors (the owner, October 2026). The
       stairs are a part of the house: they always show, also when they
       hide an item of a different room;
-    - "hall" or "closet": no furniture, so the way stays open. This is
-      also true for the closet of a bedroom;
+    - "hall" (but not "hall bath"): no furniture, so the way stays open.
+      A name with "hall" and "stairs" has the stairs;
     - "bed": a bed, two nightstands, a dresser (with no plant on it) and
       a rug;
-    - "living": a sofa, an armchair, a table, books and a rug;
+    - "living": a sofa, an armchair, a table, books and a rug. With the
+      word "dining" also, a table with chairs;
     - "kitchen": counters. With the word "dining" also, a table with
       chairs;
     - "dining": a table with chairs;
@@ -1801,7 +1804,8 @@ its turn. A length is in inches.
     - "attic": boxes;
     - "yard" (a room outside): a small round table with chairs, and one
       big tree. The tree is at the left, away from the house: at the
-      front of a front yard. A side yard ("side" in the name) has no
+      front of a yard in front of the house, and at the back of a yard
+      behind it. A side yard ("side" as a word in the name) has no
       furniture;
     - a different name has no furniture. No room inside has a plant:
       plants hide the plan (the owner, October 2026). A roof has no
@@ -2192,8 +2196,9 @@ camera and the same look. A tap on the picture opens the plan.
   rooms.
 - The order of the paint is the order of the plan
   (`DIYWeb.Camera.order/2`). For the order, a wall is flat, on its line.
-  The slabs on the ground paint first. An item in a yard that is taller
-  than floor 1 paints by its depth only. No order is right for it and the
+  The slabs on the ground paint first. An item or a piece of furniture
+  (a tree) in a yard that is taller than floor 1 paints by its depth
+  only. No order is right for it and the
   floors over it.
 - The LiveView makes the picture only for the page House, as an assign
   (`DIYWeb.Outside.view/1`). The page Power keeps the picture of

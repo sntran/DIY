@@ -1002,67 +1002,67 @@ msgstr "Các tháng của đồng hồ điện của bạn."
 msgid "This house is too large for a link. A link can have 150 items and 50 rooms at most."
 msgstr "Ngôi nhà này quá lớn cho một liên kết. Một liên kết có tối đa 150 thiết bị và 50 phòng."
 
-#: lib/diy_web/components/outside.ex:921
+#: lib/diy_web/components/outside.ex:922
 #, elixir-autogen, elixir-format
 msgid "Clouds"
 msgstr "Mây"
 
-#: lib/diy_web/components/outside.ex:916
+#: lib/diy_web/components/outside.ex:917
 #, elixir-autogen, elixir-format
 msgid "Day"
 msgstr "Ban ngày"
 
-#: lib/diy_web/components/outside.ex:918
+#: lib/diy_web/components/outside.ex:919
 #, elixir-autogen, elixir-format
 msgid "Night"
 msgstr "Ban đêm"
 
-#: lib/diy_web/components/outside.ex:908
+#: lib/diy_web/components/outside.ex:909
 #, elixir-autogen, elixir-format
 msgid "Now"
 msgstr "Bây giờ"
 
-#: lib/diy_web/components/outside.ex:909
+#: lib/diy_web/components/outside.ex:910
 #, elixir-autogen, elixir-format
 msgid "Now (%{name})"
 msgstr "Bây giờ (%{name})"
 
-#: lib/diy_web/components/outside.ex:898
+#: lib/diy_web/components/outside.ex:899
 #, elixir-autogen, elixir-format
 msgid "Now at the house: %{temp} °F, %{time}, %{weather}."
 msgstr "Bây giờ ở nhà: %{temp} °F, %{time}, %{weather}."
 
-#: lib/diy_web/components/outside.ex:922
+#: lib/diy_web/components/outside.ex:923
 #, elixir-autogen, elixir-format
 msgid "Rain"
 msgstr "Mưa"
 
-#: lib/diy_web/components/outside.ex:923
+#: lib/diy_web/components/outside.ex:924
 #, elixir-autogen, elixir-format
 msgid "Snow"
 msgstr "Tuyết"
 
-#: lib/diy_web/components/outside.ex:920
+#: lib/diy_web/components/outside.ex:921
 #, elixir-autogen, elixir-format
 msgid "Sun"
 msgstr "Nắng"
 
-#: lib/diy_web/components/outside.ex:917
+#: lib/diy_web/components/outside.ex:918
 #, elixir-autogen, elixir-format
 msgid "Sunset"
 msgstr "Hoàng hôn"
 
-#: lib/diy_web/components/outside.ex:871
+#: lib/diy_web/components/outside.ex:872
 #, elixir-autogen, elixir-format
 msgid "Time of day"
 msgstr "Thời điểm trong ngày"
 
-#: lib/diy_web/components/outside.ex:882
+#: lib/diy_web/components/outside.ex:883
 #, elixir-autogen, elixir-format
 msgid "Weather"
 msgstr "Thời tiết"
 
-#: lib/diy_web/components/outside.ex:913
+#: lib/diy_web/components/outside.ex:914
 #, elixir-autogen, elixir-format
 msgid "Sunrise"
 msgstr "Bình minh"

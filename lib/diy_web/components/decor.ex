@@ -45,15 +45,17 @@ defmodule DIYWeb.Decor do
   corner of the piece on the plan of the room (inches). The turn is 0 (the
   front of the piece looks to the front of the room) or 2 (to the back).
   `items` are the items of the room. `around` are the items of the other
-  rooms of the layer, on the plan of this room (`boxes/2`).
+  rooms of the layer, on the plan of this room (`boxes/2`). `house` is the
+  box of the rooms inside on the plan (`house/1`), or nil: the tree of a
+  yard is away from it.
   """
-  def pieces(room, items, around \\ []) do
+  def pieces(room, items, around \\ [], house \\ nil) do
     boxes = boxes(items, {0, 0})
     gap = if room.place == :outdoor, do: @yard_gap, else: @gap
     around = if stairs?(room), do: [], else: around
 
     room
-    |> plan(boxes)
+    |> plan(boxes, house)
     |> Enum.reduce({[], []}, fn {model, anchor, turn}, {done, placed} ->
       {w, d} = footprint(model, turn)
       high = height(model)
@@ -171,27 +173,47 @@ defmodule DIYWeb.Decor do
     |> Kernel./(2)
   end
 
+  @doc """
+  The box of the rooms inside on the plan (inches), for `pieces/4`, or nil
+  when there is no room inside.
+  """
+  def house(rooms) do
+    case for(%{place: :indoor, plan: %{} = plan} <- rooms, do: plan) do
+      [] -> nil
+      plans -> Layout.box(plans)
+    end
+  end
+
   # The pieces of a room, from its name: a model, its place, and its turn.
   # A yard has a round table with chairs, and one big tree. The tree is at
-  # the left, away from the house: at the front of a front yard, and at the
-  # back of a different yard. A side yard has no furniture.
-  defp plan(%{place: :outdoor, name: name}, _boxes) do
+  # the left, away from the house: at the front of a yard in front of the
+  # house, and at the back of a yard behind it. With no house, the yard is
+  # in front of the house, as in a new layout (`DIY.Layout`). A side yard
+  # has no furniture.
+  defp plan(%{place: :outdoor, name: name, plan: plan}, _boxes, house) do
     name = String.downcase(name)
-    tree = if String.contains?(name, "front"), do: :front_left, else: :back_left
 
-    if String.contains?(name, "yard") and not String.contains?(name, "side"),
+    tree =
+      if house == nil or 2 * plan.y + plan.d >= 2 * house.y + house.d,
+        do: :front_left,
+        else: :back_left
+
+    if String.contains?(name, "yard") and not Regex.match?(~r/\bside\b/, name),
       do: [{model("round_table"), :center, 0}, {model("tree"), tree, 0}],
       else: []
   end
 
-  # A room inside. It has no plant: plants hide the plan. A hall and a
-  # closet have no furniture: the way stays open, also in the closet of a
-  # bedroom. A name with the word "stairs" gives the stairs first, also
-  # with the word "hall".
-  defp plan(%{place: :indoor, name: name} = room, boxes) do
+  # A room inside. It has no plant: plants hide the plan. A closet and a
+  # hall have no furniture: the way stays open, also in the closet of a
+  # bedroom or under the stairs. A name with the word "stairs" gives the
+  # stairs, also with the word "hall". A hall bath is a bath.
+  defp plan(%{place: :indoor, name: name} = room, boxes, _house) do
     name = String.downcase(name)
 
     cond do
+      String.contains?(name, "closet") ->
+        []
+
       # The word "stair" or "stairs" (not "upstairs"). On floor 1, the
       # stairs go up to the back of the room: as many steps as the room
       # has space for. On an upper floor, the room has the opening of the
@@ -202,7 +224,7 @@ defmodule DIYWeb.Decor do
       stairs?(room) ->
         [{model("stair_well"), :front_center, 0}]
 
-      String.contains?(name, "hall") or String.contains?(name, "closet") ->
+      String.contains?(name, "hall") and not String.contains?(name, "bath") ->
         []
 
       String.contains?(name, "bed") ->
@@ -221,7 +243,8 @@ defmodule DIYWeb.Decor do
           {model("coffee_table"), :center, 0},
           {model("armchair"), :left_center, 0},
           {model("shelf_books"), :back_right, 0}
-        ]
+        ] ++
+          if(String.contains?(name, "dining"), do: [{model("dining"), :back_left, 0}], else: [])
 
       # A kitchen has counters. A table with chairs is in the dining room,
       # and a small round table is in the breakfast room.
@@ -259,7 +282,7 @@ defmodule DIYWeb.Decor do
     end
   end
 
-  defp plan(_room, _boxes), do: []
+  defp plan(_room, _boxes, _house), do: []
 
   # True when the name of a room has the word "stair" or "stairs" (not
   # "upstairs").

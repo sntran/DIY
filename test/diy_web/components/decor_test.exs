@@ -70,9 +70,9 @@ defmodule DIYWeb.DecorTest do
     assert ~w(basket) == names(build, "Laundry")
     # The furnace is at the back left of the attic.
     assert ~w(boxes) == names(build, "Attic")
-    # The AC is at the back left of the backyard: the tree there does not
-    # show.
-    assert ~w(round_table) == names(build, "Backyard")
+    # The backyard of the preset is in front of the house: its tree is at
+    # the front left, away from the house and from the AC.
+    assert ~w(round_table tree) == names(build, "Backyard")
     assert [] == names(build, "Driveway")
     assert [] == names(build, "Roof")
 
@@ -119,6 +119,12 @@ defmodule DIYWeb.DecorTest do
     assert ~w(dining) == pieces(%{big | name: "Dining room"})
     assert [:counter, "dining"] == pieces(%{big | name: "Kitchen and dining"})
     assert ~w(round_table) == pieces(%{big | name: "Breakfast"})
+
+    # A living room with "dining" in its name also has the table. A hall
+    # bath is a bath. A closet under the stairs is a closet.
+    assert "dining" in pieces(%{big | name: "Living and dining"})
+    assert ~w(bath_mat tub toilet vanity) == pieces(%{big | name: "Hall bath"})
+    assert [] == pieces(%{big | name: "Closet under the stairs"})
   end
 
   test "the stairs always show, also when they hide an item of a different room" do
@@ -129,19 +135,27 @@ defmodule DIYWeb.DecorTest do
       plan: %{x: 0, y: 0, w: 54, d: 114}
     }
 
-    living = %{stairs | name: "Living room", plan: %{x: 0, y: 0, w: 216, d: 216}}
-    item = %{type: "always_on", at: %{x: 6, y: 90}, size: nil, turn: 0, params: %{}}
-    around = Decor.boxes([item], {-42, -24})
-
-    # The stairs hide the item at their back left. A sofa in their place
-    # does not show, but the stairs do.
-    assert Enum.any?(around, &Decor.hides?(%{x: 0, y: 0, w: 35, d: 110}, 2.0, &1))
-    assert [{model, _x, _y, 0}] = Decor.pieces(stairs, [], around)
+    # 9 steps of 11 inches, 0.9 m wide (35 inches), at the back right.
+    assert [{model, 15, 4, 0} = piece] = Decor.pieces(stairs, [])
     assert model == Decor.model({"stairs", 9})
-    refute Decor.pieces(living, [], Decor.boxes([item], {0, 0})) == Decor.pieces(living, [])
+    box = box(piece)
+
+    # An item of the room behind the stairs: their top step hides it on
+    # the screen, and it does not touch them. A different piece in their
+    # place does not show. The stairs show.
+    item = %{type: "always_on", at: %{x: 0, y: 0}, size: nil, turn: 0, params: %{}}
+    around = Decor.boxes([item], {36, -12})
+
+    refute Layout.overlap?(
+             %{box | x: box.x - 4, y: box.y - 4, w: box.w + 8, d: box.d + 8},
+             hd(around)
+           )
+
+    assert Decor.hides?(box, height(piece), hd(around))
+    assert [{^model, 15, 4, 0}] = Decor.pieces(stairs, [], around)
 
     # An item of the room of the stairs still stops them.
-    refute Decor.pieces(stairs, [%{item | at: %{x: 20, y: 40}}]) |> Enum.any?()
+    assert [] == Decor.pieces(stairs, [%{item | at: %{x: 20, y: 40}}])
   end
 
   test "the counters of a kitchen fill the back wall where no item is" do
@@ -310,19 +324,37 @@ defmodule DIYWeb.DecorTest do
   end
 
   test "a yard has its furniture, and a different outside room has none" do
-    # A yard has a round table with chairs and one big tree. In a front
-    # yard, the tree is at the front left, away from the house. In a
-    # backyard, it is at the back left.
-    yard = %{name: "Front yard", place: :outdoor, plan: %{x: 0, y: 0, w: 360, d: 360}}
+    # A yard has a round table with chairs and one big tree. The tree is
+    # at the left, away from the house: at the front of a yard in front of
+    # the house, and at the back of a yard behind it. With no house, the
+    # yard is in front of the house.
+    yard = %{name: "Front yard", place: :outdoor, plan: %{x: 0, y: 400, w: 360, d: 360}}
     tree = Decor.model("tree")
     assert ~w(round_table tree) == pieces(yard)
-    assert [{^tree, 8, y, 0}] = Enum.filter(Decor.pieces(yard, []), &(elem(&1, 0) == tree))
-    assert y > 180
-    back = %{yard | name: "Backyard"}
-    assert [{^tree, 8, 8, 0}] = Enum.filter(Decor.pieces(back, []), &(elem(&1, 0) == tree))
 
-    # A side yard has no furniture.
+    tree_at = fn yard, house ->
+      Enum.find(Decor.pieces(yard, [], [], house), &(elem(&1, 0) == tree))
+    end
+
+    rooms = [
+      %{place: :indoor, plan: %{x: 0, y: 0, w: 300, d: 200}},
+      %{place: :indoor, plan: %{x: 100, y: 200, w: 200, d: 200}},
+      %{yard | name: "Yard"},
+      %{place: :indoor, plan: nil}
+    ]
+
+    house = Decor.house(rooms)
+    assert house == %{x: 0, y: 0, w: 300, d: 400}
+    assert {^tree, 8, y, 0} = tree_at.(yard, house)
+    assert y > 180
+    assert {^tree, 8, ^y, 0} = tree_at.(yard, nil)
+    back = %{yard | name: "Backyard", plan: %{yard.plan | y: -360}}
+    assert {^tree, 8, 8, 0} = tree_at.(back, house)
+    assert Decor.house([%{yard | name: "Yard"}]) == nil
+
+    # A side yard has no furniture. "Lakeside yard" is not a side yard.
     assert Decor.pieces(%{yard | name: "Side yard"}, []) == []
+    assert ~w(round_table tree) == pieces(%{yard | name: "Lakeside yard"})
     assert Decor.pieces(%{yard | name: "Patio"}, []) == []
     assert Decor.pieces(%{yard | place: :roof, name: "Roof"}, []) == []
   end
