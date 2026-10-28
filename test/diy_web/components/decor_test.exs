@@ -70,7 +70,7 @@ defmodule DIYWeb.DecorTest do
     assert ~w(basket) == names(build, "Laundry")
     # The furnace is at the back left of the attic.
     assert ~w(boxes) == names(build, "Attic")
-    # The backyard of the preset is in front of the house: its tree is at
+    # The backyard of the preset is in front of the house. Its tree is at
     # the front left, away from the house and from the AC.
     assert ~w(round_table tree) == names(build, "Backyard")
     assert [] == names(build, "Driveway")
@@ -325,8 +325,8 @@ defmodule DIYWeb.DecorTest do
 
   test "a yard has its furniture, and a different outside room has none" do
     # A yard has a round table with chairs and one big tree. The tree is
-    # at the left, away from the house: at the front of a yard in front of
-    # the house, and at the back of a yard behind it. With no house, the
+    # at the left, away from the house. In a yard in front of the house,
+    # it is at the front. In a yard behind the house, it is at the back. With no house, the
     # yard is in front of the house.
     yard = %{name: "Front yard", place: :outdoor, plan: %{x: 0, y: 400, w: 360, d: 360}}
     tree = Decor.model("tree")

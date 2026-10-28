@@ -631,9 +631,9 @@ defmodule DIYWeb.OutsideTest do
       end
 
       # Two objects that cover each other on the screen: the one behind paints
-      # first. An item larger than its room goes through its walls, and an
-      # item or a tree taller than floor 1 goes past the floors over it.
-      # Then no order is right.
+      # first. An item larger than its room goes through its walls. An item
+      # or a tree taller than floor 1 goes past the floors over it. Then no
+      # order is right.
       big =
         MapSet.new(
           for(item <- build.items, not fits?(build, item), do: item.id) ++

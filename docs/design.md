@@ -1803,9 +1803,9 @@ its turn. A length is in inches.
     - "laundry": a shelf and a basket;
     - "attic": boxes;
     - "yard" (a room outside): a small round table with chairs, and one
-      big tree. The tree is at the left, away from the house: at the
-      front of a yard in front of the house, and at the back of a yard
-      behind it. A side yard ("side" as a word in the name) has no
+      big tree. The tree is at the left, away from the house. In a yard
+      in front of the house, it is at the front. In a yard behind the
+      house, it is at the back. A side yard ("side" as a word in the name) has no
       furniture;
     - a different name has no furniture. No room inside has a plant:
       plants hide the plan (the owner, October 2026). A roof has no
