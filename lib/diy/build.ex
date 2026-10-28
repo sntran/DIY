@@ -571,9 +571,9 @@ defmodule DIY.Build do
 
   @doc """
   The rooms that a room of the house can have a door to
-  (`set_doorways/3`): the rooms on the same layer that touch it along 30
-  inches at least. One of the two rooms is inside. So a room inside can
-  have a door to a yard.
+  (`set_doorways/3`). They are on the same layer, and they touch it along
+  30 inches at least. One of the two rooms is inside. So a room inside
+  can have a door to a yard.
   """
   @spec doorway_choices(t(), room()) :: [room()]
   def doorway_choices(build, room), do: Enum.filter(build.rooms, &doorway_pair?(room, &1))
@@ -606,8 +606,9 @@ defmodule DIY.Build do
     end
   end
 
-  # Two rooms of the house that can have a door between them: on the same
-  # layer, next to each other along 30 inches at least, and one inside.
+  # Two rooms of the house that can have a door between them. They are on
+  # the same layer, next to each other along 30 inches at least. One of
+  # them is inside.
   defp doorway_pair?(room, other) do
     other.id != room.id and :indoor in [room.place, other.place] and
       room.place in [:indoor, :outdoor] and other.place in [:indoor, :outdoor] and
@@ -2183,8 +2184,9 @@ defmodule DIY.Build do
   end
 
   @doc """
-  The openings of the doors of a room in its walls: the side of the room,
-  and the part of that side (`{from, to}`, on the plan) with no wall.
+  The openings of the doors of a room in its walls. Each opening has the
+  side of the room, and the part of that side with no wall (`{from, to}`,
+  on the plan).
   """
   @spec doorway_gaps(t(), String.t()) :: [{String.t(), {integer(), integer()}}]
   def doorway_gaps(build, id) do
