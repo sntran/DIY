@@ -390,7 +390,7 @@ defmodule DIY.Catalog do
     {"pine", "Pine", {240, 240, 720}},
     # A palm: a tall thin trunk with leaves at the top. 12 ft wide, 30 ft high.
     {"palm", "Palm", {144, 144, 360}},
-    # A crape myrtle: a small tree with a few trunks and red flowers. 12 ft
+    # A crape myrtle: a small tree with a few trunks and pink flowers. 12 ft
     # wide, 18 ft high.
     {"crape_myrtle", "Crape myrtle", {144, 144, 216}}
   ]

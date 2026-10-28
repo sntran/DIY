@@ -4629,9 +4629,11 @@ The space of a tree on the plan is its crown. The models
 (`DIYWeb.Icon.TreeShapes`) have the size of the item:
 
 - The crown is as large as it can be in the size, with one scale. So it
-  keeps its shape. Its top is at the top of the tree.
-- The trunk and the round bed of mulch have their real size. They do not
-  get larger with the crown. A taller tree has a thicker trunk.
+  keeps its shape. On the screen, its top is at the top of the tree.
+- The trunks (`DIY.Layout.trunks/1`) and the round bed of mulch have their
+  real size. They do not get larger with the crown. They are at the middle
+  of the space, and they stay in it. A taller tree has a thicker trunk, up
+  to the limit of its kind.
 - The leaves are flat shapes that look to the camera of the house, so a
   tree looks the same at each turn. The crown paints after the trunk,
   from the back to the front. The crown moves to the camera until no
@@ -4639,13 +4641,16 @@ The space of a tree on the plan is its crown. The models
 
 The house from outside (`DIYWeb.Outside`) shows the whole tree. A tall
 tree in front of the house would hide the rooms on the page Rooms. So
-the view of the rooms cuts a tree at the height of the low walls (75 cm,
-`DIYWeb.Cutaway.item_view/5`). It shows the trunk, the bed of mulch, and
-the shadow of the crown on the ground. The share picture also cuts it.
+the view of the rooms cuts a placed tree at the height of the low walls
+(75 cm, `DIYWeb.Cutaway.item_view/5`). It shows the trunk, the bed of
+mulch, and the shadow of the crown on the ground. The share picture also
+cuts it. A tap on the tree brings the whole tree out of the shadow of its
+crown (`DIYWeb.Stage`). The tree of a yard (`DIYWeb.Decor`) is 4 m high:
+it is not cut.
 
-A tree stands on its trunk: its crown is high over the ground. So only
-its trunk can block a door (`DIY.Layout.foot_box/1`, a square of 24
-inches at the middle of the tree). Its crown can be over a door.
+A tree stands on its trunks: its crown is high over the ground. So only
+its trunks can block a door (`DIY.Layout.foot_box/1`: the box of the
+trunks, with 1 inch more at each side). Its crown can be over a door.
 
 ### The shapes of a roof
 

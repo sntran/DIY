@@ -816,6 +816,7 @@ defmodule DIYWeb.CutawayTest do
   # The size of a look in inches: of its kind, or of its model of station.
   defp look_size({"power_station", key}), do: Catalog.station_size(key)
   defp look_size({"ev", body, _color}), do: Catalog.car_size(body)
+  defp look_size({"tree", kind}), do: Catalog.tree_size(kind)
   defp look_size({type, _ports}), do: Catalog.size(type)
   defp look_size(type), do: Catalog.size(type)
 
@@ -926,10 +927,12 @@ defmodule DIYWeb.CutawayTest do
       # has a look for each number of its positions.
       # A car has a look for each body.
       cars = for {body, _name} <- Catalog.car_bodies(), do: {"ev", body, "red"}
+      # A tree has a look for each kind.
+      trees = for {kind, _name} <- Catalog.tree_kinds(), do: {"tree", kind}
 
       for type <-
             Catalog.types() ++
-              [{"dc_bus", 1}, {"dc_bus", 7}, {"dc_bus", 24}] ++ stations() ++ cars do
+              [{"dc_bus", 1}, {"dc_bus", 7}, {"dc_bus", 24}] ++ stations() ++ cars ++ trees do
         {w, d, h} = look_size(type)
         frame = %{at: {0, 0, 0}, size: {w * m, d * m, h * m}, turn: turn, camera: camera}
         polys = for {:poly, corners, _class} <- Shapes.placed(type, frame), do: corners

@@ -36,10 +36,10 @@ test("the frame of a part of the flight", () => {
 const rect = (left, top, width, height) => ({left, top, width, height, right: left + width, bottom: top + height})
 const polygon = (r) => ({getBoundingClientRect: () => r})
 
-test("the box of an item on the plan has its polygons, but not its shadow", () => {
+test("the box of an item on the plan has its polygons and the crown of a tree, but not its shadow", () => {
   const group = {
     querySelectorAll(selector) {
-      assert.equal(selector, "polygon:not(.p-shadow)")
+      assert.equal(selector, "polygon:not(.p-shadow), polygon.p-crown")
       return [polygon(rect(10, 20, 5, 5)), polygon(rect(12, 18, 10, 3)), polygon(rect(0, 0, 0, 0))]
     },
   }

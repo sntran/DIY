@@ -247,18 +247,47 @@ defmodule DIY.Layout do
     if rem(item.turn, 2) == 0, do: {w, d}, else: {d, w}
   end
 
-  # The side of the trunk of a tree on the plan (inches), with a margin.
-  @trunk 24
+  # The trunks of each kind of tree: the least and the most radius in
+  # inches. Also the place of each trunk from the middle of the tree, in
+  # radii. A crape myrtle has three thin trunks.
+  @trunks %{
+    "live_oak" => {5, 18, [{0, 0}]},
+    "pine" => {3, 12, [{0, 0}]},
+    "palm" => {4, 8, [{0, 0}]},
+    "crape_myrtle" => {2, 5, [{-2.5, 0}, {2.5, 0}, {0, 2.5}]}
+  }
+
+  @doc """
+  The trunks of a tree: `{x, y, r}` for each trunk, in inches from the back
+  corner of the space of the tree (`extent/1`). The trunks are at the
+  middle of the space. A taller tree has a thicker trunk, up to the limit of
+  its kind. The trunks stay in the space. A tree of a kind that the app
+  does not know has the trunk of a live oak.
+  """
+  def trunks(%{type: "tree"} = item) do
+    kind = item |> Map.get(:params, %{}) |> Map.get("kind")
+    {r0, r1, places} = Map.get(@trunks, kind, @trunks["live_oak"])
+    {w, d} = extent(item)
+    {_w, _d, h} = size(item)
+    spread = places |> Enum.map(fn {a, b} -> max(abs(a), abs(b)) end) |> Enum.max()
+    r = (0.025 * h) |> max(r0) |> min(r1) |> min(min(w, d) / 2 / (1 + spread))
+    for {a, b} <- places, do: {w / 2 + a * r, d / 2 + b * r, r}
+  end
 
   @doc """
   The box of the part of an item on the ground, in its room: `%{x, y, w,
   d}`. It is the box of the item (`item_box/1`). A tree stands on its
-  trunk at the middle of its box: its crown is high over the ground.
+  trunks (`trunks/1`), with 1 inch more at each side: its crown is high
+  over the ground.
   """
   def foot_box(%{type: "tree"} = item) do
     %{x: x, y: y, w: w, d: d} = item_box(item)
-    {tw, td} = {min(@trunk, w), min(@trunk, d)}
-    %{x: x + div(w - tw, 2), y: y + div(d - td, 2), w: tw, d: td}
+    circles = trunks(item)
+    x0 = circles |> Enum.map(fn {cx, _cy, r} -> floor(cx - r - 1) end) |> Enum.min() |> max(0)
+    x1 = circles |> Enum.map(fn {cx, _cy, r} -> ceil(cx + r + 1) end) |> Enum.max() |> min(w)
+    y0 = circles |> Enum.map(fn {_cx, cy, r} -> floor(cy - r - 1) end) |> Enum.min() |> max(0)
+    y1 = circles |> Enum.map(fn {_cx, cy, r} -> ceil(cy + r + 1) end) |> Enum.max() |> min(d)
+    %{x: x + x0, y: y + y0, w: x1 - x0, d: y1 - y0}
   end
 
   def foot_box(item), do: item_box(item)
