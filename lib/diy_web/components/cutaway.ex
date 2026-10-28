@@ -79,7 +79,11 @@ defmodule DIYWeb.Cutaway do
   @attic 0.5
   @low 0.25
   @inner 0.75
+  # The thickness of a wall on the outside (meters), and of a wall between
+  # two rooms. A wall between two rooms is a 2x4 with drywall on its two
+  # sides: 4.5 inches.
   @thick 0.16
+  @partition 0.115
   @slab 0.3
 
   @doc """
@@ -578,7 +582,7 @@ defmodule DIYWeb.Cutaway do
   # full height `high`).
   defp wall(id, room, side, {a, b, kind}, z, {height, high, span}, camera: camera, art?: art?) do
     {line, {r0, r1}} = edge(room.plan, side)
-    t = @thick / @m
+    t = thickness(kind) / @m
     # The ends of an outside wall on x go past the corners of the room.
     {a, b} =
       if side in ~w(x0 x1) and kind not in [:shared, :shared_low],
@@ -609,7 +613,7 @@ defmodule DIYWeb.Cutaway do
 
     # The face of the wall in its room. A wall between two rooms stands on
     # the line: its face is half its thickness in front of the line.
-    face = if kind in [:shared, :shared_low], do: line * @m + @thick / 2, else: line * @m
+    face = if kind in [:shared, :shared_low], do: line * @m + thickness(kind) / 2, else: line * @m
 
     trim =
       if max(h0, h1) > @low and side in ~w(x0 y0),
@@ -676,6 +680,13 @@ defmodule DIYWeb.Cutaway do
 
     [{plane.({a, b}, {0.0, 0.1}), "p-baseboard"} | window ++ picture]
   end
+
+  @doc """
+  The thickness of a wall of a kind (meters): 4.5 inches between two rooms
+  (`:shared` and `:shared_low`), and 6.3 inches on the outside.
+  """
+  def thickness(kind) when kind in [:shared, :shared_low], do: @partition
+  def thickness(_kind), do: @thick
 
   # True when a wall of a room can have a picture at a part of it (inches,
   # along the side). A garage, a laundry and an attic have no picture. No

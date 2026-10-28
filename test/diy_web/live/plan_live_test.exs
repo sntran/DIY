@@ -362,6 +362,47 @@ defmodule DIYWeb.PlanLiveTest do
     assert build(view).doorways == []
   end
 
+  test "an item cannot stand in front of a door: a drop, a size or a step", %{conn: conn} do
+    build = house()
+
+    [kitchen, living] =
+      for n <- ["Kitchen", "Living room"], do: Enum.find(build.rooms, &(&1.name == n))
+
+    {:ok, build} = Build.set_doorways(build, kitchen.id, %{living.id => nil})
+    {:ok, build, freezer} = Build.add_item(build, living.id, "freezer")
+    {:ok, build} = Build.place_item(build, freezer, living.id, %{x: 0, y: 95})
+    view = open(conn, ~p"/inside?#{[item: freezer]}", build)
+    message = "An item cannot stand in front of a door."
+
+    # A drop with its center in front of the door (131 to 163 inches).
+    html =
+      render_hook(view, "place_item", %{
+        "id" => freezer,
+        "room" => living.id,
+        "x" => living.plan.x + 28,
+        "y" => living.plan.y + 147
+      })
+
+    assert html =~ message
+    assert {:ok, %{at: %{x: 0, y: 95}}} = Build.item(build(view), freezer)
+
+    # A size that goes in front of the door, from the form or from a step.
+    html =
+      view
+      |> form("#size-form", %{"item_id" => freezer, "w" => "56", "d" => "70", "h" => "33"})
+      |> render_submit()
+
+    assert html =~ message
+
+    for _ <- 1..7,
+        do: render_click(view, "step_size", %{"id" => freezer, "side" => "d", "by" => "1"})
+
+    assert render(view) =~ message
+    {:ok, item} = Build.item(build(view), freezer)
+    {_w, d} = Layout.extent(item)
+    assert item.at.y + d <= 131
+  end
+
   test "the sheet of a room sets its size in feet", %{conn: conn} do
     view = open(conn, ~p"/inside", house())
     kitchen = room(view, "Kitchen")

@@ -167,6 +167,119 @@ defmodule DIY.BuildPlanTest do
     assert Build.put_house(door, house, rooms, items).doorways == []
   end
 
+  test "no item stands in front of a door" do
+    build = house()
+    {kitchen, living} = {room(build, "Kitchen"), room(build, "Living room")}
+    {:ok, door} = Build.set_doorways(build, kitchen.id, %{living.id => nil})
+
+    # The door is at 131 to 163 inches along the wall between the rooms.
+    # Its space is 36 inches deep in each room.
+    assert Build.door_spaces(door, kitchen.id) == [%{x: 108, y: 131, w: 36, d: 32}]
+    assert Build.door_spaces(door, living.id) == [%{x: 0, y: 131, w: 36, d: 32}]
+    assert Build.door_spaces(door, "nothing") == []
+
+    # A drop in front of the door does not go. Next to it, it goes.
+    {:ok, door, heater} = Build.add_item(door, living.id, "space_heater")
+    assert Build.place_item(door, heater, living.id, %{x: 4, y: 140}) == {:error, :door}
+    assert {:ok, door} = Build.place_item(door, heater, living.id, %{x: 40, y: 140})
+
+    # A turn or a size that goes in front of the door does not go.
+    {:ok, door, freezer} = Build.add_item(door, living.id, "freezer")
+    {:ok, door} = Build.place_item(door, freezer, living.id, %{x: 0, y: 95})
+    assert Build.turn_item(door, freezer) == {:error, :door}
+    assert Build.size_item(door, freezer, %{w: 56, d: 30, h: 33}) |> elem(0) == :ok
+    assert Build.size_item(door, freezer, %{w: 56, d: 70, h: 33}) == {:error, :door}
+
+    # An item on a wall over the door (a mini split) does not block it.
+    {:ok, door, split} = Build.add_item(door, living.id, "mini_split")
+    assert {:ok, _door} = Build.place_item(door, split, living.id, %{x: 0, y: 131})
+
+    # A new door moves the items in front of it to a free place, with the
+    # items on them. A free place is not in front of the door.
+    {:ok, build, dryer} = Build.add_item(build, kitchen.id, "dryer")
+    {:ok, build} = Build.place_item(build, dryer, kitchen.id, %{x: 110, y: 135})
+    {:ok, build, top} = Build.add_item(build, kitchen.id, "microwave")
+    {:ok, build} = Build.place_item(build, top, kitchen.id, %{x: 112, y: 137}, true)
+    assert {:ok, %{on: ^dryer} = before} = Build.item(build, top)
+    {:ok, base} = Build.item(build, dryer)
+    {:ok, door} = Build.set_doorways(build, kitchen.id, %{living.id => nil})
+    {:ok, moved} = Build.item(door, dryer)
+    [space] = Build.door_spaces(door, kitchen.id)
+    refute Layout.overlap?(Layout.item_box(moved), space)
+
+    for other <- Build.items_in(door, kitchen.id), other.id not in [dryer, top] do
+      refute Layout.overlap?(Layout.item_box(moved), Layout.item_box(other))
+    end
+
+    {:ok, carried} = Build.item(door, top)
+    assert carried.on == dryer
+    assert carried.at.x - moved.at.x == before.at.x - base.at.x
+    assert carried.at.y - moved.at.y == before.at.y - base.at.y
+  end
+
+  test "an item in front of a door goes out step by step, and a stack keeps the door clear" do
+    build = house()
+    {kitchen, living} = {room(build, "Kitchen"), room(build, "Living room")}
+    {:ok, door} = Build.set_doorways(build, kitchen.id, %{living.id => nil})
+    [space] = Build.door_spaces(door, living.id)
+    {:ok, door, freezer} = Build.add_item(door, living.id, "freezer")
+    {:ok, door} = Build.size_item(door, freezer, %{w: 56, d: 30, h: 33})
+    {:ok, door} = Build.place_item(door, freezer, living.id, %{x: 0, y: 264})
+    clear? = fn build, id -> not Layout.overlap?(space, Layout.item_box(item(build, id))) end
+
+    # A size goes into the room first: a size that puts the item in front
+    # of the door there does not go.
+    assert Build.size_item(door, freezer, %{w: 56, d: 154, h: 33}) == {:error, :door}
+
+    # A file can have an item in front of the door. The load moves it.
+    put = fn build, at ->
+      %{build | items: Enum.map(build.items, &if(&1.id == freezer, do: %{&1 | at: at}, else: &1))}
+    end
+
+    stuck = put.(door, %{x: 0, y: 140})
+    refute clear?.(stuck, freezer)
+    {:ok, loaded} = stuck |> Build.to_json() |> Build.from_json()
+    assert clear?.(loaded, freezer)
+
+    # An item in front of the door can go out of it a step at a time, and
+    # can get smaller. It cannot go further in front of the door.
+    assert {:ok, _build} = Build.place_item(stuck, freezer, living.id, %{x: 6, y: 140})
+    assert {:ok, _build} = Build.size_item(stuck, freezer, %{w: 40, d: 20, h: 33})
+    assert Build.place_item(stuck, freezer, living.id, %{x: 0, y: 131}) == {:error, :door}
+
+    # An item on an item does not go in front of the door when the item
+    # under it moves.
+    {:ok, door, dryer} = Build.add_item(door, living.id, "dryer")
+    {:ok, door} = Build.place_item(door, dryer, living.id, %{x: 80, y: 135})
+    {:ok, door, strips} = Build.add_item(door, living.id, "heat_strips")
+    {:ok, door} = Build.place_item(door, strips, living.id, %{x: 80, y: 137}, true)
+    assert item(door, strips).on == dryer
+    assert Build.place_item(door, dryer, living.id, %{x: 38, y: 135}) == {:error, :door}
+
+    # An item on an item that is in front of a door goes to the floor, at a
+    # free place.
+    stacked =
+      %{
+        door
+        | items:
+            Enum.map(door.items, &if(&1.id == strips, do: %{&1 | at: %{x: 30, y: 135}}, else: &1))
+      }
+
+    {:ok, renamed} = Build.rename_room(stacked, living.id, "Family room")
+    assert clear?.(renamed, strips)
+    assert item(renamed, strips)[:on] == nil
+
+    # An item as large as its room has no free place: it stays, and it can
+    # get smaller.
+    {:ok, build, big} = Build.add_item(build, kitchen.id, "freezer")
+    {:ok, build} = Build.size_item(build, big, %{w: kitchen.plan.w, d: kitchen.plan.d, h: 33})
+    {:ok, full} = Build.set_doorways(build, kitchen.id, %{living.id => nil})
+    assert item(full, big).at == %{x: 0, y: 0}
+    assert {:ok, small} = Build.size_item(full, big, %{w: 40, d: 30, h: 33})
+    [kitchen_space] = Build.door_spaces(small, kitchen.id)
+    refute Layout.overlap?(kitchen_space, Layout.item_box(item(small, big)))
+  end
+
   test "a room moves with its items, and does not go over a room of its layer" do
     build = house()
     kitchen = room(build, "Kitchen")

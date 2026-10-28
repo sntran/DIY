@@ -142,6 +142,29 @@ defmodule DIY.Layout do
     end
   end
 
+  # The space in front of a door, on each side of its wall (inches).
+  @door_space 36
+
+  @doc """
+  The spaces in front of the doors of a room, on the plan of the room
+  (inches). `gaps` are the openings of the doors in the sides of the room
+  (`DIY.Build.doorway_gaps/2`). A space is as wide as the door, and 36
+  inches deep (or the room, when it is less deep). No item stands in it,
+  and no furniture.
+  """
+  def door_spaces(plan, gaps) do
+    {dw, dd} = {min(@door_space, plan.w), min(@door_space, plan.d)}
+
+    for {side, {a, b}} <- gaps do
+      case side do
+        "x0" -> %{x: 0, y: a - plan.y, w: dw, d: b - a}
+        "x1" -> %{x: plan.w - dw, y: a - plan.y, w: dw, d: b - a}
+        "y0" -> %{x: a - plan.x, y: 0, w: b - a, d: dd}
+        "y1" -> %{x: a - plan.x, y: plan.d - dd, w: b - a, d: dd}
+      end
+    end
+  end
+
   @doc "True when two boxes overlap (a common side is not an overlap)."
   def overlap?(a, b),
     do: a.x < b.x + b.w and b.x < a.x + a.w and a.y < b.y + b.d and b.y < a.y + a.d
@@ -677,13 +700,18 @@ defmodule DIY.Layout do
   of the other items. It is the first place from the back corner, row by
   row. With no free place, it is the back corner.
   """
-  def free_at(item, room, others) do
+  def free_at(item, room, others), do: free_place(item, room, others) || %{x: 0, y: 0}
+
+  @doc """
+  A free place for an item in a room, as `free_at/3`. With no free place,
+  it is `nil`.
+  """
+  def free_place(item, room, others) do
     {w, d} = extent(item)
     step = max(6, round6(max(room.w, room.d) / 60))
 
     Enum.find_value(
       for(y <- range(0, room.d - d, step), x <- range(0, room.w - w, step), do: {x, y}),
-      %{x: 0, y: 0},
       fn {x, y} ->
         box = %{x: x, y: y, w: w, d: d}
         if not Enum.any?(others, &overlap?(&1, box)), do: %{x: x, y: y}

@@ -46,7 +46,13 @@ defmodule DIYWeb.Outside do
   def view(build) do
     camera = Camera.house()
     house = build |> Build.house_view() |> Build.today()
-    rooms = Enum.filter(house.rooms, & &1.plan)
+    # A yard knows the openings of its doors: its furniture leaves the space
+    # in front of them free.
+    rooms =
+      for room <- house.rooms,
+          room.plan,
+          do: Map.put(room, :doorway_gaps, Build.doorway_gaps(house, room.id))
+
     items = house.items |> Cutaway.stacked() |> Enum.group_by(& &1.room)
 
     # A yard is on the ground. A room outside on a floor (a balcony) is on

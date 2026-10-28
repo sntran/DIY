@@ -158,6 +158,34 @@ defmodule DIYWeb.DecorTest do
     assert [] == Decor.pieces(stairs, [%{item | at: %{x: 20, y: 40}}])
   end
 
+  test "no piece stands in front of a door, but the stairs stay" do
+    # A door in the middle of the back wall of a bedroom: the bed does not
+    # show. The rug is flat: it stays.
+    bedroom = %{
+      name: "Bedroom",
+      place: :indoor,
+      level: "f1",
+      plan: %{x: 0, y: 0, w: 200, d: 200}
+    }
+
+    door = Map.put(bedroom, :doorway_gaps, [{"y0", {84, 116}}])
+    bed = Decor.model("bed")
+    assert Enum.any?(Decor.pieces(bedroom, []), &(elem(&1, 0) == bed))
+    refute Enum.any?(Decor.pieces(door, []), &(elem(&1, 0) == bed))
+    assert Enum.any?(Decor.pieces(door, []), &(elem(&1, 0) == Decor.model("rug")))
+
+    # The counters of a kitchen stop at a door in their wall.
+    kitchen = %{door | name: "Kitchen", plan: %{x: 0, y: 0, w: 144, d: 200}}
+    kitchen = %{kitchen | doorway_gaps: [{"y0", {50, 82}}]}
+    assert [%{x: 4, w: 42}, %{x: 86, w: 54}] = Enum.map(Decor.pieces(kitchen, []), &box/1)
+
+    # The stairs are a part of the house: a door does not take them away.
+    stairs = %{door | name: "Stairs", plan: %{x: 0, y: 0, w: 54, d: 114}}
+    stairs = %{stairs | doorway_gaps: [{"y0", {11, 43}}]}
+    assert [{model, _x, _y, 0}] = Decor.pieces(stairs, [])
+    assert model == Decor.model({"stairs", 9})
+  end
+
   test "the counters of a kitchen fill the back wall where no item is" do
     kitchen = %{room(house(), "Kitchen") | plan: %{x: 0, y: 0, w: 144, d: 200}}
     item = fn type, x -> %{type: type, at: %{x: x, y: 0}, size: nil, turn: 0, params: %{}} end
