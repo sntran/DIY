@@ -112,6 +112,22 @@ defmodule DIY.Market do
       else: (Enum.at(sorted, middle - 1) + Enum.at(sorted, middle)) / 2
   end
 
+  # The days that a market of Power to Choose stays good in a build. The
+  # plans and their prices change: the page asks again after them.
+  @days 7
+
+  @doc """
+  True when a market of Power to Choose in a build is old: #{@days} days or
+  more. A market that the user gave does not get old.
+  """
+  @spec old?(t(), Date.t()) :: boolean()
+  def old?(market, today \\ Date.utc_today())
+
+  def old?(%{source: "ptc", date: date}, today),
+    do: Date.diff(today, Date.from_iso8601!(date)) >= @days
+
+  def old?(_market, _today), do: false
+
   @doc """
   The market that the user gives: the user knows that the utility is a
   city utility or a co-op (no choice), or the name of the utility.

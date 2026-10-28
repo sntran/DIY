@@ -74,6 +74,26 @@ defmodule DIY.MarketTest do
              Market.by_user(nil, true, @today)
   end
 
+  test "a market of Power to Choose gets old after 7 days; a market of the user does not" do
+    today = ~D[2026-10-28]
+    market = fn date, source -> %{date: Date.to_iso8601(date), source: source} end
+
+    refute Market.old?(market.(today, "ptc"), today)
+    refute Market.old?(market.(Date.add(today, -6), "ptc"), today)
+    assert Market.old?(market.(Date.add(today, -7), "ptc"), today)
+    assert Market.old?(market.(Date.add(today, -400), "ptc"), today)
+    refute Market.old?(market.(Date.add(today, -400), "user"), today)
+    refute Market.old?(market.(Date.utc_today(), "ptc"))
+  end
+
+  property "a market is old from its seventh day" do
+    check all(days <- integer(-30..400)) do
+      today = ~D[2026-10-28]
+      market = %{date: Date.to_iso8601(Date.add(today, -days)), source: "ptc"}
+      assert Market.old?(market, today) == days >= 7
+    end
+  end
+
   test "from_map reads a stored market, and refuses a bad one" do
     good = %{
       "choice" => true,

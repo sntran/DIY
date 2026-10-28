@@ -60,7 +60,10 @@ defmodule DIYWeb.PlanLinkLiveTest do
 
     {:ok, build} = Build.choose_door(Build.new(), "my_house")
     {:ok, build} = Build.set_zip(build, "75070")
-    build = if market, do: Build.set_market(build, market), else: build
+    # A market of today: the page asks again for an old market
+    # (`DIY.Market.old?/2`), and the stub has a different market.
+    today = Date.to_iso8601(Date.utc_today())
+    build = if market, do: Build.set_market(build, %{market | date: today}), else: build
     Build.put_house(build, house, rooms, items)
   end
 

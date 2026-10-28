@@ -95,6 +95,8 @@ defmodule DIYWeb.HomeLive do
      |> assign(:sky, %{zip: nil, status: :none, now: nil, timer: nil})
      |> assign(:sky_pick, %{"time" => "now", "weather" => "now"})
      |> assign(:market, %{zip: nil, status: :none})
+     # The ZIP code of an old market that the page asked again for.
+     |> assign(:market_again, nil)
      |> assign(:estimate, %{ready: false, missing: []})
      |> assign(:full, %{ready: false, missing: []})
      |> assign(:power, nil)
@@ -1706,6 +1708,22 @@ defmodule DIYWeb.HomeLive do
     end
   end
 
+  # A market of Power to Choose that is old (`Market.old?/2`): the page
+  # asks again one time for the ZIP code, in the background. The build
+  # keeps its market until the answer comes. After an error, it keeps it.
+  defp load_market(
+         %{assigns: %{build: %{zip: zip, market: %{} = market}, market_again: again}} = socket
+       )
+       when is_binary(zip) and again != zip do
+    if Market.old?(market) do
+      socket
+      |> assign(:market_again, zip)
+      |> start_async({:market_again, zip}, fn -> Market.fetch(zip) end)
+    else
+      socket
+    end
+  end
+
   defp load_market(socket), do: socket
 
   # The estimate of the house of today (with no planned item), its power
@@ -1908,6 +1926,21 @@ defmodule DIYWeb.HomeLive do
         {:noreply, socket}
     end
   end
+
+  # The new market of an old one. The build takes it only when it still has
+  # that ZIP code and a market of Power to Choose: the person can change
+  # the ZIP code or the market while the page waits.
+  def handle_async({:market_again, zip}, {:ok, {:ok, market}}, socket) do
+    case socket.assigns.build do
+      %{zip: ^zip, market: %{source: "ptc"}} = build ->
+        {:noreply, put(socket, Build.set_market(build, market))}
+
+      _other ->
+        {:noreply, socket}
+    end
+  end
+
+  def handle_async({:market_again, _zip}, _error, socket), do: {:noreply, socket}
 
   defp market(socket, zip, {:ok, {:ok, market}}) do
     socket
