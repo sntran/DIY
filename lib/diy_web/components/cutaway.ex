@@ -64,7 +64,7 @@ defmodule DIYWeb.Cutaway do
   """
   use DIYWeb, :html
 
-  alias DIY.{Catalog, Layout, Solar}
+  alias DIY.{Build, Catalog, Layout, Solar}
   alias DIYWeb.{Camera, Decor, Geometry}
   alias DIYWeb.Icon.Shapes
 
@@ -99,7 +99,13 @@ defmodule DIYWeb.Cutaway do
     camera = Camera.house()
     house = build |> Layout.house_box() |> meters()
     gap = gap(camera, house, @full)
-    by_layer = build.rooms |> Enum.filter(& &1.plan) |> Enum.group_by(&Layout.layer/1)
+    # Each room knows the rooms that it is open to: no wall between them.
+    by_layer =
+      build.rooms
+      |> Enum.filter(& &1.plan)
+      |> Enum.map(&Map.put(&1, :open, Build.open_to(build, &1.id)))
+      |> Enum.group_by(&Layout.layer/1)
+
     items = build.items |> stacked() |> Enum.group_by(& &1.room)
     ghosts = ghosts |> Enum.with_index(1) |> Enum.group_by(fn {ghost, _i} -> ghost.room end)
     floors = build.house.floors
@@ -452,15 +458,23 @@ defmodule DIYWeb.Cutaway do
   # its kind: :high, :low, or :shared (a wall of 75 cm between two rooms
   # inside). A part is :high when no room of the layer (`all`, with the
   # yards) is behind it, also on a slant (`reach/3`). A part between two
-  # rooms is :shared_low where it can hide an item (`hidden`).
+  # rooms is :shared_low where it can hide an item (`hidden`). A part on a
+  # room that this room is open to has no wall (`DIY.Build.set_open/3`).
   defp spans(room, side, {rooms, all}, reach, hidden) do
     others = Enum.reject(rooms, &(&1.id == room.id))
     {line, range} = edge(room.plan, side)
-    touch = for o <- others, across(o.plan, side) == line, do: along(o.plan, side)
+
+    {open, closed} =
+      others
+      |> Enum.filter(&(across(&1.plan, side) == line))
+      |> Enum.split_with(&(&1.id in Map.get(room, :open, [])))
+
+    touch = Enum.map(closed, &along(&1.plan, side))
     back? = side in ~w(x0 y0)
     behind = behind(Enum.reject(all, &(&1.id == room.id)), side, line, reach)
 
-    for {a, b, shared?} <- split(range, touch),
+    for {a0, b0, false} <- split(range, Enum.map(open, &along(&1.plan, side))),
+        {a, b, shared?} <- split({a0, b0}, touch),
         part <- span(a, b, shared?, back?, behind, hidden),
         do: part
   end

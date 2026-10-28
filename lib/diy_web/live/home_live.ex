@@ -831,6 +831,12 @@ defmodule DIYWeb.HomeLive do
     with_build(socket, Build.rename_room(socket.assigns.build, id, name))
   end
 
+  # The rooms that a room is open to (the sheet of a room).
+  def handle_event("room_open", %{"room_id" => id} = params, socket) do
+    ids = for other <- List.wrap(params["open"]), is_binary(other), other != "", do: other
+    with_build(socket, Build.set_open(socket.assigns.build, id, ids))
+  end
+
   # The search of the sheet Add (DIYWeb.Inside).
   def handle_event("add_search", %{"q" => q}, socket) when is_binary(q),
     do: {:noreply, assign(socket, :add_query, String.slice(q, 0, 40))}

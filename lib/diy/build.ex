@@ -65,6 +65,9 @@ defmodule DIY.Build do
     (`"pecron:id"` or `"ecoflow:sn"`), for a person with no Home Assistant
     (`link_unit/3`).
     A unit has one item at most.
+  - `open`: the pairs of rooms of the house that are open to each other:
+    no wall stands between them (`set_open/3`). The two rooms are on the
+    same layer, next to each other. A pair goes away with a room.
   - `wires`: the wires between the items, at most 100, and at most 24 for
     an item (`add_wire/3`). Each wire has an `id`, the item at each end
     (`from` gives the current, `to`), and its numbers (`DIY.Wire`). A
@@ -88,6 +91,8 @@ defmodule DIY.Build do
   @hints ~w(swipe plan)
   @max_wires 100
   @max_item_wires 24
+  # The most pairs of rooms that are open to each other.
+  @max_open 200
   @places Catalog.places()
 
   @enforce_keys [:revision]
@@ -112,7 +117,8 @@ defmodule DIY.Build do
             areas: %{},
             devices: %{},
             units: %{},
-            wires: []
+            wires: [],
+            open: []
 
   @type plan :: %{x: integer(), y: integer(), w: pos_integer(), d: pos_integer()}
   @type room :: %{
@@ -173,7 +179,8 @@ defmodule DIY.Build do
           areas: %{String.t() => String.t()},
           devices: %{String.t() => String.t()},
           units: %{String.t() => String.t()},
-          wires: [wire()]
+          wires: [wire()],
+          open: [[String.t()]]
         }
 
   @doc "The version of the format of the build."
@@ -209,6 +216,8 @@ defmodule DIY.Build do
   def change(%__MODULE__{revision: revision} = build, fun) do
     %__MODULE__{} = changed = fun.(build)
     %__MODULE__{} = changed = Layout.fill(changed)
+    # Two rooms stay open to each other only when they still touch.
+    changed = fit_open(changed, changed.open)
     # An item stays on an item only when the two still stack (`DIY.Stack`).
     rooms = Map.new(changed.rooms, &{&1.id, &1})
     changed = %{changed | items: changed.items |> DIY.Stack.normalize(rooms) |> fit_mounts(rooms)}
@@ -409,7 +418,16 @@ defmodule DIY.Build do
   @spec put_house(t(), house(), [map()], [map()]) :: t()
   def put_house(build, house, rooms, items) do
     change(build, fn build ->
-      build = %{build | house: house, rooms: [], items: [], areas: %{}, devices: %{}, units: %{}}
+      build = %{
+        build
+        | house: house,
+          rooms: [],
+          items: [],
+          areas: %{},
+          devices: %{},
+          units: %{},
+          open: []
+      }
 
       {build, ids} =
         Enum.reduce(rooms, {build, %{}}, fn room, {build, ids} ->
@@ -471,6 +489,44 @@ defmodule DIY.Build do
 
   def add_room(_build, _name, _level, _place), do: {:error, :house}
 
+  @doc """
+  The rooms that a room is open to: no wall stands between them
+  (`set_open/3`).
+  """
+  @spec open_to(t(), String.t()) :: [String.t()]
+  def open_to(build, id),
+    do: for([a, b] <- build.open, id in [a, b], do: if(a == id, do: b, else: a))
+
+  @doc """
+  Opens a room of the house to the rooms in `ids`, and closes it to the
+  other rooms: an open plan. No wall then stands between the room and
+  each of these rooms. Each room in `ids` must be a room of the house on
+  the same layer, next to it (`DIY.Layout.touch?/2`). The app ignores the
+  other ids.
+  """
+  @spec set_open(t(), String.t(), [String.t()]) :: {:ok, t()} | {:error, :room}
+  def set_open(build, id, ids) when is_list(ids) do
+    with {:ok, %{plan: %{}} = room} <- house_room(build, id) do
+      pairs =
+        for other <- build.rooms,
+            other.id in ids,
+            open_pair?(room, other),
+            do: Enum.sort([id, other.id])
+
+      {:ok,
+       change(build, &%{&1 | open: Enum.reject(&1.open, fn pair -> id in pair end) ++ pairs})}
+    else
+      _error -> {:error, :room}
+    end
+  end
+
+  # Two rooms of the house that can be open to each other: on the same
+  # layer, and next to each other.
+  defp open_pair?(room, other) do
+    other.id != room.id and not van_level?(other.level) and other.plan != nil and
+      Layout.layer(other) == Layout.layer(room) and Layout.touch?(room.plan, other.plan)
+  end
+
   @doc "Gives a room a new name."
   @spec rename_room(t(), String.t(), String.t()) :: {:ok, t()} | {:error, atom()}
   def rename_room(build, id, name) do
@@ -501,7 +557,12 @@ defmodule DIY.Build do
                item.room != id,
                do: if(item.home == id, do: %{item | home: new_home(item, house)}, else: item)
 
-         %{build | rooms: rooms, items: items, areas: Map.delete(build.areas, id)}
+         %{
+           build
+           | rooms: rooms,
+             items: items,
+             areas: Map.delete(build.areas, id)
+         }
          |> drop_vans()
          |> no_meter_no_usage()
        end)}
@@ -1347,7 +1408,8 @@ defmodule DIY.Build do
       "areas" => build.areas,
       "devices" => build.devices,
       "units" => build.units,
-      "wires" => build.wires
+      "wires" => build.wires,
+      "open" => build.open
     })
   end
 
@@ -1388,7 +1450,8 @@ defmodule DIY.Build do
          {:ok, areas} <- areas(map["areas"], rooms),
          {:ok, devices} <- devices(map["devices"], items, rooms),
          {:ok, units} <- units(map["units"], items, devices),
-         {:ok, wires} <- wires(map["wires"], items) do
+         {:ok, wires} <- wires(map["wires"], items),
+         {:ok, open} <- open(map["open"]) do
       seq = last_id(seq, rooms ++ items ++ plans ++ wires)
 
       {:ok,
@@ -1418,6 +1481,7 @@ defmodule DIY.Build do
        |> repair_vans()
        |> fit_wires()
        |> Layout.fill()
+       |> fit_open(open)
        |> then(fn build ->
          rooms = Map.new(build.rooms, &{&1.id, &1})
          %{build | items: build.items |> DIY.Stack.normalize(rooms) |> fit_mounts(rooms)}
@@ -1943,6 +2007,35 @@ defmodule DIY.Build do
   # older version has none. A link of a room that cannot have an area (it
   # is not there, or it is the roof) goes away. Two rooms cannot have one
   # area: the first room in the list keeps it.
+  # The pairs of rooms that are open to each other. A build of an older
+  # version has none.
+  defp open(nil), do: {:ok, []}
+
+  defp open(pairs) when is_list(pairs) and length(pairs) <= @max_open do
+    if Enum.all?(pairs, &match?([a, b] when is_binary(a) and is_binary(b), &1)),
+      do: {:ok, pairs},
+      else: {:error, :open}
+  end
+
+  defp open(_pairs), do: {:error, :open}
+
+  # A pair stays when its two rooms can be open to each other, after the
+  # fill of the plan. So it goes away with a room, or when a room moves
+  # away. A pair comes one time, in its order.
+  defp fit_open(build, pairs) do
+    rooms = Map.new(build.rooms, &{&1.id, &1})
+
+    open =
+      for [a, b] <- pairs,
+          room = rooms[a],
+          other = rooms[b],
+          room && other && not van_level?(room.level) && room.plan && open_pair?(room, other),
+          uniq: true,
+          do: Enum.sort([a, b])
+
+    %{build | open: open}
+  end
+
   defp areas(nil, _rooms), do: {:ok, %{}}
 
   defp areas(areas, rooms) when is_map(areas) do

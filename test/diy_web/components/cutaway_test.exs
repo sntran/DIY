@@ -282,6 +282,32 @@ defmodule DIYWeb.CutawayTest do
              )
   end
 
+  test "two rooms that are open to each other have no wall between them" do
+    build = house()
+    {kitchen, living} = {kitchen_room(build), Enum.find(build.rooms, &(&1.name == "Living room"))}
+
+    # The length (meters) of the walls of the living room on its side at
+    # the kitchen (x0).
+    length = fn build ->
+      [ground | _] = Cutaway.view(build).levels
+
+      for(
+        %{kind: :wall, room: room, id: id, box: {_, y0, _, _, y1, _}} <- ground.objects,
+        room == living.id,
+        id =~ "-x0-",
+        do: y1 - y0
+      )
+      |> Enum.sum()
+    end
+
+    {:ok, open} = Build.set_open(build, kitchen.id, [living.id])
+    {a0, a1} = {living.plan.y, living.plan.y + living.plan.d}
+    {b0, b1} = {kitchen.plan.y, kitchen.plan.y + kitchen.plan.d}
+    shared = (min(a1, b1) - max(a0, b0)) * 0.0254
+    assert shared > 0
+    assert_in_delta length.(build) - length.(open), shared, 1.0e-6
+  end
+
   test "a wall between two rooms is low where it can hide an item of the room behind it" do
     build = house()
 

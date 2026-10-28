@@ -260,7 +260,12 @@ defmodule DIYWeb.Inside do
         room={elem(Build.room(@build, @add), 1)}
         query={@add_query}
       />
-      <.room_sheet :if={@chosen && @sheet == "room"} room={@chosen} />
+      <.room_sheet
+        :if={@chosen && @sheet == "room"}
+        room={@chosen}
+        next={next_rooms(@build, @chosen)}
+        open={Build.open_to(@build, @chosen.id)}
+      />
       <.new_room_sheet :if={@sheet == "new_room"} levels={@levels} />
       <HomeAssistant.rooms_sheet
         :if={@sheet == "ha_rooms"}
@@ -754,9 +759,24 @@ defmodule DIYWeb.Inside do
   defp state_note("unavailable"), do: ", Home Assistant cannot reach it now"
   defp state_note(nil), do: ""
 
-  attr :room, :map, required: true
+  # The rooms of the house next to a room, on its layer: it can be open to
+  # them (`DIY.Build.set_open/3`).
+  defp next_rooms(build, room) do
+    for other <- build.rooms,
+        other.id != room.id,
+        other.plan,
+        not Build.van_level?(other.level),
+        Layout.layer(other) == Layout.layer(room),
+        Layout.touch?(room.plan, other.plan),
+        do: other
+  end
 
-  # The sheet of a room: its name, its size, and its removal.
+  attr :room, :map, required: true
+  attr :next, :list, default: [], doc: "the rooms next to the room, on its layer"
+  attr :open, :list, default: [], doc: "the ids of the rooms that it is open to"
+
+  # The sheet of a room: its name, its size, the rooms that it is open to,
+  # and its removal.
   defp room_sheet(assigns) do
     ~H"""
     <.sheet id="room-sheet" title={@room.name} close={~p"/inside?#{[room: @room.id]}"}>
@@ -809,6 +829,28 @@ defmodule DIYWeb.Inside do
         </div>
         <p class="text-xs opacity-70">
           The walls at the front move. On the plan, the handles on the walls move them too.
+        </p>
+      </form>
+
+      <form :if={@next != []} id={"open-#{@room.id}"} phx-change="room_open">
+        <input type="hidden" name="room_id" value={@room.id} />
+        <input type="hidden" name="open[]" value="" />
+        <fieldset class="space-y-1">
+          <legend class="text-sm font-semibold">No wall to</legend>
+          <label :for={other <- @next} class="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              id={"open-#{@room.id}-#{other.id}"}
+              name="open[]"
+              value={other.id}
+              checked={other.id in @open}
+              class="checkbox checkbox-sm"
+            />
+            {other.name}
+          </label>
+        </fieldset>
+        <p class="text-xs opacity-70">
+          An open plan: the rooms join, with no wall between them.
         </p>
       </form>
 

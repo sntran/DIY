@@ -1721,7 +1721,13 @@ its turn. A length is in inches.
   near the floor: at the front of a room and at the right end. A wall at
   the back is low where a room or a yard is behind it, also on a slant.
   So a wall does not hide the items of a room or of a yard. The walls are
-  16 cm thick, and the slabs 30 cm. The van keeps its look: its walls,
+  16 cm thick, and the slabs 30 cm.
+- An open plan. Two rooms next to each other can be open: no wall stands
+  between them, as a living room that is open to a dining room. The sheet
+  of a room has a box "No wall to" for each room next to it on its layer
+  (`DIY.Build.set_open/3`). The build keeps the pairs (`open`), and a
+  link of a share keeps them too. A pair goes away with a room, or when a
+  room moves away from the other. The van keeps its look: its walls,
   its colors and its light background.
 - The picture of an item is its icon at the size of the item
   (`DIYWeb.Icon.Shapes.placed/2`). A turn turns the model, and a face

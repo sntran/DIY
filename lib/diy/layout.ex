@@ -113,6 +113,16 @@ defmodule DIY.Layout do
     %{x: x0, y: y0, w: x1 - x0, d: y1 - y0}
   end
 
+  @doc """
+  True when two plans touch: a side of one is on a side of the other,
+  for a length more than 0.
+  """
+  def touch?(a, b) do
+    beside = (a.x + a.w == b.x or b.x + b.w == a.x) and a.y < b.y + b.d and b.y < a.y + a.d
+    over = (a.y + a.d == b.y or b.y + b.d == a.y) and a.x < b.x + b.w and b.x < a.x + a.w
+    beside or over
+  end
+
   @doc "True when two boxes overlap (a common side is not an overlap)."
   def overlap?(a, b),
     do: a.x < b.x + b.w and b.x < a.x + a.w and a.y < b.y + b.d and b.y < a.y + a.d

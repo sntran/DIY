@@ -19,6 +19,53 @@ defmodule DIY.BuildPlanTest do
   defp first(build, room, type),
     do: Enum.find(Build.items_in(build, room(build, room).id), &(&1.type == type))
 
+  test "two rooms next to each other can be open: no wall stands between them" do
+    build = house()
+
+    [kitchen, living, bedroom] =
+      for n <- ["Kitchen", "Living room", "Bedroom 1"], do: room(build, n)
+
+    assert Layout.touch?(kitchen.plan, living.plan)
+
+    # Bedroom 1 is on floor 2, and the kitchen does not touch itself. The
+    # app ignores them, and an id of no room.
+    ids = [living.id, bedroom.id, "nothing", kitchen.id]
+    {:ok, open} = Build.set_open(build, kitchen.id, ids)
+    pair = Enum.sort([kitchen.id, living.id])
+    assert open.open == [pair]
+    assert Build.open_to(open, living.id) == [kitchen.id]
+    assert Build.open_to(open, kitchen.id) == [living.id]
+    assert open.revision == build.revision + 1
+    assert Build.set_open(build, "nothing", []) == {:error, :room}
+    {:ok, closed} = Build.set_open(open, living.id, [])
+    assert closed.open == []
+
+    # The JSON keeps the pair. A pair with a room that is not there, or a
+    # second copy, goes away. A build of an older version has no pair.
+    {:ok, read} = Build.from_json(Build.to_json(open))
+    assert read.open == [pair]
+    map = open |> Build.to_json() |> Jason.decode!()
+    load = &Build.from_json(Jason.encode!(&1))
+    stale = [[kitchen.id, "gone"], [living.id, kitchen.id], pair, [bedroom.id, kitchen.id]]
+    assert {:ok, %{open: [^pair]}} = load.(%{map | "open" => stale})
+    assert {:ok, %{open: []}} = load.(Map.delete(map, "open"))
+
+    for bad <- [[["a"]], "x", [[1, 2]], List.duplicate(pair, 201)],
+        do: assert(load.(%{map | "open" => bad}) == {:error, :open})
+
+    # The pair goes away with a room, and when a room moves away.
+    {:ok, gone} = Build.delete_room(open, living.id)
+    assert gone.open == []
+    {:ok, away} = Build.move_room(open, kitchen.id, -2000, -2000)
+    assert away.open == []
+
+    # A new house has no pair.
+    {house, rooms, items} =
+      House.preset(%{size: 1800, year: 2005, floors: 2, heat: "gas", lot: nil})
+
+    assert Build.put_house(open, house, rooms, items).open == []
+  end
+
   test "a room moves with its items, and does not go over a room of its layer" do
     build = house()
     kitchen = room(build, "Kitchen")
