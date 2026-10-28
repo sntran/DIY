@@ -19,7 +19,8 @@ defmodule DIYWeb.Stage do
   of the plan. The first frame is the model of the kind, at its own size and
   with no turn. So an item with a turn, or with a size of its own, changes a
   little at the start. The plan cuts a tree (`DIYWeb.Icon.TreeShapes`): its
-  first frame is the whole tree over the shadow of its crown. Then the hook moves the model to the front of the
+  first frame is the whole tree, with its middle on the middle of the
+  shadow of its crown. Then the hook moves the model to the front of the
   page, and shows the frames one after the other while it moves. A close
   does the same in the other direction.
 
