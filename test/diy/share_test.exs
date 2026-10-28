@@ -205,6 +205,17 @@ defmodule DIY.ShareTest do
       assert s == summary()
     end
 
+    test "a link keeps the rooms that are open to each other" do
+      build = house()
+
+      [kitchen, living] =
+        for name <- ["Kitchen", "Living room"], do: Enum.find(build.rooms, &(&1.name == name))
+
+      {:ok, build} = Build.set_open(build, kitchen.id, [living.id])
+      assert {:ok, decoded, _s} = build |> encode!(summary()) |> Share.decode()
+      assert decoded.open == [Enum.sort([kitchen.id, living.id])]
+    end
+
     test "a link carries the sky of its picture" do
       s = Share.summary(List.duplicate(900, 12), 1200, "en", %{time: "night", weather: "rain"})
 

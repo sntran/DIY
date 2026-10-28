@@ -1723,6 +1723,12 @@ its turn. A length is in inches.
   So a wall does not hide the items of a room or of a yard. The walls are
   16 cm thick, and the slabs 30 cm. The van keeps its look: its walls,
   its colors and its light background.
+- An open plan. Two rooms inside, next to each other on a layer, can be
+  open. Then no wall stands between them: for example, a living room that
+  is open to a dining room. The sheet of a room has a box "No wall to" for each such
+  room (`DIY.Build.open_choices/2`, `set_open/3`). The build keeps the
+  pairs (`open`, 200 at most), and a link of a share keeps them too. A
+  pair goes away with a room, or when a room moves away from the other.
 - The picture of an item is its icon at the size of the item
   (`DIYWeb.Icon.Shapes.placed/2`). A turn turns the model, and a face
   that looks away does not show. Solar panels on a roof lie on its slope.

@@ -282,6 +282,57 @@ defmodule DIYWeb.CutawayTest do
              )
   end
 
+  test "two rooms that are open to each other have no wall between them" do
+    build = house()
+    {kitchen, living} = {kitchen_room(build), Enum.find(build.rooms, &(&1.name == "Living room"))}
+
+    # The length (meters) of the walls of the living room on its side at
+    # the kitchen (x0).
+    length = fn build ->
+      [ground | _] = Cutaway.view(build).levels
+
+      for(
+        %{kind: :wall, room: room, id: id, box: {_, y0, _, _, y1, _}} <- ground.objects,
+        room == living.id,
+        id =~ "-x0-",
+        do: y1 - y0
+      )
+      |> Enum.sum()
+    end
+
+    {:ok, open} = Build.set_open(build, kitchen.id, [living.id])
+    {a0, a1} = {living.plan.y, living.plan.y + living.plan.d}
+    {b0, b1} = {kitchen.plan.y, kitchen.plan.y + kitchen.plan.d}
+    shared = (min(a1, b1) - max(a0, b0)) * 0.0254
+    assert shared > 0
+    assert_in_delta length.(build) - length.(open), shared, 1.0e-6
+
+    # A side on an open room and on a closed room. The back of bedroom 3
+    # (y0, from 144 to 438 in) is on bedroom 1 up to 216 in, then on
+    # bedroom 2. Open to bedroom 1, only the wall on bedroom 2 stays.
+    [one, three] = for name <- ["Bedroom 1", "Bedroom 3"], do: room(build, name)
+    {:ok, open} = Build.set_open(build, three, [one])
+
+    walls = fn build ->
+      level = Enum.find(Cutaway.view(build).levels, &(&1.id == "f2"))
+      for %{kind: :wall} = w <- level.objects, do: {w.room, w.id, w.box}
+    end
+
+    back = fn walls ->
+      for {^three, id, {x0, _, _, x1, _, _}} <- walls,
+          id =~ "-y0-",
+          do: {round(x0 / 0.0254), round(x1 / 0.0254)}
+    end
+
+    {before, now} = {walls.(build), walls.(open)}
+    assert back.(before) == [{144, 438}]
+    assert back.(now) == [{216, 438}]
+
+    # The other walls do not change.
+    assert Enum.reject(before, &(elem(&1, 0) == three and elem(&1, 1) =~ "-y0-")) ==
+             Enum.reject(now, &(elem(&1, 0) == three and elem(&1, 1) =~ "-y0-"))
+  end
+
   test "a wall between two rooms is low where it can hide an item of the room behind it" do
     build = house()
 

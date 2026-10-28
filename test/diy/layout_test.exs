@@ -90,6 +90,26 @@ defmodule DIY.LayoutTest do
     assert Layout.box(plans).w >= 90 * 4
   end
 
+  test "two plans touch when a side of one is on a side of the other" do
+    a = %{x: 0, y: 0, w: 10, d: 10}
+
+    for b <- [
+          %{x: 10, y: 5, w: 5, d: 10},
+          %{x: -5, y: 0, w: 5, d: 1},
+          %{x: 2, y: 10, w: 3, d: 3},
+          %{x: 2, y: -3, w: 3, d: 3}
+        ],
+        do: assert(Layout.touch?(a, b) and Layout.touch?(b, a))
+
+    # A corner, a gap, or an overlap is not a touch.
+    for b <- [
+          %{x: 10, y: 10, w: 5, d: 5},
+          %{x: 11, y: 0, w: 5, d: 5},
+          %{x: 5, y: 5, w: 10, d: 10}
+        ],
+        do: refute(Layout.touch?(a, b))
+  end
+
   test "the layers of the rooms" do
     assert Layout.layer(%{level: "outside", place: :outdoor}) == "ground"
     assert Layout.layer(%{level: "f1", place: :indoor}) == "ground"
