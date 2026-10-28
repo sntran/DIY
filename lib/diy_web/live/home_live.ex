@@ -857,6 +857,13 @@ defmodule DIYWeb.HomeLive do
     with_build(socket, Build.set_doorways(socket.assigns.build, id, doors))
   end
 
+  # The shape of a roof (DIY.Roof): no base is the top floor.
+  def handle_event("room_roof", %{"room_id" => id} = params, socket) do
+    base = if params["base"] in [nil, ""], do: nil, else: params["base"]
+    roof = %{"slope" => params["slope"], "pitch" => parse_int(params["pitch"]), "base" => base}
+    with_build(socket, Build.set_roof(socket.assigns.build, id, roof))
+  end
+
   # The search of the sheet Add (DIYWeb.Inside).
   def handle_event("add_search", %{"q" => q}, socket) when is_binary(q),
     do: {:noreply, assign(socket, :add_query, String.slice(q, 0, 40))}

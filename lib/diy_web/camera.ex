@@ -196,7 +196,12 @@ defmodule DIYWeb.Camera do
   on the far side of it. Else the one with the smaller key (the depth of its
   center, `depth/2`) comes first. A loose object comes by its key only. It
   is an item that is larger than its room (it goes through walls), or a
-  flat rug. A part that stands behind a rug does not cover it.
+  flat rug. A tall loose object (`tall: true`) is a tree in a yard. It
+  also comes after a box that is all on its far side, along the axis that
+  goes most to the eye (`depth_axis/1`). And it comes before a box on its
+  near side. For example, a tree in front of the house paints after the
+  roof. A part that
+  stands behind a rug does not cover it.
   Three boxes can each be behind the next one (a cycle). Then the box with
   the fewest boxes before it comes first.
 
@@ -210,6 +215,7 @@ defmodule DIYWeb.Camera do
   """
   def order(objects, camera) do
     screens = Map.new(objects, &{&1.id, screen(camera, &1.polys)})
+    axis = depth_axis(camera)
 
     after_ =
       Map.new(objects, fn a ->
@@ -218,7 +224,7 @@ defmodule DIYWeb.Camera do
            b <- objects,
            b.id != a.id,
            cover?(screens[a.id], screens[b.id]),
-           before?(a, b),
+           before?(a, b, axis),
            do: b.id
          )}
       end)
@@ -230,7 +236,7 @@ defmodule DIYWeb.Camera do
 
   # The object a must paint before the object b (they cover the same part
   # of the screen).
-  defp before?(a, b) do
+  defp before?(a, b, axis) do
     case {flat?(a), flat?(b)} do
       {true, true} ->
         false
@@ -241,12 +247,24 @@ defmodule DIYWeb.Camera do
       {false, true} ->
         goes_lower?(a.box, b.box)
 
+      {false, false} when a.loose or b.loose ->
+        (tall?(a) or tall?(b)) and far_side?(a.box, b.box, axis)
+
       {false, false} ->
-        not a.loose and not b.loose and behind?(a.box, b.box) and not behind?(b.box, a.box)
+        behind?(a.box, b.box) and not behind?(b.box, a.box)
+    end
+  end
+
+  # The box a is all on the far side of the box b along an axis.
+  defp far_side?({ax0, ay0, _, ax1, ay1, _}, {bx0, by0, _, bx1, by1, _}, axis) do
+    case axis do
+      :x -> ax1 <= bx0 + 1.0e-6 and ax0 < bx1
+      :y -> ay1 <= by0 + 1.0e-6 and ay0 < by1
     end
   end
 
   defp flat?(object), do: Map.get(object, :flat, false)
+  defp tall?(object), do: Map.get(object, :tall, false)
 
   # The box a starts at or over the top of the flat box f, and rises over
   # it.
