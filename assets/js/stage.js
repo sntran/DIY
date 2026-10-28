@@ -37,10 +37,11 @@ export const easeIn = (t) => t ** 3
 export const frameAt = (part, count) => Math.min(count - 1, Math.max(0, Math.round(part * (count - 1))))
 
 // The box of the drawing of an item on the plan: all its polygons but its
-// shadow. Null when it does not show.
+// shadow. The shadow of the crown of a cut tree (p-crown) is in the box: the
+// whole tree comes out of it. Null when it does not show.
 export function rectOf(group) {
   if (!group) return null
-  const rects = [...group.querySelectorAll("polygon:not(.p-shadow)")]
+  const rects = [...group.querySelectorAll("polygon:not(.p-shadow), polygon.p-crown")]
     .map((p) => p.getBoundingClientRect())
     .filter((r) => r.width > 0 || r.height > 0)
   if (rects.length === 0) return null

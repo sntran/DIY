@@ -18,7 +18,8 @@ defmodule DIYWeb.Stage do
   The hook `Stage` (`assets/js/stage.js`) puts the first frame on the item
   of the plan. The first frame is the model of the kind, at its own size and
   with no turn. So an item with a turn, or with a size of its own, changes a
-  little at the start. Then the hook moves the model to the front of the
+  little at the start. The plan cuts a tree (`DIYWeb.Icon.TreeShapes`): its
+  first frame is the whole tree over the shadow of its crown. Then the hook moves the model to the front of the
   page, and shows the frames one after the other while it moves. A close
   does the same in the other direction.
 
@@ -37,7 +38,7 @@ defmodule DIYWeb.Stage do
 
   alias DIY.Catalog
   alias DIYWeb.Camera
-  alias DIYWeb.Icon.{Shapes, StationShapes, VanShapes}
+  alias DIYWeb.Icon.{Shapes, StationShapes, TreeShapes, VanShapes}
 
   # The frames of the flipbook, and the units of the largest side of the
   # drawing.
@@ -149,7 +150,7 @@ defmodule DIYWeb.Stage do
     # A new version of the code that draws the frames has new frames.
     modules =
       Enum.map(
-        [__MODULE__, Shapes, StationShapes, VanShapes, Camera],
+        [__MODULE__, Shapes, StationShapes, TreeShapes, VanShapes, Camera],
         & &1.module_info(:md5)
       )
 

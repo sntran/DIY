@@ -2,13 +2,13 @@ defmodule DIYWeb.Icon.TreeShapes do
   @moduledoc """
   The models of the kinds of a tree (`DIY.Catalog.tree_kinds/0`) at a size
   in meters, as parts of `DIYWeb.Icon.Shapes`. The crown of a model fills
-  its size. The trunk and the bed of mulch have their real size: they do
-  not get larger with the crown.
+  its size. The trunks (`DIY.Layout.trunks/1`) and the bed of mulch have
+  their real size: they do not get larger with the crown.
 
   The leaves are flat shapes that look to the camera of the house (`ball/3`).
   So a tree looks the same at each turn.
 
-  - Live oak: a thick trunk, and a wide round crown of five balls.
+  - Live oak: a thick trunk, and a wide round crown of eight balls.
   - Pine: a tall thin trunk, and five cones of branches, one over the other.
   - Palm: a tall thin trunk, and long leaves that hang from its top.
   - Crape myrtle: three thin trunks, and a crown of leaves with pink
@@ -16,7 +16,8 @@ defmodule DIYWeb.Icon.TreeShapes do
 
   The view of the rooms cuts a tree (`cut/3`). It shows the trunk to a low
   height, and the shadow of the crown on the ground. So the tree does not
-  hide the rooms.
+  hide the rooms. The shadow of the crown has the class `p-crown` too: the
+  flipbook of the stage covers it (`DIYWeb.Stage`).
   """
 
   alias DIYWeb.{Camera, Geometry}
@@ -30,8 +31,8 @@ defmodule DIYWeb.Icon.TreeShapes do
   the front.
   """
   def model(kind, {w, d, h}) do
-    %{at: {x, y, z}, trunk: r, crown: crown} = fit(kind, {w, d, h})
-    trunks = kind |> trunks({x, y}, z, r) |> Enum.sort_by(&depth(elem(&1, 1)))
+    %{top: top, crown: crown} = fit(kind, {w, d, h})
+    trunks = kind |> trunks({w, d, h}, top) |> Enum.sort_by(&depth(elem(&1, 1)))
     [mulch({w / 2, d / 2}, min(w, d)), {:group, trunks ++ in_front(crown, trunks)}]
   end
 
@@ -41,13 +42,14 @@ defmodule DIYWeb.Icon.TreeShapes do
   crown on the ground.
   """
   def cut(kind, {w, d, h}, height) do
-    %{at: {x, y, z}, trunk: trunk} = fit(kind, {w, d, h})
+    %{top: top} = fit(kind, {w, d, h})
     {u, v} = {{w / 2, 0.0, 0.0}, {0.0, d / 2, 0.0}}
+    shadow = Geometry.circle({w / 2, d / 2, 0.005}, u, v, 1.0, 24)
 
     [
-      {:face, Geometry.circle({w / 2, d / 2, 0.005}, u, v, 1.0, 24), {0, 0, 1}, "p-shadow"},
+      {:face, shadow, {0, 0, 1}, "p-shadow p-crown"},
       mulch({w / 2, d / 2}, min(w, d)),
-      {:group, trunks(kind, {x, y}, min(z, height), trunk)}
+      {:group, trunks(kind, {w, d, h}, min(top, height))}
     ]
   end
 
@@ -110,11 +112,10 @@ defmodule DIYWeb.Icon.TreeShapes do
   # The crown of a kind at the size of the tree. The crown is the shapes of
   # `crown/1`, with one scale. The crown is as large as it can be in the
   # size. Its top is at the top of the tree, and its middle is over the
-  # middle of the tree. `at` is the point of the crown where the trunk
-  # ends (the point {0, 0} of `crown/1`). `trunk` is the radius of the
-  # trunk: a tall tree has a thicker trunk.
+  # middle of the tree. `top` is the height where the trunk ends: the
+  # point {0, 0, 0} of `crown/1`.
   defp fit(kind, {w, d, h}) do
-    {shapes, share, {r0, r1}} = crown(kind)
+    {shapes, share} = crown(kind)
     {{x0, y0, z0}, {x1, y1, z1}} = DIYWeb.Icon.Shapes.bounds(shapes)
     k = Enum.min([w / (x1 - x0), d / (y1 - y0), share * h / (z1 - z0)])
     {dx, dy, dz} = {(w - k * (x0 + x1)) / 2, (d - k * (y0 + y1)) / 2, h - k * z1}
@@ -124,14 +125,13 @@ defmodule DIYWeb.Icon.TreeShapes do
       for {:face, corners, normal, class} <- shapes,
           do: {:face, Enum.map(corners, point), normal, class}
 
-    %{at: {dx, dy, dz}, trunk: min(r1, max(r0, 0.025 * h)), crown: crown}
+    %{top: dz, crown: crown}
   end
 
   # The shapes of the crown of a kind, around the end of the trunk at
   # {0, 0, 0}, in units of any size. Also the most of the height of the
-  # tree that the crown can take. Also the least and the most radius of
-  # the trunk in meters. `in_front/2` puts the shapes in the order of the
-  # paint.
+  # tree that the crown can take. `in_front/2` puts the shapes in the
+  # order of the paint.
   defp crown("pine") do
     {u, _v} = billboard()
     up = {0.0, 0.0, 1.0}
@@ -148,7 +148,7 @@ defmodule DIYWeb.Icon.TreeShapes do
         ]
       end
 
-    {List.flatten(tiers), 0.88, {0.08, 0.3}}
+    {List.flatten(tiers), 0.88}
   end
 
   defp crown("palm") do
@@ -179,7 +179,7 @@ defmodule DIYWeb.Icon.TreeShapes do
          class}
       end
 
-    {leaves, 0.45, {0.1, 0.2}}
+    {leaves, 0.45}
   end
 
   defp crown("crape_myrtle") do
@@ -201,7 +201,7 @@ defmodule DIYWeb.Icon.TreeShapes do
           part <- ball({x + 0.7 * ex, y + 0.7 * ey, z + 0.7 * ez}, 0.2, "pink"),
           do: part
 
-    {leaves ++ flowers, 0.65, {0.05, 0.12}}
+    {leaves ++ flowers, 0.65}
   end
 
   defp crown(_live_oak) do
@@ -219,17 +219,20 @@ defmodule DIYWeb.Icon.TreeShapes do
           part <- ball(center, r, "leaf"),
           do: part
 
-    {shapes, 0.72, {0.12, 0.45}}
+    {shapes, 0.72}
   end
 
-  # The trunk of a tree from the ground to a height. A crape myrtle has
-  # three thin trunks.
-  defp trunks("crape_myrtle", {x, y}, z, r),
-    do:
-      for(
-        {dx, dy} <- [{-2.5, 0.0}, {2.5, 0.0}, {0.0, 2.5}],
-        do: {:cyl, {x + dx * r, y + dy * r, 0}, r, z, "wood"}
-      )
+  # The trunks of a tree from the ground to a height (`DIY.Layout.trunks/1`).
+  defp trunks(kind, {w, d, h}, top) do
+    m = 0.0254
 
-  defp trunks(_kind, {x, y}, z, r), do: [{:cyl, {x, y, 0}, r, z, "wood"}]
+    tree = %{
+      type: "tree",
+      params: %{"kind" => kind},
+      size: %{w: w / m, d: d / m, h: h / m},
+      turn: 0
+    }
+
+    for {x, y, r} <- DIY.Layout.trunks(tree), do: {:cyl, {x * m, y * m, 0}, r * m, top, "wood"}
+  end
 end

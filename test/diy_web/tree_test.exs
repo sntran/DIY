@@ -97,27 +97,70 @@ defmodule DIYWeb.TreeTest do
       model = TreeShapes.model(kind, size)
 
       for {:cyl, _center, r, _h, "wood"} <- List.flatten(Enum.map(model, &parts/1)),
-          do: assert(r >= 0.05 and r <= 0.45, kind)
+          do: assert(r >= 0.05 and r <= 18 * @m + 1.0e-9, kind)
 
       [{:face, mulch, {0, 0, 1}, "i-wood-t"} | _] = model
       {xs, _ys, _zs} = unzip3(mulch)
       assert Enum.max(xs) - Enum.min(xs) <= 2.0 + 1.0e-9
     end
 
-    # A taller tree has a thicker trunk.
-    trunk = fn h ->
-      [{:cyl, _, r, _, _} | _] = parts(List.last(TreeShapes.model("live_oak", {9.0, 9.0, h})))
+    # A taller tree has a thicker trunk, up to the limit of its kind.
+    trunk = fn kind, h ->
+      [{:cyl, _, r, _, _} | _] = parts(List.last(TreeShapes.model(kind, {9.0, 9.0, h})))
       r
     end
 
-    assert trunk.(6.0) < trunk.(12.0)
+    assert trunk.("live_oak", 6.0) < trunk.("live_oak", 12.0)
+    assert trunk.("live_oak", 20.0) == trunk.("live_oak", 30.0)
+    assert trunk.("palm", 4.0) < trunk.("palm", 8.0)
+  end
+
+  test "the trunks of the model are in the box of the trunks on the plan" do
+    for {kind, _name} <- Catalog.tree_kinds(),
+        {w, d, h} <- [Catalog.tree_size(kind), {60, 60, 216}, {360, 360, 720}, {12, 360, 480}],
+        turn <- [0, 1] do
+      item = %{
+        type: "tree",
+        at: %{x: 0, y: 0},
+        size: %{w: w, d: d, h: h},
+        turn: turn,
+        params: %{"kind" => kind}
+      }
+
+      foot = Layout.foot_box(item)
+      {ew, ed} = Layout.extent(item)
+      size = {ew * @m, ed * @m, h * @m}
+
+      for {:cyl, {x, y, _z}, r, _h, "wood"} <-
+            Enum.flat_map(TreeShapes.model(kind, size), &parts/1) do
+        {x0, x1, y0, y1} = {(x - r) / @m, (x + r) / @m, (y - r) / @m, (y + r) / @m}
+        assert x0 >= foot.x and x1 <= foot.x + foot.w, "#{kind} #{inspect({w, d, h, turn})}"
+        assert y0 >= foot.y and y1 <= foot.y + foot.d, "#{kind} #{inspect({w, d, h, turn})}"
+        assert x0 >= 0 and x1 <= ew + 1.0e-6 and y0 >= 0 and y1 <= ed + 1.0e-6
+      end
+    end
+
+    # The trunks of a crape myrtle in front of a door: the tree does not go.
+    build = build()
+    {kitchen, yard} = {room(build, "Kitchen"), room(build, "Backyard")}
+    {:ok, build} = Build.set_doorways(build, yard.id, %{kitchen.id => nil})
+    [space] = Build.door_spaces(build, yard.id)
+    {:ok, build, myrtle} = Build.add_item(build, yard.id, "tree")
+    {:ok, build} = Build.update_item(build, myrtle, %{"kind" => "crape_myrtle"})
+    {:ok, build} = Build.size_item(build, myrtle, %{w: 60, d: 60, h: 216})
+    assert Build.place_item(build, myrtle, yard.id, %{x: space.x + 14, y: 0}) == {:error, :door}
   end
 
   test "a tree looks the same at each turn, and fills its turned space" do
     for {kind, _name} <- Catalog.tree_kinds() do
-      size = {3.0, 3.0, 6.0}
-      look = fn turn -> Shapes.placed({"tree", kind}, frame(size, turn)) end
-      assert Enum.all?(1..3, &(look.(&1) == look.(0))), kind
+      look = fn size, turn -> Shapes.placed({"tree", kind}, frame(size, turn)) end
+      assert Enum.all?(1..3, &(look.({3.0, 3.0, 6.0}, &1) == look.({3.0, 3.0, 6.0}, 0))), kind
+
+      # A tree of 4 by 2 meters, after a quarter turn, is the tree of 2 by
+      # 4 meters.
+      assert look.({4.0, 2.0, 6.0}, 1) == look.({2.0, 4.0, 6.0}, 0), kind
+      assert look.({4.0, 2.0, 6.0}, 3) == look.({2.0, 4.0, 6.0}, 2), kind
+      assert look.({4.0, 2.0, 6.0}, 2) == look.({4.0, 2.0, 6.0}, 0), kind
     end
 
     # A tree of 91 by 60 inches, after a quarter turn: its space is 60 by
@@ -144,10 +187,10 @@ defmodule DIYWeb.TreeTest do
     cut = Cutaway.item_view(tree, yard, 0.0, camera)
     {_, _, _, _, _, high} = cut.box
     assert high <= 0.75 + 1.0e-9
-    assert Enum.any?(cut.polys, fn {_corners, class} -> class == "p-shadow" end)
+    assert Enum.any?(cut.polys, fn {_corners, class} -> class == "p-shadow p-crown" end)
 
     # The shadow covers the space of the tree.
-    shadow = for {corners, "p-shadow"} <- cut.polys, {x, y, _z} <- corners, do: {x, y}
+    shadow = for {corners, "p-shadow p-crown"} <- cut.polys, {x, y, _z} <- corners, do: {x, y}
     {xs, ys} = Enum.unzip(shadow)
     {w, d} = Layout.extent(tree)
     assert_in_delta Enum.max(xs) - Enum.min(xs), w * @m, 0.01
@@ -175,11 +218,20 @@ defmodule DIYWeb.TreeTest do
     {:ok, build} = Build.set_doorways(build, yard.id, %{kitchen.id => nil})
     [space] = Build.door_spaces(build, yard.id)
 
-    # The box of the trunk: 24 inches at the middle of the tree, or less in
-    # a small tree.
+    # The box of the trunk, with 1 inch more at each side. A live oak of
+    # 300 inches has a trunk of 7.5 inches. A small tree has a thinner
+    # trunk: it stays in the space of the tree.
     tree = %{type: "tree", at: %{x: 10, y: 20}, size: %{w: 200, d: 100, h: 300}, turn: 0}
-    assert Layout.foot_box(tree) == %{x: 98, y: 58, w: 24, d: 24}
-    assert Layout.foot_box(%{tree | size: %{w: 10, d: 100, h: 300}}).w == 10
+    assert Layout.trunks(tree) == [{100.0, 50.0, 7.5}]
+    assert Layout.foot_box(tree) == %{x: 101, y: 61, w: 18, d: 18}
+
+    assert Layout.foot_box(%{tree | size: %{w: 10, d: 100, h: 300}}) == %{
+             x: 10,
+             y: 64,
+             w: 10,
+             d: 12
+           }
+
     fridge = %{type: "fridge", at: %{x: 1, y: 2}, size: nil, turn: 0, params: %{}}
     assert Layout.foot_box(fridge) == Layout.item_box(fridge)
 
