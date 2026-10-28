@@ -21,6 +21,8 @@ defmodule DIY.Profile do
   """
 
   @flat List.duplicate(1, 24)
+  # Furniture uses no power.
+  @furniture DIY.Catalog.furniture()
   # The start of the sleep, for a CPAP.
   @sleep 22
 
@@ -193,7 +195,7 @@ defmodule DIY.Profile do
              "battery_switch",
              "battery_monitor",
              "pool"
-           ],
+           ] or type in @furniture,
       do: 0.0
 
   def watts(%{params: %{"watts" => watts}}), do: watts / 1

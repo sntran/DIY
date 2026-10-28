@@ -1795,6 +1795,7 @@ its turn. A length is in inches.
       chairs;
     - "dining": a table with chairs;
     - "breakfast": a small round table with two chairs;
+    - "half bath": a toilet and a vanity;
     - "bath": a bath, a toilet, a vanity and a mat;
     - "garage": a bench and a shelf;
     - "laundry": a shelf and a basket;
@@ -1822,6 +1823,10 @@ its turn. A length is in inches.
     only. It uses no power, and a tap goes through it to the floor of the
     room. It moves with its room in a drag. The leaves of a tree are discs
     that look to the camera.
+  - The person can also put furniture at its place, as an item (see
+    "Furniture as an item"). A placed bathtub or shower takes the place of
+    the bath of the name. A placed table takes the place of the table of
+    the name, and a placed tree takes the place of the tree.
   - A long wall has a picture in a frame at the left of its window. A
     garage, a laundry and an attic have no picture, and no picture is
     behind an item (4 feet from the wall at most).
@@ -4509,6 +4514,31 @@ pool.
   of its water. The deck of the water was 3 ft at the sides and at the
   front, and 10 ft at the back. A room on the level of the roof gets no
   pool. The new item gets an id after the largest id of the file.
+
+### Furniture as an item
+
+The owner asked for this (October 2026): the name of a room does not put
+a fireplace, a bath or a tree at its real place. The person puts these
+pieces at their place, as items (`DIY.Catalog.furniture/0`):
+
+- a fireplace, a bathtub, a shower and a pantry go in a room inside;
+- a table with chairs goes in a room inside or outside;
+- a tree goes in a room outside.
+
+A piece of furniture uses no power and has no parameter. As a pool, it
+is in `DIY.Estimate.no_use/0`: its sheet says "It is furniture: it uses
+no power.", with no cost. A station does not run it. The size of each
+kind is the size of its model (`DIYWeb.Decor`). The person drags it,
+turns it and changes its size, as each item. The fire of a fireplace
+flickers, as the flame of a furnace. A tree has a round bed of mulch
+under it, so its space is a square. It looks the same at each turn: its
+leaves look to the camera. A placed piece takes the place of the piece
+of the same kind that the name of the room gives:
+
+- a bathtub or a shower: the bath;
+- a table: the table of a dining room, and the round table of a
+  breakfast room or of a yard;
+- a tree: the tree of a yard.
 
 ### The places of an item
 

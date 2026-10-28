@@ -457,7 +457,8 @@ defmodule DIYWeb.CutawayTest do
           uniq: true,
           do: type
 
-    assert Enum.sort(looped) == ~w(furnace heat_strips space_heater)
+    # The fire of a fireplace flickers too.
+    assert Enum.sort(looped) == ~w(fireplace furnace heat_strips space_heater)
 
     for {model, _name, _numbers, _source} <- Catalog.van_models(),
         {:poly, _corners, class} <- Shapes.placed_model(Shapes.van(model), frame),
