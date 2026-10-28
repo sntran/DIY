@@ -18,7 +18,8 @@ defmodule DIYWeb.AboutControllerTest do
     # The data of a person: what goes to the server, and what stays.
     for fact <- [
           "The server uses it while the page is open, but it does not save it.",
-          "When you share a house, the link holds the house and its ZIP code.",
+          "the link holds the house and the months of your meter",
+          "Only the sums of each month, and the text of the plan, go to the server.",
           "The server keeps it for one year after the last visit of the link.",
           "a point near your ZIP code to NASA POWER and to Open-Meteo",
           "the server sends the ZIP code to Power to Choose",

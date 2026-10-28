@@ -50,11 +50,13 @@ app before the person tries it:
   - The app needs no account, and it asks for no street address.
   - The house is saved only on the device. The server uses it while
     the page is open, but it does not save it.
-  - A share link holds the house and its ZIP code.
+  - A share link holds the house and the months of the meter. It holds
+    the ZIP code too, if the person keeps it.
   - Only a short link makes the server save a copy, for one year after
     its last visit.
-  - The file of a smart meter and the PDF of a plan stay on the
-    device. Only their numbers go to the server.
+  - The device reads the file of a smart meter and the PDF of a plan.
+    Only the sums of each month, and the text of the plan, go to the
+    server.
   - The weather services get a point near the ZIP code. Power to
     Choose gets a ZIP code of Texas.
   - The keys of the links to Home Assistant and to a maker are saved

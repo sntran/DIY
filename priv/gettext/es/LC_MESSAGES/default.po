@@ -1160,7 +1160,7 @@ msgstr "Acerca de Small Steps Home"
 msgid "About this app"
 msgstr "Acerca de esta aplicación"
 
-#: lib/diy_web/controllers/about_html.ex:138
+#: lib/diy_web/controllers/about_html.ex:139
 #, elixir-autogen, elixir-format
 msgid "Go to the app"
 msgstr "Ir a la aplicación"
@@ -1175,27 +1175,27 @@ msgstr "Small Steps Home muestra a dónde va la electricidad de una casa. Luego 
 msgid "The app is free. It has no ads, and it sells nothing."
 msgstr "La aplicación es gratuita. No tiene anuncios y no vende nada."
 
-#: lib/diy_web/controllers/about_html.ex:104
+#: lib/diy_web/controllers/about_html.ex:105
 #, elixir-autogen, elixir-format
 msgid "The bill is an estimate from the weather of your place and the items of your house. It is a range, not one number."
 msgstr "La factura es una estimación a partir del clima de su zona y los artículos de su casa. Es un rango, no un solo número."
 
-#: lib/diy_web/controllers/about_html.ex:124
+#: lib/diy_web/controllers/about_html.ex:125
 #, elixir-autogen, elixir-format
 msgid "The code"
 msgstr "El código"
 
-#: lib/diy_web/controllers/about_html.ex:126
+#: lib/diy_web/controllers/about_html.ex:127
 #, elixir-autogen, elixir-format
 msgid "The code of the app is public. Anyone can read how it works."
 msgstr "El código de la aplicación es público. Cualquier persona puede leer cómo funciona."
 
-#: lib/diy_web/controllers/about_html.ex:66
+#: lib/diy_web/controllers/about_html.ex:67
 #, elixir-autogen, elixir-format
 msgid "The copy is locked with a key that only the link has."
 msgstr "La copia está cifrada con una clave que solo tiene el enlace."
 
-#: lib/diy_web/controllers/about_html.ex:101
+#: lib/diy_web/controllers/about_html.ex:102
 #, elixir-autogen, elixir-format
 msgid "Where the numbers come from"
 msgstr "De dónde vienen los números"
@@ -1210,75 +1210,65 @@ msgstr "Quién la hizo"
 msgid "Your data"
 msgstr "Sus datos"
 
-#: lib/diy_web/controllers/about_html.ex:134
+#: lib/diy_web/controllers/about_html.ex:135
 #, elixir-autogen, elixir-format
 msgid "An issue is public, and it needs a GitHub account."
 msgstr "Un reporte es público y necesita una cuenta de GitHub."
 
-#: lib/diy_web/controllers/about_html.ex:130
+#: lib/diy_web/controllers/about_html.ex:131
 #, elixir-autogen, elixir-format
 msgid "Do you have a question, or did you find a problem?"
 msgstr "¿Tiene una pregunta o encontró un problema?"
 
-#: lib/diy_web/controllers/about_html.ex:112
+#: lib/diy_web/controllers/about_html.ex:113
 #, elixir-autogen, elixir-format
 msgid "Else it is the average of your state from the US Energy Information Administration."
 msgstr "Si no, es el promedio de su estado según la Administración de Información Energética de EE. UU."
 
-#: lib/diy_web/controllers/about_html.ex:87
+#: lib/diy_web/controllers/about_html.ex:88
 #, elixir-autogen, elixir-format
 msgid "For Pecron, each request goes through the server, which does not keep the key."
 msgstr "Para Pecron, cada solicitud pasa por el servidor, que no guarda la clave."
 
-#: lib/diy_web/controllers/about_html.ex:79
+#: lib/diy_web/controllers/about_html.ex:80
 #, elixir-autogen, elixir-format
 msgid "For a ZIP code in Texas, the server sends the ZIP code to Power to Choose, for the prices of the plans."
 msgstr "Para un código postal de Texas, el servidor envía el código postal a Power to Choose, para los precios de los planes."
 
-#: lib/diy_web/controllers/about_html.ex:74
+#: lib/diy_web/controllers/about_html.ex:75
 #, elixir-autogen, elixir-format
 msgid "For the weather, the server sends a point near your ZIP code to NASA POWER and to Open-Meteo."
 msgstr "Para el clima, el servidor envía un punto cerca de su código postal a NASA POWER y a Open-Meteo."
 
-#: lib/diy_web/controllers/about_html.ex:63
+#: lib/diy_web/controllers/about_html.ex:64
 #, elixir-autogen, elixir-format
 msgid "Only a short link makes the server save a copy of the house. The server keeps it for one year after the last visit of the link."
 msgstr "Solo un enlace corto hace que el servidor guarde una copia de la casa. El servidor la guarda durante un año después de la última visita del enlace."
 
-#: lib/diy_web/controllers/about_html.ex:132
+#: lib/diy_web/controllers/about_html.ex:133
 #, elixir-autogen, elixir-format
 msgid "Open an issue on GitHub"
 msgstr "Abra un reporte en GitHub"
 
-#: lib/diy_web/controllers/about_html.ex:69
-#, elixir-autogen, elixir-format
-msgid "The app reads the file of your smart meter and the PDF of a plan on this device. Only the numbers that it needs go to the server."
-msgstr "La aplicación lee el archivo de su medidor inteligente y el PDF de un plan en este dispositivo. Solo los números que necesita van al servidor."
-
-#: lib/diy_web/controllers/about_html.ex:92
+#: lib/diy_web/controllers/about_html.ex:93
 #, elixir-autogen, elixir-format
 msgid "The app runs on Cloudflare. It sets a cookie for the safety of its forms, and a cookie for the language that you choose."
 msgstr "La aplicación funciona en Cloudflare. Usa una cookie para la seguridad de sus formularios y una cookie para el idioma que usted elige."
 
-#: lib/diy_web/controllers/about_html.ex:84
+#: lib/diy_web/controllers/about_html.ex:85
 #, elixir-autogen, elixir-format
 msgid "The app saves your keys for Home Assistant and for the maker of a power station only on this device."
 msgstr "La aplicación guarda sus claves de Home Assistant y del fabricante de una estación de energía solo en este dispositivo."
 
-#: lib/diy_web/controllers/about_html.ex:109
+#: lib/diy_web/controllers/about_html.ex:110
 #, elixir-autogen, elixir-format
 msgid "The price is the price that you give. Else, in Texas, it is the median of the plans on Power to Choose."
 msgstr "El precio es el precio que usted da. Si no, en Texas, es la mediana de los planes en Power to Choose."
 
-#: lib/diy_web/controllers/about_html.ex:117
+#: lib/diy_web/controllers/about_html.ex:118
 #, elixir-autogen, elixir-format
 msgid "The worksheet of the plans reads the Electricity Facts Label (EFL) of each plan."
 msgstr "La hoja de trabajo de los planes lee la etiqueta de datos de electricidad (EFL) de cada plan."
-
-#: lib/diy_web/controllers/about_html.ex:58
-#, elixir-autogen, elixir-format
-msgid "When you share a house, the link holds the house and its ZIP code. Anyone with the link can see them."
-msgstr "Cuando comparte una casa, el enlace contiene la casa y su código postal. Cualquier persona con el enlace puede verlos."
 
 #: lib/diy_web/controllers/about_html.ex:48
 #, elixir-autogen, elixir-format
@@ -1289,3 +1279,18 @@ msgstr "No necesita una cuenta. La aplicación no pide nombre, correo electróni
 #, elixir-autogen, elixir-format
 msgid "Your house is saved only in the browser of this device. The server uses it while the page is open, but it does not save it."
 msgstr "Su casa se guarda solo en el navegador de este dispositivo. El servidor la usa mientras la página está abierta, pero no la guarda."
+
+#: lib/diy_web/controllers/about_html.ex:61
+#, elixir-autogen, elixir-format
+msgid "Anyone with the link can see them."
+msgstr "Cualquier persona con el enlace puede verlos."
+
+#: lib/diy_web/controllers/about_html.ex:70
+#, elixir-autogen, elixir-format
+msgid "The app reads the file of your smart meter and the PDF of a plan on this device. Only the sums of each month, and the text of the plan, go to the server."
+msgstr "La aplicación lee el archivo de su medidor inteligente y el PDF de un plan en este dispositivo. Solo las sumas de cada mes y el texto del plan van al servidor."
+
+#: lib/diy_web/controllers/about_html.ex:58
+#, elixir-autogen, elixir-format
+msgid "When you share a house, the link holds the house and the months of your meter. It holds the ZIP code too, if you keep it."
+msgstr "Cuando comparte una casa, el enlace contiene la casa y los meses de su medidor. También contiene el código postal, si usted lo deja."

@@ -1158,7 +1158,7 @@ msgstr "Giới thiệu Small Steps Home"
 msgid "About this app"
 msgstr "Giới thiệu ứng dụng này"
 
-#: lib/diy_web/controllers/about_html.ex:138
+#: lib/diy_web/controllers/about_html.ex:139
 #, elixir-autogen, elixir-format
 msgid "Go to the app"
 msgstr "Đến ứng dụng"
@@ -1173,27 +1173,27 @@ msgstr "Small Steps Home cho thấy điện của một ngôi nhà đi đâu. Sa
 msgid "The app is free. It has no ads, and it sells nothing."
 msgstr "Ứng dụng miễn phí. Ứng dụng không có quảng cáo và không bán gì cả."
 
-#: lib/diy_web/controllers/about_html.ex:104
+#: lib/diy_web/controllers/about_html.ex:105
 #, elixir-autogen, elixir-format
 msgid "The bill is an estimate from the weather of your place and the items of your house. It is a range, not one number."
 msgstr "Hóa đơn là một ước tính từ thời tiết nơi bạn ở và các món đồ trong nhà bạn. Đó là một khoảng, không phải một con số."
 
-#: lib/diy_web/controllers/about_html.ex:124
+#: lib/diy_web/controllers/about_html.ex:125
 #, elixir-autogen, elixir-format
 msgid "The code"
 msgstr "Mã nguồn"
 
-#: lib/diy_web/controllers/about_html.ex:126
+#: lib/diy_web/controllers/about_html.ex:127
 #, elixir-autogen, elixir-format
 msgid "The code of the app is public. Anyone can read how it works."
 msgstr "Mã nguồn của ứng dụng là công khai. Ai cũng có thể đọc cách ứng dụng hoạt động."
 
-#: lib/diy_web/controllers/about_html.ex:66
+#: lib/diy_web/controllers/about_html.ex:67
 #, elixir-autogen, elixir-format
 msgid "The copy is locked with a key that only the link has."
 msgstr "Bản sao được mã hóa bằng một khóa chỉ có trong liên kết."
 
-#: lib/diy_web/controllers/about_html.ex:101
+#: lib/diy_web/controllers/about_html.ex:102
 #, elixir-autogen, elixir-format
 msgid "Where the numbers come from"
 msgstr "Các con số đến từ đâu"
@@ -1208,75 +1208,65 @@ msgstr "Ai đã làm ứng dụng"
 msgid "Your data"
 msgstr "Dữ liệu của bạn"
 
-#: lib/diy_web/controllers/about_html.ex:134
+#: lib/diy_web/controllers/about_html.ex:135
 #, elixir-autogen, elixir-format
 msgid "An issue is public, and it needs a GitHub account."
 msgstr "Một issue là công khai, và cần một tài khoản GitHub."
 
-#: lib/diy_web/controllers/about_html.ex:130
+#: lib/diy_web/controllers/about_html.ex:131
 #, elixir-autogen, elixir-format
 msgid "Do you have a question, or did you find a problem?"
 msgstr "Bạn có câu hỏi, hay bạn thấy một lỗi?"
 
-#: lib/diy_web/controllers/about_html.ex:112
+#: lib/diy_web/controllers/about_html.ex:113
 #, elixir-autogen, elixir-format
 msgid "Else it is the average of your state from the US Energy Information Administration."
 msgstr "Nếu không, đó là giá trung bình của tiểu bang bạn theo Cơ quan Thông tin Năng lượng Hoa Kỳ (EIA)."
 
-#: lib/diy_web/controllers/about_html.ex:87
+#: lib/diy_web/controllers/about_html.ex:88
 #, elixir-autogen, elixir-format
 msgid "For Pecron, each request goes through the server, which does not keep the key."
 msgstr "Với Pecron, mỗi yêu cầu đi qua máy chủ, và máy chủ không lưu khóa."
 
-#: lib/diy_web/controllers/about_html.ex:79
+#: lib/diy_web/controllers/about_html.ex:80
 #, elixir-autogen, elixir-format
 msgid "For a ZIP code in Texas, the server sends the ZIP code to Power to Choose, for the prices of the plans."
 msgstr "Với một mã ZIP ở Texas, máy chủ gửi mã ZIP đến Power to Choose để lấy giá của các gói điện."
 
-#: lib/diy_web/controllers/about_html.ex:74
+#: lib/diy_web/controllers/about_html.ex:75
 #, elixir-autogen, elixir-format
 msgid "For the weather, the server sends a point near your ZIP code to NASA POWER and to Open-Meteo."
 msgstr "Để lấy thời tiết, máy chủ gửi một điểm gần mã ZIP của bạn đến NASA POWER và Open-Meteo."
 
-#: lib/diy_web/controllers/about_html.ex:63
+#: lib/diy_web/controllers/about_html.ex:64
 #, elixir-autogen, elixir-format
 msgid "Only a short link makes the server save a copy of the house. The server keeps it for one year after the last visit of the link."
 msgstr "Chỉ liên kết ngắn mới khiến máy chủ lưu một bản sao của ngôi nhà. Máy chủ giữ bản sao trong một năm sau lần truy cập cuối của liên kết."
 
-#: lib/diy_web/controllers/about_html.ex:132
+#: lib/diy_web/controllers/about_html.ex:133
 #, elixir-autogen, elixir-format
 msgid "Open an issue on GitHub"
 msgstr "Mở một issue trên GitHub"
 
-#: lib/diy_web/controllers/about_html.ex:69
-#, elixir-autogen, elixir-format
-msgid "The app reads the file of your smart meter and the PDF of a plan on this device. Only the numbers that it needs go to the server."
-msgstr "Ứng dụng đọc tệp của đồng hồ điện thông minh và tệp PDF của một gói điện trên thiết bị này. Chỉ những con số cần thiết mới được gửi đến máy chủ."
-
-#: lib/diy_web/controllers/about_html.ex:92
+#: lib/diy_web/controllers/about_html.ex:93
 #, elixir-autogen, elixir-format
 msgid "The app runs on Cloudflare. It sets a cookie for the safety of its forms, and a cookie for the language that you choose."
 msgstr "Ứng dụng chạy trên Cloudflare. Ứng dụng đặt một cookie cho sự an toàn của các biểu mẫu, và một cookie cho ngôn ngữ bạn chọn."
 
-#: lib/diy_web/controllers/about_html.ex:84
+#: lib/diy_web/controllers/about_html.ex:85
 #, elixir-autogen, elixir-format
 msgid "The app saves your keys for Home Assistant and for the maker of a power station only on this device."
 msgstr "Ứng dụng chỉ lưu các khóa của bạn cho Home Assistant và cho hãng của trạm điện trên thiết bị này."
 
-#: lib/diy_web/controllers/about_html.ex:109
+#: lib/diy_web/controllers/about_html.ex:110
 #, elixir-autogen, elixir-format
 msgid "The price is the price that you give. Else, in Texas, it is the median of the plans on Power to Choose."
 msgstr "Giá là giá bạn nhập. Nếu không, ở Texas, đó là giá trung vị của các gói điện trên Power to Choose."
 
-#: lib/diy_web/controllers/about_html.ex:117
+#: lib/diy_web/controllers/about_html.ex:118
 #, elixir-autogen, elixir-format
 msgid "The worksheet of the plans reads the Electricity Facts Label (EFL) of each plan."
 msgstr "Bảng tính các gói điện đọc nhãn thông tin điện (EFL) của mỗi gói."
-
-#: lib/diy_web/controllers/about_html.ex:58
-#, elixir-autogen, elixir-format
-msgid "When you share a house, the link holds the house and its ZIP code. Anyone with the link can see them."
-msgstr "Khi bạn chia sẻ một ngôi nhà, liên kết chứa ngôi nhà và mã ZIP của nó. Ai có liên kết cũng có thể xem."
 
 #: lib/diy_web/controllers/about_html.ex:48
 #, elixir-autogen, elixir-format
@@ -1287,3 +1277,18 @@ msgstr "Bạn không cần tài khoản. Ứng dụng không hỏi tên, email, 
 #, elixir-autogen, elixir-format
 msgid "Your house is saved only in the browser of this device. The server uses it while the page is open, but it does not save it."
 msgstr "Ngôi nhà của bạn chỉ được lưu trong trình duyệt của thiết bị này. Máy chủ dùng nó khi trang đang mở, nhưng không lưu nó."
+
+#: lib/diy_web/controllers/about_html.ex:61
+#, elixir-autogen, elixir-format
+msgid "Anyone with the link can see them."
+msgstr "Ai có liên kết cũng có thể xem chúng."
+
+#: lib/diy_web/controllers/about_html.ex:70
+#, elixir-autogen, elixir-format
+msgid "The app reads the file of your smart meter and the PDF of a plan on this device. Only the sums of each month, and the text of the plan, go to the server."
+msgstr "Ứng dụng đọc tệp của đồng hồ điện thông minh và tệp PDF của một gói điện trên thiết bị này. Chỉ tổng của mỗi tháng và chữ của gói điện được gửi đến máy chủ."
+
+#: lib/diy_web/controllers/about_html.ex:58
+#, elixir-autogen, elixir-format
+msgid "When you share a house, the link holds the house and the months of your meter. It holds the ZIP code too, if you keep it."
+msgstr "Khi bạn chia sẻ một ngôi nhà, liên kết chứa ngôi nhà và các tháng của đồng hồ điện. Liên kết cũng chứa mã ZIP, nếu bạn giữ nó."

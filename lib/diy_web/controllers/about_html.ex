@@ -56,8 +56,9 @@ defmodule DIYWeb.AboutHTML do
             </li>
             <li>
               {gettext(
-                "When you share a house, the link holds the house and its ZIP code. Anyone with the link can see them."
+                "When you share a house, the link holds the house and the months of your meter. It holds the ZIP code too, if you keep it."
               )}
+              {gettext("Anyone with the link can see them.")}
             </li>
             <li>
               {gettext(
@@ -67,7 +68,7 @@ defmodule DIYWeb.AboutHTML do
             </li>
             <li>
               {gettext(
-                "The app reads the file of your smart meter and the PDF of a plan on this device. Only the numbers that it needs go to the server."
+                "The app reads the file of your smart meter and the PDF of a plan on this device. Only the sums of each month, and the text of the plan, go to the server."
               )}
             </li>
             <li>
