@@ -377,6 +377,26 @@ defmodule DIY.StackTest do
     assert Stack.heights([pool, Map.put(pump, :on, "p")]) == %{"q" => 0}
   end
 
+  test "a snap to the side of an item can put the item on a different item" do
+    # The steps that the property found (seed 217461). The computer comes
+    # from the kitchen. The drop snaps it to the side of the item "other",
+    # and there the space heater holds it: the computer is on the heater.
+    types = ~w(washer dryer microwave cpap computer tv pool_pump hot_tub other space_heater)
+
+    {build, ids} =
+      Enum.reduce(types, {house(), []}, fn type, {build, ids} ->
+        {build, id} = add(build, "Laundry", type)
+        {build, ids ++ [id]}
+      end)
+
+    [computer, heater] = [Enum.at(ids, 4), Enum.at(ids, 9)]
+    {:ok, build} = Build.place_item(build, computer, room(build, "Kitchen").id, %{x: 0, y: 0})
+    {:ok, build} = Build.size_item(build, heater, %{w: 42, d: 12, h: 30})
+    {:ok, build} = drop(build, computer, "Laundry", %{x: 125, y: 81})
+    assert item(build, computer).at == %{x: 54, y: 84}
+    assert item(build, computer).on == heater
+  end
+
   test "carry with an item that has no place moves only the item" do
     a = %{id: "a", type: "washer", room: "r1", at: nil}
     assert Stack.carry([a], a, %{a | room: "r2"}, %{"r2" => %{plan: nil}}) == [%{a | room: "r2"}]
