@@ -72,8 +72,9 @@ defmodule DIYWeb.Icon.Shapes do
   positions for wires (`{"dc_bus", ports}`). A power station of a model
   with a look of its own shows that model (`{"power_station", model}`,
   `DIYWeb.Icon.StationShapes`). A camper van shows its model
-  (`{"camper_van", model}`, `DIYWeb.Icon.VanShapes`). Each other item has
-  the model of its kind.
+  (`{"camper_van", model}`, `DIYWeb.Icon.VanShapes`). An electric car shows
+  its body in its color (`{"ev", body, color}`). Each other item has the
+  model of its kind.
   """
   def look(%{type: "dc_bus", params: %{"ports" => ports}}), do: {"dc_bus", ports}
 
@@ -877,7 +878,7 @@ defmodule DIYWeb.Icon.Shapes do
       wheels: {0.34, [0.82, 3.49]},
       sill: 4.29,
       front: {0.5, 0.56, 0.58},
-      back: {0.93, 0.95, 1.05, 1.07}
+      back: {0.74, 0.76, 0.84, 0.86}
     }
   }
 
@@ -1604,9 +1605,12 @@ defmodule DIYWeb.Icon.Shapes do
     # the tires, the rims and their hubs.
     lines = for points <- car.lines, do: {points, "i-line"}
 
+    # The handles are dark, and steel on a black car.
+    handle = if paint == "dark", do: "i-steel-~", else: "i-dark-~"
+
     handles =
       for y <- car.handles,
-          do: {[{y, 0.88}, {y + 0.2, 0.88}, {y + 0.2, 0.91}, {y, 0.91}], "i-dark-~"}
+          do: {[{y, 0.88}, {y + 0.2, 0.88}, {y + 0.2, 0.91}, {y, 0.91}], handle}
 
     sides =
       for {x, sign} <- [{-0.006, -1}, {w + 0.006, 1}],

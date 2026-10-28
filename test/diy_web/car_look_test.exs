@@ -22,8 +22,7 @@ defmodule DIYWeb.CarLookTest do
   end
 
   test "a car has a body and a color: the crossover in red, or the Bolt of 2027" do
-    # The first car of the app is a red crossover. A file of an older
-    # version gets the same.
+    # The first car of the app is a red crossover.
     default = car(%{})
     assert %{"body" => "crossover", "color" => "red"} = default.params
     assert Shapes.look(default) == {"ev", "crossover", "red"}
@@ -46,7 +45,18 @@ defmodule DIYWeb.CarLookTest do
 
       # The body has the color. Black is the dark material.
       paint = if color == "black", do: "dark", else: color
-      assert [{:group, [{:prism, :x, _profile, _, _, ^paint} | _]}] = Shapes.model(look)
+      assert [{:group, [{:prism, :x, _profile, _, _, ^paint} | parts]}] = Shapes.model(look)
+
+      # The handles show on the body: steel on a black car. A handle is
+      # at 0.88 to 0.91 m.
+      handle = if color == "black", do: "i-steel-~", else: "i-dark-~"
+
+      handles =
+        for {:face, corners, _normal, class} <- parts,
+            Enum.all?(corners, fn {_x, _y, z} -> z >= 0.88 and z <= 0.91 end),
+            do: class
+
+      assert handles == List.duplicate(handle, 4)
     end
 
     # A size that the person gives stays.
@@ -57,11 +67,33 @@ defmodule DIYWeb.CarLookTest do
     assert {:error, _} = Catalog.params("ev", %{"color" => "pink"})
   end
 
+  test "a car of a file of an older version is a red crossover" do
+    build = house()
+    garage = Enum.find(build.rooms, &(&1.name == "Garage")).id
+    {:ok, build, _id} = Build.add_item(build, garage, "ev")
+    map = build |> Build.to_json() |> Jason.decode!()
+
+    items =
+      for item <- map["items"],
+          do:
+            if(item["type"] == "ev",
+              do: Map.update!(item, "params", &Map.drop(&1, ~w(body color))),
+              else: item
+            )
+
+    {:ok, read} = Build.from_json(Jason.encode!(%{map | "items" => items}))
+    assert [car] = Enum.filter(read.items, &(&1.type == "ev"))
+    assert %{"body" => "crossover", "color" => "red"} = car.params
+    assert Shapes.look(car) == {"ev", "crossover", "red"}
+  end
+
   test "the picture of Power draws the first car with its body and its color" do
     build = house()
     garage = Enum.find(build.rooms, &(&1.name == "Garage")).id
     {:ok, build, id} = Build.add_item(build, garage, "ev")
     {:ok, build} = Build.update_item(build, id, %{"body" => "bolt", "color" => "blue"})
+    {:ok, build, second} = Build.add_item(build, garage, "ev")
+    {:ok, build} = Build.update_item(build, second, %{"color" => "red"})
 
     parts = Scene.parts(build)
     assert parts.car and parts.car_look == {"ev", "bolt", "blue"}

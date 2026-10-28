@@ -24,7 +24,13 @@ defmodule DIYWeb.IconTest do
   test "each class of the icons has a rule in app.css" do
     css = File.read!("assets/css/app.css")
 
-    looks = Enum.map(Catalog.kinds(), & &1.type) ++ Enum.map(stations(), &elem(&1, 0))
+    # A car has a look for each body and each color.
+    cars =
+      for {body, _name} <- Catalog.car_bodies(),
+          color <- ~w(red blue white gray black),
+          do: {"ev", body, color}
+
+    looks = Enum.map(Catalog.kinds(), & &1.type) ++ Enum.map(stations(), &elem(&1, 0)) ++ cars
 
     classes =
       for look <- looks,
