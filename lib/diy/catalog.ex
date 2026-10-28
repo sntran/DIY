@@ -380,6 +380,21 @@ defmodule DIY.Catalog do
     {"bolt", "Chevrolet Bolt (2027)", {70, 170, 64}}
   ]
 
+  # The kinds of a tree: the key, the name, and the typical size of a tree
+  # of a yard in inches. A tree can be taller than the roof (the owner,
+  # October 2026). No source: a guess for a grown tree of a yard.
+  @tree_kinds [
+    # A live oak: a crown that is wide and round. 30 ft wide, 40 ft high.
+    {"live_oak", "Live oak", {360, 360, 480}},
+    # A pine: a tall cone of branches. 20 ft wide, 60 ft high.
+    {"pine", "Pine", {240, 240, 720}},
+    # A palm: a tall thin trunk with leaves at the top. 12 ft wide, 30 ft high.
+    {"palm", "Palm", {144, 144, 360}},
+    # A crape myrtle: a small tree with a few trunks and pink flowers. 12 ft
+    # wide, 18 ft high.
+    {"crape_myrtle", "Crape myrtle", {144, 144, 216}}
+  ]
+
   @kinds [
     %{
       type: "ac",
@@ -1588,7 +1603,10 @@ defmodule DIY.Catalog do
       places: [:outdoor],
       furniture: true,
       features: [],
-      params: []
+      # The kind gives the shape and the typical size (`tree_size/1`).
+      params: [
+        choice("kind", "Kind", Enum.map(@tree_kinds, &{elem(&1, 0), elem(&1, 1)}), "live_oak")
+      ]
     },
     %{
       type: "other",
@@ -1761,8 +1779,8 @@ defmodule DIY.Catalog do
     "pantry" => {30, 24, 84},
     # A table of 4 seats with its chairs (`DIYWeb.Decor`). No source.
     "dining_table" => {55, 66, 37},
-    # A big tree, as its model (`DIYWeb.Decor`). No source.
-    "tree" => {91, 91, 158}
+    # A live oak, the first kind of a tree (`@tree_kinds`).
+    "tree" => {360, 360, 480}
   }
 
   for %{type: type} <- @kinds,
@@ -1820,6 +1838,20 @@ defmodule DIY.Catalog do
   size is in inches, `{w, d, h}`.
   """
   def station_models, do: @station_models
+
+  @doc "The kinds of a tree: the key and the name."
+  def tree_kinds, do: for({key, name, _size} <- @tree_kinds, do: {key, name})
+
+  @doc """
+  The typical size of a kind of tree, in inches. A kind that the app does
+  not know has the size of the kind \"tree\".
+  """
+  def tree_size(kind) do
+    case List.keyfind(@tree_kinds, kind, 0) do
+      {_key, _name, size} -> size
+      nil -> size("tree")
+    end
+  end
 
   @doc "The bodies of an electric car: the key and the name."
   def car_bodies, do: for({key, name, _size} <- @car_bodies, do: {key, name})
@@ -1913,7 +1945,7 @@ defmodule DIY.Catalog do
     "shower" => ~w(stall bath furniture),
     "pantry" => ~w(cabinet storage food kitchen furniture),
     "dining_table" => ~w(dining table chairs patio furniture),
-    "tree" => ~w(shade yard plant furniture)
+    "tree" => ~w(shade yard plant furniture oak pine palm myrtle)
   }
 
   @doc "The more words of the kinds (`@words`), for the tests."

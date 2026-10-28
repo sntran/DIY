@@ -40,7 +40,7 @@ defmodule DIYWeb.Icon.Shapes do
   """
 
   alias DIYWeb.{Camera, Geometry}
-  alias DIYWeb.Icon.{StationShapes, VanShapes}
+  alias DIYWeb.Icon.{StationShapes, TreeShapes, VanShapes}
 
   @doc """
   The shapes of the icon of a kind for a camera (the camera of the house
@@ -60,12 +60,43 @@ defmodule DIYWeb.Icon.Shapes do
 
   # A tree looks the same at each turn: its leaves look to the camera of
   # the house. So it has no turn. After a quarter turn, its space is d by
-  # w (`DIY.Layout.extent/1`): the tree fills that space.
-  def placed("tree", %{turn: turn, size: {w, d, h}} = frame) when rem(turn, 2) == 1,
-    do: draw(model("tree"), %{frame | turn: 0, size: {d, w, h}}, frame.camera)
+  # w (`DIY.Layout.extent/1`): the tree fills that space. The model of a
+  # kind of tree has the size of the item (`DIYWeb.Icon.TreeShapes`): its
+  # trunk does not get larger with its crown.
+  def placed("tree", frame), do: placed({"tree", "live_oak"}, frame)
 
-  def placed("tree", frame), do: draw(model("tree"), %{frame | turn: 0}, frame.camera)
+  def placed({"tree", kind}, %{turn: turn, size: {w, d, h}} = frame) do
+    size = if rem(turn, 2) == 1, do: {d, w, h}, else: {w, d, h}
+    at_size(TreeShapes.model(kind, size), frame)
+  end
+
   def placed(type, frame), do: draw(model(type), frame, frame.camera)
+
+  @doc """
+  The shapes of a tree in the view of the rooms, cut at a height in meters
+  (`DIYWeb.Icon.TreeShapes.cut/3`). The frame is as for `placed/2`.
+  """
+  def cut_tree("tree", frame, height), do: cut_tree({"tree", "live_oak"}, frame, height)
+
+  def cut_tree({"tree", kind}, %{turn: turn, size: {w, d, h}} = frame, height) do
+    size = if rem(turn, 2) == 1, do: {d, w, h}, else: {w, d, h}
+    at_size(TreeShapes.cut(kind, size, height), frame)
+  end
+
+  # A model at its own size in meters, with no turn: its point {0, 0, 0} is
+  # at the point `at` of the frame.
+  defp at_size(model, %{at: at} = frame) do
+    {{x0, y0, z0}, {x1, y1, z1}} = bounds(model)
+
+    frame = %{
+      frame
+      | turn: 0,
+        at: Geometry.add(at, {x0, y0, z0}),
+        size: {x1 - x0, y1 - y0, z1 - z0}
+    }
+
+    draw(model, frame, frame.camera)
+  end
 
   @doc """
   The look of an item: the kind of its model. A busbar shows its number of
@@ -81,6 +112,8 @@ defmodule DIYWeb.Icon.Shapes do
   def look(%{type: "camper_van", params: %{"model" => model}}), do: {"camper_van", model}
 
   def look(%{type: "ev", params: %{"body" => body, "color" => color}}), do: {"ev", body, color}
+
+  def look(%{type: "tree", params: %{"kind" => kind}}), do: {"tree", kind}
 
   def look(%{type: "power_station", params: %{"model" => model}}) do
     if model in StationShapes.models(), do: {"power_station", model}, else: "power_station"
@@ -1358,7 +1391,13 @@ defmodule DIYWeb.Icon.Shapes do
   # room.
   def model("bathtub"), do: DIYWeb.Decor.model("tub")
   def model("dining_table"), do: DIYWeb.Decor.model("dining")
-  def model("tree"), do: DIYWeb.Decor.model("tree")
+  def model("tree"), do: model({"tree", "live_oak"})
+
+  # A kind of tree at its typical size (`DIY.Catalog.tree_size/1`).
+  def model({"tree", kind}) do
+    {w, d, h} = DIY.Catalog.tree_size(kind)
+    TreeShapes.model(kind, {w * 0.0254, d * 0.0254, h * 0.0254})
+  end
 
   # A pool: a low coping of stone, and the water in it. On the plan, the
   # water is lower than the floor (`DIYWeb.Cutaway`). This model is for

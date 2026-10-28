@@ -1754,7 +1754,8 @@ its turn. A length is in inches.
   the door and its walls. A door goes away with a room, or when a room moves away from the
   other. A link of a share keeps the doors. The picture of the house
   from outside has no door of the plan: it has its own front door.
-- Nothing blocks a door (the owner, October 2026). A door has a space on
+- Nothing blocks a door (the owner, October 2026). A tree blocks a door
+  only with its trunk (see "Trees"). A door has a space on
   each side of its wall: as wide as the door, and 36 inches deep
   (`DIY.Layout.door_spaces/2`, `DIY.Build.door_spaces/2`). A drop, a turn
   or a size can put an item further in front of a door. Then the change
@@ -1877,8 +1878,8 @@ its turn. A length is in inches.
     it paints after it, also when a pool lower than the rug is behind it
     on the screen. The furniture is for the eyes
     only. It uses no power, and a tap goes through it to the floor of the
-    room. It moves with its room in a drag. The leaves of a tree are discs
-    that look to the camera.
+    room. It moves with its room in a drag. The tree of a yard is a small
+    live oak, 4 meters high (see "Trees").
   - The person can also put furniture at its place, as an item (see
     "Furniture as an item"). A placed bathtub or shower takes the place of
     the bath of the name. A placed table takes the place of the table of
@@ -4582,20 +4583,66 @@ pieces at their place, as items (`DIY.Catalog.furniture/0`):
 - a table with chairs goes in a room inside or outside;
 - a tree goes in a room outside.
 
-A piece of furniture uses no power and has no parameter. As a pool, it
-is in `DIY.Estimate.no_use/0`: its sheet says "It is furniture: it uses
-no power.", with no cost. A station does not run it. The size of each
-kind is the size of its model (`DIYWeb.Decor`). The person drags it,
-turns it and changes its size, as each item. The fire of a fireplace
-flickers, as the flame of a furnace. A tree has a round bed of mulch
-under it, so its space is a square. It looks the same at each turn: its
-leaves look to the camera. A placed piece takes the place of the piece
-of the same kind that the name of the room gives:
+A piece of furniture uses no power. As a pool, it is in
+`DIY.Estimate.no_use/0`: its sheet says "It is furniture: it uses no
+power.", with no cost. A station does not run it. The size of each kind
+is the size of its model (`DIYWeb.Decor`). The person drags it, turns it
+and changes its size, as each item. The fire of a fireplace flickers, as
+the flame of a furnace. A placed piece takes the place of the piece of
+the same kind that the name of the room gives:
 
 - a bathtub or a shower: the bath;
 - a table: the table of a dining room, and the round table of a
   breakfast room or of a yard;
 - a tree: the tree of a yard.
+
+#### Trees
+
+A tree has a kind (the owner, October 2026: "My trees are pretty big,
+taller than the roof. Can we make trees customizable?"). The kind gives
+its shape and its typical size (`DIY.Catalog.tree_kinds/0`,
+`DIY.Catalog.tree_size/1`). The sizes are a guess for a grown tree of a
+yard, with no source:
+
+- Live oak (the first kind): 30 ft wide and 40 ft high. It has a thick
+  trunk and a wide round crown.
+- Pine: 20 ft wide and 60 ft high. It has a tall thin trunk and five
+  cones of branches.
+- Palm: 12 ft wide and 30 ft high. It has a tall thin trunk and long
+  leaves that hang from its top.
+- Crape myrtle: 12 ft wide and 18 ft high. It has three thin trunks and
+  a crown with pink flowers.
+
+The person changes the size in the sheet of the tree: the width of its
+crown and its height. "The size of the kind" gives the typical size
+again. A tree of an older file is a live oak.
+
+The space of a tree on the plan is its crown. The models
+(`DIYWeb.Icon.TreeShapes`) have the size of the item:
+
+- The crown is as large as it can be in the size, with one scale. So it
+  keeps its shape. On the screen, its top is at the top of the tree.
+- The trunks (`DIY.Layout.trunks/1`) and the round bed of mulch have their
+  real size. They do not get larger with the crown. They are at the middle
+  of the space, and they stay in it. A taller tree has a thicker trunk, up
+  to the limit of its kind.
+- The leaves are flat shapes that look to the camera of the house, so a
+  tree looks the same at each turn. The crown paints after the trunk,
+  from the back to the front. The crown moves to the camera until no
+  part of it is behind the trunk: the picture does not change.
+
+The house from outside (`DIYWeb.Outside`) shows the whole tree. A tall
+tree in front of the house would hide the rooms on the page Rooms. So
+the view of the rooms cuts a placed tree at the height of the low walls
+(75 cm, `DIYWeb.Cutaway.item_view/5`). It shows the trunk, the bed of
+mulch, and the shadow of the crown on the ground. The share picture also
+cuts it. A tap on the tree brings the whole tree out of the shadow of its
+crown (`DIYWeb.Stage`). The tree of a yard (`DIYWeb.Decor`) is 4 m high:
+it is not cut.
+
+A tree stands on its trunks: its crown is high over the ground. So only
+its trunks can block a door (`DIY.Layout.foot_box/1`: the box of the
+trunks, with 1 inch more at each side). Its crown can be over a door.
 
 ### The places of an item
 

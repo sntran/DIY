@@ -105,8 +105,9 @@ defmodule DIYWeb.IconTest do
   test "the model of each kind has the size of the kind, so the plan does not squash it" do
     # On the plan, solar panels are a rack or a part of a roof
     # (`DIYWeb.Cutaway`). A camper van has the size of its model
-    # (`DIY.Layout.size/1`).
-    for kind <- Catalog.kinds(), kind.type not in ["solar_panels", "camper_van"] do
+    # (`DIY.Layout.size/1`). A tree keeps the shape of its crown in its
+    # size (`DIYWeb.TreeTest`).
+    for kind <- Catalog.kinds(), kind.type not in ["solar_panels", "camper_van", "tree"] do
       {w, d, h} = Catalog.size(kind.type)
       {{x0, y0, z0}, {x1, y1, z1}} = Shapes.bounds(Shapes.model(kind.type))
 

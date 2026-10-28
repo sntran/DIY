@@ -1783,6 +1783,9 @@ defmodule DIYWeb.Inside do
           @item.type == "ev" ->
             "These are the sizes of the body of the car. Change them only when your car has a different size."
 
+          @item.type == "tree" ->
+            "These are the typical sizes of this kind of tree. Give the width of its crown, and its height."
+
           true ->
             "These are the typical sizes of this kind of item. Give the sizes of your item."
         end}
@@ -1800,6 +1803,7 @@ defmodule DIYWeb.Inside do
           {cond do
             station_source(@item) -> "The size of the model"
             @item.type == "ev" -> "The size of the body"
+            @item.type == "tree" -> "The size of the kind"
             true -> "The typical size"
           end}
         </button>

@@ -7,7 +7,7 @@ defmodule DIYWeb.FurnitureTest do
   use ExUnit.Case, async: true
 
   alias DIY.{Build, Catalog, Estimate, House, Layout, Profile, Stubs, Weather}
-  alias DIYWeb.{Camera, Decor}
+  alias DIYWeb.Decor
   alias DIYWeb.Icon.Shapes
 
   @types ~w(fireplace bathtub shower pantry dining_table tree)
@@ -35,7 +35,7 @@ defmodule DIYWeb.FurnitureTest do
         do: Enum.find(names, &(Decor.model(&1) == model)) || :counter
   end
 
-  test "furniture is an item with no power and no parameter" do
+  test "furniture is an item with no power" do
     assert Enum.sort(Catalog.furniture()) == Enum.sort(@types)
 
     build = build()
@@ -53,18 +53,21 @@ defmodule DIYWeb.FurnitureTest do
     for id <- ids do
       {:ok, item} = Build.item(build, id)
       kind = Catalog.kind(item.type)
-      assert kind.features == [] and kind.params == []
-      assert item.params == %{}
+      assert kind.features == []
+      # A tree has a kind (`DIYWeb.TreeTest`).
+      assert item.params == if(item.type == "tree", do: %{"kind" => "live_oak"}, else: %{})
       assert item.type in Estimate.no_use()
       assert Profile.watts(item) == 0.0
       assert Enum.all?(estimate.months, &(&1.items[id].kwh == 0.0))
       assert "It is furniture: it uses no power." in Estimate.explain(item, 7, estimate)
 
-      # The size of the item is the size of its model.
+      # The size of the item is the size of its model. A tree keeps the
+      # shape of its crown in its size (`DIYWeb.TreeTest`).
       {{x0, y0, z0}, {x1, y1, z1}} = Shapes.bounds(Shapes.model(item.type))
       {w, d, h} = Layout.size(item)
 
       for {size, extent} <- [{w, x1 - x0}, {d, y1 - y0}, {h, z1 - z0}],
+          item.type != "tree",
           do: assert(abs(size - extent / 0.0254) < 1, item.type)
     end
 
@@ -112,41 +115,5 @@ defmodule DIYWeb.FurnitureTest do
     # A fireplace and a pantry take the place of no piece.
     living = %{dining | name: "Living room", plan: %{x: 0, y: 0, w: 216, d: 294}}
     assert names(living, []) -- ["armchair"] == names(living, [item("fireplace", 0, 120)])
-  end
-
-  test "a tree looks the same at each turn, and its space is a square" do
-    {w, d, h} = Catalog.size("tree")
-    assert w == d
-
-    look = fn turn ->
-      Shapes.placed("tree", %{
-        at: {0, 0, 0},
-        size: {w * 0.0254, d * 0.0254, h * 0.0254},
-        turn: turn,
-        camera: Camera.house()
-      })
-    end
-
-    assert Enum.all?(1..3, &(look.(&1) == look.(0)))
-
-    # A tree of 91 by 60 inches, after a quarter turn: its space is 60 by
-    # 91 inches (`DIY.Layout.extent/1`), and the tree fills it.
-    item = %{type: "tree", at: %{x: 0, y: 0}, size: %{w: 91, d: 60, h: 158}, turn: 1, params: %{}}
-    assert Layout.extent(item) == {60, 91}
-
-    points =
-      for {:poly, corners, _class} <-
-            Shapes.placed("tree", %{
-              at: {0, 0, 0},
-              size: {91 * 0.0254, 60 * 0.0254, 158 * 0.0254},
-              turn: 1,
-              camera: Camera.house()
-            }),
-          {x, y, _z} <- corners,
-          do: {x / 0.0254, y / 0.0254}
-
-    {xs, ys} = Enum.unzip(points)
-    assert_in_delta Enum.max(xs) - Enum.min(xs), 60, 0.5
-    assert_in_delta Enum.max(ys) - Enum.min(ys), 91, 0.5
   end
 end
