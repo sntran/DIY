@@ -1762,7 +1762,7 @@ its turn. A length is in inches.
   change: an item stays in its room first, and the items on an item go
   with it. The message is "An item cannot stand in front of a door". An
   item in front of a door can go out step by step, or get smaller. An item
-  with its bottom 80 inches up or more does not block a door: for example
+  with its bottom 80 inches up or more does not block a door. For example,
   a mini split on a wall, or an item on a tall stack. A different change
   can put an item in front of a door: a new door, a file, a share link or
   a new item. Then the item goes to a free place of its room, with the

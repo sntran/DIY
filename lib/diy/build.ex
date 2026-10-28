@@ -2256,8 +2256,8 @@ defmodule DIY.Build do
       else: :ok
   end
 
-  # How much the items stand in front of the doors: the sum of the areas of
-  # the items over the spaces of the doors, in square inches.
+  # How much the items stand in front of the doors (square inches). It is
+  # the sum of the areas of the items over the spaces of the doors.
   defp door_area(spaces, items),
     do: items |> Enum.map(&door_area(spaces, items, &1)) |> Enum.sum()
 
