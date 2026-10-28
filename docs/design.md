@@ -4604,12 +4604,14 @@ its shape and its typical size (`DIY.Catalog.tree_kinds/0`,
 `DIY.Catalog.tree_size/1`). The sizes are a guess for a grown tree of a
 yard, with no source:
 
-| Kind | Width | Height | Shape |
-|-|-|-|-|
-| Live oak (the first kind) | 30 ft | 40 ft | a thick trunk and a wide round crown |
-| Pine | 20 ft | 60 ft | a tall thin trunk and five cones of branches |
-| Palm | 12 ft | 30 ft | a tall thin trunk and long leaves that hang from its top |
-| Crape myrtle | 12 ft | 18 ft | three thin trunks and a crown with pink flowers |
+- Live oak (the first kind): 30 ft wide and 40 ft high. It has a thick
+  trunk and a wide round crown.
+- Pine: 20 ft wide and 60 ft high. It has a tall thin trunk and five
+  cones of branches.
+- Palm: 12 ft wide and 30 ft high. It has a tall thin trunk and long
+  leaves that hang from its top.
+- Crape myrtle: 12 ft wide and 18 ft high. It has three thin trunks and
+  a crown with pink flowers.
 
 The person changes the size in the sheet of the tree: the width of its
 crown and its height. "The size of the kind" gives the typical size
