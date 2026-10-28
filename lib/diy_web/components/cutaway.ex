@@ -100,10 +100,12 @@ defmodule DIYWeb.Cutaway do
     house = build |> Layout.house_box() |> meters()
     gap = gap(camera, house, @full)
     # Each room knows the rooms that it is open to: no wall between them.
+    # It also knows the openings of its doors.
     by_layer =
       build.rooms
       |> Enum.filter(& &1.plan)
       |> Enum.map(&Map.put(&1, :open_to, Build.open_to(build, &1.id)))
+      |> Enum.map(&Map.put(&1, :doorway_gaps, Build.doorway_gaps(build, &1.id)))
       |> Enum.group_by(&Layout.layer/1)
 
     items = build.items |> stacked() |> Enum.group_by(& &1.room)
@@ -462,6 +464,7 @@ defmodule DIYWeb.Cutaway do
   # yards) is behind it, also on a slant (`reach/3`). A part between two
   # rooms is :shared_low where it can hide an item (`hidden`). A part on a
   # room that this room is open to has no wall (`DIY.Build.set_open/3`).
+  # The opening of a door has no wall (`DIY.Build.set_doorways/3`).
   defp spans(room, side, {rooms, all}, reach, hidden) do
     others = Enum.reject(rooms, &(&1.id == room.id))
     {line, range} = edge(room.plan, side)
@@ -475,10 +478,13 @@ defmodule DIYWeb.Cutaway do
     back? = side in ~w(x0 y0)
     behind = behind(Enum.reject(all, &(&1.id == room.id)), side, line, reach)
 
+    gaps = for {^side, gap} <- Map.get(room, :doorway_gaps, []), do: gap
+
     for {a0, b0, false} <- split(range, Enum.map(open, &along(&1.plan, side))),
         {a, b, shared?} <- split({a0, b0}, touch),
-        part <- span(a, b, shared?, back?, behind, hidden),
-        do: part
+        {p0, q0, kind} <- span(a, b, shared?, back?, behind, hidden),
+        {p, q, false} <- split({p0, q0}, gaps),
+        do: {p, q, kind}
   end
 
   defp span(a, b, true, true, _behind, hidden) do

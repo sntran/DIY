@@ -69,6 +69,13 @@ defmodule DIY.Build do
     no wall stands between them (`set_open/3`). The two rooms are inside,
     on the same layer, next to each other. A pair goes away with a room.
     A build has at most 200 pairs.
+  - `doorways`: the doors between two rooms of the house that touch:
+    `[a, b, at]` (`set_doorways/3`). A door is an opening of 32 inches in
+    the wall between them, with 4 inches of wall at each side at the
+    least. `at` is the place of its middle, in inches from the start of
+    the common part of their sides (`DIY.Layout.shared/2`). One room at
+    least is inside. A door goes away with a room, and between two rooms
+    that are open to each other. A build has at most 200 doors.
   - `wires`: the wires between the items, at most 100, and at most 24 for
     an item (`add_wire/3`). Each wire has an `id`, the item at each end
     (`from` gives the current, `to`), and its numbers (`DIY.Wire`). A
@@ -94,6 +101,11 @@ defmodule DIY.Build do
   @max_item_wires 24
   # The most pairs of rooms that are open to each other.
   @max_open 200
+  # The most doors, the width of a door, and the wall at each side of a
+  # door, at the least (inches). So the corners of the walls stay.
+  @max_doorways 200
+  @doorway 32
+  @jamb 4
   @places Catalog.places()
 
   @enforce_keys [:revision]
@@ -119,7 +131,8 @@ defmodule DIY.Build do
             devices: %{},
             units: %{},
             wires: [],
-            open: []
+            open: [],
+            doorways: []
 
   @type plan :: %{x: integer(), y: integer(), w: pos_integer(), d: pos_integer()}
   @type room :: %{
@@ -181,7 +194,8 @@ defmodule DIY.Build do
           devices: %{String.t() => String.t()},
           units: %{String.t() => String.t()},
           wires: [wire()],
-          open: [[String.t()]]
+          open: [[String.t()]],
+          doorways: [[String.t() | non_neg_integer()]]
         }
 
   @doc "The version of the format of the build."
@@ -219,6 +233,8 @@ defmodule DIY.Build do
     %__MODULE__{} = changed = Layout.fill(changed)
     # Two rooms stay open to each other only when they still touch.
     changed = fit_open(changed, changed.open)
+    # A door stays only when its rooms still touch, in their common part.
+    changed = fit_doorways(changed, changed.doorways)
     # An item stays on an item only when the two still stack (`DIY.Stack`).
     rooms = Map.new(changed.rooms, &{&1.id, &1})
     changed = %{changed | items: changed.items |> DIY.Stack.normalize(rooms) |> fit_mounts(rooms)}
@@ -427,7 +443,8 @@ defmodule DIY.Build do
           areas: %{},
           devices: %{},
           units: %{},
-          open: []
+          open: [],
+          doorways: []
       }
 
       {build, ids} =
@@ -536,6 +553,85 @@ defmodule DIY.Build do
       not van_level?(room.level) and not van_level?(other.level) and room.plan != nil and
       other.plan != nil and Layout.layer(other) == Layout.layer(room) and
       Layout.touch?(room.plan, other.plan)
+  end
+
+  @doc """
+  The doors of a room (`set_doorways/3`). Each door has the other room,
+  its place (`at`), and the places that it can have (`range`). A place is
+  in inches from the start of the common part of their sides.
+  """
+  @spec doorways_of(t(), String.t()) :: [
+          %{other: String.t(), at: integer(), range: {integer(), integer()}}
+        ]
+  def doorways_of(build, id) do
+    rooms = Map.new(build.rooms, &{&1.id, &1})
+
+    for [a, b, at] <- build.doorways, id in [a, b] do
+      other = if a == id, do: b, else: a
+      {_side, {from, to}} = Layout.shared(rooms[a].plan, rooms[b].plan)
+      %{other: other, at: at, range: doorway_range(to - from)}
+    end
+  end
+
+  # The places of the middle of a door in a common part of a length. The
+  # door has a wall of 4 inches at each side.
+  defp doorway_range(length),
+    do: {div(@doorway, 2) + @jamb, length - div(@doorway, 2) - @jamb}
+
+  @doc """
+  The rooms that a room of the house can have a door to
+  (`set_doorways/3`). They are on the same layer, and they touch it along
+  40 inches at least: the door and a wall at each side. One of the two
+  rooms is inside. So a room inside can have a door to a yard. A room
+  that it is open to has no wall, and so no door (`set_open/3`).
+  """
+  @spec doorway_choices(t(), room()) :: [room()]
+  def doorway_choices(build, room) do
+    open = open_to(build, room.id)
+    Enum.filter(build.rooms, &(doorway_pair?(room, &1) and &1.id not in open))
+  end
+
+  @doc """
+  Gives a room its doors, and takes away its other doors. `doors` maps the
+  id of each other room to the place of the door (`at`, inches), or to nil
+  for a door in the middle. Each other room must be one of the choices
+  (`doorway_choices/2`). The app ignores the other ids. A place goes into
+  the common part of the sides, with the door and 4 inches of wall at
+  each side.
+  A build has at most 200 doors (`:doorways`).
+  """
+  @spec set_doorways(t(), String.t(), %{String.t() => integer() | nil}) ::
+          {:ok, t()} | {:error, :room | :doorways}
+  def set_doorways(build, id, doors) when is_map(doors) do
+    with {:ok, %{plan: %{}} = room} <- house_room(build, id) do
+      new =
+        for other <- doorway_choices(build, room), Map.has_key?(doors, other.id) do
+          {_side, {from, to}} = Layout.shared(room.plan, other.plan)
+          Enum.sort([id, other.id]) ++ [doors[other.id] || div(to - from, 2)]
+        end
+
+      doorways = Enum.reject(build.doorways, &(id in Enum.take(&1, 2))) ++ new
+
+      if length(doorways) <= @max_doorways,
+        do: {:ok, change(build, &%{&1 | doorways: doorways})},
+        else: {:error, :doorways}
+    else
+      _error -> {:error, :room}
+    end
+  end
+
+  # Two rooms of the house that can have a door between them. They are on
+  # the same layer, next to each other along 40 inches at least. One of
+  # them is inside.
+  defp doorway_pair?(room, other) do
+    other.id != room.id and :indoor in [room.place, other.place] and
+      room.place in [:indoor, :outdoor] and other.place in [:indoor, :outdoor] and
+      not van_level?(room.level) and not van_level?(other.level) and room.plan != nil and
+      other.plan != nil and Layout.layer(other) == Layout.layer(room) and
+      match?(
+        {_side, {from, to}} when to - from >= @doorway + 2 * @jamb,
+        Layout.shared(room.plan, other.plan)
+      )
   end
 
   @doc "Gives a room a new name."
@@ -1415,7 +1511,8 @@ defmodule DIY.Build do
       "devices" => build.devices,
       "units" => build.units,
       "wires" => build.wires,
-      "open" => build.open
+      "open" => build.open,
+      "doorways" => build.doorways
     })
   end
 
@@ -1457,7 +1554,8 @@ defmodule DIY.Build do
          {:ok, devices} <- devices(map["devices"], items, rooms),
          {:ok, units} <- units(map["units"], items, devices),
          {:ok, wires} <- wires(map["wires"], items),
-         {:ok, open} <- open(map["open"]) do
+         {:ok, open} <- open(map["open"]),
+         {:ok, doorways} <- doorways(map["doorways"]) do
       seq = last_id(seq, rooms ++ items ++ plans ++ wires)
 
       {:ok,
@@ -1488,6 +1586,7 @@ defmodule DIY.Build do
        |> fit_wires()
        |> Layout.fill()
        |> fit_open(open)
+       |> fit_doorways(doorways)
        |> then(fn build ->
          rooms = Map.new(build.rooms, &{&1.id, &1})
          %{build | items: build.items |> DIY.Stack.normalize(rooms) |> fit_mounts(rooms)}
@@ -2061,6 +2160,59 @@ defmodule DIY.Build do
           do: Enum.sort([a, b])
 
     %{build | open: Enum.take(open, @max_open)}
+  end
+
+  # The doors between the rooms. A build of an older version has none.
+  defp doorways(nil), do: {:ok, []}
+
+  defp doorways(doors) when is_list(doors) do
+    if Enum.all?(
+         doors,
+         &match?([a, b, at] when is_binary(a) and is_binary(b) and is_integer(at), &1)
+       ),
+       do: {:ok, doors},
+       else: {:error, :doorways}
+  end
+
+  defp doorways(_doors), do: {:error, :doorways}
+
+  # A door stays when its two rooms can have a door, after the fill of the
+  # plan. So it goes away with a room, or when a room moves away. Two rooms
+  # that are open to each other have no door. Its place goes into the
+  # common part of the sides. A pair has one door: the first one stays.
+  # The first 200 doors stay.
+  defp fit_doorways(build, doors) do
+    rooms = Map.new(build.rooms, &{&1.id, &1})
+
+    doorways =
+      for [a, b, at] <- doors,
+          room = rooms[a],
+          other = rooms[b],
+          room && other && doorway_pair?(room, other),
+          Enum.sort([a, b]) not in build.open do
+        {_side, {from, to}} = Layout.shared(room.plan, other.plan)
+        {low, high} = doorway_range(to - from)
+        Enum.sort([a, b]) ++ [at |> max(low) |> min(high)]
+      end
+      |> Enum.uniq_by(&Enum.take(&1, 2))
+
+    %{build | doorways: Enum.take(doorways, @max_doorways)}
+  end
+
+  @doc """
+  The openings of the doors of a room in its walls. Each opening has the
+  side of the room, and the part of that side with no wall (`{from, to}`,
+  on the plan).
+  """
+  @spec doorway_gaps(t(), String.t()) :: [{String.t(), {integer(), integer()}}]
+  def doorway_gaps(build, id) do
+    rooms = Map.new(build.rooms, &{&1.id, &1})
+
+    for %{other: other, at: at} <- doorways_of(build, id) do
+      {side, {from, _to}} = Layout.shared(rooms[id].plan, rooms[other].plan)
+      half = div(@doorway, 2)
+      {side, {from + at - half, from + at + half}}
+    end
   end
 
   # The id of an area or of a device of Home Assistant: a short text.

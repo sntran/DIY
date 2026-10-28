@@ -280,4 +280,17 @@ defmodule DIY.LayoutTest do
       end
     end
   end
+
+  test "the common part of the sides of two boxes that touch" do
+    a = %{x: 0, y: 0, w: 100, d: 50}
+    assert Layout.shared(a, %{x: 100, y: 20, w: 40, d: 100}) == {"x1", {20, 50}}
+    assert Layout.shared(a, %{x: -40, y: -10, w: 40, d: 30}) == {"x0", {0, 20}}
+    assert Layout.shared(a, %{x: 60, y: 50, w: 80, d: 10}) == {"y1", {60, 100}}
+    assert Layout.shared(a, %{x: 10, y: -10, w: 20, d: 10}) == {"y0", {10, 30}}
+
+    # A corner, a box away, and a box over it give nil.
+    assert Layout.shared(a, %{x: 100, y: 50, w: 10, d: 10}) == nil
+    assert Layout.shared(a, %{x: 200, y: 0, w: 10, d: 10}) == nil
+    assert Layout.shared(a, %{x: 10, y: 10, w: 10, d: 10}) == nil
+  end
 end

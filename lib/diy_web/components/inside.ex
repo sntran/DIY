@@ -265,6 +265,8 @@ defmodule DIYWeb.Inside do
         room={@chosen}
         next={Build.open_choices(@build, @chosen)}
         open={Build.open_to(@build, @chosen.id)}
+        door_next={Build.doorway_choices(@build, @chosen)}
+        doors={Build.doorways_of(@build, @chosen.id)}
       />
       <.new_room_sheet :if={@sheet == "new_room"} levels={@levels} />
       <HomeAssistant.rooms_sheet
@@ -762,9 +764,11 @@ defmodule DIYWeb.Inside do
   attr :room, :map, required: true
   attr :next, :list, default: [], doc: "the rooms that it can be open to"
   attr :open, :list, default: [], doc: "the ids of the rooms that it is open to"
+  attr :door_next, :list, default: [], doc: "the rooms that it can have a door to"
+  attr :doors, :list, default: [], doc: "its doors (`DIY.Build.doorways_of/2`)"
 
   # The sheet of a room: its name, its size, the rooms that it is open to,
-  # and its removal.
+  # its doors, and its removal.
   defp room_sheet(assigns) do
     ~H"""
     <.sheet id="room-sheet" title={@room.name} close={~p"/inside?#{[room: @room.id]}"}>
@@ -837,6 +841,43 @@ defmodule DIYWeb.Inside do
           </label>
           <p class="text-xs opacity-70">
             An open plan: the rooms join, with no wall between them.
+          </p>
+        </fieldset>
+      </form>
+
+      <form :if={@door_next != []} id={"doors-#{@room.id}"} phx-change="room_doors">
+        <input type="hidden" name="room_id" value={@room.id} />
+        <fieldset class="space-y-1">
+          <legend class="text-sm font-semibold">Doors</legend>
+          <div :for={other <- @door_next} class="space-y-1">
+            <% door = Enum.find(@doors, &(&1.other == other.id)) %>
+            <label class="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                id={"door-#{@room.id}-#{other.id}"}
+                name="door[]"
+                value={other.id}
+                checked={door != nil}
+                class="checkbox checkbox-sm"
+              />
+              {other.name}
+            </label>
+            <label :if={door} class="block pl-6">
+              <span class="text-xs">Place of the door along the wall</span>
+              <input
+                type="range"
+                id={"door-at-#{@room.id}-#{other.id}"}
+                name={"at[#{other.id}]"}
+                min={elem(door.range, 0)}
+                max={elem(door.range, 1)}
+                value={door.at}
+                aria-valuetext={"#{door.at} inches from the back or left end of the wall"}
+                class="range range-xs w-full"
+              />
+            </label>
+          </div>
+          <p class="text-xs opacity-70">
+            A door is an opening of 32 inches in the wall between the rooms. The range moves it from the back or the left end of the wall.
           </p>
         </fieldset>
       </form>

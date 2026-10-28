@@ -74,6 +74,99 @@ defmodule DIY.BuildPlanTest do
     assert Build.put_house(open, house, rooms, items).open == []
   end
 
+  test "a door is an opening between two rooms that touch, at a place along their wall" do
+    build = house()
+    names = ["Kitchen", "Living room", "Backyard", "Garage", "Bedroom 2", "Laundry", "Driveway"]
+    [kitchen, living, yard, garage, bedroom, laundry, drive] = for n <- names, do: room(build, n)
+
+    # A room inside can have a door to a room inside or to a yard, on its
+    # layer, along 40 inches at least. The garage and the backyard touch
+    # along 6 inches only. Bedroom 2 is on floor 2.
+    assert Build.doorway_choices(build, kitchen) == [living, yard]
+    assert Build.doorway_choices(build, garage) == [laundry, drive]
+    assert Build.doorway_choices(build, yard) == [kitchen, living, laundry]
+    assert Build.doorway_choices(build, drive) == [garage]
+
+    # A door with no place is in the middle of the common part: the wall of
+    # 294 inches between the kitchen and the living room. The app ignores
+    # a room that is not a choice.
+    pair = fn a, b, at -> Enum.sort([a.id, b.id]) ++ [at] end
+    doors = %{living.id => nil, yard.id => 20, bedroom.id => nil, "nothing" => 4}
+    {:ok, door} = Build.set_doorways(build, kitchen.id, doors)
+    assert door.revision == build.revision + 1
+    assert door.doorways == [pair.(kitchen, living, 147), pair.(kitchen, yard, 20)]
+
+    # A door has 4 inches of wall at each side, at the least: its middle
+    # is 20 inches from each end of the common part.
+    assert Build.doorways_of(door, kitchen.id) == [
+             %{other: living.id, at: 147, range: {20, 274}},
+             %{other: yard.id, at: 20, range: {20, 124}}
+           ]
+
+    assert Build.doorways_of(door, living.id) == [
+             %{other: kitchen.id, at: 147, range: {20, 274}}
+           ]
+
+    # The opening is 32 inches, in the side of each room.
+    assert Build.doorway_gaps(door, kitchen.id) == [{"x1", {131, 163}}, {"y1", {4, 36}}]
+    assert Build.doorway_gaps(door, living.id) == [{"x0", {131, 163}}]
+
+    # A place goes into the common part, with the door and its walls.
+    {:ok, ends} = Build.set_doorways(build, kitchen.id, %{living.id => 0, yard.id => 999})
+    assert ends.doorways == [pair.(kitchen, living, 20), pair.(kitchen, yard, 124)]
+
+    # Two rooms that are open to each other have no wall, and no door.
+    {:ok, open} = Build.set_open(door, kitchen.id, [living.id])
+    assert Build.doorway_choices(open, kitchen) == [yard]
+    assert open.doorways == [pair.(kitchen, yard, 20)]
+
+    # The doors of the other room stay. No door takes them away.
+    {:ok, both} = Build.set_doorways(door, garage.id, %{laundry.id => nil})
+    assert length(both.doorways) == 3
+    {:ok, none} = Build.set_doorways(both, kitchen.id, %{})
+    assert none.doorways == [pair.(laundry, garage, 147)]
+
+    assert Build.set_doorways(build, "nothing", %{}) == {:error, :room}
+
+    # A build has at most 200 doors.
+    full = %{build | doorways: for(n <- 1..200, do: ["a#{n}", "b#{n}", 16])}
+    assert Build.set_doorways(full, kitchen.id, %{living.id => nil}) == {:error, :doorways}
+
+    # The JSON keeps the doors. A door of a room that is not there, of two
+    # rooms that do not touch, or a second door of a pair goes away. A
+    # place out of the common part goes into it. A build of an older
+    # version has no door.
+    {:ok, read} = Build.from_json(Build.to_json(door))
+    assert read.doorways == door.doorways
+    map = door |> Build.to_json() |> Jason.decode!()
+    load = &Build.from_json(Jason.encode!(&1))
+
+    stale = [
+      [kitchen.id, "gone", 10],
+      [living.id, kitchen.id, 500],
+      [kitchen.id, living.id, 30],
+      [garage.id, bedroom.id, 20]
+    ]
+
+    assert {:ok, %{doorways: [[_, _, 274]]}} = load.(%{map | "doorways" => stale})
+    assert {:ok, %{doorways: []}} = load.(Map.delete(map, "doorways"))
+
+    for bad <- [[["a", "b"]], "x", [[1, 2, 3]], [["a", "b", "c"]]],
+        do: assert(load.(%{map | "doorways" => bad}) == {:error, :doorways})
+
+    # The door goes away with a room, and when a room moves away.
+    {:ok, gone} = Build.delete_room(door, living.id)
+    assert gone.doorways == [pair.(kitchen, yard, 20)]
+    {:ok, away} = Build.move_room(door, kitchen.id, -2000, -2000)
+    assert away.doorways == []
+
+    # A new house has no door.
+    {house, rooms, items} =
+      House.preset(%{size: 1800, year: 2005, floors: 2, heat: "gas", lot: nil})
+
+    assert Build.put_house(door, house, rooms, items).doorways == []
+  end
+
   test "a room moves with its items, and does not go over a room of its layer" do
     build = house()
     kitchen = room(build, "Kitchen")
