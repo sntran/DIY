@@ -12,10 +12,12 @@ defmodule DIYWeb.Decor do
   piece does not show when it is larger than the room, or when it touches
   an item or a piece before it. A piece also does not show when it hides
   an item on the screen (`hides?/3`). This is also true for an item of a
-  different room of the layer. So the items show. The stairs are a part of
-  the house: they always show, also when they hide an item of a different
-  room. A rug is flat: the other
-  pieces and the items can stand on it, and it hides nothing.
+  different room of the layer. So the items show. The person can also put
+  furniture at its place, as an item (`DIY.Catalog.furniture/0`). A placed
+  bath, shower, table or tree takes the place of the piece of the name.
+  The stairs are a part of the house: they always show, also when they
+  hide an item of a different room. A rug is flat: the other pieces and
+  the items can stand on it, and it hides nothing.
 
   The models use the parts of `DIYWeb.Icon.Shapes`, in meters, with round
   corners where the real piece has them. The front of a model looks to y.
@@ -39,6 +41,14 @@ defmodule DIYWeb.Decor do
   @least 18
   # A piece does not show when it hides more than this part of an item.
   @hide 0.25
+  # The furniture that a person puts in a room (`DIY.Catalog.furniture/0`)
+  # takes the place of these pieces of the name of the room.
+  @replaces %{
+    "bathtub" => ["tub"],
+    "shower" => ["tub"],
+    "dining_table" => ["dining", "round_table"],
+    "tree" => ["tree"]
+  }
 
   @doc """
   The pieces of a room: `{model, x, y, turn}`. `x` and `y` are the back
@@ -54,8 +64,11 @@ defmodule DIYWeb.Decor do
     gap = if room.place == :outdoor, do: @yard_gap, else: @gap
     around = if stairs?(room), do: [], else: around
 
+    placed = for item <- items, name <- Map.get(@replaces, item.type, []), do: model(name)
+
     room
     |> plan(boxes, house)
+    |> Enum.reject(fn {model, _anchor, _turn} -> model in placed end)
     |> Enum.reduce({[], []}, fn {model, anchor, turn}, {done, placed} ->
       {w, d} = footprint(model, turn)
       high = height(model)
@@ -259,6 +272,10 @@ defmodule DIYWeb.Decor do
 
       String.contains?(name, "breakfast") ->
         [{model("round_table"), :center, 0}]
+
+      # A half bath has no bath.
+      String.contains?(name, "half bath") ->
+        [{model("toilet"), :back_right, 0}, {model("vanity"), :front_right, 2}]
 
       String.contains?(name, "bath") ->
         [
@@ -513,17 +530,24 @@ defmodule DIYWeb.Decor do
       end
   end
 
-  # A big tree: about 4 meters high, with a crown 2.4 meters wide.
+  # A big tree: about 4 meters high, with a crown 2.4 meters wide. A round
+  # bed of mulch is under it. So its space on the plan is a square, and it
+  # looks the same at each turn (`DIYWeb.Icon.Shapes.placed/2`).
   def model("tree") do
-    [{:cyl, {1.2, 1.2, 0}, 0.14, 2.0, "wood"}] ++
+    [
+      {:face, Geometry.circle({1.2, 1.2, 0.01}, {1, 0, 0}, {0, 1, 0}, 1.15), {0, 0, 1},
+       "i-wood-t"},
+      {:cyl, {1.2, 1.2, 0}, 0.14, 2.0, "wood"}
+    ] ++
       ball({1.2, 1.2, 2.6}, 1.2, "leaf") ++
       ball({0.85, 1.2, 3.4}, 0.75, "leaf") ++ ball({1.55, 1.3, 3.3}, 0.7, "leaf")
   end
 
+  # A bath of 60 by 30 inches, the common size.
   def model("tub") do
     [
-      round_box({0, 0, 0}, {1.6, 0.75, 0.55}, 0.12, "white"),
-      round_box({0.08, 0.08, 0.55}, {1.44, 0.59, 0.005}, 0.1, "blue")
+      round_box({0, 0, 0}, {1.52, 0.76, 0.55}, 0.12, "white"),
+      round_box({0.08, 0.08, 0.55}, {1.36, 0.6, 0.005}, 0.1, "blue")
     ]
   end
 

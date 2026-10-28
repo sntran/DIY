@@ -16,8 +16,8 @@ defmodule DIY.CatalogTest do
         do: assert(Enum.any?(kind.params, &(&1.key == "weight")), kind.type)
 
       # A pool has no feature: it uses no power, and its pump and its
-      # heater are items.
-      assert kind.features != [] or kind.type == "pool"
+      # heater are items. Furniture has no feature and no parameter.
+      assert kind.features != [] or kind.type == "pool" or kind.type in Catalog.furniture()
       assert {:ok, defaults} = Catalog.params(kind.type, %{})
       assert defaults == Catalog.defaults(kind.type)
       assert Catalog.kind(kind.type) == kind

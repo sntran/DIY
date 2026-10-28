@@ -102,9 +102,11 @@ defmodule DIY.Estimate do
   @therm 100_000
 
   # The kinds that use no power of the house by themselves (`no_use/0`). A
-  # pool uses no power: its pump and its heater are items.
+  # pool uses no power: its pump and its heater are items. Furniture uses
+  # no power.
   @no_use ~w(power_station solar_panels transfer_switch smart_meter camper_van dc_bus pool) ++
-            ~w(van_battery battery_switch battery_monitor)
+            ~w(van_battery battery_switch battery_monitor) ++ Catalog.furniture()
+  @furniture Catalog.furniture()
 
   @hvac_range 0.15
   @typical_range 0.20
@@ -112,7 +114,7 @@ defmodule DIY.Estimate do
 
   @doc """
   The kinds that use no power of the house by themselves: the power
-  equipment, the meter and a camper van. Their sheet gives their note,
+  equipment, the meter, a camper van, a pool and furniture. Their sheet gives their note,
   and no kWh: a play test read "0 kWh" as a fault. The page Bill does not
   list them.
   """
@@ -1002,6 +1004,9 @@ defmodule DIY.Estimate do
 
   defp steps(%{type: "pool"}, _m, _data, _estimate),
     do: ["The water uses no power. Its pump, its heater and a hot tub are items next to it."]
+
+  defp steps(%{type: type}, _m, _data, _estimate) when type in @furniture,
+    do: ["It is furniture: it uses no power."]
 
   defp steps(%{type: "pool_heater", params: %{"fuel" => "gas"} = p} = item, m, _data, _estimate) do
     if in_season(item, %{month: m.month}) == 0,

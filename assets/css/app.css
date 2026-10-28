@@ -236,6 +236,11 @@
 .i-victron-t { fill: #5fb0ea } .i-victron-l { fill: #2b8bd3 } .i-victron-r { fill: #1d69a8 }
 .i-orange-t { fill: #ffb429 } .i-orange-l { fill: #ff9f1c } .i-orange-r { fill: #c66d19 }
 .i-titanium-t { fill: #a7a29c } .i-titanium-l { fill: #8a8580 } .i-titanium-r { fill: #6f6b67 }
+/* The materials of the furniture (DIYWeb.Decor): a pantry, a table and
+   chairs, and a tree. */
+.i-sage-t { fill: #b4c2a6 } .i-sage-l { fill: #9aab8c } .i-sage-r { fill: #7f9073 }
+.i-linen-t { fill: #f6efe2 } .i-linen-l { fill: #e9dfcd } .i-linen-r { fill: #d1c4ac }
+.i-leaf-t { fill: #7fae63 } .i-leaf-l { fill: #62924c } .i-leaf-r { fill: #4b7539 }
 /* The steps between the face in the light and the face in the shade, for
    the parts of a round shape (DIYWeb.Camera.light/2). */
 .i-white-m1 { fill: color-mix(in oklab, #e9ecf0 75%, #c9ced6) } .i-white-m2 { fill: color-mix(in oklab, #e9ecf0 50%, #c9ced6) } .i-white-m3 { fill: color-mix(in oklab, #e9ecf0 25%, #c9ced6) }
@@ -253,6 +258,9 @@
 .i-victron-m1 { fill: color-mix(in oklab, #2b8bd3 75%, #1d69a8) } .i-victron-m2 { fill: color-mix(in oklab, #2b8bd3 50%, #1d69a8) } .i-victron-m3 { fill: color-mix(in oklab, #2b8bd3 25%, #1d69a8) }
 .i-orange-m1 { fill: color-mix(in oklab, #ff9f1c 75%, #c66d19) } .i-orange-m2 { fill: color-mix(in oklab, #ff9f1c 50%, #c66d19) } .i-orange-m3 { fill: color-mix(in oklab, #ff9f1c 25%, #c66d19) }
 .i-titanium-m1 { fill: color-mix(in oklab, #8a8580 75%, #6f6b67) } .i-titanium-m2 { fill: color-mix(in oklab, #8a8580 50%, #6f6b67) } .i-titanium-m3 { fill: color-mix(in oklab, #8a8580 25%, #6f6b67) }
+.i-sage-m1 { fill: color-mix(in oklab, #9aab8c 75%, #7f9073) } .i-sage-m2 { fill: color-mix(in oklab, #9aab8c 50%, #7f9073) } .i-sage-m3 { fill: color-mix(in oklab, #9aab8c 25%, #7f9073) }
+.i-linen-m1 { fill: color-mix(in oklab, #e9dfcd 75%, #d1c4ac) } .i-linen-m2 { fill: color-mix(in oklab, #e9dfcd 50%, #d1c4ac) } .i-linen-m3 { fill: color-mix(in oklab, #e9dfcd 25%, #d1c4ac) }
+.i-leaf-m1 { fill: color-mix(in oklab, #62924c 75%, #4b7539) } .i-leaf-m2 { fill: color-mix(in oklab, #62924c 50%, #4b7539) } .i-leaf-m3 { fill: color-mix(in oklab, #62924c 25%, #4b7539) }
 .i-line { fill: #6b7280 } .i-black { fill: #1f2328 }
 /* At night (the dark mode), a white item in a picture of a house is dim,
    as the walls of the house are: for example, the van in the drive. */
