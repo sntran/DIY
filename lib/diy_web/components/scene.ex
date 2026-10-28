@@ -77,6 +77,7 @@ defmodule DIYWeb.Scene do
     ac: true,
     pool: false,
     car: false,
+    car_look: "ev",
     van: nil
   }
 
@@ -119,6 +120,12 @@ defmodule DIYWeb.Scene do
       # balcony, does not show.
       pool: Enum.any?(of.("pool"), &(yard[&1.room] == true)),
       car: of.("ev") != [],
+      # The first car has its body and its color (`DIYWeb.Icon.Shapes.look/1`).
+      car_look:
+        case of.("ev") do
+          [car | _] -> Shapes.look(car)
+          [] -> "ev"
+        end,
       van:
         case of.("camper_van") do
           [van | _] -> van_look(van, Enum.reject(van_items(build, van), & &1.planned))
@@ -852,12 +859,13 @@ defmodule DIYWeb.Scene do
   end
 
   # An electric car in the drive, on the right of a van. It is the model of
-  # the kind "ev" (`DIYWeb.Icon.Shapes`), from the back corner of its body.
+  # the first car of the house (`DIYWeb.Icon.Shapes`), from the back corner
+  # of its body.
   defp car(%{car: false}), do: []
 
   defp car(parts) do
     {x, y} = if parts.van, do: {13.0, 7.5}, else: {11.8, 8.2}
-    model = Shapes.model("ev")
+    model = Shapes.model(parts.car_look)
     {{mx, _my, _mz}, _high} = Shapes.bounds(model)
     Shapes.placed_model(model, %{at: {x + mx, y, 0.0}, turn: 0, camera: Camera.house()})
   end

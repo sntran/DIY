@@ -370,6 +370,16 @@ defmodule DIY.Catalog do
 
   @fuels [{"electric", "Electric"}, {"gas", "Gas"}]
 
+  # The bodies of an electric car: the key, the name, and the size in
+  # inches, with its source.
+  @car_bodies [
+    # The first body of the app: a crossover of 4.72 by 1.85 m. No source.
+    {"crossover", "Crossover", {73, 186, 57}},
+    # 169.6 in long, 69.7 in wide with no mirrors, 63.9 in high
+    # (evspecifications.com, the 2027 Bolt LT).
+    {"bolt", "Chevrolet Bolt (2027)", {70, 170, 64}}
+  ]
+
   @kinds [
     %{
       type: "ac",
@@ -1039,7 +1049,22 @@ defmodule DIY.Catalog do
           "night"
         ),
         float("mpg", "The gas car that it replaces", "mpg", 25.0, 5.0, 80.0, nil),
-        float("gas", "Price of gas", "$/gal", 2.7, 0.5, 10.0, "The price at your gas station.")
+        float("gas", "Price of gas", "$/gal", 2.7, 0.5, 10.0, "The price at your gas station."),
+        # The look of the car on the plan and on the house (the owner,
+        # October 2026). The body gives its size (`car_size/1`).
+        choice("body", "Body", Enum.map(@car_bodies, &{elem(&1, 0), elem(&1, 1)}), "crossover"),
+        choice(
+          "color",
+          "Color",
+          [
+            {"red", "Red"},
+            {"blue", "Blue"},
+            {"white", "White"},
+            {"gray", "Gray"},
+            {"black", "Black"}
+          ],
+          "red"
+        )
       ]
     },
     %{
@@ -1795,6 +1820,20 @@ defmodule DIY.Catalog do
   size is in inches, `{w, d, h}`.
   """
   def station_models, do: @station_models
+
+  @doc "The bodies of an electric car: the key and the name."
+  def car_bodies, do: for({key, name, _size} <- @car_bodies, do: {key, name})
+
+  @doc """
+  The size of a body of an electric car, in inches. A body that the app
+  does not know has the size of the kind.
+  """
+  def car_size(body) do
+    case List.keyfind(@car_bodies, body, 0) do
+      {_key, _name, size} -> size
+      nil -> size("ev")
+    end
+  end
 
   @doc """
   The size of a model of power station, in inches. A station that the app

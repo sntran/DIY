@@ -537,7 +537,12 @@ Phase 3 adds four kinds of items (`DIY.Catalog`):
 - An interlock, a transfer switch, or a subpanel for the backup circuits
   with a transfer switch, and its price.
 - An electric car: its miles in one day, its miles for each kWh, its
-  charger, when it charges, and the gas car that it replaces.
+  charger, when it charges, and the gas car that it replaces. It also has
+  a body and a color (the owner, October 2026). The body is a crossover
+  (the first car of the app) or the Chevrolet Bolt of 2027 (169.6 by 69.7
+  by 63.9 inches). The color is red, blue, white, gray or black. The body
+  gives the size of the car, when the person gave no size
+  (`DIY.Catalog.car_size/1`).
 
 Each item of a build has two flags:
 
@@ -1470,8 +1475,9 @@ on a light page.
   - a microwave has its window and its keys;
   - a water heater has its pipes;
   - an AC has the grille of its fan;
-  - the car has the profile of a crossover, its glass, its doors and its
-    wheels;
+  - the car has the profile of its body, its glass, its doors and its
+    wheels. The body has the color of the car. The picture of the page
+    Power draws the first car of the house;
   - a pool pump has its motor, and a strainer with a clear lid;
   - a ceiling fan has four blades, its light and its rod;
   - a CPAP has its water tank, its screen, a knob and the port of its

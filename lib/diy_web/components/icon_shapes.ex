@@ -79,6 +79,8 @@ defmodule DIYWeb.Icon.Shapes do
 
   def look(%{type: "camper_van", params: %{"model" => model}}), do: {"camper_van", model}
 
+  def look(%{type: "ev", params: %{"body" => body, "color" => color}}), do: {"ev", body, color}
+
   def look(%{type: "power_station", params: %{"model" => model}}) do
     if model in StationShapes.models(), do: {"power_station", model}, else: "power_station"
   end
@@ -804,6 +806,85 @@ defmodule DIYWeb.Icon.Shapes do
   @doc "A polygon with its normal (nil: it always shows)."
   def face(corners, normal, class), do: {:face, corners, normal, class}
 
+  # The bodies of an electric car (the parameter "body" of the kind "ev"),
+  # in meters.
+  # The profile is the side of the body, `{y, z}`, from the back (y = 0)
+  # to the front. The edge from point 5 to point 6 is the windshield, and
+  # the edge from point 7 to point 8 is the back window. The side has the
+  # window of the doors, the pillar between the doors, the lines and the
+  # handles of the doors, the black sill under the doors, and the wheels
+  # (radius and places on y). The lights are at their heights on the front
+  # and on the back, with a black band at the back.
+  @car_bodies %{
+    # A crossover of 4.72 by 1.85 m.
+    "crossover" => %{
+      l: 4.72,
+      w: 1.85,
+      profile: [
+        {0.06, 0.2},
+        {4.64, 0.2},
+        {4.72, 0.36},
+        {4.72, 0.56},
+        {4.6, 0.78},
+        {3.72, 0.94},
+        {2.9, 1.42},
+        {1.55, 1.45},
+        {0.55, 1.12},
+        {0.18, 1.02},
+        {0.0, 0.84},
+        {0.0, 0.36}
+      ],
+      window: [{0.75, 1.0}, {3.6, 1.0}, {2.88, 1.36}, {1.58, 1.39}, {0.9, 1.18}],
+      pillar: {2.22, 2.3, 1.0, 1.4},
+      lines: [
+        [{2.26, 0.32}, {2.28, 0.32}, {2.28, 1.0}, {2.26, 1.0}],
+        [{3.5, 0.36}, {3.52, 0.36}, {3.6, 1.0}, {3.58, 1.0}]
+      ],
+      handles: [2.5, 1.45],
+      wheels: {0.33, [0.95, 3.85]},
+      sill: 4.7,
+      front: {0.62, 0.68, 0.7},
+      back: {0.62, 0.64, 0.72, 0.74}
+    },
+    # The Chevrolet Bolt of 2027, a hatchback: 4.31 m long, 1.77 m wide
+    # (no mirrors), 1.62 m high, with 2.675 m between its axles
+    # (evspecifications.com). Its hood is short, and its roof goes far to
+    # the back.
+    "bolt" => %{
+      l: 4.31,
+      w: 1.77,
+      profile: [
+        {0.06, 0.2},
+        {4.24, 0.2},
+        {4.31, 0.38},
+        {4.31, 0.6},
+        {4.16, 0.84},
+        {3.5, 1.0},
+        {2.72, 1.56},
+        {1.0, 1.62},
+        {0.22, 1.46},
+        {0.04, 1.22},
+        {0.0, 0.9},
+        {0.0, 0.38}
+      ],
+      window: [{0.45, 1.06}, {3.4, 1.06}, {2.72, 1.5}, {1.02, 1.55}, {0.4, 1.36}],
+      pillar: {2.0, 2.08, 1.06, 1.53},
+      lines: [
+        [{2.04, 0.32}, {2.06, 0.32}, {2.06, 1.06}, {2.04, 1.06}],
+        [{3.3, 0.36}, {3.32, 0.36}, {3.4, 1.06}, {3.38, 1.06}]
+      ],
+      handles: [2.3, 1.2],
+      wheels: {0.34, [0.82, 3.49]},
+      sill: 4.29,
+      front: {0.5, 0.56, 0.58},
+      back: {0.93, 0.95, 1.05, 1.07}
+    }
+  }
+
+  # The material of the body of a color of a car. Black is dark.
+  defp car_paint("black"), do: "dark"
+  defp car_paint(color), do: color
+
   @doc """
   The model of a kind: boxes, cylinders and faces, in the order of the
   paint. The unit is near a meter, and the front looks to y.
@@ -1491,27 +1572,19 @@ defmodule DIYWeb.Icon.Shapes do
       box({0.3, d, 0.2}, {0.045, 0.048, 0.16}, "red")
   end
 
-  # An electric car: the side profile of a crossover across its width. The
+  # An electric car: the side profile of its body across its width. The
   # windshield and the back window are glass, and the windows of the doors
   # are on the sides. The tires and the rims, the lights and the handles
-  # are on the faces of the body.
-  def model("ev") do
-    {l, w} = {4.72, 1.85}
+  # are on the faces of the body. The body has the color of the car.
+  def model("ev"), do: model({"ev", "crossover", "red"})
 
-    profile = [
-      {0.06, 0.2},
-      {4.64, 0.2},
-      {4.72, 0.36},
-      {4.72, 0.56},
-      {4.6, 0.78},
-      {3.72, 0.94},
-      {2.9, 1.42},
-      {1.55, 1.45},
-      {0.55, 1.12},
-      {0.18, 1.02},
-      {0.0, 0.84},
-      {0.0, 0.36}
-    ]
+  def model({"ev", body, color}) do
+    %{l: l, w: w, profile: profile} = car = Map.fetch!(@car_bodies, body)
+    paint = car_paint(color)
+    {fz0, fzm, fz1} = car.front
+    {sz0, bz0, bz1, sz1} = car.back
+    {py0, py1, pz0, pz1} = car.pillar
+    {r, wheels} = car.wheels
 
     # A face across the car on the edge of the profile from point i to
     # point i + 1, a little out of the body.
@@ -1529,31 +1602,34 @@ defmodule DIYWeb.Icon.Shapes do
 
     # The windows of the side, the lines of the doors and the handles, and
     # the tires, the rims and their hubs.
-    window = [{0.75, 1.0}, {3.6, 1.0}, {2.88, 1.36}, {1.58, 1.39}, {0.9, 1.18}]
+    lines = for points <- car.lines, do: {points, "i-line"}
+
+    handles =
+      for y <- car.handles,
+          do: {[{y, 0.88}, {y + 0.2, 0.88}, {y + 0.2, 0.91}, {y, 0.91}], "i-dark-~"}
 
     sides =
       for {x, sign} <- [{-0.006, -1}, {w + 0.006, 1}],
           {points, class} <-
             [
-              {window, "i-glass-dark"},
-              {[{2.22, 1.0}, {2.3, 1.0}, {2.3, 1.4}, {2.22, 1.4}], "i-red-~"},
-              {[{2.26, 0.32}, {2.28, 0.32}, {2.28, 1.0}, {2.26, 1.0}], "i-line"},
-              {[{3.5, 0.36}, {3.52, 0.36}, {3.6, 1.0}, {3.58, 1.0}], "i-line"},
-              {[{2.5, 0.88}, {2.7, 0.88}, {2.7, 0.91}, {2.5, 0.91}], "i-dark-~"},
-              {[{1.45, 0.88}, {1.65, 0.88}, {1.65, 0.91}, {1.45, 0.91}], "i-dark-~"},
-              {[{0.0, 0.2}, {4.7, 0.2}, {4.7, 0.3}, {0.0, 0.3}], "i-black"}
-            ] ++ wheel_discs(0.33, [0.95, 3.85]),
+              {car.window, "i-glass-dark"},
+              {[{py0, pz0}, {py1, pz0}, {py1, pz1}, {py0, pz1}], "i-#{paint}-~"}
+            ] ++
+              lines ++
+              handles ++
+              [{[{0.0, 0.2}, {car.sill, 0.2}, {car.sill, 0.3}, {0.0, 0.3}], "i-black"}] ++
+              wheel_discs(r, wheels),
           do: face(for({y, z} <- points, do: {x, y, z}), {sign, 0, 0}, class)
 
     [
       {:group,
-       [{:prism, :x, profile, 0.0, w, "red"}] ++
+       [{:prism, :x, profile, 0.0, w, paint}] ++
          [
            across.(5, "i-glass-dark"),
            across.(7, "i-glass-dark"),
            face(
              for(
-               {x, z} <- [{0.12, 0.62}, {0.4, 0.62}, {0.4, 0.7}, {0.12, 0.68}],
+               {x, z} <- [{0.12, fz0}, {0.4, fz0}, {0.4, fz1}, {0.12, fzm}],
                do: {x, l + 0.004, z}
              ),
              {0, 1, 0},
@@ -1561,7 +1637,7 @@ defmodule DIYWeb.Icon.Shapes do
            ),
            face(
              for(
-               {x, z} <- [{w - 0.4, 0.62}, {w - 0.12, 0.62}, {w - 0.12, 0.68}, {w - 0.4, 0.7}],
+               {x, z} <- [{w - 0.4, fz0}, {w - 0.12, fz0}, {w - 0.12, fzm}, {w - 0.4, fz1}],
                do: {x, l + 0.004, z}
              ),
              {0, 1, 0},
@@ -1569,7 +1645,12 @@ defmodule DIYWeb.Icon.Shapes do
            ),
            face(
              for(
-               {x, z} <- [{0.1, 0.62}, {w - 0.1, 0.62}, {w - 0.1, 0.74}, {0.1, 0.74}],
+               {x, z} <- [
+                 {0.1, sz0},
+                 {w - 0.1, sz0},
+                 {w - 0.1, sz1},
+                 {0.1, sz1}
+               ],
                do: {x, -0.004, z}
              ),
              {0, -1, 0},
@@ -1581,7 +1662,7 @@ defmodule DIYWeb.Icon.Shapes do
            do:
              face(
                for(
-                 {dx, z} <- [{0.0, 0.64}, {0.35, 0.64}, {0.35, 0.72}, {0.0, 0.72}],
+                 {dx, z} <- [{0.0, bz0}, {0.35, bz0}, {0.35, bz1}, {0.0, bz1}],
                  do: {x + dx, -0.006, z}
                ),
                {0, -1, 0},

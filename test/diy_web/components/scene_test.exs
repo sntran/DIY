@@ -328,6 +328,7 @@ defmodule DIYWeb.SceneTest do
     gen all(
           floors <- integer(1..3),
           [garage, panel, switch, ac, pool, car] <- list_of(boolean(), length: 6),
+          body <- member_of(Enum.map(DIY.Catalog.car_bodies(), &elem(&1, 0))),
           roof <- fixed_map(%{station: watts(), grid: watts()}),
           yard <- fixed_map(%{station: watts(), grid: watts()}),
           stations <- list_of(tuple({float(min: 0.1, max: 30.0), boolean()}), max_length: 3),
@@ -348,6 +349,8 @@ defmodule DIYWeb.SceneTest do
         ac: ac,
         pool: pool,
         car: car,
+        # A red car: the only red part of the picture.
+        car_look: {"ev", body, "red"},
         van: van
       }
     end
