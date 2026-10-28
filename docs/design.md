@@ -1760,8 +1760,8 @@ its turn. A length is in inches.
   or a size can put an item in such a space. Then the change does not go,
   and the item stays. A message tells "An item cannot stand in front of a
   door."
-  An item on a wall over a door (80 inches and up, a mini split) does not
-  block it. A different change can put an item in front of a door: a new
+  An item on a wall over a door does not block it: 80 inches and up, for
+  example a mini split. A different change can put an item in front of a door: a new
   door, a file or a new item. Then the item goes to a free place of its
   room, with the items on it. The furniture of a room (`DIYWeb.Decor`) does not stand
   in a space of a door, and the counters of a kitchen stop at a door. A
