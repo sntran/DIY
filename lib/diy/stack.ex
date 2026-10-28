@@ -285,7 +285,8 @@ defmodule DIY.Stack do
   The place of an item that the person drops in a room (`at`, its back
   corner), with a snap: `{at, on}`. With `snap` false (the arrow keys),
   the place does not change, and the item is on the item that holds it
-  there.
+  there. A snap to the side of an item can put the item over a different
+  item. Then it is on the item that holds it at that place.
   """
   @spec place([map()], map(), map(), %{x: integer(), y: integer()}, boolean()) ::
           {%{x: integer(), y: integer()}, String.t() | nil}
@@ -293,9 +294,12 @@ defmodule DIY.Stack do
     moved = Map.delete(%{item | room: room.id, at: at}, :on)
     others = Enum.reject(items, &(&1.id == item.id))
 
-    base =
+    under = fn moved ->
       if goes_on?(item) and stacks?(room),
         do: base(Map.new(others, &{&1.id, &1}), moved, takers([moved | others]))
+    end
+
+    base = under.(moved)
 
     cond do
       not snap ->
@@ -313,7 +317,16 @@ defmodule DIY.Stack do
                 Catalog.lift(o.type) == 0,
               do: o
 
-        {beside(moved, floor, room.plan), nil}
+        at = beside(moved, floor, room.plan)
+
+        case under.(%{moved | at: at}) do
+          nil ->
+            {at, nil}
+
+          snapped ->
+            siblings = Enum.filter(others, &(on(&1) == snapped.id))
+            {onto(%{moved | at: at}, snapped, siblings, room.plan), snapped.id}
+        end
     end
   end
 

@@ -4761,7 +4761,10 @@ station on a freezer, or a pool pump on the coping of a pool
   item does not take an old item on it.
 - Two items can overlap, on the floor or on the top of an item, as
   before. For example, a full room gives a new item a place over an old
-  item. The snap helps the person to put the items side by side.
+  item. The snap helps the person to put the items side by side. A snap
+  to the side of an item can put the item over a different item. Then the
+  item goes on the highest item that holds it at that place, in its space
+  (`DIY.Stack.place/5`).
 - An item on an item is on its top: the picture adds the height of the
   item under it. A pool is in the floor, so an item on a pool is at the
   floor. An item over the top of an item has no shadow. The top item
