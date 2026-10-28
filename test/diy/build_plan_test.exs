@@ -80,7 +80,7 @@ defmodule DIY.BuildPlanTest do
     [kitchen, living, yard, garage, bedroom, laundry, drive] = for n <- names, do: room(build, n)
 
     # A room inside can have a door to a room inside or to a yard, on its
-    # layer, along 30 inches at least. The garage and the backyard touch
+    # layer, along 40 inches at least. The garage and the backyard touch
     # along 6 inches only. Bedroom 2 is on floor 2.
     assert Build.doorway_choices(build, kitchen) == [living, yard]
     assert Build.doorway_choices(build, garage) == [laundry, drive]
@@ -96,21 +96,29 @@ defmodule DIY.BuildPlanTest do
     assert door.revision == build.revision + 1
     assert door.doorways == [pair.(kitchen, living, 147), pair.(kitchen, yard, 20)]
 
+    # A door has 4 inches of wall at each side, at the least: its middle
+    # is 20 inches from each end of the common part.
     assert Build.doorways_of(door, kitchen.id) == [
-             %{other: living.id, at: 147, length: 294},
-             %{other: yard.id, at: 20, length: 144}
+             %{other: living.id, at: 147, range: {20, 274}},
+             %{other: yard.id, at: 20, range: {20, 124}}
            ]
 
-    assert Build.doorways_of(door, living.id) == [%{other: kitchen.id, at: 147, length: 294}]
+    assert Build.doorways_of(door, living.id) == [
+             %{other: kitchen.id, at: 147, range: {20, 274}}
+           ]
 
     # The opening is 32 inches, in the side of each room.
     assert Build.doorway_gaps(door, kitchen.id) == [{"x1", {131, 163}}, {"y1", {4, 36}}]
     assert Build.doorway_gaps(door, living.id) == [{"x0", {131, 163}}]
 
-    # A place goes into the common part, with the half of the door on each
-    # side.
+    # A place goes into the common part, with the door and its walls.
     {:ok, ends} = Build.set_doorways(build, kitchen.id, %{living.id => 0, yard.id => 999})
-    assert ends.doorways == [pair.(kitchen, living, 16), pair.(kitchen, yard, 128)]
+    assert ends.doorways == [pair.(kitchen, living, 20), pair.(kitchen, yard, 124)]
+
+    # Two rooms that are open to each other have no wall, and no door.
+    {:ok, open} = Build.set_open(door, kitchen.id, [living.id])
+    assert Build.doorway_choices(open, kitchen) == [yard]
+    assert open.doorways == [pair.(kitchen, yard, 20)]
 
     # The doors of the other room stay. No door takes them away.
     {:ok, both} = Build.set_doorways(door, garage.id, %{laundry.id => nil})
@@ -140,7 +148,7 @@ defmodule DIY.BuildPlanTest do
       [garage.id, bedroom.id, 20]
     ]
 
-    assert {:ok, %{doorways: [[_, _, 278]]}} = load.(%{map | "doorways" => stale})
+    assert {:ok, %{doorways: [[_, _, 274]]}} = load.(%{map | "doorways" => stale})
     assert {:ok, %{doorways: []}} = load.(Map.delete(map, "doorways"))
 
     for bad <- [[["a", "b"]], "x", [[1, 2, 3]], [["a", "b", "c"]]],

@@ -868,16 +868,16 @@ defmodule DIYWeb.Inside do
                 type="range"
                 id={"door-at-#{@room.id}-#{other.id}"}
                 name={"at[#{other.id}]"}
-                min="0"
-                max={door.length}
+                min={elem(door.range, 0)}
+                max={elem(door.range, 1)}
                 value={door.at}
-                aria-valuetext={"#{door.at} inches from the end"}
+                aria-valuetext={"#{door.at} inches from the back or left end of the wall"}
                 class="range range-xs w-full"
               />
             </label>
           </div>
           <p class="text-xs opacity-70">
-            A door is an opening of 32 inches in the wall between the rooms.
+            A door is an opening of 32 inches in the wall between the rooms. The range moves it from the back or the left end of the wall.
           </p>
         </fieldset>
       </form>
