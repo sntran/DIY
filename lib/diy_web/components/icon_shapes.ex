@@ -811,9 +811,9 @@ defmodule DIYWeb.Icon.Shapes do
   # The profile is the side of the body, `{y, z}`, from the back (y = 0)
   # to the front. The edge from point 5 to point 6 is the windshield, and
   # the edge from point 7 to point 8 is the back window. The side has the
-  # window of the doors, the pillar between the doors, the lines and the
-  # handles of the doors, the black sill under the doors, and the wheels
-  # (radius and places on y). The lights are at their heights on the front
+  # window of the doors and the pillar between the doors. It also has the
+  # lines and the handles of the doors, the black sill under the doors,
+  # and the wheels (radius and places on y). The lights are at their heights on the front
   # and on the back, with a black band at the back.
   @car_bodies %{
     # A crossover of 4.72 by 1.85 m.
