@@ -80,7 +80,8 @@ defmodule DIYWeb.Cutaway do
   @low 0.25
   @inner 0.75
   # The thickness of a wall on the outside (meters), and of a wall between
-  # two rooms: a 2x4 with drywall on its two sides, 4.5 inches.
+  # two rooms. A wall between two rooms is a 2x4 with drywall on its two
+  # sides: 4.5 inches.
   @thick 0.16
   @partition 0.115
   @slab 0.3

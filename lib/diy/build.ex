@@ -1259,9 +1259,9 @@ defmodule DIY.Build do
     end
   end
 
-  # The place of a turned item along a side of its room (inches): against
-  # the wall at the start or at the end when it was there, else around its
-  # middle. `a` is the place, `l` the length before the turn, `t` after it,
+  # The place of a turned item along a side of its room (inches). An item
+  # against the wall at the start or at the end stays there. Else the item
+  # turns around its middle. `a` is the place, `l` the length before the turn, `t` after it,
   # and `r` the length of the room.
   defp wall_at(0, _l, _t, _r), do: 0
   defp wall_at(a, l, t, r) when a + l == r, do: r - t
@@ -2241,7 +2241,7 @@ defmodule DIY.Build do
     end
   end
 
-  # True when an item stands in front of a door of its room: its box on the
+  # True when an item stands in front of a door of its room. Its box on the
   # plan is over a space of a door, and its bottom is under the top of the
   # door. An item with no place (in the shell of a van) blocks no door.
   defp blocks_door?(build, item) do
