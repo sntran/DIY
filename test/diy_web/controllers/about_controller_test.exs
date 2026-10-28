@@ -14,10 +14,24 @@ defmodule DIYWeb.AboutControllerTest do
         do: assert(html =~ ~s(id="#{id}" aria-labelledby="#{id}-title"))
 
     assert html =~ "Sơn Trần-Nguyễn made this app."
-    assert html =~ "The server keeps no copy."
-    assert html =~ "for one year after the last visit of the link"
+
+    # The data of a person: what goes to the server, and what stays.
+    for fact <- [
+          "The server uses it while the page is open, but it does not save it.",
+          "When you share a house, the link holds the house and its ZIP code.",
+          "The server keeps it for one year after the last visit of the link.",
+          "a point near your ZIP code to NASA POWER and to Open-Meteo",
+          "the server sends the ZIP code to Power to Choose",
+          "For Pecron, each request goes through the server, which does not keep the key.",
+          "The app runs on Cloudflare."
+        ],
+        do: assert(html =~ fact)
+
     assert html =~ ~s(id="about-code-link" href="https://github.com/sntran/DIY")
-    assert html =~ ~s(id="about-issues-link" href="https://github.com/sntran/DIY/issues")
+
+    assert html =~
+             ~r/id="about-issues-link" href="https:\/\/github.com\/sntran\/DIY\/issues"[^>]*>\s*Open an issue on GitHub/
+
     assert html =~ ~s(id="about-start" href="/")
 
     # The links of the languages come back to this page. The page has no
@@ -44,11 +58,20 @@ defmodule DIYWeb.AboutControllerTest do
     assert conn |> get(~p"/") |> html_response(200) =~
              ~s(<a id="about-link" href="/about" class="link">About this app</a>)
 
+    # The foot is after the main part: a landmark of its own.
     {:ok, view, _html} = live(conn, ~p"/")
     render_hook(view, "device:restore", %{"stamp" => "s0"})
-    assert has_element?(view, "footer a#about-link[href='/about']", "About this app")
+    assert has_element?(view, "main + footer a#about-link[href='/about']", "About this app")
 
-    es = put_req_cookie(build_conn(), "diy_language", "es")
-    assert es |> get(~p"/") |> html_response(200) =~ "Acerca de esta aplicación"
+    for {lang, text} <- [{"es", "Acerca de esta aplicación"}, {"vi", "Giới thiệu ứng dụng này"}] do
+      html =
+        build_conn() |> put_req_cookie("diy_language", lang) |> get(~p"/") |> html_response(200)
+
+      assert html =~ text
+    end
+
+    # The tab of the sign-in of Home Assistant has no link: a click there
+    # loses the sign-in.
+    refute build_conn() |> get(~p"/ha/sign-in") |> html_response(200) =~ "about-link"
   end
 end

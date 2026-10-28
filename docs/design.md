@@ -39,25 +39,42 @@ that made it. So a person who shares a house uses the address of the app.
 
 ## The page About
 
-A neighbor did not want to open a link of the app (the owner, October
-2026: "Not sure about clicking on an unknown link on Nextdoor"). So the
-page About (`/about`, `DIYWeb.AboutController`) tells a person about the
+A neighbor did not want to open a link of the app. The owner gave the
+words of the neighbor (October 2026): "Not sure about clicking on an
+unknown link on Nextdoor". So the page About (`/about`, `DIYWeb.AboutController`) tells a person about the
 app before the person tries it:
 
 - what the app does, and what a small step is;
 - who made it. The app is free, with no ads, and it sells nothing;
-- the data of a person. The app needs no account. The house stays on
-  the device, except for a short link. A short link stays one year after
-  its last visit. The weather services get a point near the ZIP code.
-  The keys of the links to Home Assistant and to a maker stay on the
-  device;
-- where the numbers come from;
+- the data of a person:
+  - The app needs no account, and it asks for no street address.
+  - The house is saved only on the device. The server uses it while
+    the page is open, but it does not save it.
+  - A share link holds the house and its ZIP code.
+  - Only a short link makes the server save a copy, for one year after
+    its last visit.
+  - The file of a smart meter and the PDF of a plan stay on the
+    device. Only their numbers go to the server.
+  - The weather services get a point near the ZIP code. Power to
+    Choose gets a ZIP code of Texas.
+  - The keys of the links to Home Assistant and to a maker are saved
+    only on the device. A request to Pecron goes through the server,
+    which does not keep the key.
+  - The app runs on Cloudflare, and it sets two cookies: the safety of
+    the forms, and the language.
+- where the numbers come from: the order of the prices (`DIY.Prices`),
+  and the EFL of a plan for the worksheet;
 - the public code on GitHub, and its issues for a question.
 
 It is a plain page: it needs no build and no script. It has the links
-of the languages, and it is in English, Spanish and Vietnamese. The foot
-of each page of the app has a link to it (`DIYWeb.Layouts.app/1`). A
-change of the data of the app must change this page too.
+of the languages, and it is in English, Spanish and Vietnamese. The plug
+of the language sets the language of its texts (`DIYWeb.Locale`).
+
+The foot of each page of the app has a link to it
+(`DIYWeb.Layouts.app/1`). The foot is after the main part, so it is a
+landmark of its own. The tab of the sign-in of Home Assistant has no
+link: a click there loses the sign-in. A change of the data of the app
+must change the page About too.
 
 The tests: `test/diy_web/controllers/about_controller_test.exs` checks
 the page in each language, its links, and the link at the foot of the

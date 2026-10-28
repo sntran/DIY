@@ -1,9 +1,9 @@
 defmodule DIYWeb.AboutHTML do
   @moduledoc """
   The page About (`DIYWeb.AboutController`). A neighbor can read it before
-  the neighbor tries the app: what the app does, who made it, and what
-  it does with the data of a person. A change to the data of the app
-  must change this page too.
+  the neighbor tries the app. It tells what the app does, who made it,
+  and what it does with the data of a person. A change to the data of the
+  app must change this page too.
   """
   use DIYWeb, :html
 
@@ -45,25 +45,52 @@ defmodule DIYWeb.AboutHTML do
           <h2 id="about-data-title" class="text-lg font-bold">{gettext("Your data")}</h2>
           <ul class="list-disc space-y-1 pl-5">
             <li>
-              {gettext("You need no account. The app asks for no name, no email and no password.")}
-            </li>
-            <li>
-              {gettext("Your house stays in the browser of this device. The server keeps no copy.")}
+              {gettext(
+                "You need no account. The app asks for no name, no email, no password and no street address."
+              )}
             </li>
             <li>
               {gettext(
-                "A short link to share a house is the one exception. The server keeps a copy of the house for one year after the last visit of the link."
+                "Your house is saved only in the browser of this device. The server uses it while the page is open, but it does not save it."
+              )}
+            </li>
+            <li>
+              {gettext(
+                "When you share a house, the link holds the house and its ZIP code. Anyone with the link can see them."
+              )}
+            </li>
+            <li>
+              {gettext(
+                "Only a short link makes the server save a copy of the house. The server keeps it for one year after the last visit of the link."
               )}
               {gettext("The copy is locked with a key that only the link has.")}
             </li>
             <li>
               {gettext(
-                "For the weather, the server sends a point near your ZIP code to NASA POWER and to Open-Meteo. It does not send your address."
+                "The app reads the file of your smart meter and the PDF of a plan on this device. Only the numbers that it needs go to the server."
               )}
             </li>
             <li>
               {gettext(
-                "The keys of your links to Home Assistant and to the maker of a power station stay on this device. The server does not keep them."
+                "For the weather, the server sends a point near your ZIP code to NASA POWER and to Open-Meteo."
+              )}
+            </li>
+            <li>
+              {gettext(
+                "For a ZIP code in Texas, the server sends the ZIP code to Power to Choose, for the prices of the plans."
+              )}
+            </li>
+            <li>
+              {gettext(
+                "The app saves your keys for Home Assistant and for the maker of a power station only on this device."
+              )}
+              {gettext(
+                "For Pecron, each request goes through the server, which does not keep the key."
+              )}
+            </li>
+            <li>
+              {gettext(
+                "The app runs on Cloudflare. It sets a cookie for the safety of its forms, and a cookie for the language that you choose."
               )}
             </li>
           </ul>
@@ -80,7 +107,15 @@ defmodule DIYWeb.AboutHTML do
           </p>
           <p>
             {gettext(
-              "The prices come from public data: the US Energy Information Administration, and the Electricity Facts Labels of the plans in Texas."
+              "The price is the price that you give. Else, in Texas, it is the median of the plans on Power to Choose."
+            )}
+            {gettext(
+              "Else it is the average of your state from the US Energy Information Administration."
+            )}
+          </p>
+          <p>
+            {gettext(
+              "The worksheet of the plans reads the Electricity Facts Label (EFL) of each plan."
             )}
           </p>
         </section>
@@ -92,10 +127,11 @@ defmodule DIYWeb.AboutHTML do
             <a id="about-code-link" href={@code} class="link">github.com/sntran/DIY</a>
           </p>
           <p>
-            {gettext("To ask a question or to tell about a problem, open an issue on GitHub.")}
+            {gettext("Do you have a question, or did you find a problem?")}
             <a id="about-issues-link" href={@code <> "/issues"} class="link">
-              {gettext("The issues of the app")}
+              {gettext("Open an issue on GitHub")}
             </a>
+            {gettext("An issue is public, and it needs a GitHub account.")}
           </p>
         </section>
 

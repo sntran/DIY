@@ -8,9 +8,9 @@ defmodule DIYWeb.Layouts do
   embed_templates "layouts/*"
 
   @doc """
-  The frame of a page: the name of the app, the state of the save, the
-  content, the link to the page About, the bar of the parts of a build,
-  and the notices.
+  The frame of a page: the name of the app, the state of the save, and
+  the content. Then the link to the page About, the bar of the parts of a
+  build, and the notices.
   """
   attr :flash, :map, required: true, doc: "the flash notices"
   attr :nav, :boolean, default: false, doc: "show the bar of the parts of a build"
@@ -30,14 +30,18 @@ defmodule DIYWeb.Layouts do
       </span>
     </header>
 
-    <main class={["px-4", if(@nav, do: "pb-24", else: "pb-16")]}>
+    <main class={["px-4", if(@about, do: "pb-8", else: bottom(@nav))]}>
       <div class="mx-auto max-w-xl space-y-4">
         {render_slot(@inner_block)}
       </div>
-      <footer :if={@about} class="mx-auto max-w-xl pt-8 text-sm">
-        <a id="about-link" href={~p"/about"} class="link">{gettext("About this app")}</a>
-      </footer>
     </main>
+
+    <%!-- After the main part: a landmark of its own (contentinfo). --%>
+    <footer :if={@about} class={["px-4 text-sm", bottom(@nav)]}>
+      <div class="mx-auto max-w-xl">
+        <a id="about-link" href={~p"/about"} class="link">{gettext("About this app")}</a>
+      </div>
+    </footer>
 
     <nav
       :if={@nav}
@@ -96,6 +100,11 @@ defmodule DIYWeb.Layouts do
     </div>
     """
   end
+
+  # The space at the foot of a page: the bar of the parts covers the
+  # bottom of the screen.
+  defp bottom(true), do: "pb-24"
+  defp bottom(false), do: "pb-16"
 
   # A van is a part of the house: its page is in the part Rooms. On the page
   # of a van, the link Rooms is the current part (aria-current "true"), but

@@ -20,7 +20,8 @@ defmodule DIYWeb.SignInLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash}>
+    <%!-- No link to the page About: a click loses the sign-in of this tab. --%>
+    <Layouts.app flash={@flash} about={false}>
       <section id="ha-sign-in" lang="en" phx-hook="HomeAssistantSignIn" class="space-y-3">
         <h1 class="text-xl font-bold">Sign in to Home Assistant</h1>
         <p id="ha-status" role="status" class="text-sm font-medium">
