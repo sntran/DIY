@@ -1780,6 +1780,9 @@ defmodule DIYWeb.Inside do
           station_source(@item) ->
             "These are the sizes of the model. Change them only when your station has a different size, for example on a cart."
 
+          @item.type == "ev" ->
+            "These are the sizes of the body of the car. Change them only when your car has a different size."
+
           true ->
             "These are the typical sizes of this kind of item. Give the sizes of your item."
         end}
@@ -1794,7 +1797,11 @@ defmodule DIYWeb.Inside do
           }
           class="stage-btn"
         >
-          {if station_source(@item), do: "The size of the model", else: "The typical size"}
+          {cond do
+            station_source(@item) -> "The size of the model"
+            @item.type == "ev" -> "The size of the body"
+            true -> "The typical size"
+          end}
         </button>
       </div>
     </div>

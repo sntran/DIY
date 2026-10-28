@@ -167,6 +167,9 @@ defmodule DIY.Layout do
 
   def size(%{size: %{w: w, d: d, h: h}}), do: {w, d, h}
 
+  # An electric car has the size of its body, when the user gave no size.
+  def size(%{type: "ev", params: %{"body" => body}}), do: Catalog.car_size(body)
+
   # A power station has the size of its model, when the user gave no size.
   def size(%{type: "power_station", params: %{"model" => model}}),
     do: Catalog.station_size(model)
