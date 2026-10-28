@@ -301,6 +301,32 @@ same ZIP code (the key Try again asks again). When the person changes the
 ZIP code, the build forgets its market. When the ZIP code comes back, the
 page asks again.
 
+The plans and their prices change, so a market of Power to Choose gets
+old after 7 days (`DIY.Market.old?/2`). A date after today, from a file,
+is old too. The app has no job that gets the plans each day, because the
+server keeps no ZIP codes of people. Instead, the page asks again when it
+opens a build with an old market:
+
+- It asks one time for each ZIP code in a session, in the background.
+  The build keeps its old market until the answer comes.
+- A new market goes into the build only when the build still has that
+  ZIP code and a market of Power to Choose. The person can change them
+  while the page waits.
+- After an error, the build keeps its old market, and the page shows no
+  error: the old median is still good for an estimate. The source of the
+  price gives the date of the median.
+- A new market with less in it is an error too (`DIY.Market.less?/2`).
+  Power to Choose can give an empty answer one time. Then the new market
+  has no retail choice and no median, and the Plans page would go away.
+- The page asks one time for each ZIP code in a session. A build can
+  come later in the session from a file or a different tab. If it has an
+  old market of the same ZIP code, it waits for the next session.
+- A market that the person gave (`source: "user"`) does not get old.
+
+The cache of the server keeps the answer of Power to Choose for one ZIP
+code and one day. So the server asks at most one time a day for a ZIP
+code.
+
 In the data of NASA POWER, the sun of the last months comes later than
 the degree days. A month with no sun keeps its degree days.
 
