@@ -4629,9 +4629,9 @@ The space of a tree on the plan is its crown. The models
 
 The house from outside (`DIYWeb.Outside`) shows the whole tree. A tall
 tree in front of the house would hide the rooms on the page Rooms. So
-the view of the rooms cuts a tree at the height of the low walls (75 cm):
-the trunk, the bed of mulch, and the shadow of the crown on the ground
-(`DIYWeb.Cutaway.item_view/5`). The share picture also cuts it.
+the view of the rooms cuts a tree at the height of the low walls (75 cm,
+`DIYWeb.Cutaway.item_view/5`). It shows the trunk, the bed of mulch, and
+the shadow of the crown on the ground. The share picture also cuts it.
 
 A tree stands on its trunk: its crown is high over the ground. So only
 its trunk can block a door (`DIY.Layout.foot_box/1`, a square of 24

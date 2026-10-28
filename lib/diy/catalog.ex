@@ -381,8 +381,8 @@ defmodule DIY.Catalog do
   ]
 
   # The kinds of a tree: the key, the name, and the typical size of a tree
-  # of a yard in inches (the owner, October 2026: a tree can be taller
-  # than the roof). No source: a guess for a grown tree of a yard.
+  # of a yard in inches. A tree can be taller than the roof (the owner,
+  # October 2026). No source: a guess for a grown tree of a yard.
   @tree_kinds [
     # A live oak: a crown that is wide and round. 30 ft wide, 40 ft high.
     {"live_oak", "Live oak", {360, 360, 480}},

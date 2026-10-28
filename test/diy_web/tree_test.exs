@@ -1,8 +1,8 @@
 defmodule DIYWeb.TreeTest do
   @moduledoc """
   The kinds of a tree (`DIY.Catalog.tree_kinds/0`): their sizes, their
-  models (`DIYWeb.Icon.TreeShapes`), the cut in the view of the rooms, and
-  the doors (a tree stands on its trunk, `DIY.Layout.foot_box/1`).
+  models (`DIYWeb.Icon.TreeShapes`) and the cut in the view of the rooms.
+  Also the doors: a tree stands on its trunk (`DIY.Layout.foot_box/1`).
   """
   use ExUnit.Case, async: true
 

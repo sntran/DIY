@@ -14,7 +14,7 @@ defmodule DIYWeb.Icon.TreeShapes do
   - Crape myrtle: three thin trunks, and a crown of leaves with pink
     flowers.
 
-  The view of the rooms cuts a tree (`cut/3`): it shows the trunk to a low
+  The view of the rooms cuts a tree (`cut/3`). It shows the trunk to a low
   height, and the shadow of the crown on the ground. So the tree does not
   hide the rooms.
   """
@@ -36,9 +36,9 @@ defmodule DIYWeb.Icon.TreeShapes do
   end
 
   @doc """
-  The model of a tree in the view of the rooms, cut at a height (meters):
-  the bed of mulch, the trunk to that height, and the shadow of the crown
-  on the ground.
+  The model of a tree in the view of the rooms, cut at a height in meters.
+  It is the bed of mulch, the trunk to that height, and the shadow of the
+  crown on the ground.
   """
   def cut(kind, {w, d, h}, height) do
     %{at: {x, y, z}, trunk: trunk} = fit(kind, {w, d, h})
@@ -52,8 +52,8 @@ defmodule DIYWeb.Icon.TreeShapes do
   end
 
   @doc """
-  A ball of leaves (or of flowers) that looks to the camera of the house: a
-  disc in the shade of the material, with two lighter discs on it.
+  A ball of leaves (or of flowers) that looks to the camera of the house.
+  It is a disc in the shade of the material, with two lighter discs on it.
   """
   def ball(center, r, material) do
     {u, v} = billboard()
@@ -109,7 +109,7 @@ defmodule DIYWeb.Icon.TreeShapes do
 
   # The crown of a kind at the size of the tree. The crown is the shapes of
   # `crown/1`, with one scale. The crown is as large as it can be in the
-  # size, with its top at the top of the tree, and its middle over the
+  # size. Its top is at the top of the tree, and its middle is over the
   # middle of the tree. `at` is the point of the crown where the trunk
   # ends (the point {0, 0} of `crown/1`). `trunk` is the radius of the
   # trunk: a tall tree has a thicker trunk.
@@ -129,9 +129,9 @@ defmodule DIYWeb.Icon.TreeShapes do
 
   # The shapes of the crown of a kind, around the end of the trunk at
   # {0, 0, 0}, in units of any size. Also the most of the height of the
-  # tree that the crown can take, and the least and the most radius of the
-  # trunk in meters. The shapes are in the order of the paint: the back
-  # first.
+  # tree that the crown can take. Also the least and the most radius of
+  # the trunk in meters. `in_front/2` puts the shapes in the order of the
+  # paint.
   defp crown("pine") do
     {u, _v} = billboard()
     up = {0.0, 0.0, 1.0}
