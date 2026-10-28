@@ -43,6 +43,10 @@ defmodule DIYWeb.Router do
     # it needs no script.
     get "/language/:locale", LanguageController, :update
 
+    # Who made the app, and what it does with the data of a person
+    # (DIYWeb.AboutController). It needs no build.
+    get "/about", AboutController, :show
+
     # The signed session keeps the language of the first render
     # (DIYWeb.Locale.live_session/1).
     live_session :build,

@@ -76,7 +76,7 @@ msgstr "Atrás"
 msgid "Before 1980"
 msgstr "Antes de 1980"
 
-#: lib/diy_web/components/layouts.ex:61
+#: lib/diy_web/components/layouts.ex:70
 #, elixir-autogen, elixir-format
 msgid "Bill"
 msgstr "Factura"
@@ -138,7 +138,7 @@ msgstr "Calefacción"
 msgid "Heat pump"
 msgstr "Bomba de calor"
 
-#: lib/diy_web/components/layouts.ex:47
+#: lib/diy_web/components/layouts.ex:56
 #, elixir-autogen, elixir-format
 msgid "House"
 msgstr "Casa"
@@ -209,7 +209,7 @@ msgstr "Siguiente"
 msgid "No retail choice: a city utility or a co-op sells the power."
 msgstr "Sin elección de proveedor: una compañía de luz municipal o una cooperativa vende la electricidad."
 
-#: lib/diy_web/components/layouts.ex:27
+#: lib/diy_web/components/layouts.ex:29
 #, elixir-autogen, elixir-format
 msgid "Not saved yet"
 msgstr "Aún no se guardó"
@@ -229,12 +229,12 @@ msgstr "Un acre tiene 43,560 pies cuadrados."
 msgid "Open a file of a build"
 msgstr "Abrir un archivo de un modelo"
 
-#: lib/diy_web/components/layouts.ex:77
+#: lib/diy_web/components/layouts.ex:86
 #, elixir-autogen, elixir-format
 msgid "Plans"
 msgstr "Planes"
 
-#: lib/diy_web/components/layouts.ex:69
+#: lib/diy_web/components/layouts.ex:78
 #, elixir-autogen, elixir-format
 msgid "Power"
 msgstr "Energía"
@@ -254,7 +254,7 @@ msgstr "Elección de proveedor."
 msgid "Retail choice: %{utility} delivers the power."
 msgstr "Elección de proveedor: %{utility} distribuye la electricidad."
 
-#: lib/diy_web/components/layouts.ex:54
+#: lib/diy_web/components/layouts.ex:63
 #, elixir-autogen, elixir-format
 msgid "Rooms"
 msgstr "Cuartos"
@@ -270,7 +270,7 @@ msgstr "Guardar"
 msgid "Save the house"
 msgstr "Guardar la casa"
 
-#: lib/diy_web/components/layouts.ex:27
+#: lib/diy_web/components/layouts.ex:29
 #, elixir-autogen, elixir-format
 msgid "Saved on this device"
 msgstr "Guardado en este dispositivo"
@@ -280,7 +280,7 @@ msgstr "Guardado en este dispositivo"
 msgid "See my house"
 msgstr "Ver mi casa"
 
-#: lib/diy_web/components/layouts.ex:84
+#: lib/diy_web/components/layouts.ex:93
 #: lib/diy_web/components/settings.ex:35
 #, elixir-autogen, elixir-format
 msgid "Settings"
@@ -347,7 +347,7 @@ msgstr "La casa"
 msgid "The lot and the house"
 msgstr "El terreno y la casa"
 
-#: lib/diy_web/components/layouts.ex:40
+#: lib/diy_web/components/layouts.ex:49
 #, elixir-autogen, elixir-format
 msgid "The parts of your build"
 msgstr "Las partes de su modelo"
@@ -1004,67 +1004,67 @@ msgstr "Los meses de su medidor."
 msgid "This house is too large for a link. A link can have 150 items and 50 rooms at most."
 msgstr "Esta casa es demasiado grande para un enlace. Un enlace puede tener 150 aparatos y 50 cuartos como máximo."
 
-#: lib/diy_web/components/outside.ex:939
+#: lib/diy_web/components/outside.ex:949
 #, elixir-autogen, elixir-format
 msgid "Clouds"
 msgstr "Nubes"
 
-#: lib/diy_web/components/outside.ex:934
+#: lib/diy_web/components/outside.ex:944
 #, elixir-autogen, elixir-format
 msgid "Day"
 msgstr "Día"
 
-#: lib/diy_web/components/outside.ex:936
+#: lib/diy_web/components/outside.ex:946
 #, elixir-autogen, elixir-format
 msgid "Night"
 msgstr "Noche"
 
-#: lib/diy_web/components/outside.ex:926
+#: lib/diy_web/components/outside.ex:936
 #, elixir-autogen, elixir-format
 msgid "Now"
 msgstr "Ahora"
 
-#: lib/diy_web/components/outside.ex:927
+#: lib/diy_web/components/outside.ex:937
 #, elixir-autogen, elixir-format
 msgid "Now (%{name})"
 msgstr "Ahora (%{name})"
 
-#: lib/diy_web/components/outside.ex:916
+#: lib/diy_web/components/outside.ex:926
 #, elixir-autogen, elixir-format
 msgid "Now at the house: %{temp} °F, %{time}, %{weather}."
 msgstr "Ahora en la casa: %{temp} °F, %{time}, %{weather}."
 
-#: lib/diy_web/components/outside.ex:940
+#: lib/diy_web/components/outside.ex:950
 #, elixir-autogen, elixir-format
 msgid "Rain"
 msgstr "Lluvia"
 
-#: lib/diy_web/components/outside.ex:941
+#: lib/diy_web/components/outside.ex:951
 #, elixir-autogen, elixir-format
 msgid "Snow"
 msgstr "Nieve"
 
-#: lib/diy_web/components/outside.ex:938
+#: lib/diy_web/components/outside.ex:948
 #, elixir-autogen, elixir-format
 msgid "Sun"
 msgstr "Sol"
 
-#: lib/diy_web/components/outside.ex:935
+#: lib/diy_web/components/outside.ex:945
 #, elixir-autogen, elixir-format
 msgid "Sunset"
 msgstr "Atardecer"
 
-#: lib/diy_web/components/outside.ex:889
+#: lib/diy_web/components/outside.ex:899
 #, elixir-autogen, elixir-format
 msgid "Time of day"
 msgstr "Hora del día"
 
-#: lib/diy_web/components/outside.ex:900
+#: lib/diy_web/components/outside.ex:910
 #, elixir-autogen, elixir-format
 msgid "Weather"
 msgstr "Clima"
 
-#: lib/diy_web/components/outside.ex:931
+#: lib/diy_web/components/outside.ex:941
 #, elixir-autogen, elixir-format
 msgid "Sunrise"
 msgstr "Amanecer"
@@ -1138,3 +1138,159 @@ msgstr "La cabina, el compartimento del motor y el techo de la camioneta se qued
 #, elixir-autogen, elixir-format
 msgid "An item cannot stand in front of a door."
 msgstr "Un objeto no puede quedar delante de una puerta."
+
+#: lib/diy_web/controllers/about_html.ex:40
+#, elixir-autogen, elixir-format
+msgid "%{name} made this app."
+msgstr "%{name} hizo esta aplicación."
+
+#: lib/diy_web/controllers/about_html.ex:33
+#, elixir-autogen, elixir-format
+msgid "A small step can be a better plan for your electricity, a change to an item, or a power station for an outage."
+msgstr "Un pequeño paso puede ser un mejor plan de electricidad, un cambio en un artículo o una estación de energía para un apagón."
+
+#: lib/diy_web/controllers/about_controller.ex:13
+#: lib/diy_web/controllers/about_html.ex:26
+#, elixir-autogen, elixir-format
+msgid "About Small Steps Home"
+msgstr "Acerca de Small Steps Home"
+
+#: lib/diy_web/components/layouts.ex:42
+#, elixir-autogen, elixir-format
+msgid "About this app"
+msgstr "Acerca de esta aplicación"
+
+#: lib/diy_web/controllers/about_html.ex:138
+#, elixir-autogen, elixir-format
+msgid "Go to the app"
+msgstr "Ir a la aplicación"
+
+#: lib/diy_web/controllers/about_html.ex:28
+#, elixir-autogen, elixir-format
+msgid "Small Steps Home shows where the power of a house goes. Then it helps you find your next small step."
+msgstr "Small Steps Home muestra a dónde va la electricidad de una casa. Luego le ayuda a encontrar su próximo pequeño paso."
+
+#: lib/diy_web/controllers/about_html.ex:41
+#, elixir-autogen, elixir-format
+msgid "The app is free. It has no ads, and it sells nothing."
+msgstr "La aplicación es gratuita. No tiene anuncios y no vende nada."
+
+#: lib/diy_web/controllers/about_html.ex:105
+#, elixir-autogen, elixir-format
+msgid "The bill is an estimate from the weather of your place and the items of your house. It is a range, not one number."
+msgstr "La factura es una estimación a partir del clima de su zona y los artículos de su casa. Es un rango, no un solo número."
+
+#: lib/diy_web/controllers/about_html.ex:125
+#, elixir-autogen, elixir-format
+msgid "The code"
+msgstr "El código"
+
+#: lib/diy_web/controllers/about_html.ex:127
+#, elixir-autogen, elixir-format
+msgid "The code of the app is public. Anyone can read how it works."
+msgstr "El código de la aplicación es público. Cualquier persona puede leer cómo funciona."
+
+#: lib/diy_web/controllers/about_html.ex:67
+#, elixir-autogen, elixir-format
+msgid "The copy is locked with a key that only the link has."
+msgstr "La copia está cifrada con una clave que solo tiene el enlace."
+
+#: lib/diy_web/controllers/about_html.ex:102
+#, elixir-autogen, elixir-format
+msgid "Where the numbers come from"
+msgstr "De dónde vienen los números"
+
+#: lib/diy_web/controllers/about_html.ex:39
+#, elixir-autogen, elixir-format
+msgid "Who made it"
+msgstr "Quién la hizo"
+
+#: lib/diy_web/controllers/about_html.ex:45
+#, elixir-autogen, elixir-format
+msgid "Your data"
+msgstr "Sus datos"
+
+#: lib/diy_web/controllers/about_html.ex:132
+#, elixir-autogen, elixir-format
+msgid "An issue is public, and it needs a GitHub account."
+msgstr "Un reporte es público y necesita una cuenta de GitHub."
+
+#: lib/diy_web/controllers/about_html.ex:131
+#, elixir-autogen, elixir-format
+msgid "Do you have a question, or did you find a problem?"
+msgstr "¿Tiene una pregunta o encontró un problema?"
+
+#: lib/diy_web/controllers/about_html.ex:113
+#, elixir-autogen, elixir-format
+msgid "Else it is the average of your state from the US Energy Information Administration."
+msgstr "Si no, es el promedio de su estado según la Administración de Información Energética de EE. UU."
+
+#: lib/diy_web/controllers/about_html.ex:88
+#, elixir-autogen, elixir-format
+msgid "For Pecron, each request goes through the server, which does not keep the key."
+msgstr "Para Pecron, cada solicitud pasa por el servidor, que no guarda la clave."
+
+#: lib/diy_web/controllers/about_html.ex:80
+#, elixir-autogen, elixir-format
+msgid "For a ZIP code in Texas, the server sends the ZIP code to Power to Choose, for the prices of the plans."
+msgstr "Para un código postal de Texas, el servidor envía el código postal a Power to Choose, para los precios de los planes."
+
+#: lib/diy_web/controllers/about_html.ex:75
+#, elixir-autogen, elixir-format
+msgid "For the weather, the server sends a point near your ZIP code to NASA POWER and to Open-Meteo."
+msgstr "Para el clima, el servidor envía un punto cerca de su código postal a NASA POWER y a Open-Meteo."
+
+#: lib/diy_web/controllers/about_html.ex:64
+#, elixir-autogen, elixir-format
+msgid "Only a short link makes the server save a copy of the house. The server keeps it for one year after the last visit of the link."
+msgstr "Solo un enlace corto hace que el servidor guarde una copia de la casa. El servidor la guarda durante un año después de la última visita del enlace."
+
+#: lib/diy_web/controllers/about_html.ex:132
+#, elixir-autogen, elixir-format
+msgid "Open an issue on GitHub"
+msgstr "Abra un reporte en GitHub"
+
+#: lib/diy_web/controllers/about_html.ex:93
+#, elixir-autogen, elixir-format
+msgid "The app runs on Cloudflare. It sets a cookie for the safety of its forms, and a cookie for the language that you choose."
+msgstr "La aplicación funciona en Cloudflare. Usa una cookie para la seguridad de sus formularios y una cookie para el idioma que usted elige."
+
+#: lib/diy_web/controllers/about_html.ex:85
+#, elixir-autogen, elixir-format
+msgid "The app saves your keys for Home Assistant and for the maker of a power station only on this device."
+msgstr "La aplicación guarda sus claves de Home Assistant y del fabricante de una estación de energía solo en este dispositivo."
+
+#: lib/diy_web/controllers/about_html.ex:110
+#, elixir-autogen, elixir-format
+msgid "The price is the price that you give. Else, in Texas, it is the median of the plans on Power to Choose."
+msgstr "El precio es el precio que usted da. Si no, en Texas, es la mediana de los planes en Power to Choose."
+
+#: lib/diy_web/controllers/about_html.ex:118
+#, elixir-autogen, elixir-format
+msgid "The worksheet of the plans reads the Electricity Facts Label (EFL) of each plan."
+msgstr "La hoja de trabajo de los planes lee la etiqueta de datos de electricidad (EFL) de cada plan."
+
+#: lib/diy_web/controllers/about_html.ex:48
+#, elixir-autogen, elixir-format
+msgid "You need no account. The app asks for no name, no email, no password and no street address."
+msgstr "No necesita una cuenta. La aplicación no pide nombre, correo electrónico, contraseña ni dirección."
+
+#: lib/diy_web/controllers/about_html.ex:53
+#, elixir-autogen, elixir-format
+msgid "Your house is saved only in the browser of this device. The server uses it while the page is open, but it does not save it."
+msgstr "Su casa se guarda solo en el navegador de este dispositivo. El servidor la usa mientras la página está abierta, pero no la guarda."
+
+#: lib/diy_web/controllers/about_html.ex:61
+#, elixir-autogen, elixir-format
+msgid "Anyone with the link can see them."
+msgstr "Cualquier persona con el enlace puede verlos."
+
+#: lib/diy_web/controllers/about_html.ex:70
+#, elixir-autogen, elixir-format
+msgid "The app reads the file of your smart meter and the PDF of a plan on this device. Only the sums of each month, and the text of the plan, go to the server."
+msgstr "La aplicación lee el archivo de su medidor inteligente y el PDF de un plan en este dispositivo. Solo las sumas de cada mes y el texto del plan van al servidor."
+
+#: lib/diy_web/controllers/about_html.ex:58
+#, elixir-autogen, elixir-format
+msgid "When you share a house, the link holds the house and the months of your meter. It holds the ZIP code too, if you keep it."
+msgstr "Cuando comparte una casa, el enlace contiene la casa y los meses de su medidor. También contiene el código postal, si usted lo deja."

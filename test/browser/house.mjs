@@ -466,6 +466,14 @@ async function build(context, name) {
   await page.click("#language-en")
   await page.waitForSelector("html[lang=en] h1:has-text('Find your next small step')")
   await connected(page)
+
+  // The page About: a plain page, from the link at the foot of each page.
+  await page.click("#about-link")
+  await page.waitForSelector("html[lang=en] h1:has-text('About Small Steps Home')")
+  await check(page, `${name} about`)
+  await page.click("#about-start")
+  await page.waitForSelector("#door-my-house")
+  await connected(page)
   await page.click("#door-my-house")
 
   await page.waitForSelector("#zip-form")

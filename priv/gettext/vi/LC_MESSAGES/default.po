@@ -76,7 +76,7 @@ msgstr "Quay lại"
 msgid "Before 1980"
 msgstr "Trước 1980"
 
-#: lib/diy_web/components/layouts.ex:61
+#: lib/diy_web/components/layouts.ex:70
 #, elixir-autogen, elixir-format
 msgid "Bill"
 msgstr "Hóa đơn"
@@ -138,7 +138,7 @@ msgstr "Sưởi ấm"
 msgid "Heat pump"
 msgstr "Bơm nhiệt"
 
-#: lib/diy_web/components/layouts.ex:47
+#: lib/diy_web/components/layouts.ex:56
 #, elixir-autogen, elixir-format
 msgid "House"
 msgstr "Nhà"
@@ -209,7 +209,7 @@ msgstr "Tiếp"
 msgid "No retail choice: a city utility or a co-op sells the power."
 msgstr "Không được chọn nhà cung cấp: công ty điện của thành phố hoặc hợp tác xã bán điện."
 
-#: lib/diy_web/components/layouts.ex:27
+#: lib/diy_web/components/layouts.ex:29
 #, elixir-autogen, elixir-format
 msgid "Not saved yet"
 msgstr "Chưa lưu"
@@ -229,12 +229,12 @@ msgstr "Một mẫu Anh (acre) là 43,560 ft²."
 msgid "Open a file of a build"
 msgstr "Mở tệp của một mô hình"
 
-#: lib/diy_web/components/layouts.ex:77
+#: lib/diy_web/components/layouts.ex:86
 #, elixir-autogen, elixir-format
 msgid "Plans"
 msgstr "Gói điện"
 
-#: lib/diy_web/components/layouts.ex:69
+#: lib/diy_web/components/layouts.ex:78
 #, elixir-autogen, elixir-format
 msgid "Power"
 msgstr "Nguồn điện"
@@ -254,7 +254,7 @@ msgstr "Được chọn nhà cung cấp điện."
 msgid "Retail choice: %{utility} delivers the power."
 msgstr "Được chọn nhà cung cấp điện: %{utility} phân phối điện."
 
-#: lib/diy_web/components/layouts.ex:54
+#: lib/diy_web/components/layouts.ex:63
 #, elixir-autogen, elixir-format
 msgid "Rooms"
 msgstr "Phòng"
@@ -270,7 +270,7 @@ msgstr "Lưu"
 msgid "Save the house"
 msgstr "Lưu ngôi nhà"
 
-#: lib/diy_web/components/layouts.ex:27
+#: lib/diy_web/components/layouts.ex:29
 #, elixir-autogen, elixir-format
 msgid "Saved on this device"
 msgstr "Đã lưu trên thiết bị này"
@@ -280,7 +280,7 @@ msgstr "Đã lưu trên thiết bị này"
 msgid "See my house"
 msgstr "Xem nhà của tôi"
 
-#: lib/diy_web/components/layouts.ex:84
+#: lib/diy_web/components/layouts.ex:93
 #: lib/diy_web/components/settings.ex:35
 #, elixir-autogen, elixir-format
 msgid "Settings"
@@ -347,7 +347,7 @@ msgstr "Ngôi nhà"
 msgid "The lot and the house"
 msgstr "Lô đất và ngôi nhà"
 
-#: lib/diy_web/components/layouts.ex:40
+#: lib/diy_web/components/layouts.ex:49
 #, elixir-autogen, elixir-format
 msgid "The parts of your build"
 msgstr "Các phần của mô hình"
@@ -1002,67 +1002,67 @@ msgstr "Các tháng của đồng hồ điện của bạn."
 msgid "This house is too large for a link. A link can have 150 items and 50 rooms at most."
 msgstr "Ngôi nhà này quá lớn cho một liên kết. Một liên kết có tối đa 150 thiết bị và 50 phòng."
 
-#: lib/diy_web/components/outside.ex:939
+#: lib/diy_web/components/outside.ex:949
 #, elixir-autogen, elixir-format
 msgid "Clouds"
 msgstr "Mây"
 
-#: lib/diy_web/components/outside.ex:934
+#: lib/diy_web/components/outside.ex:944
 #, elixir-autogen, elixir-format
 msgid "Day"
 msgstr "Ban ngày"
 
-#: lib/diy_web/components/outside.ex:936
+#: lib/diy_web/components/outside.ex:946
 #, elixir-autogen, elixir-format
 msgid "Night"
 msgstr "Ban đêm"
 
-#: lib/diy_web/components/outside.ex:926
+#: lib/diy_web/components/outside.ex:936
 #, elixir-autogen, elixir-format
 msgid "Now"
 msgstr "Bây giờ"
 
-#: lib/diy_web/components/outside.ex:927
+#: lib/diy_web/components/outside.ex:937
 #, elixir-autogen, elixir-format
 msgid "Now (%{name})"
 msgstr "Bây giờ (%{name})"
 
-#: lib/diy_web/components/outside.ex:916
+#: lib/diy_web/components/outside.ex:926
 #, elixir-autogen, elixir-format
 msgid "Now at the house: %{temp} °F, %{time}, %{weather}."
 msgstr "Bây giờ ở nhà: %{temp} °F, %{time}, %{weather}."
 
-#: lib/diy_web/components/outside.ex:940
+#: lib/diy_web/components/outside.ex:950
 #, elixir-autogen, elixir-format
 msgid "Rain"
 msgstr "Mưa"
 
-#: lib/diy_web/components/outside.ex:941
+#: lib/diy_web/components/outside.ex:951
 #, elixir-autogen, elixir-format
 msgid "Snow"
 msgstr "Tuyết"
 
-#: lib/diy_web/components/outside.ex:938
+#: lib/diy_web/components/outside.ex:948
 #, elixir-autogen, elixir-format
 msgid "Sun"
 msgstr "Nắng"
 
-#: lib/diy_web/components/outside.ex:935
+#: lib/diy_web/components/outside.ex:945
 #, elixir-autogen, elixir-format
 msgid "Sunset"
 msgstr "Hoàng hôn"
 
-#: lib/diy_web/components/outside.ex:889
+#: lib/diy_web/components/outside.ex:899
 #, elixir-autogen, elixir-format
 msgid "Time of day"
 msgstr "Thời điểm trong ngày"
 
-#: lib/diy_web/components/outside.ex:900
+#: lib/diy_web/components/outside.ex:910
 #, elixir-autogen, elixir-format
 msgid "Weather"
 msgstr "Thời tiết"
 
-#: lib/diy_web/components/outside.ex:931
+#: lib/diy_web/components/outside.ex:941
 #, elixir-autogen, elixir-format
 msgid "Sunrise"
 msgstr "Bình minh"
@@ -1136,3 +1136,159 @@ msgstr "Cabin, khoang động cơ và mái của xe van giữ nguyên vị trí.
 #, elixir-autogen, elixir-format
 msgid "An item cannot stand in front of a door."
 msgstr "Một món đồ không thể đặt chắn trước cửa."
+
+#: lib/diy_web/controllers/about_html.ex:40
+#, elixir-autogen, elixir-format
+msgid "%{name} made this app."
+msgstr "%{name} đã làm ứng dụng này."
+
+#: lib/diy_web/controllers/about_html.ex:33
+#, elixir-autogen, elixir-format
+msgid "A small step can be a better plan for your electricity, a change to an item, or a power station for an outage."
+msgstr "Một bước nhỏ có thể là một gói điện tốt hơn, một thay đổi ở một món đồ, hoặc một trạm điện cho lúc mất điện."
+
+#: lib/diy_web/controllers/about_controller.ex:13
+#: lib/diy_web/controllers/about_html.ex:26
+#, elixir-autogen, elixir-format
+msgid "About Small Steps Home"
+msgstr "Giới thiệu Small Steps Home"
+
+#: lib/diy_web/components/layouts.ex:42
+#, elixir-autogen, elixir-format
+msgid "About this app"
+msgstr "Giới thiệu ứng dụng này"
+
+#: lib/diy_web/controllers/about_html.ex:138
+#, elixir-autogen, elixir-format
+msgid "Go to the app"
+msgstr "Đến ứng dụng"
+
+#: lib/diy_web/controllers/about_html.ex:28
+#, elixir-autogen, elixir-format
+msgid "Small Steps Home shows where the power of a house goes. Then it helps you find your next small step."
+msgstr "Small Steps Home cho thấy điện của một ngôi nhà đi đâu. Sau đó ứng dụng giúp bạn tìm bước nhỏ tiếp theo."
+
+#: lib/diy_web/controllers/about_html.ex:41
+#, elixir-autogen, elixir-format
+msgid "The app is free. It has no ads, and it sells nothing."
+msgstr "Ứng dụng miễn phí. Ứng dụng không có quảng cáo và không bán gì cả."
+
+#: lib/diy_web/controllers/about_html.ex:105
+#, elixir-autogen, elixir-format
+msgid "The bill is an estimate from the weather of your place and the items of your house. It is a range, not one number."
+msgstr "Hóa đơn là một ước tính từ thời tiết nơi bạn ở và các món đồ trong nhà bạn. Đó là một khoảng, không phải một con số."
+
+#: lib/diy_web/controllers/about_html.ex:125
+#, elixir-autogen, elixir-format
+msgid "The code"
+msgstr "Mã nguồn"
+
+#: lib/diy_web/controllers/about_html.ex:127
+#, elixir-autogen, elixir-format
+msgid "The code of the app is public. Anyone can read how it works."
+msgstr "Mã nguồn của ứng dụng là công khai. Ai cũng có thể đọc cách ứng dụng hoạt động."
+
+#: lib/diy_web/controllers/about_html.ex:67
+#, elixir-autogen, elixir-format
+msgid "The copy is locked with a key that only the link has."
+msgstr "Bản sao được mã hóa bằng một khóa chỉ có trong liên kết."
+
+#: lib/diy_web/controllers/about_html.ex:102
+#, elixir-autogen, elixir-format
+msgid "Where the numbers come from"
+msgstr "Các con số đến từ đâu"
+
+#: lib/diy_web/controllers/about_html.ex:39
+#, elixir-autogen, elixir-format
+msgid "Who made it"
+msgstr "Ai đã làm ứng dụng"
+
+#: lib/diy_web/controllers/about_html.ex:45
+#, elixir-autogen, elixir-format
+msgid "Your data"
+msgstr "Dữ liệu của bạn"
+
+#: lib/diy_web/controllers/about_html.ex:132
+#, elixir-autogen, elixir-format
+msgid "An issue is public, and it needs a GitHub account."
+msgstr "Một issue là công khai, và cần một tài khoản GitHub."
+
+#: lib/diy_web/controllers/about_html.ex:131
+#, elixir-autogen, elixir-format
+msgid "Do you have a question, or did you find a problem?"
+msgstr "Bạn có câu hỏi, hay bạn thấy một lỗi?"
+
+#: lib/diy_web/controllers/about_html.ex:113
+#, elixir-autogen, elixir-format
+msgid "Else it is the average of your state from the US Energy Information Administration."
+msgstr "Nếu không, đó là giá trung bình của tiểu bang bạn theo Cơ quan Thông tin Năng lượng Hoa Kỳ (EIA)."
+
+#: lib/diy_web/controllers/about_html.ex:88
+#, elixir-autogen, elixir-format
+msgid "For Pecron, each request goes through the server, which does not keep the key."
+msgstr "Với Pecron, mỗi yêu cầu đi qua máy chủ, và máy chủ không lưu khóa."
+
+#: lib/diy_web/controllers/about_html.ex:80
+#, elixir-autogen, elixir-format
+msgid "For a ZIP code in Texas, the server sends the ZIP code to Power to Choose, for the prices of the plans."
+msgstr "Với một mã ZIP ở Texas, máy chủ gửi mã ZIP đến Power to Choose để lấy giá của các gói điện."
+
+#: lib/diy_web/controllers/about_html.ex:75
+#, elixir-autogen, elixir-format
+msgid "For the weather, the server sends a point near your ZIP code to NASA POWER and to Open-Meteo."
+msgstr "Để lấy thời tiết, máy chủ gửi một điểm gần mã ZIP của bạn đến NASA POWER và Open-Meteo."
+
+#: lib/diy_web/controllers/about_html.ex:64
+#, elixir-autogen, elixir-format
+msgid "Only a short link makes the server save a copy of the house. The server keeps it for one year after the last visit of the link."
+msgstr "Chỉ liên kết ngắn mới khiến máy chủ lưu một bản sao của ngôi nhà. Máy chủ giữ bản sao trong một năm sau lần truy cập cuối của liên kết."
+
+#: lib/diy_web/controllers/about_html.ex:132
+#, elixir-autogen, elixir-format
+msgid "Open an issue on GitHub"
+msgstr "Mở một issue trên GitHub"
+
+#: lib/diy_web/controllers/about_html.ex:93
+#, elixir-autogen, elixir-format
+msgid "The app runs on Cloudflare. It sets a cookie for the safety of its forms, and a cookie for the language that you choose."
+msgstr "Ứng dụng chạy trên Cloudflare. Ứng dụng đặt một cookie cho sự an toàn của các biểu mẫu, và một cookie cho ngôn ngữ bạn chọn."
+
+#: lib/diy_web/controllers/about_html.ex:85
+#, elixir-autogen, elixir-format
+msgid "The app saves your keys for Home Assistant and for the maker of a power station only on this device."
+msgstr "Ứng dụng chỉ lưu các khóa của bạn cho Home Assistant và cho hãng của trạm điện trên thiết bị này."
+
+#: lib/diy_web/controllers/about_html.ex:110
+#, elixir-autogen, elixir-format
+msgid "The price is the price that you give. Else, in Texas, it is the median of the plans on Power to Choose."
+msgstr "Giá là giá bạn nhập. Nếu không, ở Texas, đó là giá trung vị của các gói điện trên Power to Choose."
+
+#: lib/diy_web/controllers/about_html.ex:118
+#, elixir-autogen, elixir-format
+msgid "The worksheet of the plans reads the Electricity Facts Label (EFL) of each plan."
+msgstr "Bảng tính các gói điện đọc nhãn thông tin điện (EFL) của mỗi gói."
+
+#: lib/diy_web/controllers/about_html.ex:48
+#, elixir-autogen, elixir-format
+msgid "You need no account. The app asks for no name, no email, no password and no street address."
+msgstr "Bạn không cần tài khoản. Ứng dụng không hỏi tên, email, mật khẩu hay địa chỉ nhà."
+
+#: lib/diy_web/controllers/about_html.ex:53
+#, elixir-autogen, elixir-format
+msgid "Your house is saved only in the browser of this device. The server uses it while the page is open, but it does not save it."
+msgstr "Ngôi nhà của bạn chỉ được lưu trong trình duyệt của thiết bị này. Máy chủ dùng nó khi trang đang mở, nhưng không lưu nó."
+
+#: lib/diy_web/controllers/about_html.ex:61
+#, elixir-autogen, elixir-format
+msgid "Anyone with the link can see them."
+msgstr "Ai có liên kết cũng có thể xem chúng."
+
+#: lib/diy_web/controllers/about_html.ex:70
+#, elixir-autogen, elixir-format
+msgid "The app reads the file of your smart meter and the PDF of a plan on this device. Only the sums of each month, and the text of the plan, go to the server."
+msgstr "Ứng dụng đọc tệp của đồng hồ điện thông minh và tệp PDF của một gói điện trên thiết bị này. Chỉ tổng của mỗi tháng và chữ của gói điện được gửi đến máy chủ."
+
+#: lib/diy_web/controllers/about_html.ex:58
+#, elixir-autogen, elixir-format
+msgid "When you share a house, the link holds the house and the months of your meter. It holds the ZIP code too, if you keep it."
+msgstr "Khi bạn chia sẻ một ngôi nhà, liên kết chứa ngôi nhà và các tháng của đồng hồ điện. Liên kết cũng chứa mã ZIP, nếu bạn giữ nó."

@@ -91,7 +91,10 @@ defmodule DIYWeb.Locale do
 
   def call(conn, _opts) do
     conn = fetch_cookies(conn)
-    assign(conn, :locale, of_conn(conn))
+    locale = of_conn(conn)
+    # The texts of a page of a controller (the page About) are in it too.
+    Gettext.put_locale(DIY.Gettext, locale)
+    assign(conn, :locale, locale)
   end
 
   ## The hook of a LiveView
