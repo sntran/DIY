@@ -1730,17 +1730,19 @@ its turn. A length is in inches.
   pairs (`open`, 200 at most), and a link of a share keeps them too. A
   pair goes away with a room, or when a room moves away from the other.
 - Doors (the owner, October 2026). Two rooms on a layer that touch along
-  30 inches at least can have a door between them. One of the two rooms
-  is inside: so a kitchen can have a door to the backyard. A door is an
-  opening of 32 inches in the wall, with no wall in it. The sheet of a
+  40 inches at least can have a door between them. One of the two rooms
+  is inside: so a kitchen can have a door to the backyard. Two rooms that
+  are open to each other have no wall, and so no door. A door is an
+  opening of 32 inches in the wall, with no wall in it. A wall of 4
+  inches at least stays at each side, so the corners of the walls stay. The sheet of a
   room has a part "Doors", with a box for each such room
   (`DIY.Build.doorway_choices/2`, `set_doorways/3`). A new door is in the
   middle of the common part of the two sides (`DIY.Layout.shared/2`). A
   range moves it along the wall. The build keeps the doors (`doorways`,
   200 at most, one for each pair). A door has its two rooms and the place
-  of its middle, in inches from the start of the common part. A
-  place goes into the common part, with the half of the door on each
-  side. A door goes away with a room, or when a room moves away from the
+  of its middle, in inches from the start of the common part: the back
+  or the left end of the wall. A place goes into the common part, with
+  the door and its walls. A door goes away with a room, or when a room moves away from the
   other. A link of a share keeps the doors. The picture of the house
   from outside has no door of the plan: it has its own front door.
 - The picture of an item is its icon at the size of the item

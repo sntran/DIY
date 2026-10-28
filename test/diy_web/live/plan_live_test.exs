@@ -340,7 +340,11 @@ defmodule DIYWeb.PlanLiveTest do
     assert [%{other: other, at: 147}] = Build.doorways_of(build(view), kitchen.id)
     assert other == living.id
     assert has_element?(view, "#door-#{kitchen.id}-#{living.id}[checked]")
-    assert has_element?(view, "#door-at-#{kitchen.id}-#{living.id}[value='147'][max='294']")
+
+    assert has_element?(
+             view,
+             "#door-at-#{kitchen.id}-#{living.id}[value='147'][min='20'][max='274']"
+           )
 
     render_change(view, "room_doors", %{
       "room_id" => kitchen.id,

@@ -71,10 +71,11 @@ defmodule DIY.Build do
     A build has at most 200 pairs.
   - `doorways`: the doors between two rooms of the house that touch:
     `[a, b, at]` (`set_doorways/3`). A door is an opening of 32 inches in
-    the wall between them. `at` is the place of its middle, in inches from
-    the start of the common part of their sides (`DIY.Layout.shared/2`).
-    One room at least is inside. A door goes away with a room. A build
-    has at most 200 doors.
+    the wall between them, with 4 inches of wall at each side at the
+    least. `at` is the place of its middle, in inches from the start of
+    the common part of their sides (`DIY.Layout.shared/2`). One room at
+    least is inside. A door goes away with a room, and between two rooms
+    that are open to each other. A build has at most 200 doors.
   - `wires`: the wires between the items, at most 100, and at most 24 for
     an item (`add_wire/3`). Each wire has an `id`, the item at each end
     (`from` gives the current, `to`), and its numbers (`DIY.Wire`). A
@@ -100,11 +101,11 @@ defmodule DIY.Build do
   @max_item_wires 24
   # The most pairs of rooms that are open to each other.
   @max_open 200
-  # The most doors, the width of a door, and the least common part of the
-  # sides of two rooms with a door (inches).
+  # The most doors, the width of a door, and the wall at each side of a
+  # door, at the least (inches). So the corners of the walls stay.
   @max_doorways 200
   @doorway 32
-  @least_doorway 30
+  @jamb 4
   @places Catalog.places()
 
   @enforce_keys [:revision]
@@ -556,34 +557,47 @@ defmodule DIY.Build do
 
   @doc """
   The doors of a room (`set_doorways/3`): the other room, the place of
-  the door (`at`), and the length of the common part of their sides.
+  the door (`at`), and the places that it can have (`range`), in inches
+  from the start of the common part of their sides.
   """
-  @spec doorways_of(t(), String.t()) :: [%{other: String.t(), at: integer(), length: integer()}]
+  @spec doorways_of(t(), String.t()) :: [
+          %{other: String.t(), at: integer(), range: {integer(), integer()}}
+        ]
   def doorways_of(build, id) do
     rooms = Map.new(build.rooms, &{&1.id, &1})
 
     for [a, b, at] <- build.doorways, id in [a, b] do
       other = if a == id, do: b, else: a
       {_side, {from, to}} = Layout.shared(rooms[a].plan, rooms[b].plan)
-      %{other: other, at: at, length: to - from}
+      %{other: other, at: at, range: doorway_range(to - from)}
     end
   end
+
+  # The places of the middle of a door in a common part of a length: the
+  # door and a wall of 4 inches at each side.
+  defp doorway_range(length),
+    do: {div(@doorway, 2) + @jamb, length - div(@doorway, 2) - @jamb}
 
   @doc """
   The rooms that a room of the house can have a door to
   (`set_doorways/3`). They are on the same layer, and they touch it along
-  30 inches at least. One of the two rooms is inside. So a room inside
-  can have a door to a yard.
+  40 inches at least: the door and a wall at each side. One of the two
+  rooms is inside. So a room inside can have a door to a yard. A room
+  that it is open to has no wall, and so no door (`set_open/3`).
   """
   @spec doorway_choices(t(), room()) :: [room()]
-  def doorway_choices(build, room), do: Enum.filter(build.rooms, &doorway_pair?(room, &1))
+  def doorway_choices(build, room) do
+    open = open_to(build, room.id)
+    Enum.filter(build.rooms, &(doorway_pair?(room, &1) and &1.id not in open))
+  end
 
   @doc """
   Gives a room its doors, and takes away its other doors. `doors` maps the
   id of each other room to the place of the door (`at`, inches), or to nil
   for a door in the middle. Each other room must be one of the choices
   (`doorway_choices/2`). The app ignores the other ids. A place goes into
-  the common part of the sides, with the half of the door on each side.
+  the common part of the sides, with the door and 4 inches of wall at
+  each side.
   A build has at most 200 doors (`:doorways`).
   """
   @spec set_doorways(t(), String.t(), %{String.t() => integer() | nil}) ::
@@ -607,7 +621,7 @@ defmodule DIY.Build do
   end
 
   # Two rooms of the house that can have a door between them. They are on
-  # the same layer, next to each other along 30 inches at least. One of
+  # the same layer, next to each other along 40 inches at least. One of
   # them is inside.
   defp doorway_pair?(room, other) do
     other.id != room.id and :indoor in [room.place, other.place] and
@@ -615,7 +629,7 @@ defmodule DIY.Build do
       not van_level?(room.level) and not van_level?(other.level) and room.plan != nil and
       other.plan != nil and Layout.layer(other) == Layout.layer(room) and
       match?(
-        {_side, {from, to}} when to - from >= @least_doorway,
+        {_side, {from, to}} when to - from >= @doorway + 2 * @jamb,
         Layout.shared(room.plan, other.plan)
       )
   end
@@ -2163,9 +2177,10 @@ defmodule DIY.Build do
   defp doorways(_doors), do: {:error, :doorways}
 
   # A door stays when its two rooms can have a door, after the fill of the
-  # plan. So it goes away with a room, or when a room moves away. Its place
-  # goes into the common part of the sides. A pair has one door: the first
-  # one stays. The first 200 doors stay.
+  # plan. So it goes away with a room, or when a room moves away. Two rooms
+  # that are open to each other have no door. Its place goes into the
+  # common part of the sides. A pair has one door: the first one stays.
+  # The first 200 doors stay.
   defp fit_doorways(build, doors) do
     rooms = Map.new(build.rooms, &{&1.id, &1})
 
@@ -2173,10 +2188,11 @@ defmodule DIY.Build do
       for [a, b, at] <- doors,
           room = rooms[a],
           other = rooms[b],
-          room && other && doorway_pair?(room, other) do
+          room && other && doorway_pair?(room, other),
+          Enum.sort([a, b]) not in build.open do
         {_side, {from, to}} = Layout.shared(room.plan, other.plan)
-        half = div(min(@doorway, to - from), 2)
-        Enum.sort([a, b]) ++ [at |> max(half) |> min(to - from - half)]
+        {low, high} = doorway_range(to - from)
+        Enum.sort([a, b]) ++ [at |> max(low) |> min(high)]
       end
       |> Enum.uniq_by(&Enum.take(&1, 2))
 
@@ -2193,8 +2209,8 @@ defmodule DIY.Build do
     rooms = Map.new(build.rooms, &{&1.id, &1})
 
     for %{other: other, at: at} <- doorways_of(build, id) do
-      {side, {from, to}} = Layout.shared(rooms[id].plan, rooms[other].plan)
-      half = div(min(@doorway, to - from), 2)
+      {side, {from, _to}} = Layout.shared(rooms[id].plan, rooms[other].plan)
+      half = div(@doorway, 2)
       {side, {from + at - half, from + at + half}}
     end
   end
