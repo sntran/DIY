@@ -479,7 +479,7 @@ defmodule DIYWeb.Outside do
       for {piece, i} <- Enum.with_index(Decor.pieces(room, items, [], house)),
           do: Cutaway.decor_view("#{room.id}-#{i}", piece, room, z, camera)
 
-    items = for item <- items, do: Cutaway.item_view(item, room, z, camera)
+    items = for item <- items, do: Cutaway.item_view(item, room, z, camera, false)
 
     for %{box: {_, _, z0, _, _, z1}} = view <- decor ++ items,
         do: %{view | loose: view.loose or z1 - z0 > @slab + @full}

@@ -24,7 +24,7 @@ defmodule DIYWeb.Decor do
   """
 
   alias DIY.{Catalog, Layout}
-  alias DIYWeb.{Camera, Geometry}
+  alias DIYWeb.Camera
   alias DIYWeb.Icon.Shapes
 
   @m 0.0254
@@ -542,18 +542,11 @@ defmodule DIYWeb.Decor do
       end
   end
 
-  # A big tree: about 4 meters high, with a crown 2.4 meters wide. A round
-  # bed of mulch is under it. So its space on the plan is a square, and it
-  # looks the same at each turn (`DIYWeb.Icon.Shapes.placed/2`).
-  def model("tree") do
-    [
-      {:face, Geometry.circle({1.2, 1.2, 0.01}, {1, 0, 0}, {0, 1, 0}, 1.15), {0, 0, 1},
-       "i-wood-t"},
-      {:cyl, {1.2, 1.2, 0}, 0.14, 2.0, "wood"}
-    ] ++
-      ball({1.2, 1.2, 2.6}, 1.2, "leaf") ++
-      ball({0.85, 1.2, 3.4}, 0.75, "leaf") ++ ball({1.55, 1.3, 3.3}, 0.7, "leaf")
-  end
+  # The tree of a yard: a live oak about 4 meters high, with a crown 2.3
+  # meters wide (`DIYWeb.Icon.TreeShapes`). A round bed of mulch is under
+  # it. So its space on the plan is a square, and it looks the same at each
+  # turn (`DIYWeb.Icon.Shapes.placed/2`).
+  def model("tree"), do: DIYWeb.Icon.TreeShapes.model("live_oak", {2.3, 2.3, 4.0})
 
   # A bath of 60 by 30 inches, the common size.
   def model("tub") do
@@ -625,24 +618,6 @@ defmodule DIYWeb.Decor do
   # A ball of leaves: a disc in the shade that always looks to the camera of
   # the house. Two smaller discs in the light are over it. A ball does not
   # go into a part under it: it is a flat disc.
-  defp ball(center, r, material) do
-    {ex, ey, ez} = Camera.house().eye
-    n = :math.sqrt(ex * ex + ey * ey)
-    u = {-ey / n, ex / n, 0.0}
-    {ux, uy, _} = u
-    v = {-ez * uy, ez * ux, ex * uy - ey * ux}
-
-    at = fn du, dv ->
-      Geometry.add(center, Geometry.add(Geometry.scale(u, du), Geometry.scale(v, dv)))
-    end
-
-    [
-      {:face, Geometry.circle(center, u, v, r), nil, "i-#{material}-r i-face"},
-      {:face, Geometry.circle(at.(-0.12 * r, 0.12 * r), u, v, 0.78 * r), nil, "i-#{material}-l"},
-      {:face, Geometry.circle(at.(-0.25 * r, 0.3 * r), u, v, 0.42 * r), nil, "i-#{material}-t"}
-    ]
-  end
-
   # A box with round corners (seen from above).
   defp round_box({x, y, z}, {w, d, h}, r, material),
     do: {:prism, soft({x, y}, {w, d}, r), z, h, material}

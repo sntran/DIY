@@ -190,6 +190,9 @@ defmodule DIY.Layout do
 
   def size(%{size: %{w: w, d: d, h: h}}), do: {w, d, h}
 
+  # A tree has the size of its kind, when the user gave no size.
+  def size(%{type: "tree", params: %{"kind" => kind}}), do: Catalog.tree_size(kind)
+
   # An electric car has the size of its body, when the user gave no size.
   def size(%{type: "ev", params: %{"body" => body}}), do: Catalog.car_size(body)
 
@@ -243,6 +246,22 @@ defmodule DIY.Layout do
     {w, d, _h} = size(item)
     if rem(item.turn, 2) == 0, do: {w, d}, else: {d, w}
   end
+
+  # The side of the trunk of a tree on the plan (inches), with a margin.
+  @trunk 24
+
+  @doc """
+  The box of the part of an item on the ground, in its room: `%{x, y, w,
+  d}`. It is the box of the item (`item_box/1`). A tree stands on its
+  trunk at the middle of its box: its crown is high over the ground.
+  """
+  def foot_box(%{type: "tree"} = item) do
+    %{x: x, y: y, w: w, d: d} = item_box(item)
+    {tw, td} = {min(@trunk, w), min(@trunk, d)}
+    %{x: x + div(w - tw, 2), y: y + div(d - td, 2), w: tw, d: td}
+  end
+
+  def foot_box(item), do: item_box(item)
 
   @doc "The box of an item in its room: `%{x, y, w, d}`."
   def item_box(%{at: %{x: x, y: y}} = item) do

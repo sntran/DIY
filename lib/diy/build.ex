@@ -2269,11 +2269,12 @@ defmodule DIY.Build do
   # How much an item stands in front of the doors of its room. Only an item
   # with its bottom under the top of a door counts. The bottom of an item
   # on an item is the top of the item under it (`DIY.Stack.heights/1`). The
-  # heights come from a function: only an item over a space needs them. An
+  # heights come from a function: only an item over a space needs them. A
+  # tree blocks a door only with its trunk (`DIY.Layout.foot_box/1`). An
   # item with no place (in the shell of a van) blocks no door.
   defp door_area(spaces, heights, item) do
     spaces = if item.at, do: Map.get(spaces, item.room, []), else: []
-    area = spaces |> Enum.map(&overlap_area(&1, Layout.item_box(item))) |> Enum.sum()
+    area = spaces |> Enum.map(&overlap_area(&1, Layout.foot_box(item))) |> Enum.sum()
 
     lift = Catalog.lift(item.type)
 

@@ -852,8 +852,16 @@ defmodule DIYWeb.CutawayTest do
 
     # A ball of leaves (or a rug) looks to the camera at the turn 0 only. A
     # piece with leaves stays at the turn 0 on the plan.
-    for model <- models,
-        turn <- if(Enum.any?(model, &match?({:face, _, nil, _}, &1)), do: [0], else: 0..3) do
+    leaves? = fn model ->
+      model
+      |> Enum.flat_map(fn
+        {:group, parts} -> parts
+        part -> [part]
+      end)
+      |> Enum.any?(&match?({:face, _, nil, _}, &1))
+    end
+
+    for model <- models, turn <- if(leaves?.(model), do: [0], else: 0..3) do
       frame = %{at: {0, 0, 0}, turn: turn, camera: camera}
       polys = for {:poly, corners, _class} <- Shapes.placed_model(model, frame), do: corners
       assert depth_faults(polys, camera, 0.01) == [], "#{inspect(hd(model))} at turn #{turn}"

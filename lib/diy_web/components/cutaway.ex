@@ -1016,8 +1016,12 @@ defmodule DIYWeb.Cutaway do
   at a height (meters), for a camera. An item on an item stands on its top
   (`:base_top`, `stacked/1`). It has its box in the world, for the order of
   the paint.
+
+  With `cut` (the view of the rooms), a tree is cut at the height of the
+  low walls (`DIYWeb.Icon.Shapes.cut_tree/3`): it does not hide the rooms.
+  The house from outside (`DIYWeb.Outside`) shows the whole tree.
   """
-  def item_view(item, room, z, camera) do
+  def item_view(item, room, z, camera, cut \\ true) do
     {w, d, h} = Layout.size(item)
     {ew, ed} = Layout.extent(item)
     {x, y} = {room.plan.x + item.at.x, room.plan.y + item.at.y}
@@ -1059,6 +1063,10 @@ defmodule DIYWeb.Cutaway do
           for {corners, class} <- pool(%{x: x, y: y, w: ew, d: ed}, z, camera),
               do: {:poly, corners, class}
 
+        {"tree", nil} when cut ->
+          frame = %{at: {x * @m, y * @m, z}, size: size, turn: item.turn, camera: camera}
+          Shapes.cut_tree(Shapes.look(item), frame, @inner)
+
         {type, nil} ->
           base = z + (Catalog.lift(type) + Map.get(item, :base_top, 0)) * @m
 
@@ -1081,10 +1089,11 @@ defmodule DIYWeb.Cutaway do
       end
 
     # A soft shadow on the floor under an item that stands on it. A pool is
-    # in the floor.
+    # in the floor. A tree has its bed of mulch, and the shadow of its crown
+    # when it is cut.
     shadow =
       if roof == nil and Catalog.lift(item.type) == 0 and Map.get(item, :base_top, 0) == 0 and
-           item.type != "pool" do
+           item.type not in ["pool", "tree"] do
         {x0, y0, x1, y1} = {(x - 3) * @m, (y - 3) * @m, (x + ew + 3) * @m, (y + ed + 3) * @m}
 
         [
