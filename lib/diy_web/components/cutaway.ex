@@ -39,7 +39,8 @@ defmodule DIYWeb.Cutaway do
   - each surface of a room: `data-room`, `data-plan` (`x y w d`, inches)
     and `data-origin`. The origin is the SVG point of the plan point 0, 0
     on the surface of the room. A roof also has `data-rise`: the height of
-    its ridge over its eaves, in inches;
+    its top over its eaves, in inches. It also has `data-slope`: the way
+    that it slopes (`DIY.Roof`);
   - each item: `data-item`, `data-in` (its room) and `data-at` (the
     center of the item on the plan, in inches). The item of a device of
     Home Assistant also has `data-ha`: the state of the device (`on`,
@@ -64,17 +65,16 @@ defmodule DIYWeb.Cutaway do
   """
   use DIYWeb, :html
 
-  alias DIY.{Build, Catalog, Layout, Solar}
+  alias DIY.{Build, Catalog, Layout, Roof, Solar}
   alias DIYWeb.{Camera, Decor, Geometry}
   alias DIYWeb.Icon.Shapes
 
   # One inch in meters.
   @m 0.0254
-  # The pitch of a roof (5 in 12). Then, in meters: the height of a wall,
-  # and of a wall of the attic. Then the cut of a wall near the floor, and
-  # the cut of a wall between two rooms. Then the thickness of a wall and
-  # of a floor.
-  @pitch 5 / 12
+  # In meters: the height of a wall, and of a wall of the attic. Then the
+  # cut of a wall near the floor, and the cut of a wall between two rooms.
+  # Then the thickness of a wall and of a floor. The shape of a roof is in
+  # `DIY.Roof`.
   @full 2.4
   @attic 0.5
   @low 0.25
@@ -707,25 +707,17 @@ defmodule DIYWeb.Cutaway do
 
   ## The rooms
 
-  # A room: its floor (or, for a roof, its two slopes and its gable end),
-  # with the data of its surface.
+  # A room: its floor (or, for a roof, its slopes and its ends that look
+  # to the camera, `DIY.Roof`), with the data of its surface.
   defp room_view(%{place: :roof, level: "roof"} = room, z, camera) do
-    p = meters(room.plan)
-    rise = p.d / 2 * @pitch
-    {x1, y1, yc} = {p.x + p.w, p.y + p.d, p.y + p.d / 2}
+    polys = roof_planes(room, room.plan, z) ++ roof_ends(room, room.plan, z)
 
-    back = [{p.x, p.y, z}, {x1, p.y, z}, {x1, yc, z + rise}, {p.x, yc, z + rise}]
-    front = [{p.x, yc, z + rise}, {x1, yc, z + rise}, {x1, y1, z}, {p.x, y1, z}]
-
-    polys = [
-      {back, "p-floor p-roof-b"},
-      {back, "p-tex p-tex-roof"},
-      {front, "p-floor p-roof-f"},
-      {front, "p-tex p-tex-roof"},
-      {[{x1, p.y, z}, {x1, y1, z}, {x1, yc, z + rise}], "p-gable"}
-    ]
-
-    %{surface(room, z, camera) | polys: polys, rise: round(rise / @m)}
+    %{
+      surface(room, z, camera)
+      | polys: polys,
+        rise: round(Roof.rise(room)),
+        slope: Roof.shape(room).slope
+    }
   end
 
   defp room_view(%{place: :indoor} = room, z, camera) do
@@ -822,6 +814,7 @@ defmodule DIYWeb.Cutaway do
       plan: "#{room.plan.x} #{room.plan.y} #{room.plan.w} #{room.plan.d}",
       origin: "#{Camera.round1(ox)} #{Camera.round1(oy)}",
       rise: nil,
+      slope: nil,
       fixed: false,
       polys: []
     }
@@ -865,7 +858,7 @@ defmodule DIYWeb.Cutaway do
 
     z =
       if room.place == :roof and room.level == "roof",
-        do: z + p.d / 2 * @pitch / 2,
+        do: z + Roof.rise(room) * @m / 2,
         else: z
 
     {sx, sy} = Camera.at(camera, {0, 0}, {p.x + p.w / 2, p.y + p.d * 0.75, z})
@@ -1078,7 +1071,7 @@ defmodule DIYWeb.Cutaway do
           })
 
         {_type, roof} ->
-          base = roof_z(roof, z, cy)
+          base = roof_z(roof, z, {cx, cy})
 
           Shapes.placed(Shapes.look(item), %{
             at: {x * @m, y * @m, base},
@@ -1129,11 +1122,47 @@ defmodule DIYWeb.Cutaway do
     }
   end
 
-  # The height of a roof over a point of the plan (y in inches), in meters:
-  # its eaves are at z.
-  defp roof_z(roof, z, y) do
-    half = roof.plan.d / 2
-    z + half * @pitch * @m * (1 - abs(y - (roof.plan.y + half)) / half)
+  # The height of a roof over a point of the plan (inches), in meters: its
+  # eaves are at z.
+  defp roof_z(roof, z, point), do: z + Roof.height(roof, point) * @m
+
+  @doc """
+  The planes of a roof over a box of the plan (inches), with its eaves at
+  z (meters): the slope and the shingles of each plane (`DIY.Roof`). A
+  plane that looks to the front or to the right has the light.
+  """
+  def roof_planes(room, box, z),
+    do:
+      Enum.flat_map(Roof.planes(room, box), fn {corners, side} ->
+        roof_plane(room, corners, side, z)
+      end)
+
+  @doc """
+  A plane of a roof (`DIY.Roof.planes/2`): its slope and its shingles,
+  with the eaves at z (meters).
+  """
+  def roof_plane(room, corners, side, z) do
+    points = for {x, y} = p <- corners, do: {x * @m, y * @m, roof_z(room, z, p)}
+    light = if side in [:front, :right], do: "p-floor p-roof-f", else: "p-floor p-roof-b"
+    [{points, light}, {points, "p-tex p-tex-roof"}]
+  end
+
+  @doc """
+  The ends of a roof that look to the camera: the walls under the roof at
+  the front and at the right of a box of the plan (inches). They go from
+  the eaves (z, meters) up to the roof (`DIY.Roof.profile/3`). A side with
+  the eaves on it has no end.
+  """
+  def roof_ends(room, box, z) do
+    for side <- [:front, :right],
+        profile = Roof.profile(room, side, box),
+        Enum.any?(profile, fn {_point, h} -> h > 0 end) do
+      [{first, _} | _] = profile
+      {last, _} = List.last(profile)
+      ground = fn {x, y} -> {x * @m, y * @m, z} end
+      top = for {{x, y}, h} <- profile, h > 0, do: {x * @m, y * @m, z + h * @m}
+      {Enum.dedup([ground.(first)] ++ top ++ [ground.(last)]), "p-gable"}
+    end
   end
 
   # The panels on a roof: on its surface, in rows. A panel over the ridge
@@ -1143,18 +1172,21 @@ defmodule DIYWeb.Cutaway do
     {pw, pd} = if rem(item.turn, 2) == 0, do: {w, d}, else: {d, w}
     {cols, rows} = if rem(item.turn, 2) == 0, do: {cols, rows}, else: {rows, cols}
     {ax, ay} = {roof.plan.x + item.at.x, roof.plan.y + item.at.y}
-    ridge = roof.plan.y + roof.plan.d / 2
+    point = fn x, y -> {x * @m, y * @m, roof_z(roof, z, {x, y}) + 0.04} end
 
     for k <- 0..(count - 1),
         {col, row} = panel_cell(k, cols, rows, item.turn),
         {x0, y0} = {ax + col * pw + 1, ay + row * pd + 1},
-        {x1, y1} = {x0 + pw - 2, y0 + pd - 2},
-        {ya, yb} <-
-          if(y0 < ridge and y1 > ridge, do: [{y0, ridge}, {ridge, y1}], else: [{y0, y1}]) do
-      point = fn x, y -> {x * @m, y * @m, roof_z(roof, z, y) + 0.04} end
-      {:poly, [point.(x0, ya), point.(x1, ya), point.(x1, yb), point.(x0, yb)], "i-pv"}
+        {xa, xb} <- split(x0, x0 + pw - 2, Roof.ridge(roof), :x),
+        {ya, yb} <- split(y0, y0 + pd - 2, Roof.ridge(roof), :y) do
+      {:poly, [point.(xa, ya), point.(xb, ya), point.(xb, yb), point.(xa, yb)], "i-pv"}
     end
   end
+
+  # The parts of a side of a panel (from a to b): two parts when the ridge
+  # crosses it.
+  defp split(a, b, {axis, r}, axis) when a < r and b > r, do: [{a, r}, {r, b}]
+  defp split(a, b, _ridge, _axis), do: [{a, b}]
 
   # The column and the row of panel k: the first row of the array is full.
   defp panel_cell(k, cols, _rows, turn) when rem(turn, 2) == 0, do: {rem(k, cols), div(k, cols)}
@@ -1484,6 +1516,7 @@ defmodule DIYWeb.Cutaway do
           data-plan={@room.plan}
           data-origin={@room.origin}
           data-rise={@room.rise}
+          data-slope={@room.slope}
         />
       <% end %>
     </g>

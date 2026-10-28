@@ -54,18 +54,28 @@ test("the axes of the two cameras", () => {
 
 test("the numbers of an attribute, and the surface of a room", () => {
   assert.deepEqual(numbers(" 1 2.5  -3 "), [1, 2.5, -3])
-  const el = {getAttribute: (name) => ({"data-origin": "10 20", "data-plan": "0 0 100 200", "data-rise": "40"})[name]}
-  assert.deepEqual(surfaceOf(el), {origin: [10, 20], plan: [0, 0, 100, 200], rise: 40})
-  const flat = {getAttribute: (name) => (name === "data-rise" ? null : "1 2")}
+  const attrs = {"data-origin": "10 20", "data-plan": "0 0 100 200", "data-rise": "40", "data-slope": "front"}
+  const el = {getAttribute: (name) => attrs[name] ?? null}
+  assert.deepEqual(surfaceOf(el), {origin: [10, 20], plan: [0, 0, 100, 200], rise: 40, slope: "front"})
+  const flat = {getAttribute: (name) => (name === "data-rise" || name === "data-slope" ? null : "1 2")}
   assert.equal(surfaceOf(flat).rise, 0)
+  assert.equal(surfaceOf(flat).slope, "x")
 })
 
-test("the height of a roof: 0 at the eaves, the rise at the ridge", () => {
-  const roof = {origin: [0, 0], plan: [0, 100, 300, 200], rise: 60}
-  assert.equal(heightAt(roof, 100), 0)
-  assert.equal(heightAt(roof, 200), 60)
-  assert.equal(heightAt(roof, 300), 0)
-  assert.equal(heightAt({...roof, rise: 0}, 200), 0)
+test("the height of a roof of each shape: 0 at the eaves, the rise at the top", () => {
+  const roof = {origin: [0, 0], plan: [0, 100, 300, 200], rise: 60, slope: "x"}
+  const h = (slope, x, y) => heightAt({...roof, slope}, {x, y})
+  // Two slopes along x: the ridge at y = 200. Along y: the ridge at x = 150.
+  assert.deepEqual([h("x", 10, 100), h("x", 10, 200), h("x", 10, 300)], [0, 60, 0])
+  assert.deepEqual([h("y", 0, 120), h("y", 150, 120), h("y", 300, 120)], [0, 60, 0])
+  // One slope: 0 at its low side, the rise at the other side.
+  assert.deepEqual([h("front", 5, 300), h("front", 5, 100)], [0, 60])
+  assert.deepEqual([h("back", 5, 100), h("back", 5, 300)], [0, 60])
+  assert.deepEqual([h("left", 0, 150), h("left", 300, 150)], [0, 60])
+  assert.deepEqual([h("right", 300, 150), h("right", 0, 150)], [0, 60])
+  // Past the walls, the slope goes on.
+  assert.equal(h("front", 5, 320), -6)
+  assert.equal(heightAt({...roof, rise: 0}, {x: 10, y: 200}), 0)
 })
 
 // A surface: a floor (rise 0) or a roof (a pitch of 5 in 12, as
@@ -81,8 +91,13 @@ const surfaces = fc
       fc.integer({min: 24, max: 2400}),
     ),
     roof: fc.boolean(),
+    slope: fc.constantFrom("x", "y", "front", "back", "left", "right"),
   })
-  .map(({origin, plan, roof}) => ({origin, plan, rise: roof ? Math.round(((plan[3] / 2) * 5) / 12) : 0}))
+  .map(({origin, plan, roof, slope}) => {
+    // The run of the roof: half of the side for two slopes, else the side.
+    const run = {x: plan[3] / 2, y: plan[2] / 2, front: plan[3], back: plan[3], left: plan[2], right: plan[2]}[slope]
+    return {origin, plan, slope, rise: roof ? Math.round((run * 5) / 12) : 0}
+  })
 const part = (min, max) => fc.double({min, max, noNaN: true})
 const at = (s, u, v) => ({x: s.plan[0] + u * s.plan[2], y: s.plan[1] + v * s.plan[3]})
 
@@ -115,13 +130,32 @@ test("the units of one pixel: the side that limits the view", () => {
 })
 
 test("a point on each slope of a roof goes to the SVG and back", () => {
-  const roof = {origin: [5, -40], plan: [0, 0, 300, 200], rise: 42}
-  for (const axes of [HOUSE, VAN])
-    for (const point of [{x: 50, y: 30}, {x: 120, y: 170}, {x: 0, y: 100}]) {
-      const back = inverse(forward(point, roof, axes), roof, axes)
-      near(back.x, point.x)
-      near(back.y, point.y)
-    }
+  for (const slope of ["x", "y", "front", "back", "left", "right"]) {
+    const roof = {origin: [5, -40], plan: [0, 0, 300, 200], rise: 42, slope}
+    for (const axes of [HOUSE, VAN])
+      for (const point of [{x: 50, y: 30}, {x: 120, y: 170}, {x: 0, y: 100}, {x: 250, y: 60}]) {
+        const back = inverse(forward(point, roof, axes), roof, axes)
+        near(back.x, point.x)
+        near(back.y, point.y)
+      }
+  }
+})
+
+test("on a steep roof, the eye sees the slope in front, and a point past the roof is not on it", () => {
+  // 24 in 12. From the front (yaw 60), the front slope hides the back slope
+  // near the ridge: the point under the eye is on the front slope. From the
+  // back (yaw 240), the back slope hides the front slope.
+  const roof = {origin: [0, 0], plan: [0, 0, 200, 200], rise: 200, slope: "x"}
+  const front = axesOf(60, 34)
+  const seen = inverse(forward({x: 100, y: 90}, roof, front), roof, front)
+  near(seen.y, 104, 1)
+  assert.ok(seen.y >= 100)
+  const back = axesOf(240, 34)
+  const other = inverse(forward({x: 100, y: 110}, roof, back), roof, back)
+  near(other.y, 96, 1)
+  assert.ok(other.y < 100)
+  // No slope has the point: it is not on the roof.
+  assert.ok(!onSurface({x: 0, y: -500}, roof, front))
 })
 
 test("a move on the SVG is a move on the plan", () => {

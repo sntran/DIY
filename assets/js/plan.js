@@ -18,36 +18,73 @@
 // The formula:
 //   sx = ox + ax x + bx y + cx z
 //   sy = oy + ay x + by y + cy z
-// A floor is flat (z = 0). A roof (data-rise) has a ridge along x, at the
-// middle of its depth. On a roof, z is 0 at the eaves and the rise at the
-// ridge.
+// A floor is flat (z = 0). A roof (data-rise) has a shape (data-slope,
+// DIY.Roof): two slopes with the ridge along x ("x", the first shape) or
+// along y ("y"), or one slope with its low side at the "front", the
+// "back", the "left" or the "right". On a roof, z is 0 at the eaves and
+// the rise at the top.
 
 // The numbers of a text attribute ("1 2 3").
 export const numbers = (text) => text.trim().split(/\s+/).map(Number)
 
-// The surface of a room element: its origin, its plan and its rise.
+// The surface of a room element: its origin, its plan, its rise and its
+// slope.
 export function surfaceOf(el) {
   const rise = el.getAttribute("data-rise")
   return {
     origin: numbers(el.getAttribute("data-origin")),
     plan: numbers(el.getAttribute("data-plan")),
     rise: rise ? Number(rise) : 0,
+    slope: el.getAttribute("data-slope") || "x",
   }
 }
 
-// The height of a surface over a point of the plan (y in inches).
-export function heightAt(surface, y) {
-  if (!surface.rise) return 0
-  const [, py, , d] = surface.plan
-  const half = d / 2
-  return surface.rise * (1 - Math.abs(y - (py + half)) / half)
+// The planes of a surface: z = z0 + mx x + my y, each on the part of the
+// plan where `has` is true. A floor is one flat plane.
+export function planesOf(surface) {
+  const [px, py, w, d] = surface.plan
+  const r = surface.rise
+  const all = () => true
+  if (!r) return [{z0: 0, mx: 0, my: 0, has: all}]
+  const [cx, cy] = [px + w / 2, py + d / 2]
+  const [kx, ky] = [r / (w / 2), r / (d / 2)]
+  switch (surface.slope) {
+    case "y":
+      return [
+        {z0: r + kx * cx, mx: -kx, my: 0, has: (p) => p.x >= cx},
+        {z0: r - kx * cx, mx: kx, my: 0, has: (p) => p.x < cx},
+      ]
+    case "front":
+      return [{z0: (r * (py + d)) / d, mx: 0, my: -r / d, has: all}]
+    case "back":
+      return [{z0: (-r * py) / d, mx: 0, my: r / d, has: all}]
+    case "left":
+      return [{z0: (-r * px) / w, mx: r / w, my: 0, has: all}]
+    case "right":
+      return [{z0: (r * (px + w)) / w, mx: -r / w, my: 0, has: all}]
+    default:
+      return [
+        {z0: r + ky * cy, mx: 0, my: -ky, has: (p) => p.y >= cy},
+        {z0: r - ky * cy, mx: 0, my: ky, has: (p) => p.y < cy},
+      ]
+  }
+}
+
+// The height of a plane over a point of the plan.
+const zOf = (plane, p) => plane.z0 + plane.mx * p.x + plane.my * p.y
+
+// The height of a surface over a point of the plan (inches). Past the
+// walls, the slope goes on.
+export function heightAt(surface, point) {
+  const planes = planesOf(surface)
+  return zOf(planes.find((plane) => plane.has(point)), point)
 }
 
 // The SVG point of a point of the plan on a surface.
 export function forward(point, surface, axes) {
   const [ax, ay, bx, by, cx, cy] = axes
   const [ox, oy] = surface.origin
-  const z = heightAt(surface, point.y)
+  const z = heightAt(surface, point)
   return {x: ox + ax * point.x + bx * point.y + cx * z, y: oy + ay * point.x + by * point.y + cy * z}
 }
 
@@ -58,23 +95,24 @@ function solve(u, v, [ax, ay], [bx, by]) {
   return {x: (u * by - bx * v) / det, y: (ax * v - ay * u) / det}
 }
 
-// The point of the plan on a surface under an SVG point.
+// The point of the plan on a surface under an SVG point. On each plane, z
+// goes with x and y: the plane has the vectors a + mx c along x and
+// b + my c along y, from the point z0 c. The point is on a plane where the
+// plane has it. The ray from the eye goes down, so it meets the highest of
+// these points first.
 export function inverse(svg, surface, axes) {
   const [ax, ay, bx, by, cx, cy] = axes
   const [ox, oy] = surface.origin
   const [u, v] = [svg.x - ox, svg.y - oy]
-  if (!surface.rise) return solve(u, v, [ax, ay], [bx, by])
-
-  // On a roof, z goes with y: z = z0 + m y on each slope. So a slope is a
-  // plane with the vector b + m c along y, from the point z0 c. The front
-  // slope goes from the ridge to the front; else the point is on the back
-  // slope.
-  const [, py, , d] = surface.plan
-  const ridge = py + d / 2
-  const m = surface.rise / (d / 2)
-  const slope = (z0, k) => solve(u - cx * z0, v - cy * z0, [ax, ay], [bx + k * cx, by + k * cy])
-  const front = slope(surface.rise + m * ridge, -m)
-  return front.y >= ridge ? front : slope(surface.rise - m * ridge, m)
+  const points = planesOf(surface).map((plane) => {
+    const p = solve(u - cx * plane.z0, v - cy * plane.z0, [ax + plane.mx * cx, ay + plane.mx * cy], [
+      bx + plane.my * cx,
+      by + plane.my * cy,
+    ])
+    return {p, z: zOf(plane, p), has: plane.has(p)}
+  })
+  const on = points.filter((point) => point.has)
+  return (on.length ? on : points).reduce((a, b) => (b.z > a.z ? b : a)).p
 }
 
 // True when the point of the plan under an SVG point is on a surface.

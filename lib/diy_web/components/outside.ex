@@ -23,20 +23,19 @@ defmodule DIYWeb.Outside do
   """
   use DIYWeb, :html
 
-  alias DIY.{Build, Catalog, Layout, Power}
+  alias DIY.{Build, Catalog, Layout, Power, Roof}
   alias DIYWeb.{Camera, Cutaway, Decor, Format, Geometry}
   alias DIYWeb.Icon.Shapes
 
   # One inch in meters. Then, in meters: the height of a wall, the depth of
   # a floor, the thickness of a wall, and the overhang of a roof. The pole
-  # of the grid is 6 m high. The pitch of a roof is 5 in 12.
+  # of the grid is 6 m high. The shape of a roof is in `DIY.Roof`.
   @m 0.0254
   @full 2.4
   @slab 0.3
   @thick 0.16
   @eave 0.35
   @pole 6.0
-  @pitch 5 / 12
 
   @doc """
   The picture of the house from the outside. It has the polygons of the
@@ -129,12 +128,22 @@ defmodule DIYWeb.Outside do
   end
 
   # The height of the floor of a room (meters). Floor 1 is on its slab, and
-  # each floor is on the floor under it. A garage is on a lower slab. The
-  # roof is on the walls of the top floor (`top`). A yard is on the ground.
+  # each floor is on the floor under it. A garage is on a lower slab. A
+  # roof is on the walls of its base, else of the top floor (`top`). A yard
+  # is on the ground.
   defp floor_z(%{level: "f" <> n}, _top),
     do: @slab + (String.to_integer(n) - 1) * (@full + @slab)
 
-  defp floor_z(%{level: "roof"}, top), do: @slab + (top - 1) * (@full + @slab) + @full
+  defp floor_z(%{level: "roof"} = roof, top) do
+    floor =
+      case Roof.shape(roof).base do
+        "f" <> n -> String.to_integer(n)
+        nil -> top
+      end
+
+    @slab + (floor - 1) * (@full + @slab) + @full
+  end
+
   defp floor_z(%{place: :outdoor}, _top), do: 0.02
   defp floor_z(_garage, _top), do: 0.1
 
@@ -421,40 +430,39 @@ defmodule DIYWeb.Outside do
     [object("you", {x - 0.17, y - 0.17, 0.0, x + 0.17, y + 0.17, 1.5}, polys, camera)]
   end
 
-  # The roof on the walls of the top floor. It has two slopes with their
-  # shingles, the gable at the right end, and the items on the roof
-  # (panels). It goes past the walls (`@eave`).
+  # A roof on the walls of its floor (`DIY.Roof`). It has its slopes with
+  # their shingles, its ends that look to the camera (a gable), and the
+  # items on the roof (panels). It goes past the walls (`@eave`). The
+  # slopes that look away paint first, then the ends, then the other
+  # slopes.
   defp roof(room, items, z, camera) do
-    p = meters(room.plan)
-    {o, rise} = {@eave, p.d / 2 * @pitch}
-    {x0, x1, y0, y1, yc} = {p.x - o, p.x + p.w + o, p.y - o, p.y + p.d + o, p.y + p.d / 2}
-    low = z - o * @pitch
-    top = z + rise
+    grow = fn plan, by ->
+      %{x: plan.x - by, y: plan.y - by, w: plan.w + 2 * by, d: plan.d + 2 * by}
+    end
 
-    back = [{x0, y0, low}, {x1, y0, low}, {x1, yc, top}, {x0, yc, top}]
-    front = [{x0, yc, top}, {x1, yc, top}, {x1, y1, low}, {x0, y1, low}]
-    gx = p.x + p.w + @thick
+    eaves = grow.(room.plan, @eave / @m)
 
-    gable = [
-      {gx, p.y - @thick, z},
-      {gx, p.y + p.d + @thick, z},
-      {gx, yc, top - 0.05}
-    ]
+    {back, front} =
+      room |> Roof.planes(eaves) |> Enum.split_with(&(elem(&1, 1) in [:back, :left]))
 
+    draw =
+      &Enum.flat_map(&1, fn {corners, side} -> Cutaway.roof_plane(room, corners, side, z) end)
+
+    ends = Cutaway.roof_ends(room, grow.(room.plan, @thick / @m), z)
     panels = Enum.flat_map(items, &Cutaway.item_view(&1, room, z, camera).polys)
-
-    polys =
-      [
-        {back, "p-floor p-roof-b"},
-        {back, "p-tex p-tex-roof"},
-        {gable, "p-gable"},
-        {front, "p-floor p-roof-f"},
-        {front, "p-tex p-tex-roof"}
-      ] ++ panels
+    p = meters(eaves)
+    top = z + Roof.rise(room) * @m
 
     # For the order of the paint, the roof starts at its eaves: the walls
     # under it paint first.
-    [object("roof-" <> room.id, {x0, y0, z, x1, y1, top}, polys, camera)]
+    [
+      object(
+        "roof-" <> room.id,
+        {p.x, p.y, z, p.x + p.w, p.y + p.d, top},
+        draw.(back) ++ ends ++ draw.(front) ++ panels,
+        camera
+      )
+    ]
   end
 
   # A flat roof on a room outside of the house (a garage). It goes 10 cm
@@ -472,8 +480,9 @@ defmodule DIYWeb.Outside do
 
   # A yard, the driveway or a balcony: its furniture and its items. A piece
   # or an item that is taller than floor 1 (a tree) has no right order with
-  # the floors over it. It paints by its depth only (`loose`), as an item
-  # larger than its room.
+  # the floors over it. It paints by its depth (`loose`), as an item larger
+  # than its room. It also paints after a box that is all behind it, and
+  # before a box all in front of it (`tall`, `DIYWeb.Camera.order/2`).
   defp yard(room, items, house, z, camera) do
     decor =
       for {piece, i} <- Enum.with_index(Decor.pieces(room, items, [], house)),
@@ -481,8 +490,10 @@ defmodule DIYWeb.Outside do
 
     items = for item <- items, do: Cutaway.item_view(item, room, z, camera, false)
 
-    for %{box: {_, _, z0, _, _, z1}} = view <- decor ++ items,
-        do: %{view | loose: view.loose or z1 - z0 > @slab + @full}
+    for %{box: {_, _, z0, _, _, z1}} = view <- decor ++ items do
+      tall = z1 - z0 > @slab + @full
+      view |> Map.put(:loose, view.loose or tall) |> Map.put(:tall, tall)
+    end
   end
 
   # The pole of the grid, at the back right of the lot.
@@ -569,7 +580,7 @@ defmodule DIYWeb.Outside do
       case roofs do
         [roof | _] ->
           p = meters(roof.plan)
-          {p.x + p.w / 2, p.y + p.d / 2, z.(roof) + p.d / 2 * @pitch + 1.2}
+          {p.x + p.w / 2, p.y + p.d / 2, z.(roof) + Roof.rise(roof) * @m + 1.2}
 
         [] ->
           {px, py, @pole}

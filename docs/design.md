@@ -2229,10 +2229,18 @@ camera and the same look. A tap on the picture opens the plan.
   each 8 feet of wall. The largest room of floor 1 with a wall at the
   front has the door, at the middle of the longest part of that wall. The
   person stands beside the door.
-- The roof is on the top floor with rooms. It has its slopes, its gable
-  and its panels. Only a room on the roof on the level of the roof is the
-  roof. A house with no such room gets a roof with no item. The attic is
-  in the roof, and the items in the rooms do not show.
+- A roof is on the walls of its base, else on the top floor with rooms
+  (see "The shapes of a roof"). It has its slopes, its ends that look to
+  the camera (a gable) and its panels. Only a room on the roof on the
+  level of the roof is a roof. A house with no such room gets a roof with
+  no item. The attic is in the roof, and the items in the rooms do not
+  show.
+- A tall item in a yard (a tree) has no right order with the floors over
+  it: it paints by its depth (`loose`). It also paints after a box that is
+  all behind it along y, and before a box all in front of it (`tall`,
+  `DIYWeb.Camera.order/2`). So a tree in front of the house paints after
+  the roof (the owner, October 2026: "The frontyard tree is hiding behind
+  the roof").
 - The yards and the driveway show their furniture (`DIYWeb.Decor`) and
   their items, as in the plan: the AC, the panels, a car.
 - A room outside on a floor (a balcony or a patio) is on its slab, with
@@ -4638,6 +4646,46 @@ the shadow of the crown on the ground. The share picture also cuts it.
 A tree stands on its trunk: its crown is high over the ground. So only
 its trunk can block a door (`DIY.Layout.foot_box/1`, a square of 24
 inches at the middle of the tree). Its crown can be over a door.
+
+### The shapes of a roof
+
+The roof of a house is not always one shape (the owner, October 2026:
+"The part above the living room is a big slope"). So a house can have
+many roofs. Each roof is a room on the level of the roof (`place: :roof`),
+over a part of the house. Its shape is in its `roof` field (`DIY.Roof`):
+
+- The slope:
+  - `"x"`: two slopes, with the ridge from the left to the right. This is
+    the first shape, and the shape of a roof of an older file.
+  - `"y"`: two slopes, with the ridge from the back to the front. Its
+    gable is at the front, for example over a garage.
+  - `"front"`, `"back"`, `"left"` or `"right"`: one slope, with its low
+    side at that side.
+- The pitch: the rise for 12 inches of run, from 1 to 12. The first pitch
+  is 5 in 12.
+- The base: the floor with the walls that hold the eaves. With no base,
+  the eaves are on the top floor. For example, a big slope over a living
+  room with a high ceiling has its eaves on floor 1.
+
+The sheet of a roof has the shape: six choices of the slope, the pitch,
+and the floor under the eaves (`Build.set_roof/3`). A file keeps the
+shape. A shape that the app cannot read gives the first shape.
+
+The roof uses the shape in each view:
+
+- The house from outside (`DIYWeb.Outside`): the slopes go past the
+  walls (35 cm), and the eaves are on the base. The slopes that look to
+  the back paint first, then the ends, then the slopes that look to the
+  front.
+- The plan (`DIYWeb.Cutaway`): the roofs are on the level of the roof,
+  each with its slopes and its ends at the front and at the right
+  (`DIYWeb.Cutaway.roof_ends/3`). The panels on a roof are on its slopes:
+  a panel over the ridge has two parts. An item on a roof stands on its
+  slope.
+- The hook of the plan (`assets/js/plan.js`): `data-rise` and
+  `data-slope` give the planes of the roof. A drag on a roof follows its
+  slope. Where the eye sees two slopes at one point, the higher slope is
+  the slope in front.
 
 ### The places of an item
 

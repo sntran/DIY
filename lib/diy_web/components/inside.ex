@@ -267,6 +267,7 @@ defmodule DIYWeb.Inside do
         open={Build.open_to(@build, @chosen.id)}
         door_next={Build.doorway_choices(@build, @chosen)}
         doors={Build.doorways_of(@build, @chosen.id)}
+        floors={@build.house.floors}
       />
       <.new_room_sheet :if={@sheet == "new_room"} levels={@levels} />
       <HomeAssistant.rooms_sheet
@@ -761,11 +762,79 @@ defmodule DIYWeb.Inside do
   defp state_note("unavailable"), do: ", Home Assistant cannot reach it now"
   defp state_note(nil), do: ""
 
+  @slope_names [
+    {"x", "Two slopes, with the ridge from the left to the right"},
+    {"y", "Two slopes, with the ridge from the back to the front"},
+    {"front", "One slope, low at the front"},
+    {"back", "One slope, low at the back"},
+    {"left", "One slope, low at the left"},
+    {"right", "One slope, low at the right"}
+  ]
+
+  attr :room, :map, required: true
+  attr :floors, :integer, required: true
+
+  # The shape of a roof (`DIY.Roof`): its slope, its pitch, and the floor
+  # with the walls that hold its eaves.
+  defp roof_form(assigns) do
+    assigns =
+      assigns
+      |> assign(:shape, DIY.Roof.shape(assigns.room))
+      |> assign(:slope_names, @slope_names)
+
+    ~H"""
+    <form id={"roof-#{@room.id}"} phx-change="room_roof" class="space-y-2">
+      <input type="hidden" name="room_id" value={@room.id} />
+      <fieldset class="space-y-1">
+        <legend class="text-sm font-semibold">Shape of the roof</legend>
+        <label :for={{slope, name} <- @slope_names} class="flex items-center gap-2 text-sm">
+          <input
+            type="radio"
+            id={"roof-#{@room.id}-#{slope}"}
+            name="slope"
+            value={slope}
+            checked={@shape.slope == slope}
+            class="radio radio-sm"
+          />
+          {name}
+        </label>
+      </fieldset>
+      <div class="flex items-end gap-2">
+        <label>
+          <span class="text-xs">Pitch</span>
+          <select id={"roof-pitch-#{@room.id}"} name="pitch" class="select select-sm">
+            <option :for={pitch <- 1..12} value={pitch} selected={pitch == @shape.pitch}>
+              {pitch} in 12
+            </option>
+          </select>
+        </label>
+        <label>
+          <span class="text-xs">The walls under the eaves</span>
+          <select id={"roof-base-#{@room.id}"} name="base" class="select select-sm">
+            <option value="" selected={@shape.base == nil}>The top floor</option>
+            <option
+              :for={floor <- 1..@floors//1}
+              value={"f#{floor}"}
+              selected={@shape.base == "f#{floor}"}
+            >
+              Floor {floor}
+            </option>
+          </select>
+        </label>
+      </div>
+      <p class="text-xs opacity-70">
+        A house can have many roofs. Each roof is a room on the level of the roof, over a part of the house. The pitch is the rise of the roof for 12 inches.
+      </p>
+    </form>
+    """
+  end
+
   attr :room, :map, required: true
   attr :next, :list, default: [], doc: "the rooms that it can be open to"
   attr :open, :list, default: [], doc: "the ids of the rooms that it is open to"
   attr :door_next, :list, default: [], doc: "the rooms that it can have a door to"
   attr :doors, :list, default: [], doc: "its doors (`DIY.Build.doorways_of/2`)"
+  attr :floors, :integer, default: 1, doc: "the floors of the house: the bases of a roof"
 
   # The sheet of a room: its name, its size, the rooms that it is open to,
   # its doors, and its removal.
@@ -844,6 +913,8 @@ defmodule DIYWeb.Inside do
           </p>
         </fieldset>
       </form>
+
+      <.roof_form :if={@room.place == :roof} room={@room} floors={@floors} />
 
       <form :if={@door_next != []} id={"doors-#{@room.id}"} phx-change="room_doors">
         <input type="hidden" name="room_id" value={@room.id} />
