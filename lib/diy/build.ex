@@ -2247,6 +2247,9 @@ defmodule DIY.Build do
   # A change of the items goes only when the items do not go more in front
   # of the doors. Thus an item in front of a door can go out of the space
   # step by step. The items stay in their rooms first (`DIY.Layout.fill/1`).
+  # A house with no door has no check.
+  defp door_check(%{doorways: []}, _items), do: :ok
+
   defp door_check(build, items) do
     spaces = space_map(build)
     %{items: after_items} = Layout.fill(%{build | items: items})
@@ -2258,18 +2261,25 @@ defmodule DIY.Build do
 
   # How much the items stand in front of the doors (square inches). It is
   # the sum of the areas of the items over the spaces of the doors.
-  defp door_area(spaces, items),
-    do: items |> Enum.map(&door_area(spaces, items, &1)) |> Enum.sum()
+  defp door_area(spaces, items) do
+    heights = DIY.Stack.heights(items)
+    items |> Enum.map(&door_area(spaces, fn -> heights end, &1)) |> Enum.sum()
+  end
 
   # How much an item stands in front of the doors of its room. Only an item
   # with its bottom under the top of a door counts. The bottom of an item
-  # on an item is the top of the item under it (`DIY.Stack.heights/1`). An
+  # on an item is the top of the item under it (`DIY.Stack.heights/1`). The
+  # heights come from a function: only an item over a space needs them. An
   # item with no place (in the shell of a van) blocks no door.
-  defp door_area(spaces, items, item) do
+  defp door_area(spaces, heights, item) do
     spaces = if item.at, do: Map.get(spaces, item.room, []), else: []
     area = spaces |> Enum.map(&overlap_area(&1, Layout.item_box(item))) |> Enum.sum()
-    bottom = Catalog.lift(item.type) + Map.get(DIY.Stack.heights(items), item.id, 0)
-    if area > 0 and bottom < @door_height, do: area, else: 0
+
+    lift = Catalog.lift(item.type)
+
+    if area > 0 and lift < @door_height and lift + Map.get(heights.(), item.id, 0) < @door_height,
+      do: area,
+      else: 0
   end
 
   defp overlap_area(a, b) do
@@ -2280,20 +2290,22 @@ defmodule DIY.Build do
 
   # Each item in front of a door goes to a free place of its room, with the
   # items on it. A free place is not over an item, and not in front of a
-  # door (`DIY.Layout.free_place/3`). The items on the floor go first. An
-  # item on an item that is still in front of a door goes to the floor.
+  # door (`DIY.Layout.free_place/3`). The lowest items go first. An item on
+  # an item that is still in front of a door goes to the floor.
   # With no free place, the item stays: the person can move it.
   defp clear_doorways(%{doorways: []} = build), do: build
 
   defp clear_doorways(build) do
     rooms = Map.new(build.rooms, &{&1.id, &1})
     spaces = space_map(build)
-    ids = build.items |> Enum.sort_by(&(DIY.Stack.on(&1) != nil)) |> Enum.map(& &1.id)
+    heights = DIY.Stack.heights(build.items)
+    ids = build.items |> Enum.sort_by(&Map.get(heights, &1.id, 0)) |> Enum.map(& &1.id)
 
     items =
       Enum.reduce(ids, build.items, fn id, items ->
         item = Enum.find(items, &(&1.id == id))
-        clear_doorway(items, item, door_area(spaces, items, item) > 0, rooms, spaces)
+        blocks? = door_area(spaces, fn -> DIY.Stack.heights(items) end, item) > 0
+        clear_doorway(items, item, blocks?, rooms, spaces)
       end)
 
     %{build | items: items}
