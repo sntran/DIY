@@ -129,10 +129,9 @@ defmodule DIYWeb.AboutHTML do
           </p>
           <p>
             {gettext("Do you have a question, or did you find a problem?")}
-            <a id="about-issues-link" href={@code <> "/issues"} class="link">
-              {gettext("Open an issue on GitHub")}
-            </a>
-            {gettext("An issue is public, and it needs a GitHub account.")}
+            <a id="about-issues-link" href={@code <> "/issues"} class="link">{gettext("Open an issue on GitHub")}</a>. {gettext(
+              "An issue is public, and it needs a GitHub account."
+            )}
           </p>
         </section>
 

@@ -1160,7 +1160,7 @@ msgstr "Acerca de Small Steps Home"
 msgid "About this app"
 msgstr "Acerca de esta aplicación"
 
-#: lib/diy_web/controllers/about_html.ex:139
+#: lib/diy_web/controllers/about_html.ex:138
 #, elixir-autogen, elixir-format
 msgid "Go to the app"
 msgstr "Ir a la aplicación"
@@ -1210,7 +1210,7 @@ msgstr "Quién la hizo"
 msgid "Your data"
 msgstr "Sus datos"
 
-#: lib/diy_web/controllers/about_html.ex:135
+#: lib/diy_web/controllers/about_html.ex:132
 #, elixir-autogen, elixir-format
 msgid "An issue is public, and it needs a GitHub account."
 msgstr "Un reporte es público y necesita una cuenta de GitHub."
@@ -1245,7 +1245,7 @@ msgstr "Para el clima, el servidor envía un punto cerca de su código postal a 
 msgid "Only a short link makes the server save a copy of the house. The server keeps it for one year after the last visit of the link."
 msgstr "Solo un enlace corto hace que el servidor guarde una copia de la casa. El servidor la guarda durante un año después de la última visita del enlace."
 
-#: lib/diy_web/controllers/about_html.ex:133
+#: lib/diy_web/controllers/about_html.ex:132
 #, elixir-autogen, elixir-format
 msgid "Open an issue on GitHub"
 msgstr "Abra un reporte en GitHub"

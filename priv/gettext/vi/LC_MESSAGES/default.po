@@ -1158,7 +1158,7 @@ msgstr "Giới thiệu Small Steps Home"
 msgid "About this app"
 msgstr "Giới thiệu ứng dụng này"
 
-#: lib/diy_web/controllers/about_html.ex:139
+#: lib/diy_web/controllers/about_html.ex:138
 #, elixir-autogen, elixir-format
 msgid "Go to the app"
 msgstr "Đến ứng dụng"
@@ -1208,7 +1208,7 @@ msgstr "Ai đã làm ứng dụng"
 msgid "Your data"
 msgstr "Dữ liệu của bạn"
 
-#: lib/diy_web/controllers/about_html.ex:135
+#: lib/diy_web/controllers/about_html.ex:132
 #, elixir-autogen, elixir-format
 msgid "An issue is public, and it needs a GitHub account."
 msgstr "Một issue là công khai, và cần một tài khoản GitHub."
@@ -1243,7 +1243,7 @@ msgstr "Để lấy thời tiết, máy chủ gửi một điểm gần mã ZIP 
 msgid "Only a short link makes the server save a copy of the house. The server keeps it for one year after the last visit of the link."
 msgstr "Chỉ liên kết ngắn mới khiến máy chủ lưu một bản sao của ngôi nhà. Máy chủ giữ bản sao trong một năm sau lần truy cập cuối của liên kết."
 
-#: lib/diy_web/controllers/about_html.ex:133
+#: lib/diy_web/controllers/about_html.ex:132
 #, elixir-autogen, elixir-format
 msgid "Open an issue on GitHub"
 msgstr "Mở một issue trên GitHub"

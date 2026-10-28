@@ -33,6 +33,8 @@ defmodule DIYWeb.AboutControllerTest do
     assert html =~
              ~r/id="about-issues-link" href="https:\/\/github.com\/sntran\/DIY\/issues"[^>]*>\s*Open an issue on GitHub/
 
+    # The link ends its sentence: no space before the full stop.
+    assert html =~ "Open an issue on GitHub</a>."
     assert html =~ ~s(id="about-start" href="/")
 
     # The links of the languages come back to this page. The page has no
