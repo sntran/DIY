@@ -378,9 +378,10 @@ defmodule DIY.StackTest do
   end
 
   test "a snap to the side of an item can put the item on a different item" do
-    # The steps that the property found (seed 217461). The computer comes
-    # from the kitchen. The drop snaps it to the side of the item "other",
-    # and there the space heater holds it: the computer is on the heater.
+    # The property found these steps (seed 217461). The computer comes from
+    # the kitchen. The drop snaps it to the front of the hot tub, and there
+    # the space heater holds it. So the computer goes on the heater, at
+    # its center: the computer is deeper than the heater.
     types = ~w(washer dryer microwave cpap computer tv pool_pump hot_tub other space_heater)
 
     {build, ids} =
@@ -393,8 +394,8 @@ defmodule DIY.StackTest do
     {:ok, build} = Build.place_item(build, computer, room(build, "Kitchen").id, %{x: 0, y: 0})
     {:ok, build} = Build.size_item(build, heater, %{w: 42, d: 12, h: 30})
     {:ok, build} = drop(build, computer, "Laundry", %{x: 125, y: 81})
-    assert item(build, computer).at == %{x: 54, y: 84}
-    assert item(build, computer).on == heater
+    assert item(build, computer).at == %{x: 42, y: 88}
+    assert Map.get(item(build, computer), :on) == heater
   end
 
   test "carry with an item that has no place moves only the item" do

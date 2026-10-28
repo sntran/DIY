@@ -318,8 +318,15 @@ defmodule DIY.Stack do
               do: o
 
         at = beside(moved, floor, room.plan)
-        snapped = under.(%{moved | at: at})
-        {at, snapped && snapped.id}
+
+        case under.(%{moved | at: at}) do
+          nil ->
+            {at, nil}
+
+          snapped ->
+            siblings = Enum.filter(others, &(on(&1) == snapped.id))
+            {onto(%{moved | at: at}, snapped, siblings, room.plan), snapped.id}
+        end
     end
   end
 
