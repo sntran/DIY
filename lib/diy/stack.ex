@@ -286,7 +286,7 @@ defmodule DIY.Stack do
   corner), with a snap: `{at, on}`. With `snap` false (the arrow keys),
   the place does not change, and the item is on the item that holds it
   there. A snap to the side of an item can put the item over a different
-  item: then it is on the item that holds it at that place.
+  item. Then it is on the item that holds it at that place.
   """
   @spec place([map()], map(), map(), %{x: integer(), y: integer()}, boolean()) ::
           {%{x: integer(), y: integer()}, String.t() | nil}
