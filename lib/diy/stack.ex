@@ -36,13 +36,23 @@ defmodule DIY.Stack do
   @doc "The id of the item under an item, or nil."
   def on(item), do: Map.get(item, :on)
 
-  @doc "True when an item of a kind can go on an item."
+  @doc """
+  True when an item of a kind can go on an item. Furniture
+  (`DIY.Catalog.furniture/0`) stands on the floor.
+  """
   def goes_on?(%{type: type}),
-    do: type not in ~w(solar_panels camper_van ev pool washer_dryer) and Catalog.lift(type) == 0
+    do:
+      type not in ~w(solar_panels camper_van ev pool washer_dryer) and
+        type not in Catalog.furniture() and Catalog.lift(type) == 0
 
-  @doc "True when an item of a kind can take an item on it."
+  @doc """
+  True when an item of a kind can take an item on it. A tree, a shower
+  and a bathtub take no item.
+  """
   def takes?(%{type: type}),
-    do: type not in ~w(solar_panels camper_van ev washer_dryer) and Catalog.lift(type) == 0
+    do:
+      type not in ~w(solar_panels camper_van ev washer_dryer tree shower bathtub) and
+        Catalog.lift(type) == 0
 
   @doc "True when the items of a room can stack: not on the roof, not in a van."
   def stacks?(%{place: place, level: level}),

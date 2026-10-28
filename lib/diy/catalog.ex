@@ -1512,6 +1512,59 @@ defmodule DIY.Catalog do
       features: [:weight],
       params: [weight(100)]
     },
+    # Furniture that the person puts at its place: the pieces that the name
+    # of a room does not place well (`DIYWeb.Decor`). Furniture uses no
+    # power, and it has no parameter. A placed piece takes the place of the
+    # piece of the same kind that the name of the room gives (the owner,
+    # October 2026).
+    %{
+      type: "fireplace",
+      name: "Fireplace",
+      places: [:indoor],
+      furniture: true,
+      features: [],
+      params: []
+    },
+    %{
+      type: "bathtub",
+      name: "Bathtub",
+      places: [:indoor],
+      furniture: true,
+      features: [],
+      params: []
+    },
+    %{
+      type: "shower",
+      name: "Shower",
+      places: [:indoor],
+      furniture: true,
+      features: [],
+      params: []
+    },
+    %{
+      type: "pantry",
+      name: "Pantry",
+      places: [:indoor],
+      furniture: true,
+      features: [],
+      params: []
+    },
+    %{
+      type: "dining_table",
+      name: "Table and chairs",
+      places: [:indoor, :outdoor],
+      furniture: true,
+      features: [],
+      params: []
+    },
+    %{
+      type: "tree",
+      name: "Tree",
+      places: [:outdoor],
+      furniture: true,
+      features: [],
+      params: []
+    },
     %{
       type: "other",
       name: "Other",
@@ -1670,7 +1723,21 @@ defmodule DIY.Catalog do
     # No source: a part of the floor.
     "van_floor" => {48, 48, 1},
     # No source.
-    "other" => {24, 24, 24}
+    "other" => {24, 24, 24},
+    # A fireplace with its mantel, on a wall. No source.
+    "fireplace" => {60, 20, 54},
+    # A common alcove bathtub: 60 by 30 in (standard size), 22 in high.
+    "bathtub" => {60, 30, 22},
+    # A common shower stall: 36 by 36 in (standard size). No source for
+    # the height of its glass.
+    "shower" => {36, 36, 80},
+    # A tall cabinet of a kitchen: 24 in deep, as the counters, and 84 in
+    # high (standard size).
+    "pantry" => {30, 24, 84},
+    # A table of 4 seats with its chairs (`DIYWeb.Decor`). No source.
+    "dining_table" => {55, 66, 37},
+    # A big tree, as its model (`DIYWeb.Decor`). No source.
+    "tree" => {91, 91, 158}
   }
 
   for %{type: type} <- @kinds,
@@ -1692,6 +1759,15 @@ defmodule DIY.Catalog do
 
   @doc "All the kinds, in the order of the list of a new item."
   def kinds, do: @kinds
+
+  @furniture for %{furniture: true, type: type} <- @kinds, do: type
+
+  @doc """
+  The kinds of furniture: they use no power, and they have no parameter.
+  The furniture that the name of a room gives is not an item
+  (`DIYWeb.Decor`).
+  """
+  def furniture, do: @furniture
 
   @doc "The kind of a type, or `nil`."
   def kind(type), do: Map.get(@by_type, type)
@@ -1792,7 +1868,13 @@ defmodule DIY.Catalog do
     "power_station" => ~w(battery backup ecoflow pecron generator),
     "van_battery" => ~w(lifepo4 lithium diy pack),
     "battery_switch" => ~w(disconnect cutoff isolator),
-    "battery_monitor" => ~w(shunt smartshunt bmv)
+    "battery_monitor" => ~w(shunt smartshunt bmv),
+    "fireplace" => ~w(fire hearth mantel chimney furniture),
+    "bathtub" => ~w(bath tub furniture),
+    "shower" => ~w(stall bath furniture),
+    "pantry" => ~w(cabinet storage food kitchen furniture),
+    "dining_table" => ~w(dining table chairs patio furniture),
+    "tree" => ~w(shade yard plant furniture)
   }
 
   @doc "The more words of the kinds (`@words`), for the tests."

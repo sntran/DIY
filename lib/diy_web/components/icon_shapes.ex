@@ -56,6 +56,15 @@ defmodule DIYWeb.Icon.Shapes do
   point of the world (`at`). A face that looks away from the `camera`
   after the turn does not show.
   """
+  def placed(type, frame)
+
+  # A tree looks the same at each turn: its leaves look to the camera of
+  # the house. So it has no turn. After a quarter turn, its space is d by
+  # w (`DIY.Layout.extent/1`): the tree fills that space.
+  def placed("tree", %{turn: turn, size: {w, d, h}} = frame) when rem(turn, 2) == 1,
+    do: draw(model("tree"), %{frame | turn: 0, size: {d, w, h}}, frame.camera)
+
+  def placed("tree", frame), do: draw(model("tree"), %{frame | turn: 0}, frame.camera)
   def placed(type, frame), do: draw(model(type), frame, frame.camera)
 
   @doc """
@@ -1220,6 +1229,54 @@ defmodule DIYWeb.Icon.Shapes do
       rbox({0.03, 0.03, h}, {w - 0.06, w - 0.06, 0.03}, 0.18, "gray") ++
       rbox({0.16, 0.16, h + 0.03}, {w - 0.32, w - 0.32, 0.01}, 0.12, "blue")
   end
+
+  # A fireplace on a wall: a white surround, a mantel of wood over it, and
+  # a hearth of stone in front of it. The fire is in the dark opening.
+  def model("fireplace") do
+    {w, d, h} = {1.52, 0.51, 1.37}
+
+    box({0, 0.3, 0}, {w, d - 0.3, 0.06}, "gray") ++
+      box({0.1, 0, 0}, {w - 0.2, 0.3, 1.2}, "white") ++
+      box({0, 0, 1.2}, {w, 0.36, h - 1.2}, "wood") ++
+      [
+        front({0.46, 0.3, 0.12}, {0.6, 0.62}, "i-black"),
+        front({0.6, 0.302, 0.16}, {0.32, 0.22}, "i-flame i-fire")
+      ]
+  end
+
+  # A shower stall: a white tray, and two walls of glass at the front and
+  # at the right. The pipe and the head are on the back wall.
+  def model("shower") do
+    {w, h} = {0.91, 2.03}
+
+    rbox({0, 0, 0}, {w, w, 0.08}, 0.03, "white") ++
+      [disc({w / 2, w / 2, 0.081}, :top, 0.04, "i-dark-t")] ++
+      box({0.44, 0, 1.0}, {0.03, 0.04, 0.95}, "steel") ++
+      box({0.38, 0.04, 1.92}, {0.15, 0.15, 0.03}, "steel") ++
+      [
+        front({0, w - 0.01, 0.08}, {w, h - 0.08}, "i-glass"),
+        side({w - 0.01, 0, 0.08}, {w, h - 0.08}, "i-glass")
+      ]
+  end
+
+  # A tall pantry cabinet, as the counters of the kitchen: two doors with
+  # their handles.
+  def model("pantry") do
+    {w, d, h} = {0.76, 0.61, 2.13}
+
+    box({0, 0, 0}, {w, d, h}, "sage") ++
+      [
+        front({w / 2 - 0.005, d, 0.05}, {0.01, h - 0.1}, "i-line"),
+        front({w / 2 - 0.06, d, 0.95}, {0.02, 0.25}, "i-dark-t"),
+        front({w / 2 + 0.04, d, 0.95}, {0.02, 0.25}, "i-dark-t")
+      ]
+  end
+
+  # The furniture of `DIYWeb.Decor`, as an item that the person puts in a
+  # room.
+  def model("bathtub"), do: DIYWeb.Decor.model("tub")
+  def model("dining_table"), do: DIYWeb.Decor.model("dining")
+  def model("tree"), do: DIYWeb.Decor.model("tree")
 
   # A pool: a low coping of stone, and the water in it. On the plan, the
   # water is lower than the floor (`DIYWeb.Cutaway`). This model is for
