@@ -32,6 +32,38 @@ One VM in 128 MB serves all the users. So a WebSocket frame can be 1 MiB
 at most, a build from the device can be 512 KiB at most, and the
 fallback of long polls is off.
 
+The address of the app is https://diy.mkfifo.com (the owner, October
+2026). The address of the Worker (`diy.mkfifo.workers.dev`) also works,
+but a person does not know it. A share link has the host of the page
+that made it. So a person who shares a house uses the address of the app.
+
+## The page About
+
+A neighbor did not want to open a link of the app (the owner, October
+2026: "Not sure about clicking on an unknown link on Nextdoor"). So the
+page About (`/about`, `DIYWeb.AboutController`) tells a person about the
+app before the person tries it:
+
+- what the app does, and what a small step is;
+- who made it. The app is free, with no ads, and it sells nothing;
+- the data of a person. The app needs no account. The house stays on
+  the device, except for a short link. A short link stays one year after
+  its last visit. The weather services get a point near the ZIP code.
+  The keys of the links to Home Assistant and to a maker stay on the
+  device;
+- where the numbers come from;
+- the public code on GitHub, and its issues for a question.
+
+It is a plain page: it needs no build and no script. It has the links
+of the languages, and it is in English, Spanish and Vietnamese. The foot
+of each page of the app has a link to it (`DIYWeb.Layouts.app/1`). A
+change of the data of the app must change this page too.
+
+The tests: `test/diy_web/controllers/about_controller_test.exs` checks
+the page in each language, its links, and the link at the foot of the
+pages. The browser test opens it from the first screen, with the checks
+of axe.
+
 ## The build on the device
 
 The build of a user (the house, its rooms and items, and later the vans)
@@ -4507,8 +4539,9 @@ to `/`. The cookie is `Secure` on https.
 
 The first step has the tools and the choice of the language. It also
 translates the frame of the pages, the first screens, and the page
-Settings. The frame is the bar of the parts, the state of the save, and
-the notices. The next steps translate the other pages, one group at a
+Settings. The frame is the bar of the parts, the state of the save, the
+link to the page About, and the notices. The page About is translated
+too. The next steps translate the other pages, one group at a
 time. Until then, those pages are in English, and their main part has
 `lang="en"` (WCAG 3.1.2): a screen reader reads them with an English
 voice. The cards of Home Assistant and of Pecron on the page Settings

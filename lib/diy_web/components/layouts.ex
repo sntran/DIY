@@ -9,7 +9,8 @@ defmodule DIYWeb.Layouts do
 
   @doc """
   The frame of a page: the name of the app, the state of the save, the
-  content, the bar of the parts of a build, and the notices.
+  content, the link to the page About, the bar of the parts of a build,
+  and the notices.
   """
   attr :flash, :map, required: true, doc: "the flash notices"
   attr :nav, :boolean, default: false, doc: "show the bar of the parts of a build"
@@ -17,6 +18,7 @@ defmodule DIYWeb.Layouts do
   attr :power, :boolean, default: false, doc: "show the part Power (DIYWeb.PowerPage)"
   attr :plans, :boolean, default: false, doc: "show the part Plans (DIYWeb.LessonPage)"
   attr :saved, :boolean, default: true, doc: "the device has the last change"
+  attr :about, :boolean, default: true, doc: "show the link to the page About"
   slot :inner_block, required: true
 
   def app(assigns) do
@@ -32,6 +34,9 @@ defmodule DIYWeb.Layouts do
       <div class="mx-auto max-w-xl space-y-4">
         {render_slot(@inner_block)}
       </div>
+      <footer :if={@about} class="mx-auto max-w-xl pt-8 text-sm">
+        <a id="about-link" href={~p"/about"} class="link">{gettext("About this app")}</a>
+      </footer>
     </main>
 
     <nav

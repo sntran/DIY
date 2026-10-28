@@ -76,7 +76,7 @@ msgstr "Atrás"
 msgid "Before 1980"
 msgstr "Antes de 1980"
 
-#: lib/diy_web/components/layouts.ex:61
+#: lib/diy_web/components/layouts.ex:66
 #, elixir-autogen, elixir-format
 msgid "Bill"
 msgstr "Factura"
@@ -138,7 +138,7 @@ msgstr "Calefacción"
 msgid "Heat pump"
 msgstr "Bomba de calor"
 
-#: lib/diy_web/components/layouts.ex:47
+#: lib/diy_web/components/layouts.ex:52
 #, elixir-autogen, elixir-format
 msgid "House"
 msgstr "Casa"
@@ -209,7 +209,7 @@ msgstr "Siguiente"
 msgid "No retail choice: a city utility or a co-op sells the power."
 msgstr "Sin elección de proveedor: una compañía de luz municipal o una cooperativa vende la electricidad."
 
-#: lib/diy_web/components/layouts.ex:27
+#: lib/diy_web/components/layouts.ex:29
 #, elixir-autogen, elixir-format
 msgid "Not saved yet"
 msgstr "Aún no se guardó"
@@ -229,12 +229,12 @@ msgstr "Un acre tiene 43,560 pies cuadrados."
 msgid "Open a file of a build"
 msgstr "Abrir un archivo de un modelo"
 
-#: lib/diy_web/components/layouts.ex:77
+#: lib/diy_web/components/layouts.ex:82
 #, elixir-autogen, elixir-format
 msgid "Plans"
 msgstr "Planes"
 
-#: lib/diy_web/components/layouts.ex:69
+#: lib/diy_web/components/layouts.ex:74
 #, elixir-autogen, elixir-format
 msgid "Power"
 msgstr "Energía"
@@ -254,7 +254,7 @@ msgstr "Elección de proveedor."
 msgid "Retail choice: %{utility} delivers the power."
 msgstr "Elección de proveedor: %{utility} distribuye la electricidad."
 
-#: lib/diy_web/components/layouts.ex:54
+#: lib/diy_web/components/layouts.ex:59
 #, elixir-autogen, elixir-format
 msgid "Rooms"
 msgstr "Cuartos"
@@ -270,7 +270,7 @@ msgstr "Guardar"
 msgid "Save the house"
 msgstr "Guardar la casa"
 
-#: lib/diy_web/components/layouts.ex:27
+#: lib/diy_web/components/layouts.ex:29
 #, elixir-autogen, elixir-format
 msgid "Saved on this device"
 msgstr "Guardado en este dispositivo"
@@ -280,7 +280,7 @@ msgstr "Guardado en este dispositivo"
 msgid "See my house"
 msgstr "Ver mi casa"
 
-#: lib/diy_web/components/layouts.ex:84
+#: lib/diy_web/components/layouts.ex:89
 #: lib/diy_web/components/settings.ex:35
 #, elixir-autogen, elixir-format
 msgid "Settings"
@@ -347,7 +347,7 @@ msgstr "La casa"
 msgid "The lot and the house"
 msgstr "El terreno y la casa"
 
-#: lib/diy_web/components/layouts.ex:40
+#: lib/diy_web/components/layouts.ex:45
 #, elixir-autogen, elixir-format
 msgid "The parts of your build"
 msgstr "Las partes de su modelo"
@@ -1004,67 +1004,67 @@ msgstr "Los meses de su medidor."
 msgid "This house is too large for a link. A link can have 150 items and 50 rooms at most."
 msgstr "Esta casa es demasiado grande para un enlace. Un enlace puede tener 150 aparatos y 50 cuartos como máximo."
 
-#: lib/diy_web/components/outside.ex:939
+#: lib/diy_web/components/outside.ex:949
 #, elixir-autogen, elixir-format
 msgid "Clouds"
 msgstr "Nubes"
 
-#: lib/diy_web/components/outside.ex:934
+#: lib/diy_web/components/outside.ex:944
 #, elixir-autogen, elixir-format
 msgid "Day"
 msgstr "Día"
 
-#: lib/diy_web/components/outside.ex:936
+#: lib/diy_web/components/outside.ex:946
 #, elixir-autogen, elixir-format
 msgid "Night"
 msgstr "Noche"
 
-#: lib/diy_web/components/outside.ex:926
+#: lib/diy_web/components/outside.ex:936
 #, elixir-autogen, elixir-format
 msgid "Now"
 msgstr "Ahora"
 
-#: lib/diy_web/components/outside.ex:927
+#: lib/diy_web/components/outside.ex:937
 #, elixir-autogen, elixir-format
 msgid "Now (%{name})"
 msgstr "Ahora (%{name})"
 
-#: lib/diy_web/components/outside.ex:916
+#: lib/diy_web/components/outside.ex:926
 #, elixir-autogen, elixir-format
 msgid "Now at the house: %{temp} °F, %{time}, %{weather}."
 msgstr "Ahora en la casa: %{temp} °F, %{time}, %{weather}."
 
-#: lib/diy_web/components/outside.ex:940
+#: lib/diy_web/components/outside.ex:950
 #, elixir-autogen, elixir-format
 msgid "Rain"
 msgstr "Lluvia"
 
-#: lib/diy_web/components/outside.ex:941
+#: lib/diy_web/components/outside.ex:951
 #, elixir-autogen, elixir-format
 msgid "Snow"
 msgstr "Nieve"
 
-#: lib/diy_web/components/outside.ex:938
+#: lib/diy_web/components/outside.ex:948
 #, elixir-autogen, elixir-format
 msgid "Sun"
 msgstr "Sol"
 
-#: lib/diy_web/components/outside.ex:935
+#: lib/diy_web/components/outside.ex:945
 #, elixir-autogen, elixir-format
 msgid "Sunset"
 msgstr "Atardecer"
 
-#: lib/diy_web/components/outside.ex:889
+#: lib/diy_web/components/outside.ex:899
 #, elixir-autogen, elixir-format
 msgid "Time of day"
 msgstr "Hora del día"
 
-#: lib/diy_web/components/outside.ex:900
+#: lib/diy_web/components/outside.ex:910
 #, elixir-autogen, elixir-format
 msgid "Weather"
 msgstr "Clima"
 
-#: lib/diy_web/components/outside.ex:931
+#: lib/diy_web/components/outside.ex:941
 #, elixir-autogen, elixir-format
 msgid "Sunrise"
 msgstr "Amanecer"
@@ -1138,3 +1138,114 @@ msgstr "La cabina, el compartimento del motor y el techo de la camioneta se qued
 #, elixir-autogen, elixir-format
 msgid "An item cannot stand in front of a door."
 msgstr "Un objeto no puede quedar delante de una puerta."
+
+#: lib/diy_web/controllers/about_html.ex:40
+#, elixir-autogen, elixir-format
+msgid "%{name} made this app."
+msgstr "%{name} hizo esta aplicación."
+
+#: lib/diy_web/controllers/about_html.ex:54
+#, elixir-autogen, elixir-format
+msgid "A short link to share a house is the one exception. The server keeps a copy of the house for one year after the last visit of the link."
+msgstr "Un enlace corto para compartir una casa es la única excepción. El servidor guarda una copia de la casa durante un año después de la última visita del enlace."
+
+#: lib/diy_web/controllers/about_html.ex:33
+#, elixir-autogen, elixir-format
+msgid "A small step can be a better plan for your electricity, a change to an item, or a power station for an outage."
+msgstr "Un pequeño paso puede ser un mejor plan de electricidad, un cambio en un artículo o una estación de energía para un apagón."
+
+#: lib/diy_web/controllers/about_controller.ex:14
+#: lib/diy_web/controllers/about_html.ex:26
+#, elixir-autogen, elixir-format
+msgid "About Small Steps Home"
+msgstr "Acerca de Small Steps Home"
+
+#: lib/diy_web/components/layouts.ex:38
+#, elixir-autogen, elixir-format
+msgid "About this app"
+msgstr "Acerca de esta aplicación"
+
+#: lib/diy_web/controllers/about_html.ex:60
+#, elixir-autogen, elixir-format
+msgid "For the weather, the server sends a point near your ZIP code to NASA POWER and to Open-Meteo. It does not send your address."
+msgstr "Para el clima, el servidor envía un punto cerca de su código postal a NASA POWER y a Open-Meteo. No envía su dirección."
+
+#: lib/diy_web/controllers/about_html.ex:102
+#, elixir-autogen, elixir-format
+msgid "Go to the app"
+msgstr "Ir a la aplicación"
+
+#: lib/diy_web/controllers/about_html.ex:28
+#, elixir-autogen, elixir-format
+msgid "Small Steps Home shows where the power of a house goes. Then it helps you find your next small step."
+msgstr "Small Steps Home muestra a dónde va la electricidad de una casa. Luego le ayuda a encontrar su próximo pequeño paso."
+
+#: lib/diy_web/controllers/about_html.ex:41
+#, elixir-autogen, elixir-format
+msgid "The app is free. It has no ads, and it sells nothing."
+msgstr "La aplicación es gratuita. No tiene anuncios y no vende nada."
+
+#: lib/diy_web/controllers/about_html.ex:77
+#, elixir-autogen, elixir-format
+msgid "The bill is an estimate from the weather of your place and the items of your house. It is a range, not one number."
+msgstr "La factura es una estimación a partir del clima de su zona y los artículos de su casa. Es un rango, no un solo número."
+
+#: lib/diy_web/controllers/about_html.ex:89
+#, elixir-autogen, elixir-format
+msgid "The code"
+msgstr "El código"
+
+#: lib/diy_web/controllers/about_html.ex:91
+#, elixir-autogen, elixir-format
+msgid "The code of the app is public. Anyone can read how it works."
+msgstr "El código de la aplicación es público. Cualquier persona puede leer cómo funciona."
+
+#: lib/diy_web/controllers/about_html.ex:57
+#, elixir-autogen, elixir-format
+msgid "The copy is locked with a key that only the link has."
+msgstr "La copia está cifrada con una clave que solo tiene el enlace."
+
+#: lib/diy_web/controllers/about_html.ex:97
+#, elixir-autogen, elixir-format
+msgid "The issues of the app"
+msgstr "Los reportes de la aplicación"
+
+#: lib/diy_web/controllers/about_html.ex:65
+#, elixir-autogen, elixir-format
+msgid "The keys of your links to Home Assistant and to the maker of a power station stay on this device. The server does not keep them."
+msgstr "Las claves de sus conexiones con Home Assistant y con el fabricante de una estación de energía se quedan en este dispositivo. El servidor no las guarda."
+
+#: lib/diy_web/controllers/about_html.ex:82
+#, elixir-autogen, elixir-format
+msgid "The prices come from public data: the US Energy Information Administration, and the Electricity Facts Labels of the plans in Texas."
+msgstr "Los precios vienen de datos públicos: la Administración de Información Energética de EE. UU. y las etiquetas de datos de electricidad (EFL) de los planes en Texas."
+
+#: lib/diy_web/controllers/about_html.ex:95
+#, elixir-autogen, elixir-format
+msgid "To ask a question or to tell about a problem, open an issue on GitHub."
+msgstr "Para hacer una pregunta o informar de un problema, abra un reporte en GitHub."
+
+#: lib/diy_web/controllers/about_html.ex:74
+#, elixir-autogen, elixir-format
+msgid "Where the numbers come from"
+msgstr "De dónde vienen los números"
+
+#: lib/diy_web/controllers/about_html.ex:39
+#, elixir-autogen, elixir-format
+msgid "Who made it"
+msgstr "Quién la hizo"
+
+#: lib/diy_web/controllers/about_html.ex:48
+#, elixir-autogen, elixir-format
+msgid "You need no account. The app asks for no name, no email and no password."
+msgstr "No necesita una cuenta. La aplicación no pide nombre, correo electrónico ni contraseña."
+
+#: lib/diy_web/controllers/about_html.ex:45
+#, elixir-autogen, elixir-format
+msgid "Your data"
+msgstr "Sus datos"
+
+#: lib/diy_web/controllers/about_html.ex:51
+#, elixir-autogen, elixir-format
+msgid "Your house stays in the browser of this device. The server keeps no copy."
+msgstr "Su casa se queda en el navegador de este dispositivo. El servidor no guarda una copia."
