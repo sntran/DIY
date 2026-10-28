@@ -1,9 +1,9 @@
 defmodule DIYWeb.RoofShapesTest do
   @moduledoc """
-  The roofs of a house with their shapes (`DIY.Roof`): in the build, on
-  the plan (`DIYWeb.Cutaway`), on the house from outside (`DIYWeb.Outside`)
-  and in the sheet of a roof. Also the order of the paint of a tall item in
-  a yard (`DIYWeb.Camera.order/2`).
+  The roofs of a house with their shapes (`DIY.Roof`). They are in the
+  build, on the plan (`DIYWeb.Cutaway`), on the house from outside
+  (`DIYWeb.Outside`) and in the sheet of a roof. Also the order of the
+  paint of a tall item in a yard (`DIYWeb.Camera.order/2`).
   """
   use DIYWeb.ConnCase, async: true
 

@@ -19,10 +19,10 @@
 //   sx = ox + ax x + bx y + cx z
 //   sy = oy + ay x + by y + cy z
 // A floor is flat (z = 0). A roof (data-rise) has a shape (data-slope,
-// DIY.Roof): two slopes with the ridge along x ("x", the first shape) or
-// along y ("y"), or one slope with its low side at the "front", the
-// "back", the "left" or the "right". On a roof, z is 0 at the eaves and
-// the rise at the top.
+// DIY.Roof). It has two slopes with the ridge along x ("x", the first
+// shape) or along y ("y"). Or it has one slope, with its low side at the
+// "front", the "back", the "left" or the "right". On a roof, z is 0 at the
+// eaves and the rise at the top.
 
 // The numbers of a text attribute ("1 2 3").
 export const numbers = (text) => text.trim().split(/\s+/).map(Number)
@@ -96,7 +96,7 @@ function solve(u, v, [ax, ay], [bx, by]) {
 }
 
 // The point of the plan on a surface under an SVG point. On each plane, z
-// goes with x and y: the plane has the vectors a + mx c along x and
+// goes with x and y. The plane has the vector a + mx c along x, and
 // b + my c along y, from the point z0 c. The point is on a plane where the
 // plane has it. The ray from the eye goes down, so it meets the highest of
 // these points first.

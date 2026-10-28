@@ -1128,7 +1128,7 @@ defmodule DIYWeb.Cutaway do
 
   @doc """
   The planes of a roof over a box of the plan (inches), with its eaves at
-  z (meters): the slope and the shingles of each plane (`DIY.Roof`). A
+  z (meters). Each plane has its slope and its shingles (`DIY.Roof`). A
   plane that looks to the front or to the right has the light.
   """
   def roof_planes(room, box, z),
@@ -1148,10 +1148,10 @@ defmodule DIYWeb.Cutaway do
   end
 
   @doc """
-  The ends of a roof that look to the camera: the walls under the roof at
-  the front and at the right of a box of the plan (inches). They go from
-  the eaves (z, meters) up to the roof (`DIY.Roof.profile/3`). A side with
-  the eaves on it has no end.
+  The ends of a roof that look to the camera. They are the walls under the
+  roof at the front and at the right of a box of the plan (inches). They go
+  from the eaves (z, meters) up to the roof (`DIY.Roof.profile/3`). A side
+  with the eaves on it has no end.
   """
   def roof_ends(room, box, z) do
     for side <- [:front, :right],

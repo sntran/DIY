@@ -4677,8 +4677,8 @@ The roof uses the shape in each view:
   walls (35 cm), and the eaves are on the base. The slopes that look to
   the back paint first, then the ends, then the slopes that look to the
   front.
-- The plan (`DIYWeb.Cutaway`): the roofs are on the level of the roof,
-  each with its slopes and its ends at the front and at the right
+- The plan (`DIYWeb.Cutaway`): the roofs are on the level of the roof.
+  Each roof has its slopes, and its ends at the front and at the right
   (`DIYWeb.Cutaway.roof_ends/3`). The panels on a roof are on its slopes:
   a panel over the ridge has two parts. An item on a roof stands on its
   slope.

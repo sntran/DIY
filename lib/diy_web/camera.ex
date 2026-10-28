@@ -196,10 +196,11 @@ defmodule DIYWeb.Camera do
   on the far side of it. Else the one with the smaller key (the depth of its
   center, `depth/2`) comes first. A loose object comes by its key only. It
   is an item that is larger than its room (it goes through walls), or a
-  flat rug. A tall loose object (`tall: true`, a tree in a yard) also comes
-  after a box that is all on the far side of it along the axis that goes
-  most to the eye (`depth_axis/1`), and before a box on its near side. For
-  example, a tree in front of the house paints after the roof. A part that
+  flat rug. A tall loose object (`tall: true`) is a tree in a yard. It
+  also comes after a box that is all on its far side, along the axis that
+  goes most to the eye (`depth_axis/1`). And it comes before a box on its
+  near side. For example, a tree in front of the house paints after the
+  roof. A part that
   stands behind a rug does not cover it.
   Three boxes can each be behind the next one (a cycle). Then the box with
   the fewest boxes before it comes first.
